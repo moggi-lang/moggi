@@ -2,6 +2,8 @@
 
 namespace Moggi\LSP\Analysis;
 
+require_once __DIR__ . '/source_children.php';
+
 use Moggi\Pipeline\CompilationContext;
 use Moggi\Pipeline\CompilePurpose;
 use Moggi\Semantics\Types\TypeError;
@@ -459,25 +461,10 @@ function findNodeChainAt($ast, int $line, int $col, array &$seen = []): array
     }
 
     $bestChildChain = [];
-    foreach (\get_object_vars($ast) as $key => $prop) {
-        if ($key === 'inferredType' || $key === 'inferredInternalType' || $key === 'core'
-            || $prop instanceof Ast\TypeNode) {
-            continue;
-        }
-        if (\is_object($prop)) {
-            $child = findNodeChainAt($prop, $line, $col, $seen);
-            if ($child !== []) {
-                $bestChildChain = $child;
-            }
-        } elseif (\is_array($prop)) {
-            foreach ($prop as $elem) {
-                if (\is_object($elem) && ! $elem instanceof Ast\TypeNode) {
-                    $child = findNodeChainAt($elem, $line, $col, $seen);
-                    if ($child !== []) {
-                        $bestChildChain = $child;
-                    }
-                }
-            }
+    foreach (sourceChildren($ast) as $child) {
+        $chain = findNodeChainAt($child, $line, $col, $seen);
+        if ($chain !== []) {
+            $bestChildChain = $chain;
         }
     }
 

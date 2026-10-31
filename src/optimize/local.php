@@ -3,6 +3,7 @@
 namespace Moggi\Optimize\Local;
 
 use Moggi\IR;
+use Moggi\Optimize\Facts\Facts;
 
 use function Moggi\IR\Callables\calleeIsRun;
 use function Moggi\IR\Visit\mapGuards;
@@ -26,7 +27,7 @@ use Moggi\Optimize\Support;
  * `foldMatchReturn` may turn it into an arm value, together with converting
  * the whole match to a `MatchReturn`.
  */
-function optimizeBlock(IR\Block $block, ?int $armValueDest = null): IR\Block
+function optimizeBlock(IR\Block $block, ?Facts $facts = null, ?int $armValueDest = null): IR\Block
 {
     $temps = [];
     $locals = [];
@@ -34,7 +35,7 @@ function optimizeBlock(IR\Block $block, ?int $armValueDest = null): IR\Block
     $captureIndex = null;
 
     foreach ($block->items as $itemIndex => $item) {
-        $item = mapStmt($item, $temps, $locals);
+        $item = mapStmt($item, $temps, $locals, $facts);
 
         if ($item instanceof IR\Assign) {
             if ($armValueDest !== null && $item->dest === $armValueDest) {
@@ -44,7 +45,7 @@ function optimizeBlock(IR\Block $block, ?int $armValueDest = null): IR\Block
             }
 
             if (Support\isPropagatableExpr($item->value)) {
-                if (operandIsNonDuplicable($item->value)) {
+                if (operandIsNonDuplicable($item->value, $facts)) {
                     $items[] = $item;
 
                     continue;
@@ -69,12 +70,12 @@ function optimizeBlock(IR\Block $block, ?int $armValueDest = null): IR\Block
 
                     continue;
                 }
-                if (operandIsNonDuplicable($item->value)) {
+                if (operandIsNonDuplicable($item->value, $facts)) {
                     $items[] = $item;
 
                     continue;
                 }
-                $captureIndex ??= lambdaCaptureIndex($block->items);
+                $captureIndex ??= lambdaCaptureIndex($block->items, $facts);
                 if (($captureIndex[$item->name] ?? -1) > $itemIndex) {
                     $items[] = $item;
 
@@ -104,7 +105,7 @@ function optimizeBlock(IR\Block $block, ?int $armValueDest = null): IR\Block
             $items[] = new IR\MatchStmt(
                 $scrutinee,
                 \array_map(
-                    static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArm($arm, $temps, $locals, $scrutinee, $item->dest),
+                    static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArm($arm, $temps, $locals, $scrutinee, $item->dest, $facts),
                     $item->arms,
                 ),
                 $item->dest,
@@ -119,7 +120,7 @@ function optimizeBlock(IR\Block $block, ?int $armValueDest = null): IR\Block
             $items[] = new IR\MatchReturn(
                 $scrutinee,
                 \array_map(
-                    static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArm($arm, $temps, $locals, $scrutinee),
+                    static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArm($arm, $temps, $locals, $scrutinee, null, $facts),
                     $item->arms,
                 ),
                 $item->exhaustive,
@@ -137,17 +138,17 @@ function optimizeBlock(IR\Block $block, ?int $armValueDest = null): IR\Block
 }
 
 /** @param array<int, IR\Operand> $temps @param array<string, IR\Operand> $locals */
-function mapMatchArm(IR\MatchArm $arm, array $temps, array $locals, IR\Operand $scrutinee, ?int $armValueDest = null): IR\MatchArm
+function mapMatchArm(IR\MatchArm $arm, array $temps, array $locals, IR\Operand $scrutinee, ?int $armValueDest = null, ?Facts $facts = null): IR\MatchArm
 {
     $armTemps = $temps;
     $armLocals = $locals;
     $mappedItems = [];
     foreach ($arm->body->items as $item) {
-        $mappedItems[] = mapStmt($item, $armTemps, $armLocals);
+        $mappedItems[] = mapStmt($item, $armTemps, $armLocals, $facts);
     }
 
     $optimized = cleanupConstructorArm(
-        new IR\MatchArm($arm->pattern, optimizeBlock(new IR\Block($mappedItems), $armValueDest), $arm->guards),
+        new IR\MatchArm($arm->pattern, optimizeBlock(new IR\Block($mappedItems), $facts, $armValueDest), $arm->guards),
         $scrutinee,
     );
 
@@ -164,8 +165,8 @@ function mapMatchArm(IR\MatchArm $arm, array $temps, array $locals, IR\Operand $
         mapGuards(
             $arm->guards,
             static fn (IR\Operand $g): IR\Operand => mapOperand($g, $temps, $locals),
-            static function (IR\Stmt $s) use (&$guardTemps, &$guardLocals): IR\Stmt {
-                return mapStmt($s, $guardTemps, $guardLocals);
+            static function (IR\Stmt $s) use ($facts, &$guardTemps, &$guardLocals): IR\Stmt {
+                return mapStmt($s, $guardTemps, $guardLocals, $facts);
             },
         ),
     );
@@ -252,7 +253,7 @@ function foldArmMatchReturn(array $items, int $matchDest): array
 }
 
 /** @param array<int, IR\Operand> $temps @param array<string, IR\Operand> $locals */
-function mapStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
+function mapStmt(IR\Stmt $stmt, array &$temps, array &$locals, ?Facts $facts = null): IR\Stmt
 {
     return match ($stmt::class) {
         IR\Ret::class => new IR\Ret(mapOperand($stmt->value, $temps, $locals)),
@@ -308,7 +309,7 @@ function mapStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
         IR\MatchStmt::class => new IR\MatchStmt(
             mapOperand($stmt->scrutinee, $temps, $locals),
             \array_map(
-                static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArmOperands($arm, $temps, $locals),
+                static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArmOperands($arm, $temps, $locals, $facts),
                 $stmt->arms,
             ),
             $stmt->dest,
@@ -317,7 +318,7 @@ function mapStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
         IR\MatchReturn::class => new IR\MatchReturn(
             mapOperand($stmt->scrutinee, $temps, $locals),
             \array_map(
-                static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArmOperands($arm, $temps, $locals),
+                static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArmOperands($arm, $temps, $locals, $facts),
                 $stmt->arms,
             ),
             $stmt->exhaustive,
@@ -325,13 +326,13 @@ function mapStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
         IR\IoMatch::class => new IR\IoMatch(
             mapOperand($stmt->scrutinee, $temps, $locals),
             \array_map(
-                static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArmOperands($arm, $temps, $locals),
+                static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArmOperands($arm, $temps, $locals, $facts),
                 $stmt->arms,
             ),
             $stmt->exhaustive,
         ),
-        IR\IoAssignAction::class => (function () use ($stmt, $temps, $locals): IR\IoAssignAction {
-            [$body, $result] = optimizeIoAssignAction($stmt->body, $stmt->result, $temps, $locals);
+        IR\IoAssignAction::class => (function () use ($stmt, $temps, $locals, $facts): IR\IoAssignAction {
+            [$body, $result] = optimizeIoAssignAction($stmt->body, $stmt->result, $temps, $locals, $facts);
 
             return new IR\IoAssignAction($stmt->dest, $body, $result, $stmt->srcLoc);
         })(),
@@ -339,7 +340,7 @@ function mapStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
             \array_map(static fn (IR\Operand $arg): IR\Operand => mapOperand($arg, $temps, $locals), $stmt->args),
         ),
         IR\Loop::class => new IR\Loop(new IR\Block(\array_map(
-            static fn (IR\Stmt $item): IR\Stmt => mapStmt($item, $temps, $locals),
+            static fn (IR\Stmt $item): IR\Stmt => mapStmt($item, $temps, $locals, $facts),
             $stmt->body->items,
         ))),
         default => $stmt,
@@ -347,18 +348,18 @@ function mapStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
 }
 
 /** Substitute temps/locals inside a match arm without re-running block optimization. */
-function mapMatchArmOperands(IR\MatchArm $arm, array $temps, array $locals): IR\MatchArm
+function mapMatchArmOperands(IR\MatchArm $arm, array $temps, array $locals, ?Facts $facts = null): IR\MatchArm
 {
     return new IR\MatchArm(
         $arm->pattern,
         new IR\Block(\array_map(
-            static fn (IR\Stmt $item): IR\Stmt => mapStmt($item, $temps, $locals),
+            static fn (IR\Stmt $item): IR\Stmt => mapStmt($item, $temps, $locals, $facts),
             $arm->body->items,
         )),
         mapGuards(
             $arm->guards,
             static fn (IR\Operand $guard): IR\Operand => mapOperand($guard, $temps, $locals),
-            static fn (IR\Stmt $s): IR\Stmt => mapStmt($s, $temps, $locals),
+            static fn (IR\Stmt $s): IR\Stmt => mapStmt($s, $temps, $locals, $facts),
         ),
     );
 }
@@ -412,17 +413,17 @@ function mapOperand(IR\Operand $operand, array $temps, array $locals): IR\Operan
 }
 
 /** @param array<int, IR\Operand> $temps @param array<string, IR\Operand> $locals @return array{0: IR\Block, 1: IR\Operand} */
-function optimizeIoAssignAction(IR\Block $body, IR\Operand $result, array $temps, array $locals): array
+function optimizeIoAssignAction(IR\Block $body, IR\Operand $result, array $temps, array $locals, ?Facts $facts = null): array
 {
     $bodyTemps = $temps;
     $bodyLocals = $locals;
     $mappedItems = [];
     foreach ($body->items as $item) {
-        $mappedItems[] = mapStmt($item, $bodyTemps, $bodyLocals);
+        $mappedItems[] = mapStmt($item, $bodyTemps, $bodyLocals, $facts);
     }
 
     $mappedResult = mapOperand($result, $bodyTemps, $bodyLocals);
-    $optimized = optimizeBlock(new IR\Block([...$mappedItems, new IR\Ret($mappedResult)]));
+    $optimized = optimizeBlock(new IR\Block([...$mappedItems, new IR\Ret($mappedResult)]), $facts);
     $items = $optimized->items;
     $tail = \array_pop($items);
     if (! $tail instanceof IR\Ret) {

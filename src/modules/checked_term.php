@@ -13,12 +13,23 @@ use Moggi\Syntax\Ast;
  * made the AST the only real term tree — copying or reparsing a node lost its
  * plan, and "the type of this term" was answered by position.
  *
- * This is the family the lowering reads instead. A term owns its identity
- * ({@see TermId}), its payload and its evidence decision; a source origin stays
- * beside it as the link tooling follows, never as a key. The family is closed and
- * grows one construct at a time — the cut-over is whole per construct, and the
- * lowerer's arm for it reads a term or refuses, so a migrated construct is never
- * readable two ways.
+ * This is the family the lowering reads for the decisions a construct leaves to
+ * inference. A term owns its identity ({@see TermId}), its payload and its
+ * evidence decision; a source origin stays beside it as the link tooling follows,
+ * never as a key. The family is closed *as a family* and grows one construct at a
+ * time — the cut-over is whole per construct, and the lowerer's arm for it reads a
+ * term or refuses, so a migrated construct is never readable two ways.
+ *
+ * It is not, however, a second structural tree. The children a term names are
+ * still the AST nodes they are (`CheckedLambda::$body` is a source body,
+ * `CheckedApplication` names a source callee and its argument nodes), so the AST
+ * remains the structural substrate and these terms are the decisions recorded
+ * over it. A construct's migration therefore means "its decisions are published
+ * as terms", not "its structure moved": lowering still dispatches on the AST
+ * shape of a construct that publishes no term, and free-variable/capture analysis
+ * still walks the tree. Treating this family as the closed core its name suggests
+ * would be wrong until structure migrates too; the two-representation cost is a
+ * known, accepted property of the hybrid, not an oversight.
  *
  * Families published today: evidence ({@see CheckedEvidenceRef},
  * {@see CheckedEvidenceMethod}), foreign calls ({@see CheckedForeignCall}),
@@ -71,6 +82,146 @@ final class TermId
 {
     public function __construct(public readonly int $value)
     {
+    }
+}
+
+/**
+ * One declaration's terms, by id and by the source node each one elaborates.
+ *
+ * The record owns the node→term link. It is deliberately not a public field on `AstNode`: a
+ * parsed node has no term, a copied node must not inherit one, and a scrubbed tree must keep
+ * answering from the record rather than from whatever a node still happens to carry. The map is
+ * the one place that link is written and read.
+ *
+ * Implements `ArrayAccess`/`IteratorAggregate` so existing readers that address a term by its
+ * `TermId` value stay direct; new code should prefer {@see termFor()} when it has the site.
+ */
+final class CheckedTerms implements \ArrayAccess, \Countable, \IteratorAggregate
+{
+    /** @var array<int, CheckedTerm> */
+    private array $byId = [];
+
+    /** @var array<int, int> spl_object_id(site) => term id */
+    private array $siteIds = [];
+
+    /** @var array<int, Ast\AstNode> the retained node for each site id, to defeat id reuse */
+    private array $siteNodes = [];
+
+    public function add(Ast\AstNode $site, CheckedTerm $term): void
+    {
+        $this->byId[$term->id->value] = $term;
+        $objectId = \spl_object_id($site);
+        $this->siteIds[$objectId] = $term->id->value;
+        $this->siteNodes[$objectId] = $site;
+    }
+
+    /** The term published for a site, or null when the record does not cover it. */
+    public function termFor(Ast\AstNode $site): ?CheckedTerm
+    {
+        $id = $this->idFor($site);
+
+        return $id === null ? null : ($this->byId[$id] ?? null);
+    }
+
+    /** The id published for a site, or null when the record does not cover it. */
+    public function idFor(Ast\AstNode $site): ?int
+    {
+        $objectId = \spl_object_id($site);
+        if (($this->siteNodes[$objectId] ?? null) !== $site) {
+            return null;
+        }
+
+        return $this->siteIds[$objectId] ?? null;
+    }
+
+    /** Forget a site's link without deleting the term it named. Used by scrub tests. */
+    public function forget(Ast\AstNode $site): void
+    {
+        $objectId = \spl_object_id($site);
+        unset($this->siteIds[$objectId], $this->siteNodes[$objectId]);
+    }
+
+    /**
+     * Re-key the site links after the module cache decodes this record.
+     *
+     * `spl_object_id()` is process-local: serialization restores the node objects but not their
+     * ids, so the keys written at publication name objects that no longer exist by that id. The
+     * nodes themselves are retained in `siteNodes`, so the old id → term pair is enough to
+     * rebuild the maps around the restored nodes. Without this, a warm module read answers
+     * `null` for every site and lowering refuses a record that is in fact complete.
+     */
+    public function __wakeup(): void
+    {
+        $siteIds = [];
+        $siteNodes = [];
+        foreach ($this->siteNodes as $oldId => $node) {
+            $termId = $this->siteIds[$oldId] ?? null;
+            if ($termId === null) {
+                continue;
+            }
+
+            $newId = \spl_object_id($node);
+            $siteIds[$newId] = $termId;
+            $siteNodes[$newId] = $node;
+        }
+
+        $this->siteIds = $siteIds;
+        $this->siteNodes = $siteNodes;
+    }
+
+    /** Restore a link previously removed by {@see forget()}; a null term stays forgotten. */
+    public function restore(Ast\AstNode $site, ?CheckedTerm $term): void
+    {
+        if ($term === null) {
+            $this->forget($site);
+
+            return;
+        }
+
+        $this->add($site, $term);
+    }
+
+    public function get(int $id): ?CheckedTerm
+    {
+        return $this->byId[$id] ?? null;
+    }
+
+    /** @return array<int, CheckedTerm> */
+    public function all(): array
+    {
+        return $this->byId;
+    }
+
+    public function count(): int
+    {
+        return \count($this->byId);
+    }
+
+    public function getIterator(): \Traversable
+    {
+        return new \ArrayIterator($this->byId);
+    }
+
+    public function offsetExists(mixed $offset): bool
+    {
+        return \is_int($offset) && isset($this->byId[$offset]);
+    }
+
+    public function offsetGet(mixed $offset): ?CheckedTerm
+    {
+        return \is_int($offset) ? ($this->byId[$offset] ?? null) : null;
+    }
+
+    public function offsetSet(mixed $offset, mixed $value): void
+    {
+        throw new \LogicException('checked terms are published through `add()` so the site link is never lost');
+    }
+
+    public function offsetUnset(mixed $offset): void
+    {
+        if (\is_int($offset)) {
+            unset($this->byId[$offset]);
+        }
     }
 }
 

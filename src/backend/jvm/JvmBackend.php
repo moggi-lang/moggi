@@ -30,6 +30,16 @@ require_once __DIR__ . '/dependencies.php';
 
 final class JvmBackend implements Backend
 {
+    public function id(): string
+    {
+        return 'jvm';
+    }
+
+    public function emitPlan(string $outputRelative, array $options = []): \Moggi\Modules\EmitPlan
+    {
+        return \Moggi\Modules\EmitPlan::forTarget($this->id(), $outputRelative);
+    }
+
     public function extension(): string
     {
         return '.class';

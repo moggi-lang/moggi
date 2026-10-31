@@ -88,7 +88,7 @@ function dceItems(array $items, Model $effects, ?int $matchDest = null): array
 {
     $items = \array_map(static fn (IR\Stmt $stmt): IR\Stmt => dceStmt($stmt, $effects), $items);
     for ($round = 0; $round < 16; ++$round) {
-        $used = usedInItems($items);
+        $used = usedInItems($items, $effects->facts);
         if ($matchDest !== null) {
             $used['temps'][$matchDest] = true;
         }
@@ -158,13 +158,13 @@ function dceStmt(IR\Stmt $stmt, Model $effects): IR\Stmt
  *
  * @param list<IR\Stmt> $items @return array{temps: array<int, true>, locals: array<string, true>}
  */
-function usedInItems(array $items): array
+function usedInItems(array $items, Facts $facts): array
 {
     $used = ['temps' => [], 'locals' => []];
     foreach ($items as $item) {
         collectUsedStmt($item, $used);
     }
-    markLambdaCaptureLocalsUsed($items, $used);
+    markLambdaCaptureLocalsUsed($items, $used, $facts);
 
     return $used;
 }
@@ -176,9 +176,9 @@ function usedInItems(array $items): array
  * @param list<IR\Stmt> $items
  * @param array{temps: array<int, true>, locals: array<string, true>} $used
  */
-function markLambdaCaptureLocalsUsed(array $items, array &$used): void
+function markLambdaCaptureLocalsUsed(array $items, array &$used, Facts $facts): void
 {
-    $needs = liftedCaptureNeeds();
+    $needs = liftedCaptureNeeds($facts);
     $isLifted = static fn (string $name): bool => isset($needs[$name]);
 
     foreach ($items as $item) {
@@ -525,20 +525,20 @@ function isFieldExtractCall(IR\Call $call, IR\Operand $scrutinee): bool
  *        their uses live in the *parent* block, so arm-local use counts look
  *        like zero and would otherwise drop the binding (empty match arms).
  */
-function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals = [], ?int $matchDest = null): IR\Block
+function propagateCopiesBlock(IR\Block $block, Facts $facts, array $temps = [], array $locals = [], ?int $matchDest = null): IR\Block
 {
     $items = [];
     $useCounts = null;
     $captureIndex = null;
 
     foreach ($block->items as $itemIndex => $item) {
-        $item = mapCopyStmt($item, $temps, $locals);
+        $item = mapCopyStmt($item, $facts, $temps, $locals);
 
         if ($item instanceof IR\Assign && isPropagatableExpr($item->value)) {
             if ($matchDest !== null && $item->dest === $matchDest) {
                 $items[] = $item;
                 if (isSimpleOperand($item->value)
-                    && ! operandIsNonDuplicable($item->value)
+                    && ! operandIsNonDuplicable($item->value, $facts)
                 ) {
                     $temps[$item->dest] = $item->value;
                 }
@@ -546,7 +546,7 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
                 continue;
             }
 
-            if (operandIsNonDuplicable($item->value)) {
+            if (operandIsNonDuplicable($item->value, $facts)) {
                 $useCounts ??= tempUseCountsInItems($block->items);
                 if (($useCounts[$item->dest] ?? 0) > 1) {
                     $items[] = $item;
@@ -580,14 +580,14 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
         }
 
         if ($item instanceof IR\Let && isPropagatableExpr($item->value)) {
-            $captureIndex ??= lambdaCaptureIndex($block->items);
+            $captureIndex ??= lambdaCaptureIndex($block->items, $facts);
             if (($captureIndex[$item->name] ?? -1) > $itemIndex) {
                 $items[] = $item;
 
                 continue;
             }
 
-            if (operandIsNonDuplicable($item->value)) {
+            if (operandIsNonDuplicable($item->value, $facts)) {
                 $localUses = countLocalUsesInItems($block->items, $item->name);
                 if ($localUses > 1) {
                     $items[] = $item;
@@ -615,19 +615,19 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
 }
 
 /** @param array<int, IR\Operand> $temps @param array<string, IR\Operand> $locals */
-function mapCopyStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
+function mapCopyStmt(IR\Stmt $stmt, Facts $facts, array &$temps, array &$locals): IR\Stmt
 {
-    $mapArm = static function (IR\MatchArm $arm, ?int $armMatchDest = null) use (&$temps, &$locals): IR\MatchArm {
+    $mapArm = static function (IR\MatchArm $arm, ?int $armMatchDest = null) use ($facts, &$temps, &$locals): IR\MatchArm {
         $guardTemps = $temps;
         $guardLocals = $locals;
 
         return new IR\MatchArm(
             $arm->pattern,
-            propagateCopiesBlock($arm->body, $temps, $locals, $armMatchDest),
+            propagateCopiesBlock($arm->body, $facts, $temps, $locals, $armMatchDest),
             IR\Visit\mapGuards(
                 $arm->guards,
                 static fn (IR\Operand $guard): IR\Operand => mapCopyOperand($guard, $guardTemps, $guardLocals),
-                static fn (IR\Stmt $s): IR\Stmt => mapCopyStmt($s, $guardTemps, $guardLocals),
+                static fn (IR\Stmt $s): IR\Stmt => mapCopyStmt($s, $facts, $guardTemps, $guardLocals),
             ),
         );
     };
@@ -678,10 +678,10 @@ function mapCopyStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
             ),
             $stmt->exhaustive,
         ),
-        IR\Loop::class => new IR\Loop(propagateCopiesBlock($stmt->body, $temps, $locals)),
+        IR\Loop::class => new IR\Loop(propagateCopiesBlock($stmt->body, $facts, $temps, $locals)),
         IR\IoAssignAction::class => new IR\IoAssignAction(
             $stmt->dest,
-            propagateCopiesBlock($stmt->body, $temps, $locals),
+            propagateCopiesBlock($stmt->body, $facts, $temps, $locals),
             mapCopyOperand($stmt->result, $temps, $locals),
             $stmt->srcLoc,
         ),
@@ -717,7 +717,7 @@ function mapCopyOperand(IR\Operand $operand, array $temps, array $locals): IR\Op
  *
  * @param list<IR\FunctionDecl> $functions
  */
-function publishLiftedCaptureNeeds(array $functions): void
+function publishLiftedCaptureNeeds(array $functions, Facts $facts): void
 {
     $bodies = [];
     $params = [];
@@ -759,7 +759,7 @@ function publishLiftedCaptureNeeds(array $functions): void
     }
     unset($locals);
 
-    Facts::current()->publishLiftedCaptureNeeds($needs);
+    $facts->publishLiftedCaptureNeeds($needs);
 }
 
 /**
@@ -767,9 +767,9 @@ function publishLiftedCaptureNeeds(array $functions): void
  *
  * @return array<string, list<string>>
  */
-function liftedCaptureNeeds(): array
+function liftedCaptureNeeds(Facts $facts): array
 {
-    return Facts::current()->liftedCaptureNeeds
+    return $facts->liftedCaptureNeeds
         ?? throw new \RuntimeException('global-pass: capture needs read before they were published');
 }
 
@@ -785,9 +785,9 @@ function liftedCaptureNeeds(): array
  * @param list<IR\Stmt> $items
  * @return array<string, int>
  */
-function lambdaCaptureIndex(array $items): array
+function lambdaCaptureIndex(array $items, Facts $facts): array
 {
-    $needs = liftedCaptureNeeds();
+    $needs = liftedCaptureNeeds($facts);
     $isLifted = static fn (string $name): bool => isset($needs[$name]);
 
     $lastIndex = [];

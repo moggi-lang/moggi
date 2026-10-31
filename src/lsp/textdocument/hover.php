@@ -17,6 +17,7 @@ use function Moggi\Docs\schemeToString;
 use function Moggi\Docs\surfaceTypeSignature;
 use function Moggi\LSP\Analysis\findNodeAt;
 use function Moggi\LSP\Analysis\findNodeChainAt;
+use function Moggi\LSP\Analysis\sourceChildren;
 use function Moggi\LSP\Index\binderResolved;
 use function Moggi\LSP\Index\isBinderResolved;
 use function Moggi\LSP\Protocol\compilerPosToLsp;
@@ -150,20 +151,9 @@ function astTreeContains(object $root, Ast\AstNode $needle): bool
     if ($root instanceof Ast\TypeNode) {
         return false;
     }
-    foreach (\get_object_vars($root) as $key => $prop) {
-        if ($key === 'core') {
-            continue;
-        }
-        if (\is_object($prop)) {
-            if (astTreeContains($prop, $needle)) {
-                return true;
-            }
-        } elseif (\is_array($prop)) {
-            foreach ($prop as $elem) {
-                if (\is_object($elem) && astTreeContains($elem, $needle)) {
-                    return true;
-                }
-            }
+    foreach (sourceChildren($root) as $child) {
+        if (astTreeContains($child, $needle)) {
+            return true;
         }
     }
 

@@ -57,6 +57,8 @@ function compileProject(array $paths, string $rootDir, CompilationContext $conte
  */
 function compileProjectBoth(array $paths, string $rootDir, CompilationContext $context, bool $optimize = true, bool $strip = false): array
 {
+    $timing = \getenv('MOGGI_PHASE_TIMING') === '1';
+    $phaseStarted = \microtime(true);
     $outputsKey = Cache\hashContent(
         preparedProjectDiskKey($paths, $rootDir, $context)
             . '|opt=' . ($optimize ? '1' : '0')
@@ -77,8 +79,14 @@ function compileProjectBoth(array $paths, string $rootDir, CompilationContext $c
     } finally {
         resume();
     }
+    if ($timing) {
+        \fwrite(STDERR, \sprintf("phase prepare %.2fs\n", \microtime(true) - $phaseStarted));
+    }
 
     $outputs = compilePreparedProject($prepared, $context, $optimize, $strip);
+    if ($timing) {
+        \fwrite(STDERR, \sprintf("phase project total %.2fs\n", \microtime(true) - $phaseStarted));
+    }
     Cache\artifactPut($outputsKey, $outputs);
 
     return $outputs;
@@ -96,6 +104,10 @@ function compileProjectBoth(array $paths, string $rootDir, CompilationContext $c
  */
 function compilePreparedProject(PreparedProject $prepared, CompilationContext $context, bool $optimize = true, bool $strip = false): array
 {
+    $timing = \getenv('MOGGI_PHASE_TIMING') === '1';
+    $pipelineSeconds = 0.0;
+    $specializeSeconds = 0.0;
+    $emitSeconds = 0.0;
     $optByModule = [];
     $relativeByModule = [];
     foreach ($prepared->units as $moduleName => $unit) {
@@ -126,6 +138,7 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
             }
         }
 
+        $pipelineStarted = \microtime(true);
         $artifacts = pipelineRun(new PipelineRequest(
             filename: $unit['path'],
             typedProgram: $prepared->program($moduleName, $context),
@@ -133,6 +146,7 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
             importContext: $prepared->importContexts[$moduleName],
             context: $context,
         ), PipelineStage::IrOpt);
+        $pipelineSeconds += \microtime(true) - $pipelineStarted;
         $optByModule[$moduleName] = $artifacts->irOpt
             ?? throw new \RuntimeException("pipeline produced no IR for module `{$moduleName}`");
         if ($irCacheKey !== null) {
@@ -145,8 +159,10 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         foreach ($prepared->importContexts as $moduleName => $importContext) {
             $externalFnsByModule[$moduleName] = $importContext->interface->externalFns();
         }
+        $specializeStarted = \microtime(true);
         $specialized = specializeAcrossModules($optByModule, $externalFnsByModule);
         $optByModule = $specialized['modules'];
+        $specializeSeconds += \microtime(true) - $specializeStarted;
     }
 
     if ($strip) {
@@ -251,6 +267,23 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         );
     }
 
+    /*
+     * Everything an emitter reads that is *not* the module's own IR: the target and its
+     * discriminator, the optimize/strip modes, the JVM interface set, the program-wide arity
+     * tables and (per module) the rendered plan. An emitted artifact is reused only when all of
+     * it matches, because those facts decide descriptors, arity maps and imported layout just as
+     * the body does; a body-only edit leaves this fingerprint alone, so the untouched modules are
+     * served from cache instead of the whole project being re-emitted.
+     */
+    $emitProgramFingerprint = \hash('xxh128', \serialize([
+        'backend' => $context->backendId,
+        'discriminator' => $context->backend->emitCacheDiscriminator(),
+        'optimize' => $optimize,
+        'strip' => $strip,
+        'foreignInterfaces' => $foreignInterfaces,
+        'callables' => $callableTables,
+    ]));
+
     foreach ($written as $moduleName) {
         $planned = $plans[$moduleName];
         $unit = $planned['unit'];
@@ -258,6 +291,33 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         $irUsage = $planned['irUsage'];
         $outputRelative = $planned['outputRelative'];
 
+        $cacheRel = $unit['cacheRelPath'] ?? null;
+        $emitCacheKey = null;
+        if (\is_string($cacheRel) && $cacheRel !== '') {
+            $emitCacheKey = $context->moduleProductKey(
+                $moduleName,
+                ($unit['contentKey'] ?? '')
+                    . '|opt=' . ($optimize ? '1' : '0')
+                    . '|strip=' . ($strip ? '1' : '0')
+                    . '|emit-layout=' . $emitProgramFingerprint
+                    . '|plan=' . \hash('xxh128', \serialize($planned['plan']))
+                    . '|path=' . ($unit['path'] ?? ''),
+                (($unit['program'] ?? null) instanceof Ast\Program)
+                    && programDeclaresForeign($unit['program']),
+            );
+            $cachedEmit = Cache\moduleGet($cacheRel, 'emit', $emitCacheKey, $context->backendId);
+            if (\is_array($cachedEmit)) {
+                foreach ($cachedEmit as $path => $bytes) {
+                    if (\is_string($path) && \is_string($bytes)) {
+                        $emitOutputs[$path] = $bytes;
+                    }
+                }
+
+                continue;
+            }
+        }
+
+        $emitStarted = \microtime(true);
         $emitted = codegenWith($context->backend, $optimizedIr, $unit['path'], [
             'namespace' => $unit['namespace'],
             'plan' => $planned['plan'],
@@ -267,13 +327,26 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
             'callableTables' => $callableTables,
             'foreignInterfaces' => $foreignInterfaces,
         ]);
+        $emitSeconds += \microtime(true) - $emitStarted;
 
         foreach ($emitted as $path => $bytes) {
             $emitOutputs[$path] = $bytes;
         }
+
+        if ($emitCacheKey !== null && \is_string($cacheRel)) {
+            Cache\modulePut($cacheRel, 'emit', $emitCacheKey, $emitted, $context->backendId);
+        }
     }
 
     $emitOutputs = $context->backend->foldProgramEmit($emitOutputs);
+    if ($timing) {
+        \fwrite(STDERR, \sprintf(
+            "phase pipeline %.2fs specialize %.2fs emit %.2fs\n",
+            $pipelineSeconds,
+            $specializeSeconds,
+            $emitSeconds,
+        ));
+    }
 
     return [
         'emit' => $emitOutputs,

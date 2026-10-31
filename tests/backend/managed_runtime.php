@@ -179,32 +179,41 @@ if ($javap !== null) {
         }
         $verified = 0;
         $unnamable = [];
-        foreach ($classes as $internal => $bytes) {
-            $binary = \str_replace('/', '.', $internal);
-            $classpath = $dir;
-            if ($reservedDevice($internal)) {
-                if ($reservedJar === null) {
+        if ($reserved !== [] && $reservedJar === null) {
+            // Without a jar there is no way to give the launcher `Con.class` on a host whose
+            // filesystem reserves that name. Any class may reference it (`RT` does), so running
+            // the remaining classes would produce a false NoClassDefFoundError. Report the skip
+            // rather than claim a verifier pass that never happened.
+            echo "jvm runtime verifier skipped: reserved class names [" . \implode(', ', $reserved)
+                . "] and no usable ZipArchive for `moggi-classes.jar`\n";
+        } else {
+            foreach ($classes as $internal => $bytes) {
+                $binary = \str_replace('/', '.', $internal);
+                // The tree cannot name `Con.class` on Windows, so it lives in the jar — and any
+                // other runtime class may reference it (`RT` does). The jar therefore joins every
+                // launch's classpath, not only the launches of the classes written inside it.
+                $classpath = $reservedJar !== null ? $dir . \PATH_SEPARATOR . $reservedJar : $dir;
+                if ($reservedDevice($internal) && $reservedJar === null) {
                     $unnamable[] = $internal;
 
                     continue;
                 }
-                $classpath = $reservedJar;
+                $result = runProcess([$java, '-Xverify:all', '-cp', $classpath, $binary], $work, null, false, 20);
+                $diagnostics = $result['stdout'] . "\n" . $result['stderr'];
+                $assert(
+                    ! \preg_match('/VerifyError|ClassFormatError|IncompatibleClassChangeError/', $diagnostics),
+                    "`{$internal}` must pass the JVM verifier:\n{$diagnostics}",
+                );
+                $assert(
+                    \str_contains($diagnostics, 'Main method not found') || $result['exitCode'] === 0,
+                    "`{$internal}` did not reach the missing-`main` stop, so it was never verified:\n{$diagnostics}",
+                );
+                ++$verified;
             }
-            $result = runProcess([$java, '-Xverify:all', '-cp', $classpath, $binary], $work, null, false, 20);
-            $diagnostics = $result['stdout'] . "\n" . $result['stderr'];
-            $assert(
-                ! \preg_match('/VerifyError|ClassFormatError|IncompatibleClassChangeError/', $diagnostics),
-                "`{$internal}` must pass the JVM verifier:\n{$diagnostics}",
-            );
-            $assert(
-                \str_contains($diagnostics, 'Main method not found') || $result['exitCode'] === 0,
-                "`{$internal}` did not reach the missing-`main` stop, so it was never verified:\n{$diagnostics}",
-            );
-            ++$verified;
+            echo "jvm runtime classes verified: {$verified}"
+                . ($unnamable !== [] ? ' (not nameable on this host: ' . \implode(', ', $unnamable) . ')' : '')
+                . "\n";
         }
-        echo "jvm runtime classes verified: {$verified}"
-            . ($unnamable !== [] ? ' (not nameable on this host: ' . \implode(', ', $unnamable) . ')' : '')
-            . "\n";
     }
 }
 

@@ -101,6 +101,33 @@ try {
 
     $roundCore = $round->core;
     $assert($roundCore instanceof CheckedCore, 'the record did not survive the cache encoding');
+
+    // A site link is keyed by object identity, and unserialization gives every node a new object
+    // id. The record has to rebuild those keys, or every parameter/pattern lookup after a warm read
+    // answers null even though the term table itself survived.
+    $declaration = static function (\Moggi\Syntax\Ast\Program $program, string $name): ?\Moggi\Syntax\Ast\FunctionDecl {
+        foreach ($program->items as $item) {
+            if ($item instanceof \Moggi\Syntax\Ast\FunctionDecl && $item->name === $name) {
+                return $item;
+            }
+        }
+
+        return null;
+    };
+    $coldScaled = $declaration($program, 'scaled');
+    $warmScaled = $declaration($round, 'scaled');
+    $assert($coldScaled !== null && $warmScaled !== null, 'the cache fixture lost `scaled`');
+    $coldSite = $coldScaled->params[0] ?? null;
+    $warmSite = $warmScaled->params[0] ?? null;
+    $assert($coldSite !== null && $warmSite !== null, 'the cache fixture lost the parameter site');
+    $coldTerm = $core->function('scaled')?->termFor($coldSite);
+    $warmTerm = $roundCore->function('scaled')?->termFor($warmSite);
+    $assert($coldTerm instanceof Modules\CheckedPattern, 'the cold record does not plan the parameter');
+    $assert(
+        $warmTerm instanceof Modules\CheckedPattern && $warmTerm->id->value === $coldTerm->id->value,
+        'a site link did not survive the cache round-trip: cold='
+            . ($coldTerm?->id->value ?? 'null') . ' warm=' . ($warmTerm?->id->value ?? 'null'),
+    );
     $roundNames = \array_keys($roundCore->functions);
     \sort($roundNames);
     $assert($roundNames === $names, 'the cached record lost declarations, got: ' . \implode(', ', $roundNames));
@@ -109,14 +136,14 @@ try {
         'the cached record lost the evidence vector',
     );
     $assert(
-        \count($roundCore->function('scaled')?->terms ?? []) === \count($core->function('scaled')?->terms ?? []),
+        ($roundCore->function('scaled')?->terms->count() ?? 0) === ($core->function('scaled')?->terms->count() ?? 0),
         'the cached record lost the evidence terms',
     );
     // A term's identity is its own id, not an object id: it must survive the cache round-trip and
     // still be the key the lowering resolves through.
     $termIds = static fn (CheckedCore $core): array => \array_map(
         static fn ($term): string => $term::class . '#' . $term->id->value . '@' . $term->origin,
-        $core->function('scaled')?->terms ?? [],
+        $core->function('scaled')?->terms->all() ?? [],
     );
     $assert(
         $termIds($roundCore) === $termIds($core),

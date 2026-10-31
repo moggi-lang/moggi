@@ -22,10 +22,16 @@ use function Moggi\Syntax\Ast\generatedWorkerPrefix;
  * computed once per compilation revision. Before this module the same logical
  * layout was derived at seven independent sites (`bindLambdaCaptures`, the optimizer's inline
  * metadata, the module arity table, and each of the three backends), and the two sides of a call
- * could only agree because every one of them sorted the capture names alphabetically. The runtime
- * slot order is `E ++ C ++ V` ({@see CallableSig::slotNames()}), published once; `captures` keeps
- * the order the binder produced, with the evidence slots taken out of it so the two lists are
- * disjoint and neither side sorts to agree with the other.
+ * could only agree because every one of them sorted the capture names alphabetically. `captures`
+ * keeps the order the binder produced, with the evidence slots taken out of it so the two lists
+ * are disjoint and neither side sorts to agree with the other; the runtime arity is
+ * `|E| + |C| + |V|`.
+ *
+ * There is deliberately no `E ++ C ++ V` accessor. For a lifted callable `E` and `C` are a *split*
+ * of that one binder-ordered vector, so a concatenation that puts every evidence slot first names
+ * a different slot order than the one the binder produced — and than the order a call passes
+ * (`Optimize\Partial::publishedLayout()` reads `meta()`'s vector). The order is the vector here,
+ * not a derived convenience.
  *
  * Not published here — the migration list, not a permanent caveat: imported entries, whose facts
  * travel in the module `facts` record (and, on the import side, in `ImportInterface::abi()`), and
@@ -172,18 +178,6 @@ final class CallableSig
         return $this->hiddenSlots() + \count($this->params);
     }
 
-    /**
-     * The runtime slot names in the order a call passes them: the evidence slots, then the
-     * captures, then the user parameters. This is the one publication of that order. `captures`
-     * keeps the binder's order and excludes evidence, so a call site and a definition agree by
-     * reading this vector rather than by sorting the same names.
-     *
-     * @return list<string>
-     */
-    public function slotNames(): array
-    {
-        return [...$this->evidenceNames(), ...$this->captures, ...$this->params];
-    }
 }
 
 /** A module's entries, keyed by the name their declarations use. */
@@ -296,10 +290,11 @@ function captureMeta(array $byName): array
 {
     return captureClosure(
         $byName,
-        static fn (IR\FunctionDecl $function): array => freeLocalsInBlock(
-            $function->body,
-            \array_fill_keys($function->params, true),
-        ),
+        static fn (IR\FunctionDecl $function): array => $function->captures
+            ?? freeLocalsInBlock(
+                $function->body,
+                \array_fill_keys($function->params, true),
+            ),
     );
 }
 

@@ -139,29 +139,29 @@ function evidencePlanFor(Ast\AstNode $site): ?EvidencePlan
  * dictionary from its scope.
  *
  * One term per site: a site that is also some instance's context is made once,
- * not twice. The id is written back onto the node it elaborates
- * (`$node->checkedTerm`), which is the one link lowering follows; the node's own
- * evidence fields are never read again.
+ * not twice. The returned record owns the site→term link; nothing is written back
+ * onto the node, so the node's own evidence fields are never read again and a
+ * copied or reparsed node cannot inherit a term it did not elaborate.
  *
  * A lambda's capture set is completed in a second pass over the sites this walk
  * reserved ids for, because answering it needs the evidence terms *inside* the
  * body — and pre-order visits the lambda first. The ids stay the walk's: only the
  * fill happens later, so the record is the same for the same source.
  *
- * @return array<int, CheckedTerm>
+ * @return CheckedTerms
  */
-function checkedTermsIn(Ast\AstNode $root): array
+function checkedTermsIn(Ast\AstNode $root): CheckedTerms
 {
-    $terms = [];
+    $terms = new CheckedTerms();
     $seen = [];
     $next = 0;
     /** @var list<array{id: TermId, node: Ast\Lambda}> $lambdas */
     $lambdas = [];
 
-    $publishPattern = static function (Ast\AstNode $pattern) use (&$terms, &$seen, &$next, &$publishPattern): int {
+    $publishPattern = static function (Ast\AstNode $pattern) use ($terms, &$seen, &$next, &$publishPattern): int {
         $key = \spl_object_id($pattern);
         if (isset($seen[$key])) {
-            return $pattern->checkedTerm ?? throw new \LogicException(
+            return $terms->idFor($pattern) ?? throw new \LogicException(
                 'a pattern published a second time lost the id of its first review',
             );
         }
@@ -190,9 +190,8 @@ function checkedTermsIn(Ast\AstNode $root): array
         }
 
         $id = new TermId(++$next);
-        $pattern->checkedTerm = $id->value;
         $seen[$key] = true;
-        $terms[$id->value] = new CheckedPattern(
+        $terms->add($pattern, new CheckedPattern(
             $id,
             CheckedFunction::termOrigin($pattern),
             patternShape($pattern),
@@ -204,12 +203,12 @@ function checkedTermsIn(Ast\AstNode $root): array
             $children,
             $fields,
             \array_keys(patternBoundNames($pattern)),
-        );
+        ));
 
         return $id->value;
     };
 
-    walkElaboration($root, static function (Ast\AstNode $node) use (&$terms, &$seen, &$next, &$lambdas, &$publishPattern): void {
+    $visit = static function (Ast\AstNode $node) use ($terms, &$seen, &$next, &$lambdas, &$publishPattern): void {
         $intrinsic = intrinsicNameFor($node);
         if ($intrinsic !== null) {
             $key = \spl_object_id($node);
@@ -219,9 +218,8 @@ function checkedTermsIn(Ast\AstNode $root): array
             $seen[$key] = true;
 
             $id = new TermId(++$next);
-            $node->checkedTerm = $id->value;
 
-            $terms[$id->value] = $node instanceof Ast\Apply
+            $terms->add($node, $node instanceof Ast\Apply
                 ? new CheckedApplication(
                     $id,
                     CheckedFunction::termOrigin($node),
@@ -230,7 +228,7 @@ function checkedTermsIn(Ast\AstNode $root): array
                     $node->argument,
                     $intrinsic,
                 )
-                : new CheckedIntrinsicCall($id, CheckedFunction::termOrigin($node), $intrinsic);
+                : new CheckedIntrinsicCall($id, CheckedFunction::termOrigin($node), $intrinsic));
 
             return;
         }
@@ -243,8 +241,7 @@ function checkedTermsIn(Ast\AstNode $root): array
             $seen[$key] = true;
 
             $id = new TermId(++$next);
-            $node->checkedTerm = $id->value;
-            $terms[$id->value] = new CheckedVariable($id, CheckedFunction::termOrigin($node), $node->binderId);
+            $terms->add($node, new CheckedVariable($id, CheckedFunction::termOrigin($node), $node->binderId));
 
             return;
         }
@@ -257,14 +254,13 @@ function checkedTermsIn(Ast\AstNode $root): array
             $seen[$key] = true;
 
             $id = new TermId(++$next);
-            $node->checkedTerm = $id->value;
-            $terms[$id->value] = new CheckedLiteral(
+            $terms->add($node, new CheckedLiteral(
                 $id,
                 CheckedFunction::termOrigin($node),
                 literalShape($node),
                 $node->value,
                 $node instanceof Ast\IntegerLit ? $node->digits : null,
-            );
+            ));
 
             return;
         }
@@ -277,8 +273,7 @@ function checkedTermsIn(Ast\AstNode $root): array
             $seen[$key] = true;
 
             $id = new TermId(++$next);
-            $node->checkedTerm = $id->value;
-            $terms[$id->value] = new CheckedGuards($id, CheckedFunction::termOrigin($node), $node->clauses);
+            $terms->add($node, new CheckedGuards($id, CheckedFunction::termOrigin($node), $node->clauses));
 
             return;
         }
@@ -296,21 +291,20 @@ function checkedTermsIn(Ast\AstNode $root): array
             }
 
             $id = new TermId(++$next);
-            $node->checkedTerm = $id->value;
             $constructor = $node instanceof Ast\RecordCon
                 ? $node->name
                 : ($node->constructor ?? throw new \LogicException(
                     'a record update at ' . CheckedFunction::termOrigin($node)
                     . ' reached publication without a constructor the check resolved',
                 ));
-            $terms[$id->value] = new CheckedRecord(
+            $terms->add($node, new CheckedRecord(
                 $id,
                 CheckedFunction::termOrigin($node),
                 $constructor,
                 $fields,
                 $node instanceof Ast\RecordUpdate ? $node->object : null,
                 $node instanceof Ast\RecordUpdate ? $node->fieldOnNewtype : false,
-            );
+            ));
 
             return;
         }
@@ -345,14 +339,13 @@ function checkedTermsIn(Ast\AstNode $root): array
             $seen[$key] = true;
 
             $id = new TermId(++$next);
-            $node->checkedTerm = $id->value;
-            $terms[$id->value] = new CheckedApplication(
+            $terms->add($node, new CheckedApplication(
                 $id,
                 CheckedFunction::termOrigin($node),
                 remainingArity($node->inferredInternalType),
                 $node->function,
                 $node->argument,
-            );
+            ));
 
             return;
         }
@@ -378,13 +371,12 @@ function checkedTermsIn(Ast\AstNode $root): array
             }
 
             $id = new TermId(++$next);
-            $node->checkedTerm = $id->value;
-            $terms[$id->value] = new CheckedCase(
+            $terms->add($node, new CheckedCase(
                 $id,
                 CheckedFunction::termOrigin($node),
                 $arms,
                 $node->exhaustive,
-            );
+            ));
 
             return;
         }
@@ -412,13 +404,12 @@ function checkedTermsIn(Ast\AstNode $root): array
             };
 
             $id = new TermId(++$next);
-            $node->checkedTerm = $id->value;
-            $terms[$id->value] = new CheckedLetGroup(
+            $terms->add($node, new CheckedLetGroup(
                 $id,
                 CheckedFunction::termOrigin($node),
                 $components,
                 $body,
-            );
+            ));
 
             return;
         }
@@ -436,8 +427,7 @@ function checkedTermsIn(Ast\AstNode $root): array
             $seen[$key] = true;
 
             $id = new TermId(++$next);
-            $node->checkedTerm = $id->value;
-            $terms[$id->value] = new CheckedForeignCall(
+            $terms->add($node, new CheckedForeignCall(
                 $id,
                 CheckedFunction::termOrigin($node),
                 $node->name,
@@ -452,7 +442,7 @@ function checkedTermsIn(Ast\AstNode $root): array
                 $node->handleBox,
                 $node->handleUnboxArgs,
                 $node->nativeSig,
-            );
+            ));
 
             return;
         }
@@ -464,10 +454,9 @@ function checkedTermsIn(Ast\AstNode $root): array
         $seen[$key] = true;
 
         $id = new TermId(++$next);
-        $node->checkedTerm = $id->value;
         $origin = $plan->origin;
 
-        $terms[$id->value] = $node instanceof Ast\EvidenceMethod
+        $terms->add($node, $node instanceof Ast\EvidenceMethod
             ? new CheckedEvidenceMethod(
                 $id,
                 $origin,
@@ -477,8 +466,10 @@ function checkedTermsIn(Ast\AstNode $root): array
                 $node->methodNullary,
                 $plan,
             )
-            : new CheckedEvidenceRef($id, $origin, $node->class, $plan);
-    });
+            : new CheckedEvidenceRef($id, $origin, $node->class, $plan));
+    };
+
+    walkElaboration($root, $visit);
 
     foreach ($lambdas as $lambda) {
         $node = $lambda['node'];
@@ -492,21 +483,20 @@ function checkedTermsIn(Ast\AstNode $root): array
             $node->body,
             \array_fill_keys($parameterNames, true),
             static fn (Ast\EvidenceMethod $method): ?string
-                => ($terms[$method->checkedTerm ?? 0] ?? null) instanceof CheckedEvidenceMethod
-                    ? $terms[$method->checkedTerm]->plan->parameter
+                => $terms->termFor($method) instanceof CheckedEvidenceMethod
+                    ? $terms->termFor($method)->plan->parameter
                     : null,
             $terms,
         );
 
-        $node->checkedTerm = $lambda['id']->value;
-        $terms[$lambda['id']->value] = new CheckedLambda(
+        $terms->add($node, new CheckedLambda(
             $lambda['id'],
             CheckedFunction::termOrigin($node),
             $parameterNames,
             $parameterBinders,
             \array_values(\array_unique($captures)),
             $node->body,
-        );
+        ));
     }
 
     return $terms;
@@ -520,15 +510,14 @@ function checkedTermsIn(Ast\AstNode $root): array
  * both times, so the node's own field is never a second answer. A pattern that binds nothing (a
  * wildcard, a literal) has no term and answers null.
  *
- * @param array<int, CheckedTerm> $terms
  */
-function patternBinder(Ast\AstNode $pattern, array $terms): ?int
+function patternBinder(Ast\AstNode $pattern, CheckedTerms $terms): ?int
 {
     if (! $pattern instanceof Ast\PatVar) {
         return null;
     }
 
-    $term = $pattern->checkedTerm === null ? null : ($terms[$pattern->checkedTerm] ?? null);
+    $term = $terms->termFor($pattern);
 
     return $term instanceof CheckedPattern ? $term->binder : null;
 }

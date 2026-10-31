@@ -20,6 +20,7 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 require $root . '/src/compiler.php';
 
 use Moggi\IR;
+use Moggi\Optimize\Facts\Facts;
 
 use function Moggi\Optimize\CaseFold\tryFoldMatch;
 
@@ -48,7 +49,7 @@ $fold = static function (string $patternName): ?array {
     );
     $head = new IR\ForeignCall('php', 'function', 'strlen', 'static', [new IR\ConstStr('x')]);
 
-    return tryFoldMatch($match, new IR\ListLit([$head]), [], [], $nextTemp);
+    return tryFoldMatch($match, new IR\ListLit([$head]), [], [], $nextTemp, new Facts());
 };
 
 $first = $fold('head');

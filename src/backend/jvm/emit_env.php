@@ -2,6 +2,7 @@
 
 namespace Moggi\Backend\Jvm\Codegen;
 
+require_once __DIR__ . '/../managed/operand.php';
 
 use Moggi\Backend\Jvm\Classfile\CodeBuilder;
 use Moggi\Backend\Jvm\Classfile\ConstantPool;
@@ -9,7 +10,7 @@ use Moggi\Debug\SourceMapBuilder;
 use Moggi\IR;
 use function Moggi\Backend\Meta\tempReadsForFunction;
 
-final class EmitEnv
+final class EmitEnv implements \Moggi\Backend\Managed\OperandTarget
 {
     /** @var array<string, int> */
     public array $locals = [];
@@ -130,6 +131,112 @@ final class EmitEnv
         }
 
         return $locals;
+    }
+
+    // --- OperandTarget: how this target pushes a value, loads a slot and calls a method -------
+
+    public function pushInt(int $value): void
+    {
+        pushBoxedInt($this, $value);
+    }
+
+    public function pushString(string $value): void
+    {
+        $this->c->ldc($this->cp->string_($value));
+    }
+
+    public function pushDouble(float $value): void
+    {
+        $this->c->ldc($this->cp->string_(formatDoubleLiteral($value)));
+        $this->c->invokestatic(
+            $this->cp->methodRef('java/lang/Double', 'valueOf', '(Ljava/lang/String;)Ljava/lang/Double;'),
+            1,
+            true,
+        );
+    }
+
+    public function pushNull(): void
+    {
+        $this->c->aconst_null();
+    }
+
+    public function pushBool(bool $value): void
+    {
+        $this->c->iconst($value ? 1 : 0);
+        $this->c->invokestatic(
+            $this->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'),
+            1,
+            true,
+        );
+    }
+
+    public function loadNamed(string $name): void
+    {
+        $this->c->aload($this->locals[$name] ?? throw new \RuntimeException("unknown local {$name}"));
+    }
+
+    public function loadTemp(int $id): void
+    {
+        $key = 't' . $id;
+        $slot = $this->locals[$key] ?? null;
+        if ($slot === null) {
+            throw new \RuntimeException("unknown temp {$key} in {$this->owner}");
+        }
+        $this->c->aload($slot);
+    }
+
+    public function noteLoc(?IR\SrcLoc $loc): void
+    {
+        noteSrcLoc($this, $loc);
+    }
+
+    public function intrinsic(IR\Intrinsic $op): void
+    {
+        emitIntrinsic($this, $op);
+    }
+
+    public function listLit(IR\ListLit $op): void
+    {
+        emitListLit($this, $op);
+    }
+
+    public function foreign(IR\ForeignCall $op): void
+    {
+        emitForeign($this, $op);
+    }
+
+    public function partial(IR\Partial $op): void
+    {
+        emitPartialValue($this, $op->fn, $op->arity, $op->args);
+    }
+
+    public function dictMethodCall(): void
+    {
+        $this->c->invokestatic(
+            $this->cp->methodRef('moggi/rt/RT', 'dictMethod', '(Ljava/lang/Object;Ljava/lang/String;)Ljava/lang/Object;'),
+            2,
+            true,
+        );
+    }
+
+    public function directCall(string $name): void
+    {
+        emitStaticCall($this, $name, []);
+    }
+
+    public function fnValue(string $name, int $arity): void
+    {
+        emitTopLevelFnValue($this, $name, $arity);
+    }
+
+    public function label(): string
+    {
+        return 'JVM';
+    }
+
+    public function unsupported(string $class): \RuntimeException
+    {
+        return new \RuntimeException('JVM emit: unsupported operand ' . $class);
     }
 }
 

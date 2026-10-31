@@ -4,6 +4,7 @@ namespace Moggi\IR;
 
 use Moggi\Modules\CheckedFunction;
 use Moggi\Modules\CheckedPattern;
+use Moggi\Modules\CheckedTerms;
 use Moggi\Modules\PatternShape;
 use Moggi\Syntax\Ast;
 
@@ -380,14 +381,14 @@ function srcLocFromAst(Ast\AstNode $node, string $module, string $function, stri
  * nothing by that name and is called `_pN`, N being its position.
  *
  * @param array<int, Ast\AstNode> $patterns
- * @param array<int, \Moggi\Modules\CheckedTerm> $terms the declaration's published terms
+ * @param CheckedTerms $terms the declaration's published terms
  * @return array<int, string>
  */
-function functionParamSlots(array $patterns, array $terms): array
+function functionParamSlots(array $patterns, CheckedTerms $terms): array
 {
     $names = [];
     foreach ($patterns as $i => $pattern) {
-        $term = $pattern->checkedTerm === null ? null : ($terms[$pattern->checkedTerm] ?? null);
+        $term = $terms->termFor($pattern);
         if ($term instanceof CheckedPattern && $term->shape === PatternShape::Var) {
             $names[] = $term->name
                 ?? throw new \RuntimeException("the parameter pattern at {$term->origin} publishes no name");
@@ -407,7 +408,7 @@ function functionParamSlots(array $patterns, array $terms): array
  * A pattern is structure — a constructor's arguments, a record's fields, a list's head and tail,
  * a variable's name — and it was the last family whose structure lowering read off the node one
  * level below the term that owned it. The term publishes the shape, the names and the
- * sub-patterns by their own ids, so this function reads the site's `checkedTerm` and nothing
+ * sub-patterns by their own ids, so this function asks the checked record's site map and nothing
  * else: scrubbing every pattern node's fields leaves the IR identical, which is what
  * `tests/semantics/checked_pattern_terms.php` asserts.
  */
@@ -440,7 +441,7 @@ function plannedPattern(Ast\AstNode $site, LowerCtx $ctx): CheckedPattern
 /** A pattern term by its own id, for a sub-pattern the parent names. */
 function patternTermById(int $id, LowerCtx $ctx, CheckedPattern $parent): CheckedPattern
 {
-    $term = $ctx->terms[$id] ?? null;
+    $term = $ctx->terms->get($id);
 
     if ($term instanceof CheckedPattern) {
         return $term;
@@ -607,7 +608,7 @@ function freshLocalName(LowerCtx $ctx, string $occ): string
  * @param array<int, \Moggi\Modules\CheckedTerm> $terms the enclosure's published terms, when it has them
  * @return array<int, string>
  */
-function freeVarsExpr(Ast\AstNode $expr, array $bound, callable $evidenceParameter, array $terms = []): array
+function freeVarsExpr(Ast\AstNode $expr, array $bound, callable $evidenceParameter, CheckedTerms $terms = new CheckedTerms()): array
 {
     $walk = static fn (Ast\AstNode $node, array $names): array
         => freeVarsExpr($node, $names, $evidenceParameter, $terms);
@@ -661,7 +662,7 @@ function freeVarsExpr(Ast\AstNode $expr, array $bound, callable $evidenceParamet
  * @param array<int, \Moggi\Modules\CheckedTerm> $terms
  * @return array<int, string>
  */
-function freeVarsInChildren(Ast\AstNode $expr, array $bound, callable $evidenceParameter, array $terms = []): array
+function freeVarsInChildren(Ast\AstNode $expr, array $bound, callable $evidenceParameter, CheckedTerms $terms = new CheckedTerms()): array
 {
     $free = [];
     foreach ($expr->childValues() as $child) {
@@ -680,7 +681,7 @@ function freeVarsInChildren(Ast\AstNode $expr, array $bound, callable $evidenceP
  * @param array<int, \Moggi\Modules\CheckedTerm> $terms
  * @return array<int, string>
  */
-function freeVarsInRecordFields(array $fields, array $bound, callable $evidenceParameter, array $terms = []): array
+function freeVarsInRecordFields(array $fields, array $bound, callable $evidenceParameter, CheckedTerms $terms = new CheckedTerms()): array
 {
     $free = [];
     foreach ($fields as $field) {
@@ -697,7 +698,7 @@ function freeVarsInRecordFields(array $fields, array $bound, callable $evidenceP
  * @param array<int, \Moggi\Modules\CheckedTerm> $terms
  * @return array<int, string>
  */
-function freeVarsInExprs(array $exprs, array $bound, callable $evidenceParameter, array $terms = []): array
+function freeVarsInExprs(array $exprs, array $bound, callable $evidenceParameter, CheckedTerms $terms = new CheckedTerms()): array
 {
     $free = [];
     foreach ($exprs as $expr) {
@@ -720,9 +721,9 @@ function freeVarsInExprs(array $exprs, array $bound, callable $evidenceParameter
  * @param array<int, \Moggi\Modules\CheckedTerm> $terms
  * @return array<int, string>
  */
-function freeVarsInGroupNode(Ast\AstNode $expr, array $bound, callable $evidenceParameter, array $terms): array
+function freeVarsInGroupNode(Ast\AstNode $expr, array $bound, callable $evidenceParameter, CheckedTerms $terms): array
 {
-    $term = $expr->checkedTerm === null ? null : ($terms[$expr->checkedTerm] ?? null);
+    $term = $terms->termFor($expr);
     if (! $term instanceof \Moggi\Modules\CheckedLetGroup) {
         $node = $expr instanceof Ast\Where ? $expr->expr : $expr->body;
 
@@ -758,9 +759,9 @@ function freeVarsInGroupNode(Ast\AstNode $expr, array $bound, callable $evidence
  * @param array<int, \Moggi\Modules\CheckedTerm> $terms
  * @return array<int, string>
  */
-function freeVarsInCaseNode(Ast\CaseExpr $expr, array $bound, callable $evidenceParameter, array $terms): array
+function freeVarsInCaseNode(Ast\CaseExpr $expr, array $bound, callable $evidenceParameter, CheckedTerms $terms): array
 {
-    $term = $expr->checkedTerm === null ? null : ($terms[$expr->checkedTerm] ?? null);
+    $term = $terms->termFor($expr);
     if (! $term instanceof \Moggi\Modules\CheckedCase) {
         return [
             ...freeVarsExpr($expr->scrutinee, $bound, $evidenceParameter, $terms),
@@ -789,7 +790,7 @@ function freeVarsInCaseNode(Ast\CaseExpr $expr, array $bound, callable $evidence
  * @param array<int, \Moggi\Modules\CheckedTerm> $terms
  * @return array<int, string>
  */
-function freeVarsLet(array $bindings, Ast\AstNode $body, array $bound, callable $evidenceParameter, array $terms = []): array
+function freeVarsLet(array $bindings, Ast\AstNode $body, array $bound, callable $evidenceParameter, CheckedTerms $terms = new CheckedTerms()): array
 {
     $groupBound = $bound;
     foreach ($bindings as $binding) {
@@ -811,7 +812,7 @@ function freeVarsLet(array $bindings, Ast\AstNode $body, array $bound, callable 
  * @param array<int, \Moggi\Modules\CheckedTerm> $terms
  * @return array<int, string>
  */
-function freeVarsInGuards(array $clauses, array $bound, callable $evidenceParameter, array $terms = []): array
+function freeVarsInGuards(array $clauses, array $bound, callable $evidenceParameter, CheckedTerms $terms = new CheckedTerms()): array
 {
     $free = [];
     foreach ($clauses as $clause) {
@@ -832,7 +833,7 @@ function freeVarsInGuards(array $clauses, array $bound, callable $evidenceParame
  * @param array<int, \Moggi\Modules\CheckedTerm> $terms
  * @return array<int, string>
  */
-function freeVarsInCaseAlts(array $alts, array $bound, callable $evidenceParameter, array $terms = []): array
+function freeVarsInCaseAlts(array $alts, array $bound, callable $evidenceParameter, CheckedTerms $terms = new CheckedTerms()): array
 {
     $free = [];
     foreach ($alts as $alt) {
@@ -857,9 +858,9 @@ function freeVarsInCaseAlts(array $alts, array $bound, callable $evidenceParamet
  * @param array<int, \Moggi\Modules\CheckedTerm> $terms
  * @return list<array{0: string, 1: Ast\AstNode}>
  */
-function recordFieldValues(Ast\AstNode $expr, array $terms): array
+function recordFieldValues(Ast\AstNode $expr, CheckedTerms $terms): array
 {
-    $term = $expr->checkedTerm === null ? null : ($terms[$expr->checkedTerm] ?? null);
+    $term = $terms->termFor($expr);
     if ($term instanceof \Moggi\Modules\CheckedRecord) {
         $fields = [];
         foreach ($term->fields as $field) {
@@ -883,9 +884,9 @@ function recordFieldValues(Ast\AstNode $expr, array $terms): array
  *
  * @param array<int, \Moggi\Modules\CheckedTerm> $terms
  */
-function recordReceiver(Ast\AstNode $expr, array $terms): Ast\AstNode
+function recordReceiver(Ast\AstNode $expr, CheckedTerms $terms): Ast\AstNode
 {
-    $term = $expr->checkedTerm === null ? null : ($terms[$expr->checkedTerm] ?? null);
+    $term = $terms->termFor($expr);
     if ($term instanceof \Moggi\Modules\CheckedRecord && $term->receiver !== null) {
         return $term->receiver;
     }
@@ -901,9 +902,9 @@ function recordReceiver(Ast\AstNode $expr, array $terms): Ast\AstNode
  * @param array<int, \Moggi\Modules\CheckedTerm> $terms
  * @return list<Ast\Guarded>
  */
-function guardsClauses(Ast\GuardsExpr $expr, array $terms): array
+function guardsClauses(Ast\GuardsExpr $expr, CheckedTerms $terms): array
 {
-    $term = $expr->checkedTerm === null ? null : ($terms[$expr->checkedTerm] ?? null);
+    $term = $terms->termFor($expr);
 
     return $term instanceof \Moggi\Modules\CheckedGuards ? $term->clauses : $expr->clauses;
 }
@@ -920,9 +921,9 @@ function guardsClauses(Ast\GuardsExpr $expr, array $terms): array
  * @param array<int, \Moggi\Modules\CheckedTerm> $terms
  * @return array<string, true>
  */
-function patternBoundSet(Ast\AstNode $pattern, array $terms): array
+function patternBoundSet(Ast\AstNode $pattern, CheckedTerms $terms): array
 {
-    $term = $pattern->checkedTerm === null ? null : ($terms[$pattern->checkedTerm] ?? null);
+    $term = $terms->termFor($pattern);
 
     return $term instanceof CheckedPattern ? $term->boundNames() : patternBoundNames($pattern);
 }
@@ -936,9 +937,9 @@ function patternBoundSet(Ast\AstNode $pattern, array $terms): array
  * @param array<int, \Moggi\Modules\CheckedTerm> $terms
  * @return array<string, true>
  */
-function lambdaBoundSet(Ast\Lambda $lambda, array $terms): array
+function lambdaBoundSet(Ast\Lambda $lambda, CheckedTerms $terms): array
 {
-    $term = $lambda->checkedTerm === null ? null : ($terms[$lambda->checkedTerm] ?? null);
+    $term = $terms->termFor($lambda);
 
     return \array_fill_keys(
         $term instanceof \Moggi\Modules\CheckedLambda ? $term->parameterNames : patternParams($lambda->params),

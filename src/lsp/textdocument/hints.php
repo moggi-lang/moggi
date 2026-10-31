@@ -9,6 +9,7 @@ use function Moggi\Docs\dumpAstTypeForDocs;
 use function Moggi\Docs\dumpTypeForDocs;
 use function Moggi\Docs\friendlyAstTypeVarNames;
 use function Moggi\Docs\surfaceTypeSignature;
+use function Moggi\LSP\Analysis\sourceChildren;
 use function Moggi\LSP\Index\declTokenMaps;
 use function Moggi\LSP\Index\tokenNameRange;
 use function Moggi\LSP\Protocol\nodeToLspRange;
@@ -92,19 +93,8 @@ function svcInlayHints(AnalysisService $svc, string $uri, array $range): array
                 ];
             }
         }
-        foreach (\get_object_vars($node) as $key => $prop) {
-            if ($key === 'core') {
-                continue;
-            }
-            if (\is_object($prop)) {
-                $walk($prop);
-            } elseif (\is_array($prop)) {
-                foreach ($prop as $el) {
-                    if (\is_object($el)) {
-                        $walk($el);
-                    }
-                }
-            }
+        foreach (sourceChildren($node) as $child) {
+            $walk($child);
         }
     };
     $walk($analysis->program);

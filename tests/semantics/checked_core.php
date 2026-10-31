@@ -259,7 +259,7 @@ try {
         // evidence terms only; the primop family is pinned by
         // `semantics/checked_intrinsic_terms`.
         $evidenceTerms = \array_filter(
-            $sumDown->terms,
+            $sumDown->terms->all(),
             static fn (Modules\CheckedTerm $term): bool => $term instanceof Modules\CheckedEvidenceRef
                 || $term instanceof Modules\CheckedEvidenceMethod,
         );
@@ -565,7 +565,7 @@ try {
         // The record's term map holds every family; this check is about the evidence one, so it
         // counts the terms that carry a plan (a foreign call's term does not).
         $evidenceTerms = \array_filter(
-            $record?->terms ?? [],
+            $record?->terms->all() ?? [],
             static fn (Modules\CheckedTerm $term): bool => $term instanceof Modules\CheckedEvidenceRef
                 || $term instanceof Modules\CheckedEvidenceMethod,
         );
@@ -577,7 +577,7 @@ try {
 
         $expected = [];
         foreach ($declarationSites as $site) {
-            $term = $site->checkedTerm === null ? null : $record?->term($site->checkedTerm);
+            $term = $record?->termFor($site);
             $check(
                 $term !== null,
                 "`{$name}` leaves the evidence site at line {$site->line} unplanned",
@@ -595,7 +595,7 @@ try {
     }
 
     $bothPlans = \array_values(\array_filter(
-        $core?->function('both')?->terms ?? [],
+        $core?->function('both')?->terms->all() ?? [],
         static fn (Modules\CheckedTerm $term): bool => $term instanceof Modules\CheckedEvidenceRef
             || $term instanceof Modules\CheckedEvidenceMethod,
     ));
@@ -607,7 +607,7 @@ try {
     );
 
     $listedPlan = \array_values(\array_filter(
-        $core?->function('listed')?->terms ?? [],
+        $core?->function('listed')?->terms->all() ?? [],
         static fn (Modules\CheckedTerm $term): bool => $term instanceof Modules\CheckedEvidenceRef
             || $term instanceof Modules\CheckedEvidenceMethod,
     ))[0]->plan ?? null;
@@ -629,9 +629,7 @@ try {
     $projectedSite = $sites['projected'][0] ?? null;
     $projectedPlan = $projectedSite === null
         ? null
-        : ($projectedSite->checkedTerm === null
-            ? null
-            : ($core?->function('projected')?->term($projectedSite->checkedTerm)?->plan ?? null));
+        : ($core?->function('projected')?->termFor($projectedSite)?->plan ?? null);
     $check(
         $projectedPlan !== null && $projectedPlan->kind === EvidencePlanKind::Projection,
         'an instance-selected method is planned as a projection, got: '
@@ -708,7 +706,7 @@ try {
     if ($publishedBoth !== null) {
         $program->core = new CheckedCore(
             'Main',
-            ['both' => $publishedBoth->withElaboration($publishedBoth->termTypes, [])] + $program->core->functions,
+            ['both' => $publishedBoth->withElaboration($publishedBoth->termTypes, new Modules\CheckedTerms())] + $program->core->functions,
         );
         $unplanned = '';
         try {

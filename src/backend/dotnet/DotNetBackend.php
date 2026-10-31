@@ -40,6 +40,16 @@ require_once __DIR__ . '/codegen.php';
  */
 final class DotNetBackend implements Backend
 {
+    public function id(): string
+    {
+        return 'dotnet';
+    }
+
+    public function emitPlan(string $outputRelative, array $options = []): \Moggi\Modules\EmitPlan
+    {
+        return \Moggi\Modules\EmitPlan::forTarget($this->id(), $outputRelative);
+    }
+
     public function extension(): string
     {
         return '.il';

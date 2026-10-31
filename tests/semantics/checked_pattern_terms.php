@@ -220,7 +220,7 @@ try {
                     return;
                 }
 
-                $term = $node->checkedTerm === null ? null : $record->term($node->checkedTerm);
+                $term = $record->termFor($node);
                 if (! $term instanceof CheckedPattern) {
                     throw new \RuntimeException(
                         'the pattern `' . $node::class . '` at line ' . $node->line . ' of `'
@@ -275,7 +275,7 @@ try {
                     );
                 }
                 foreach (\array_values($children) as $index => $child) {
-                    if ($term->children[$index] !== $child->checkedTerm) {
+                    if ($term->children[$index] !== $record->terms->idFor($child)) {
                         throw new \RuntimeException(
                             'sub-pattern ' . $index . ' at line ' . $node->line
                             . ' is published under another id than its child names',
@@ -296,7 +296,7 @@ try {
                         );
                     }
                     foreach ($node->fields as $index => $field) {
-                        if ($term->fields[$index]['id'] !== $field->pattern->checkedTerm) {
+                        if ($term->fields[$index]['id'] !== $record->terms->idFor($field->pattern)) {
                             throw new \RuntimeException(
                                 'field `' . $field->name . '` at line ' . $node->line
                                 . ' is published under another id than its pattern names',
@@ -369,9 +369,13 @@ try {
 
     // 3. A site the record does not cover is refused, for every shape the family covers.
     $refusals = [];
-    $refused = static function (Ast\AstNode $node) use ($program, $path): bool {
-        $saved = $node->checkedTerm;
-        $node->checkedTerm = null;
+    $refused = static function (Ast\AstNode $node) use ($program, $path, $core): bool {
+        $record = Modules\owningRecord($core, $node);
+        if ($record === null) {
+            return false;
+        }
+        $saved = $record->terms->termFor($node);
+        $record->terms->forget($node);
 
         try {
             IR\lower($program, $program->interface->data(), $path);
@@ -382,14 +386,14 @@ try {
 
             throw $refusal;
         } finally {
-            $node->checkedTerm = $saved;
+            $record->terms->restore($node, $saved);
         }
 
         return false;
     };
 
     foreach ($sites as $node) {
-        if ($node->checkedTerm === null) {
+        if (Modules\owningRecord($core, $node) === null) {
             continue;
         }
         $shape = $shapeOf($node)->value;

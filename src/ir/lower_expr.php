@@ -347,9 +347,7 @@ function foreignCallOperand(CheckedForeignCall $term, array $args): ForeignCall
  */
 function siteTerm(Ast\AstNode $site, LowerCtx $ctx): ?CheckedTerm
 {
-    $id = $site->checkedTerm;
-
-    return $id === null ? null : ($ctx->terms[$id] ?? null);
+    return $ctx->terms->termFor($site);
 }
 
 function plannedEvidence(
@@ -1123,7 +1121,7 @@ function lambdaBody(Ast\Lambda $lambda, CheckedLambda $term): callable
  * facts only (its site is then line 0, as a synthesized declaration's is).
  *
  * @param list<string> $paramNames the callable's slots, in positional order
- * @param list<string> $captures the body's free names, already filtered by scope
+ * @param list<string> $captures the body's free names; entry references stay in scope but are not slots
  * @param callable(LowerCtx): Operand $body the callable's result, lowered in its own context
  * @param ?Ast\AstNode $origin the site whose span names this declaration, when it has one
  * @param ?Ast\AstNode $type the lambda's inferred type, when the checker left one on the node
@@ -1138,6 +1136,17 @@ function lowerNamedLambda(
     FunctionKind $kind,
     ?Ast\AstNode $type = null,
 ): FnRef {
+    // A name the enclosing scope resolves to a `FnRef` is an entry reference, not a local slot:
+    // a recursive group member, a nested lambda that mentions one, or any other lifted entry.
+    // Free-variable analysis can name it, but passing it as a capture would emit `Local('showl')`
+    // for a name nothing binds. Keep it in the body environment (the body still names it), but
+    // never publish it as a capture slot. What stays a slot is a genuine local value, whose scope
+    // entry is a `Local`.
+    $captureSlots = \array_values(\array_filter(
+        $captures,
+        static fn (string $free): bool => ! (($ctx->env[$free] ?? null) instanceof FnRef),
+    ));
+
     $srcLoc = $origin === null
         ? new SrcLoc($ctx->moduleName, $name, normalizeDisplayPath($ctx->sourceFile), 0, 0)
         : srcLocFromAst($origin, $ctx->moduleName, $name, $ctx->sourceFile);
@@ -1166,6 +1175,7 @@ function lowerNamedLambda(
         new FunctionShape(kind: $kind),
         $srcLoc,
         $ctx->evidenceNames,
+        $kind->takesCaptures() ? $captureSlots : null,
     );
     $ctx->functionArity[$name] = \count($paramNames);
 

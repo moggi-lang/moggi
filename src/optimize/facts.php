@@ -17,8 +17,10 @@ use function Moggi\IR\Projection\leafName;
  * callable table and rebinding tables. They are all derived from the same module set, so one object holds
  * them, one install publishes them, and a reader asks for the fact it needs.
  *
- * The object is ambient because the passes that read it sit at the bottom of rewrite recursion that
- * carries no context of its own; the size of that ambient surface is this one object, not four keys.
+ * The object is passed, not installed: a run derives its own owner from the one it was handed and
+ * passes it down to every pass function that asks a question, so no rewrite helper can answer from
+ * another run's program. Nothing creates an owner implicitly; a pass that was handed none has no
+ * facts to read.
  *
  * Name identity, where the maps differ and why: the boolean facts ({@see runsOnReference()}) are keyed by
  * leaf on both sides, so any spelling of an operand answers and a leaf collision over-answers — which only
@@ -28,8 +30,6 @@ use function Moggi\IR\Projection\leafName;
  */
 final class Facts
 {
-    private static ?self $current = null;
-
     /**
      * Incremented every time the published function/evidence index is replaced.
      *
@@ -49,7 +49,7 @@ final class Facts
     public function __construct(
         public array $evidence = [],
         public array $fnsByModule = [],
-        public readonly array $externalFnsByModule = [],
+        public array $externalFnsByModule = [],
         public array $nullaryCtorCafs = [],
         public ?CallableTable $callableTable = null,
         /** @var ?array<string, list<string>> the locals a reference to each lifted callable keeps alive */
@@ -60,42 +60,6 @@ final class Facts
         /** @var array<string, true> the entries a reference runs instead of closing over */
         public array $nullary = [],
     ) {
-    }
-
-    public static function install(self $facts): void
-    {
-        self::$current = $facts;
-    }
-
-    public static function clear(): void
-    {
-        self::$current = null;
-    }
-
-    /**
-     * The owner the current run installed, or null when none is.
-     *
-     * `optimize()` installs one for the module set it is rewriting and clears it afterwards, and
-     * `specializeAcrossModules()` installs the whole-program owner for its own duration; a run that
-     * nests inside either reuses the owner that is already there. Nothing creates one implicitly: a
-     * pass that reads facts without an owner is a lifecycle bug, not a program with no facts.
-     */
-    public static function installed(): ?self
-    {
-        return self::$current;
-    }
-
-    public static function current(): self
-    {
-        return self::$current ?? throw new \LogicException(
-            'no optimizer facts owner is installed; the run that calls this pass must install one',
-        );
-    }
-
-    /** Put the owner a nested run replaced back in place, or clear when there was none. */
-    public static function restore(?self $facts): void
-    {
-        self::$current = $facts;
     }
 
     /**
@@ -117,10 +81,10 @@ final class Facts
     /**
      * A run's own facts, seeded with the program-wide facts its owner already published.
      *
-     * `optimize()` installs one of these per run and restores the previous owner afterwards, so a
-     * run that nests inside another — specialization re-optimizing a module, a pass that calls
-     * `optimize()` — publishes into its own revision instead of overwriting the enclosing run's
-     * index and callable table. The module-set maps are copied because they describe the program,
+     * `optimize()` derives one of these per run from the owner it was handed and absorbs it back
+     * afterwards, so a run that nests inside another — specialization re-optimizing a module, a
+     * pass that calls `optimize()` — publishes into its own revision instead of overwriting the
+     * enclosing run's index and callable table. The module-set maps are copied because they describe the program,
      * not the one body being rewritten: a child that could not see them would answer "no evidence"
      * and fold less. The per-module facts start empty, because the child is about to publish its
      * own, and the transient inline arrays start empty for the same reason.
@@ -139,6 +103,16 @@ final class Facts
             inlineTargetBoundNames: [],
             nullary: $this->nullary,
         );
+    }
+
+    /**
+     * The imported-function maps, republished when the program a whole-program run sees changes.
+     *
+     * @param array<string, array<string, string>> $externalFnsByModule
+     */
+    public function publishExternalFns(array $externalFnsByModule): void
+    {
+        $this->externalFnsByModule = $externalFnsByModule;
     }
 
     /** @param array<string, CtorTree> $cafs */

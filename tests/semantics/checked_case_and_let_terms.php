@@ -197,7 +197,7 @@ try {
             &$shapes,
         ): void {
             if ($node instanceof Ast\CaseExpr || $node instanceof Ast\IoCase) {
-                $term = $node->checkedTerm === null ? null : $record->term($node->checkedTerm);
+                $term = $record->termFor($node);
                 if (! $term instanceof CheckedCase) {
                     throw new \RuntimeException(
                         'the `case` at line ' . $node->line . ' of `' . $item->name
@@ -244,7 +244,7 @@ try {
                 return;
             }
 
-            $term = $node->checkedTerm === null ? null : $record->term($node->checkedTerm);
+            $term = $record->termFor($node);
             if (! $term instanceof CheckedLetGroup) {
                 throw new \RuntimeException(
                     'the `' . $node::class . '` at line ' . $node->line . ' of `' . $item->name
@@ -333,9 +333,13 @@ try {
 
     // 3. A site the record does not cover is refused, for every shape the family covers.
     $refusals = [];
-    $refused = static function (Ast\AstNode $node) use ($program, $path): bool {
-        $saved = $node->checkedTerm;
-        $node->checkedTerm = null;
+    $refused = static function (Ast\AstNode $node) use ($program, $path, $core): bool {
+        $record = Modules\owningRecord($core, $node);
+        if ($record === null) {
+            return false;
+        }
+        $saved = $record->terms->termFor($node);
+        $record->terms->forget($node);
 
         try {
             IR\lower($program, $program->interface->data(), $path);
@@ -346,14 +350,14 @@ try {
 
             throw $refusal;
         } finally {
-            $node->checkedTerm = $saved;
+            $record->terms->restore($node, $saved);
         }
 
         return false;
     };
 
     foreach ([...$caseNodes, ...$groupNodes] as $node) {
-        if ($node->checkedTerm === null) {
+        if (Modules\owningRecord($core, $node) === null) {
             continue;
         }
         $shape = $shapeOf($node);

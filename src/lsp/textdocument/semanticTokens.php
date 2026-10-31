@@ -7,6 +7,7 @@ use Moggi\LSP\Analysis\AnalysisService;
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Lexer\TokenKind;
 
+use function Moggi\LSP\Analysis\sourceChildren;
 use function Moggi\LSP\Protocol\codepointColToUtf16;
 use function Moggi\LSP\Protocol\splitLines;
 use function Moggi\LSP\Protocol\utf16Length;
@@ -289,19 +290,8 @@ function buildAstSemanticTokens(AnalysisResult $analysis): array
         } elseif ($node instanceof Ast\ExprHole && ($node->line ?? 0) > 0) {
             $emitAt($node->line, $node->col, '_', 22); // decorator
         }
-        foreach (\get_object_vars($node) as $key => $prop) {
-            if ($key === 'core') {
-                continue;
-            }
-            if (\is_object($prop)) {
-                $walk($prop);
-            } elseif (\is_array($prop)) {
-                foreach ($prop as $el) {
-                    if (\is_object($el)) {
-                        $walk($el);
-                    }
-                }
-            }
+        foreach (sourceChildren($node) as $child) {
+            $walk($child);
         }
     };
     if ($analysis->program instanceof Ast\Program) {

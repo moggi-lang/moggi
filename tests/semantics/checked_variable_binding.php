@@ -148,7 +148,7 @@ try {
                 return;
             }
             if ($node instanceof Ast\Variable) {
-                $term = $node->checkedTerm === null ? null : $record?->term($node->checkedTerm);
+                $term = $record?->termFor($node);
                 if (! $term instanceof CheckedVariable) {
                     throw new \RuntimeException(
                         'the use of `' . $node->name . '` at line ' . $node->line . ' of `'
@@ -246,7 +246,7 @@ try {
         $record = $core->function($item->name);
         $walk = static function (Ast\AstNode $node) use (&$walk, $record, &$scrubbed): void {
             if ($node instanceof Ast\Variable) {
-                $term = $node->checkedTerm === null ? null : $record?->term($node->checkedTerm);
+                $term = $record?->termFor($node);
                 if ($term instanceof CheckedVariable && $term->binder !== null) {
                     $node->name = 'scrubbedName';
                     ++$scrubbed;
@@ -298,7 +298,7 @@ try {
                 ++$sites;
             }
             if ($node instanceof Ast\Variable) {
-                $term = $node->checkedTerm === null ? null : $record?->term($node->checkedTerm);
+                $term = $record?->termFor($node);
                 if ($term instanceof CheckedVariable && $term->binder !== null) {
                     $binders['use'][$term->binder] = true;
                     $node->binderId = null;

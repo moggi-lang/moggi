@@ -2,6 +2,7 @@
 
 namespace Moggi\Backend\DotNet\Codegen;
 
+require_once __DIR__ . '/../managed/operand.php';
 
 use Moggi\Debug\SourceMapBuilder;
 use Moggi\IR;
@@ -210,7 +211,7 @@ final class MethodIl
     }
 }
 
-final class EmitEnv
+final class EmitEnv implements \Moggi\Backend\Managed\OperandTarget
 {
     /** @var array<string, string> source name => IL local id, or `arg:N` */
     public array $locals = [];
@@ -278,6 +279,98 @@ final class EmitEnv
     public function freshLabelId(): int
     {
         return $this->m->freshLabelId();
+    }
+
+    // --- OperandTarget: how this target pushes a value, loads a slot and calls a method -------
+
+    public function pushInt(int $value): void
+    {
+        pushBoxedInt($this, $value);
+    }
+
+    public function pushString(string $value): void
+    {
+        $this->m->emit('ldstr ' . \Moggi\Backend\DotNet\Il\ilString($value));
+    }
+
+    public function pushDouble(float $value): void
+    {
+        $this->m->emit('ldc.r8 ' . formatDoubleLiteral($value));
+        boxDouble($this);
+    }
+
+    public function pushNull(): void
+    {
+        $this->m->emit('ldnull');
+    }
+
+    public function pushBool(bool $value): void
+    {
+        $this->m->emit($value ? 'ldc.i4.1' : 'ldc.i4.0');
+        $this->m->emit('box bool');
+    }
+
+    public function loadNamed(string $name): void
+    {
+        $slot = $this->locals[$name] ?? throw new \RuntimeException("unknown local {$name}");
+        $this->m->load($slot);
+    }
+
+    public function loadTemp(int $id): void
+    {
+        $key = 't' . $id;
+        $slot = $this->locals[$key] ?? throw new \RuntimeException("unknown temp {$key} in {$this->owner}");
+        $this->m->load($slot);
+    }
+
+    public function noteLoc(?IR\SrcLoc $loc): void
+    {
+        $this->m->emitLine($loc);
+    }
+
+    public function intrinsic(IR\Intrinsic $op): void
+    {
+        emitIntrinsic($this, $op);
+    }
+
+    public function listLit(IR\ListLit $op): void
+    {
+        emitListLit($this, $op);
+    }
+
+    public function foreign(IR\ForeignCall $op): void
+    {
+        emitForeign($this, $op);
+    }
+
+    public function partial(IR\Partial $op): void
+    {
+        emitPartialValue($this, $op->fn, $op->arity, $op->args);
+    }
+
+    public function dictMethodCall(): void
+    {
+        $this->m->emit('call object Moggi.Rt.RT::DictMethod(object, string)');
+    }
+
+    public function directCall(string $name): void
+    {
+        emitStaticCall($this, $name, []);
+    }
+
+    public function fnValue(string $name, int $arity): void
+    {
+        emitTopLevelFnValue($this, $name, $arity);
+    }
+
+    public function label(): string
+    {
+        return 'DotNet';
+    }
+
+    public function unsupported(string $class): \RuntimeException
+    {
+        return new \RuntimeException('DotNet emit: unsupported operand ' . $class);
     }
 }
 

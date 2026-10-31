@@ -8,6 +8,7 @@ use Moggi\Syntax\Ast;
 
 use function Moggi\LSP\Analysis\findNodeAt;
 use function Moggi\LSP\Analysis\findNodeChainAt;
+use function Moggi\LSP\Analysis\sourceChildren;
 use function Moggi\LSP\checkCancelledPoint;
 use function Moggi\LSP\Index\binderResolved;
 use function Moggi\LSP\Index\isBinderResolved;
@@ -301,24 +302,10 @@ function findEvidenceMethodForNode(object $root, Ast\AstNode $needle): ?Ast\Evid
     if ($root instanceof Ast\TypeNode) {
         return null;
     }
-    foreach (\get_object_vars($root) as $key => $prop) {
-        if ($key === 'core') {
-            continue;
-        }
-        if (\is_object($prop)) {
-            $hit = findEvidenceMethodForNode($prop, $needle);
-            if ($hit !== null) {
-                return $hit;
-            }
-        } elseif (\is_array($prop)) {
-            foreach ($prop as $el) {
-                if (\is_object($el)) {
-                    $hit = findEvidenceMethodForNode($el, $needle);
-                    if ($hit !== null) {
-                        return $hit;
-                    }
-                }
-            }
+    foreach (sourceChildren($root) as $child) {
+        $hit = findEvidenceMethodForNode($child, $needle);
+        if ($hit !== null) {
+            return $hit;
         }
     }
 

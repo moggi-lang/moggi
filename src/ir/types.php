@@ -304,6 +304,7 @@ final class FunctionDecl implements IrNode
      * @param FunctionShape $shape the declaration's emitted traits
      * @param ?SrcLoc $srcLoc where the declaration is written, when that is not the body's span
      * @param list<string> $evidenceScope the evidence slots in scope where it was created, in order
+     * @param ?list<string> $captures the binder-ordered hidden vector published for a lifted callable
      */
     public function __construct(
         public string $name,
@@ -324,12 +325,29 @@ final class FunctionDecl implements IrNode
          * different layouts even though both are positional at the runtime.
          */
         public array $evidenceScope = [],
+        /**
+         * The local slots a lifted callable takes, in the order its binder built them.
+         *
+         * Entry references are not slots: a free name the enclosing scope resolves to a lifted
+         * `FnRef` is kept in the lambda's environment but omitted here, and the body reaches the
+         * entry directly. This is the one value the callable table publishes as `E + C`; it
+         * includes evidence slots, which the table then splits against `$evidenceScope`. Null
+         * means the vector was not published for this declaration (a hand-built fixture, or a
+         * body a pass has just rewritten), and the table derives it from the body. A rewrite sets
+         * it to null rather than preserving a vector that may no longer match the body.
+         */
+        public ?array $captures = null,
     ) {
     }
 
     public function withBody(Block $body): self
     {
-        return $this->with(['body' => $body]);
+        $copy = $this->with(['body' => $body]);
+        if ($copy->shape->kind->takesCaptures()) {
+            $copy->captures = null;
+        }
+
+        return $copy;
     }
 
     /**
@@ -1050,16 +1068,14 @@ final class LowerCtx
          */
         public array $evidenceBindings = [],
         /**
-         * The checked core's terms for the declaration being lowered, by the id each term owns.
+         * The checked core's terms for the declaration being lowered.
          *
-         * The record owns every evidence decision in this declaration: an evidence position
+         * The record owns the site→term link as well as the id→term table: an evidence position
          * whose term is missing here is a producer bug, and lowering refuses it rather than
          * reading the elaborated node's own fields. Empty for a declaration built outside a
          * checked core (the suite's hand-built IR), which then has no evidence positions at all.
-         *
-         * @var array<int, \Moggi\Modules\CheckedTerm>
          */
-        public array $terms = [],
+        public \Moggi\Modules\CheckedTerms $terms = new \Moggi\Modules\CheckedTerms(),
     ) {
     }
 }

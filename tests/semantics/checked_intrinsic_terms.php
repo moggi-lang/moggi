@@ -111,7 +111,7 @@ try {
             if ($name === null) {
                 return;
             }
-            $term = $node->checkedTerm === null ? null : $record?->term($node->checkedTerm);
+            $term = $record?->termFor($node);
             $planned = $term instanceof CheckedIntrinsicCall
                 ? $term->intrinsic
                 : ($term instanceof CheckedApplication ? $term->intrinsic : null);
@@ -193,15 +193,17 @@ try {
     $refusals = [];
     $unreached = [];
     foreach ($program->items as $item) {
-        if (! $item instanceof Ast\FunctionDecl || $core->function($item->name) === null) {
+        if (! $item instanceof Ast\FunctionDecl) {
             continue;
         }
-        Modules\walkElaboration($item->body, static function (Ast\AstNode $node) use (&$refusals, &$unreached, $program, $path): void {
-            if (Modules\intrinsicNameFor($node) === null || $node->checkedTerm === null) {
+        $record = $core->function($item->name);
+        $assert($record !== null, "`Main::{$item->name}` is lowered and has no record");
+        Modules\walkElaboration($item->body, static function (Ast\AstNode $node) use (&$refusals, &$unreached, $program, $path, $record): void {
+            if (Modules\intrinsicNameFor($node) === null || $record->terms->termFor($node) === null) {
                 return;
             }
-            $saved = $node->checkedTerm;
-            $node->checkedTerm = null;
+            $saved = $record->terms->termFor($node);
+            $record->terms->forget($node);
 
             $refused = false;
             try {
@@ -213,7 +215,7 @@ try {
                 $refused = true;
                 $refusals[$node::class] = ($refusals[$node::class] ?? 0) + 1;
             } finally {
-                $node->checkedTerm = $saved;
+                $record->terms->restore($node, $saved);
             }
 
             if (! $refused) {

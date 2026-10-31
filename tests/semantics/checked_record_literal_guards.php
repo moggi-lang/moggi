@@ -155,7 +155,7 @@ try {
             &$newtypeUpdates,
         ): void {
             if ($node instanceof Ast\RecordCon || $node instanceof Ast\RecordUpdate) {
-                $term = $node->checkedTerm === null ? null : $record->term($node->checkedTerm);
+                $term = $record->termFor($node);
                 if (! $term instanceof CheckedRecord) {
                     throw new \RuntimeException(
                         'the record at line ' . $node->line . ' of `' . $item->name
@@ -215,7 +215,7 @@ try {
             }
 
             if (Modules\isLiteralNode($node)) {
-                $term = $node->checkedTerm === null ? null : $record->term($node->checkedTerm);
+                $term = $record->termFor($node);
                 if (! $term instanceof CheckedLiteral) {
                     throw new \RuntimeException(
                         'the literal at line ' . $node->line . ' of `' . $item->name
@@ -249,7 +249,7 @@ try {
             }
 
             if ($node instanceof Ast\GuardsExpr) {
-                $term = $node->checkedTerm === null ? null : $record->term($node->checkedTerm);
+                $term = $record->termFor($node);
                 if (! $term instanceof CheckedGuards) {
                     throw new \RuntimeException(
                         'the guard chain at line ' . $node->line . ' of `' . $item->name
@@ -310,7 +310,7 @@ try {
             if (! Modules\isLiteralNode($node)) {
                 return;
             }
-            $term = $node->checkedTerm === null ? null : $bigRecord->term($node->checkedTerm);
+            $term = $bigRecord->termFor($node);
             if (! $term instanceof CheckedLiteral) {
                 throw new \RuntimeException(
                     'the literal at line ' . $node->line . ' of the literal fixture is not a term',
@@ -369,9 +369,13 @@ try {
 
     // 3. A site the record does not cover is refused, for every family.
     $sites = ['construction' => 0, 'update' => 0, 'literal' => 0, 'guards' => 0];
-    $refused = static function (Ast\AstNode $node) use ($program, $path): bool {
-        $saved = $node->checkedTerm;
-        $node->checkedTerm = null;
+    $refused = static function (Ast\AstNode $node) use ($program, $path, $core): bool {
+        $record = Modules\owningRecord($core, $node);
+        if ($record === null) {
+            return false;
+        }
+        $saved = $record->terms->termFor($node);
+        $record->terms->forget($node);
 
         try {
             IR\lower($program, $program->interface->data(), $path);
@@ -382,7 +386,7 @@ try {
 
             throw $refusal;
         } finally {
-            $node->checkedTerm = $saved;
+            $record->terms->restore($node, $saved);
         }
 
         return false;
@@ -390,7 +394,7 @@ try {
 
     foreach (['construction' => $records, 'update' => $updates, 'literal' => $literals, 'guards' => $guards] as $name => $family) {
         foreach ($family as $node) {
-            if ($node->checkedTerm === null) {
+            if (Modules\owningRecord($core, $node) === null) {
                 continue;
             }
             $assert(

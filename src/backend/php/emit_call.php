@@ -128,6 +128,13 @@ function formatQualifiedCallee(string $name, EmitEnv $env): string
     return '\\' . $namespace . '\\' . $member;
 }
 
+/**
+ * Whether a callee spelling may name a source constructor.
+ *
+ * The `__` refusal is a collision guard only: generated symbols (workers, evidence, partials) are
+ * reserved that way, so a reference spelled like one cannot be a source constructor. Which
+ * declaration a name resolves to is the resolver's answer, never this test's.
+ */
 function isConstructorName(string $name): bool
 {
     return $name !== ''

@@ -20,6 +20,16 @@ require_once __DIR__ . '/verify.php';
 
 final class PhpBackend implements Backend
 {
+    public function id(): string
+    {
+        return 'php';
+    }
+
+    public function emitPlan(string $outputRelative, array $options = []): \Moggi\Modules\EmitPlan
+    {
+        return \Moggi\Modules\EmitPlan::forTarget($this->id(), $outputRelative);
+    }
+
     public function extension(): string
     {
         return '.php';

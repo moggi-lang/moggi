@@ -32,8 +32,8 @@ use function Moggi\Optimize\GlobalPass\usedInItems;
 use function Moggi\Optimize\GlobalPass\usedInOperand;
 use function Moggi\Optimize\Specialize\unboundTempsInFunction;
 
-Facts::install(new Facts());
-Facts::current()->publishLiftedCaptureNeeds([]);
+$facts = new Facts();
+$facts->publishLiftedCaptureNeeds([]);
 
 $failures = [];
 $check = static function (bool $condition, string $message) use (&$failures): void {
@@ -70,7 +70,7 @@ $kinds = [
 ];
 foreach ($kinds as $kind => $stmt) {
     $check(
-        isset(usedInItems([$stmt])['temps'][$read]),
+        isset(usedInItems([$stmt], $facts)['temps'][$read]),
         "usedInItems does not see t{$read} through {$kind}",
     );
 }
@@ -85,7 +85,7 @@ $localFunction = new IR\FunctionDecl('main', [], null, new IR\Block([
     new IR\Ret($unit()),
 ]));
 $check(
-    isset(usedInItems($localFunction->body->items)['locals']['a']),
+    isset(usedInItems($localFunction->body->items, $facts)['locals']['a']),
     'usedInItems misses a local read inside an io_assign_action body',
 );
 
@@ -100,7 +100,7 @@ $function = new IR\FunctionDecl('main', [], null, new IR\Block([
     new IR\Ret($unit()),
 ]));
 $totalFib = new IR\FunctionDecl('fib', ['n'], null, new IR\Block([new IR\Ret(new IR\ConstInt(0))]));
-$optimized = $function->withBody(dceBlock($function->body, Model::forFunctions([$totalFib, $function])));
+$optimized = $function->withBody(dceBlock($function->body, Model::forFunctions([$totalFib, $function], '', $facts)));
 $destinations = [];
 walkBlock($optimized->body, static function (IR\Stmt $stmt) use (&$destinations): void {
     if ($stmt instanceof IR\Call && $stmt->dest !== null) {

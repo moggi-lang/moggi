@@ -15,6 +15,7 @@ require $root . '/src/compiler.php';
 
 use Moggi\Backend;
 use Moggi\Modules\EmitPlan;
+use Moggi\Optimize\Facts\Facts;
 
 use function Moggi\Backend\codegenWith;
 use function Moggi\IR\Dump\identityLines;
@@ -41,8 +42,9 @@ $target = new IR\FunctionDecl(
     new IR\Block([new IR\Ret(new IR\ConstInt(1))]),
 );
 
-$clone = cloneSpecializedFunction($target, '__spec_0123456789abcdef01234567', [], $target->name);
-$renamed = cloneSpecializedFunction($target, 'q', [], $target->name);
+$facts = new Facts();
+$clone = cloneSpecializedFunction($target, '__spec_0123456789abcdef01234567', [], $target->name, $facts);
+$renamed = cloneSpecializedFunction($target, 'q', [], $target->name, $facts);
 
 $check($clone->shape->kind === IR\FunctionKind::SpecClone, 'a clone is not SpecClone');
 $check($clone->shape->origin === 'originFn', 'a clone does not carry its declaration origin');
@@ -66,6 +68,7 @@ $partialClone = cloneSpecializedFunction(
     '__spec_partial',
     [],
     'originFn',
+    $facts,
 );
 $wrapped = specializePartialReturnFunction($partialClone);
 $check(

@@ -20,6 +20,7 @@ require_once __DIR__ . '/emit_io.php';
 require_once __DIR__ . '/classfile.php';
 require_once __DIR__ . '/naming.php';
 require_once __DIR__ . '/foreign.php';
+require_once __DIR__ . '/../managed/setup.php';
 
 
 use Moggi\Backend\Jvm\Classfile\ClassBuilder;
@@ -30,6 +31,7 @@ use Moggi\IR;
 use Moggi\Modules\EmitPlan;
 use function Moggi\Backend\Jvm\Naming\moduleInternalName;
 use function Moggi\Backend\Jvm\Naming\symbolName;
+use function Moggi\Backend\Managed\managedModuleFacts;
 use function Moggi\Backend\Meta\constructorArityMap;
 use function Moggi\Backend\Meta\constructorArityMapFromRegistry;
 use function Moggi\Backend\Meta\newtypeConstructorMap;
@@ -51,92 +53,23 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     $moduleName = $options['artifactModuleName'] ?? '';
     $internal = moduleInternalName($moduleName !== '' ? $moduleName : 'Main');
     $b = new ClassBuilder($internal);
-    $displaySource = normalizeDisplayPath($module->sourceFile !== '' ? $module->sourceFile : $sourcePath);
+
+    [
+        $displaySource,
+        $artifact,
+        $sourceMap,
+        $lambdaMeta,
+        $functionArity,
+        $externalFns,
+        $localCallables,
+        $newtypeConstructors,
+    ] = managedModuleFacts($module, $sourcePath, $options, 'jvm', $internal . '.class');
     if ($displaySource !== '') {
         $b->setSourceFile($displaySource);
     }
-    $artifact = (string) ($options['outputRelative'] ?? ($internal . '.class'));
-    $sourceMap = new SourceMapBuilder($moduleName !== '' ? $moduleName : 'Main', 'jvm', $artifact);
-    $lambdaMeta = captureMeta(indexCapturedFunctions($module->functions));
+
     $wrapperRegistry = new FnWrapperRegistry();
     $ioThunkRegistry = new IoThunkRegistry();
-
-    $callableTables = $options['callableTables'] ?? [];
-    $callableTable = ($callableTables[$moduleName] ?? null) instanceof \Moggi\IR\Callables\CallableTable
-        ? $callableTables[$moduleName]
-        : table($module->functions, (string) $moduleName);
-    $programArity = arityBySymbol($callableTables);
-
-    $functionArity = [];
-    /** @var array<string, true> $localBindings */
-    $localBindings = [];
-    foreach ($module->functions as $fn) {
-        $localBindings[$fn->name] = true;
-        $functionArity[$fn->name] = $callableTable->sig($fn->name)?->runtimeArity()
-            ?? \count($fn->params);
-    }
-    foreach (constructorArityMap($module->data) as $name => $arity) {
-        $localBindings[$name] = true;
-        $functionArity[$name] = $arity;
-    }
-    $plan = $options['plan'] ?? null;
-    if (! $plan instanceof EmitPlan) {
-        throw new \RuntimeException(
-            "emitting `{$moduleName}` needs its EmitPlan",
-        );
-    }
-    foreach (constructorArityMapFromRegistry($plan->importedData) as $name => $arity) {
-        if (! isset($localBindings[$name])) {
-            $functionArity[$name] = $arity;
-        }
-    }
-    foreach ($plan->externalFnRuntimeArity as $name => $arity) {
-        if (! isset($localBindings[$name])) {
-            $functionArity[$name] = $arity;
-        }
-        $resolved = $plan->externalFns[$name] ?? null;
-        if (\is_string($resolved)) {
-            $parsed = parseResolvedSymbol($resolved);
-            if ($parsed !== null) {
-                $functionArity[resolvedSymbol($parsed['module'], $parsed['name'])] = $arity;
-            }
-        }
-    }
-    foreach ($programArity as $name => $arity) {
-        if (! isset($functionArity[$name])) {
-            $functionArity[$name] = $arity;
-        }
-    }
-    foreach ($module->instanceEvidence as $ev) {
-        $functionArity[$ev->evidenceName] = \count($ev->contextParams);
-    }
-    if ($moduleName !== '') {
-        foreach ($functionArity as $name => $arity) {
-            if (! \is_string($name) || \str_contains($name, '::')) {
-                continue;
-            }
-            $functionArity[resolvedSymbol($moduleName, $name)] = $arity;
-        }
-    }
-
-    $externalFns = $plan->externalFns;
-
-    /** @var array<string, true> $localCallables */
-    $localCallables = [];
-    foreach ($module->functions as $fn) {
-        $localCallables[$fn->name] = true;
-    }
-    foreach ($module->instanceEvidence as $ev) {
-        $localCallables[$ev->evidenceName] = true;
-        foreach ($ev->methods as $irName) {
-            $localCallables[$irName] = true;
-        }
-    }
-
-    $newtypeConstructors = [
-        ...newtypeConstructorMapFromRegistry($plan->importedData),
-        ...newtypeConstructorMap($module->data),
-    ];
 
     $foreignInterfaces = $options['foreignInterfaces'] ?? [];
 

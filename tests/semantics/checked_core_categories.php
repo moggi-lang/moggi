@@ -294,7 +294,7 @@ try {
     $assert($foreignSites !== [], 'the foreign import has no `ForeignCall` body');
     $foreignTerm = null;
     foreach ($foreignSites as $site) {
-        $term = $site->checkedTerm === null ? null : $foreign?->term($site->checkedTerm);
+        $term = $foreign?->termFor($site);
         $assert(
             $term instanceof Modules\CheckedForeignCall,
             'the foreign call at line ' . $site->line . ' is not published as a term',
