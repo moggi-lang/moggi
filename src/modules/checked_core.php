@@ -465,7 +465,7 @@ function parameterKindsFor(TypeCheckState $state, Ast\FunctionDecl $item, Scheme
  * a record without it is a record of the wrong tree, and lowering refuses an
  * evidence site it has no term for.
  */
-function publishElaboration(Ast\Program $program): Ast\Program
+function publishElaboration(Ast\Program $program, ?\Moggi\Semantics\Types\TypeCheckState $state = null): Ast\Program
 {
     $core = $program->core;
     if ($core === null) {
@@ -488,7 +488,9 @@ function publishElaboration(Ast\Program $program): Ast\Program
             );
         }
 
-        assertObligationsSettled($declaration, $core->module);
+        if ($state !== null) {
+            assertObligationsSettled($declaration, $core->module, $state);
+        }
 
         $termTypes = termTypesFor($declaration);
         $terms = checkedTermsIn($declaration);
@@ -512,16 +514,20 @@ function publishElaboration(Ast\Program $program): Ast\Program
  * {@see walkElaboration()} the terms and plans come from — no shape is skipped
  * because someone forgot it in a match.
  */
-function assertObligationsSettled(Ast\FunctionDecl $declaration, string $module): void
-{
-    $refuse = static function (Ast\AstNode $node) use ($declaration, $module): void {
-        if ($node->pendingConstraints === []) {
+function assertObligationsSettled(
+    Ast\FunctionDecl $declaration,
+    string $module,
+    \Moggi\Semantics\Types\TypeCheckState $state,
+): void {
+    $refuse = static function (Ast\AstNode $node) use ($declaration, $module, $state): void {
+        $pending = \Moggi\Semantics\Types\pendingConstraintsOf($state, $node);
+        if ($pending === []) {
             return;
         }
 
         throw new \LogicException(
             "the elaboration of `{$module}::{$declaration->name}` still carries "
-            . \count($node->pendingConstraints) . ' unresolved obligation(s) on a '
+            . \count($pending) . ' unresolved obligation(s) on a '
             . $node::class . " at line {$node->line}; the checked core cannot publish a body it did not settle",
         );
     };

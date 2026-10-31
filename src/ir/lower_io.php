@@ -719,8 +719,8 @@ function lowerActionCall(
             $call->name,
             $call->args,
             $callDest,
-            intrinsic: $call->name,
-            srcLoc: $call->srcLoc,
+            new IoIntrinsic($call->name),
+            $call->srcLoc,
         );
 
         if ($answersWithAction) {
@@ -787,11 +787,11 @@ function lowerIoNullaryCall(string $name, LowerCtx $ctx, ?int $dest, ?SrcLoc $sr
 
 function callYieldsAction(IoCall $call, LowerCtx $ctx, ?Ast\AstNode $expr = null): bool
 {
-    if ($call->foreign !== null || $call->intrinsic !== null) {
+    if ($call->op instanceof IoForeign || $call->op instanceof IoIntrinsic) {
         return false;
     }
 
-    if (\is_string($call->runtime) && \str_starts_with($call->runtime, 'foreign:')) {
+    if ($call->op instanceof IoRuntime && \str_starts_with($call->op->runtime, 'foreign:')) {
         return false;
     }
 
@@ -914,9 +914,8 @@ function ioActionCall(Ast\AstNode $expr, LowerCtx $ctx): Intrinsic|IoCall|null
             '__foreign__' . $term->name,
             $args,
             null,
-            foreign: foreignCallOperand($term, $args),
-            runtime: 'foreign:' . $term->ioWrap->value,
-            srcLoc: srcLocFromAst($expr, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile),
+            new IoForeign(foreignCallOperand($term, $args), 'foreign:' . $term->ioWrap->value),
+            srcLocFromAst($expr, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile),
         );
     }
 

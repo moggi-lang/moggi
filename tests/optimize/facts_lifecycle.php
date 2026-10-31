@@ -4,9 +4,14 @@
  * Who owns the facts an optimize run reads, and for how long.
  *
  * The passes ask one shared owner what the program is; a run installs it. Nothing creates one
- * implicitly, a run that finds one already installed leaves it in place (whole-program
- * specialization optimizes modules inside its own owner), and the run that installed it clears it on
- * the way out — so a pass can never answer from a program that has finished compiling.
+ * implicitly, and the run that installed it restores what it found on the way out — so a pass can
+ * never answer from a program that has finished compiling.
+ *
+ * A run nested inside an installed owner gets its *own* child owner, seeded with the program-wide
+ * facts and restored afterwards. The published function index and callable table describe the one
+ * body being rewritten, so a nested run must not publish them onto its host (whole-program
+ * specialization optimizes module after module inside one owner); the evidence tables and CAF
+ * trees it discovers are program-wide, so those are handed up.
  *
  * The owner also learns the evidence tables of the module it was handed at the point the run starts,
  * so a first per-module pass and a whole-program pass answer the same question about a dictionary.
@@ -68,6 +73,15 @@ $check(Facts::installed() === $owner, 'a run inside an installed owner replaced 
 optimize($module([new IR\InstanceEvidence('__ev_Foo_Int', ['show' => 'showInt'])]));
 $check($owner->isEvidence('__ev_Foo_Int'), 'the run did not publish the module\'s own evidence table onto the owner it found');
 $check($owner->isEvidence('Main::__ev_Foo_Int'), 'the owner did not answer the qualified spelling of the table it published');
+$check(
+    $owner->callableTable === null,
+    'a nested run published its own callable table onto the owner it found: the host run would '
+    . 'then read one module\'s layouts while rewriting another',
+);
+$check(
+    $owner->fnsIn('Main') === [],
+    'a nested run left the function index of the body it optimized on the owner it found',
+);
 $check(! $owner->isEvidence('__ev_Unrelated_9'), 'a name that only looks like evidence was answered as a table');
 specializeAcrossModules([]);
 $check(Facts::installed() === $owner, 'the whole-program run replaced the owner it found instead of restoring it');

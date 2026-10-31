@@ -141,10 +141,12 @@ function checkRaw(
     ?array &$interface = null,
     array $entryModules = [],
     string $backendId = 'php',
+    ?\Moggi\Semantics\Types\TypeCheckState &$stateOut = null,
 ): Ast\Program {
     $importContext ??= standaloneImportContext($program, $backendId);
 
     $state = newState($source, $filename);
+    $stateOut = $state;
     $state->compileBackend = $backendId;
     $state->module = $program->module ?? '';
     $state->entryModules = $entryModules;

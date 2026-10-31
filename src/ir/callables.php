@@ -8,6 +8,7 @@ use Moggi\Syntax\Ast\TypeArrow;
 use function Moggi\IR\Visit\boundLocalsInBlock;
 use function Moggi\IR\Visit\collectLambdaRefsInBlock;
 use function Moggi\IR\Visit\freeLocalsInBlock;
+use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
 use function Moggi\Semantics\IoBoundary\stripConstraints;
 use function Moggi\Syntax\Ast\generatedWorkerPrefix;
@@ -21,13 +22,16 @@ use function Moggi\Syntax\Ast\generatedWorkerPrefix;
  * computed once per compilation revision. Before this module the same logical
  * layout was derived at seven independent sites (`bindLambdaCaptures`, the optimizer's inline
  * metadata, the module arity table, and each of the three backends), and the two sides of a call
- * could only agree because every one of them sorted the capture names alphabetically. Nothing
- * here changes the runtime order: `captures` is the list the binder already produced, with the
- * evidence slots taken out of it, because making `E ++ C` the runtime order is a separate slice.
+ * could only agree because every one of them sorted the capture names alphabetically. The runtime
+ * slot order is `E ++ C ++ V` ({@see CallableSig::slotNames()}), published once; `captures` keeps
+ * the order the binder produced, with the evidence slots taken out of it so the two lists are
+ * disjoint and neither side sorts to agree with the other.
  *
- * What this module does not yet publish: imported entries — their facts travel in the module
- * `facts` record — and the action worker/action-value split at the IR node level, which
- * `IR\FunctionDecl::$kind` (`Worker`) and `$actionConvention` carry in the tree.
+ * Not published here — the migration list, not a permanent caveat: imported entries, whose facts
+ * travel in the module `facts` record (and, on the import side, in `ImportInterface::abi()`), and
+ * the action worker/action-value split at the IR node level, which `IR\FunctionDecl::$kind`
+ * (`Worker`) and `$actionConvention` carry in the tree. Closing either moves a reader onto the
+ * owner that already holds the fact; neither needs a new derivation.
  */
 const ABI_VERSION = 1;
 
@@ -169,9 +173,10 @@ final class CallableSig
     }
 
     /**
-     * The runtime slot names in the order the binder produces them: the evidence slots, then the
-     * captures, then the user parameters. `captures` keeps the binder's order, so this is the
-     * vector a call has to match today; a slice that adopts `E ++ C` only changes `captures`.
+     * The runtime slot names in the order a call passes them: the evidence slots, then the
+     * captures, then the user parameters. This is the one publication of that order. `captures`
+     * keeps the binder's order and excludes evidence, so a call site and a definition agree by
+     * reading this vector rather than by sorting the same names.
      *
      * @return list<string>
      */
@@ -209,7 +214,6 @@ final class CallableTable
         return null;
     }
 
-    /** @return list<string> */
     /** @return array<string, array{captures: list<string>, params: list<string>}> */
     public function meta(): array
     {
@@ -225,11 +229,11 @@ final class CallableTable
  * parameters, its `let`s, its match binders — is never added, because a nested lambda's local is
  * that body's own and passing it would name an undefined local at the caller.
  *
- * The returned lists are sorted. Direct captures miss the locals hidden inside nested lifted
- * references (they only appear once captures are bound), so first-seen order depends on when in
- * the pipeline the set is computed; sorting is what has kept the use site and the definition site
- * agreeing so far. It is a workaround, not a contract: the order a binder produced is what the
- * signature has to publish (`CallableSig::$captures` is where that lands).
+ * The returned lists keep the order the binder produced: each callable's direct free locals in
+ * body order, followed by the captures its nested references need, also in body order. The list is
+ * built from the tree alone, so it is the same on every run and at every pipeline stage; the call
+ * site reads the same publication ({@see CallableSig::$captures}), so neither side sorts to agree.
+ * A capture the body binds itself is never added.
  *
  * @param array<string, IR\FunctionDecl> $byName
  * @param callable(IR\FunctionDecl): list<string> $capturesOf
@@ -277,11 +281,6 @@ function captureClosure(array $byName, callable $capturesOf): array
         }
         unset($info);
     }
-
-    foreach ($meta as &$info) {
-        \sort($info['captures']);
-    }
-    unset($info);
 
     return $meta;
 }
@@ -428,4 +427,28 @@ function resultConventions(IR\FunctionDecl $function, int $evidenceSlots = 0): a
         $returnsCallable ? ResultConvention::Callable : ResultConvention::Value,
         $returnsCallable,
     ];
+}
+
+/**
+ * The runtime arity of every entry in the program, keyed by the symbol a call names.
+ *
+ * A projection of the published table, not a second derivation: `compilePreparedProject()`
+ * builds one `CallableTable` per module and hands the set to every backend, so emit reads the
+ * same `CallableSig` the validator and the optimizer read. This replaced the map `modules.php`
+ * rebuilt from `captureMeta()` immediately before emit, and the `count($params) + captures`
+ * recomputation each backend did for its own entries.
+ *
+ * @param array<string, CallableTable> $tablesByModule
+ * @return array<string, int>
+ */
+function arityBySymbol(array $tablesByModule): array
+{
+    $arity = [];
+    foreach ($tablesByModule as $moduleName => $table) {
+        foreach ($table->byEntry as $entry => $sig) {
+            $arity[resolvedSymbol((string) $moduleName, $entry)] = $sig->runtimeArity();
+        }
+    }
+
+    return $arity;
 }

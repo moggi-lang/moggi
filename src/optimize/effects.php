@@ -24,8 +24,8 @@ function annotateIoEffects(array $functions, string $moduleName = ''): array
         foreach ($functions as $i => $function) {
             $ioEffect = functionIoEffect($function, $index);
             if ($function->shape->ioEffect !== $ioEffect) {
-                $function->shape->ioEffect = $ioEffect;
-                $index[$function->name]->shape->ioEffect = $ioEffect;
+                $function->shape = $function->shape->with(['ioEffect' => $ioEffect]);
+                $index[$function->name]->shape = $index[$function->name]->shape->with(['ioEffect' => $ioEffect]);
                 $changed = true;
             }
         }
@@ -182,7 +182,7 @@ function stmtHasDirectForeign(IR\Stmt $stmt): bool
         IR\MatchStmt::class, IR\MatchReturn::class, IR\IoMatch::class => operandHasDirectForeign($stmt->scrutinee)
             || matchArmsHaveDirectForeign($stmt->arms),
         IR\Loop::class => blockHasDirectForeign($stmt->body),
-        IR\IoCall::class => $stmt->foreign !== null,
+        IR\IoCall::class => $stmt->op instanceof IR\IoForeign,
         default => false,
     };
 }

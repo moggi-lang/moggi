@@ -58,10 +58,9 @@ function publishModuleFacts(array $functions, string $moduleName): void
 function optimize(Module $module): Module
 {
     PassCheckpoints\enterOptimize();
-    $ownsFacts = Facts::installed() === null;
-    if ($ownsFacts) {
-        Facts::install(new Facts());
-    }
+    $previous = Facts::installed();
+    $facts = $previous?->child() ?? new Facts();
+    Facts::install($facts);
     $result = null;
 
     try {
@@ -159,6 +158,7 @@ function optimize(Module $module): Module
                     static fn (FunctionDecl $function): FunctionDecl => specializePartialReturnFunction(
                         $function,
                         publishedCaptures($table, $function->name),
+                        $table,
                     ),
                     $fns,
                 );
@@ -231,9 +231,8 @@ function optimize(Module $module): Module
         $result = new Module($functions, $module->data, $instanceEvidence, entryFromFunctions($functions), $moduleName, $module->sourceFile);
     } finally {
         PassCheckpoints\leaveOptimize();
-        if ($ownsFacts) {
-            Facts::clear();
-        }
+        $previous?->absorb($facts);
+        Facts::restore($previous);
     }
 
     return $result;

@@ -67,9 +67,7 @@ function remapTempsInStmt(IR\Stmt $stmt, array $temps): IR\Stmt
                 $stmt->args,
             ),
             $stmt->dest,
-            $stmt->intrinsic,
-            $stmt->runtime,
-            $stmt->foreign,
+            $stmt->op,
             $stmt->srcLoc,
         ),
         IR\IoRun::class => new IR\IoRun(

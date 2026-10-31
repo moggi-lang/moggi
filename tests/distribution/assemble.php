@@ -106,13 +106,17 @@ try {
 
 $host = \Moggi\Dist\hostTarget($runtimeConfig);
 if (! \Moggi\Dist\runtimeIsPrepared('php-native', $host, $runtimeConfig)) {
+    // Exit 2 is the standalone runner's "this machine cannot exercise the case": it reports a
+    // `skip` with this reason instead of a pass. The assembly is the only path that exercises the
+    // native compiler through its appended archive, so a pass here would claim coverage that did
+    // not run.
     \fwrite(
-        STDOUT,
+        STDERR,
         "distribution: skipped the assembly — php-native for {$host} is not prepared,"
         . " and bin/moggi is built from it (it is compiled, not downloaded)\n",
     );
     removeDirectory($work);
-    exit(0);
+    exit(2);
 }
 
 try {

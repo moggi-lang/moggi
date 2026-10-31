@@ -116,6 +116,7 @@ MOG;
 $work = createTempDir('moggi-checked-variable');
 $path = $work . '/Main.mog';
 \file_put_contents($path, $source);
+$previousCache = \getenv('MOGGI_CACHE_DIR');
 
 try {
     $context = CompilationContext::for(
@@ -356,9 +357,11 @@ try {
     //    the source (so no binder is on the node) and reads the checked core the first one cached.
     $cache = $work . '/.cache';
     $out = $work . '/out';
-    $run = static function (string $outDir) use ($root, $work, $cache): array {
-        $command = 'MOGGI_CACHE_DIR=' . \escapeshellarg($cache)
-            . ' ' . \escapeshellarg(\PHP_BINARY)
+    // `VAR=value command` is shell syntax, not a Windows command line: the child inherits this
+    // process's environment instead, which every host spells the same way.
+    \putenv('MOGGI_CACHE_DIR=' . $cache);
+    $run = static function (string $outDir) use ($root, $work): array {
+        $command = \escapeshellarg(\PHP_BINARY)
             . ' ' . \escapeshellarg($root . '/moggi.php')
             . ' compile ' . \escapeshellarg($work)
             . ' --unpacked --backend php -o ' . \escapeshellarg($outDir);
@@ -378,10 +381,13 @@ try {
 
     $generated = static function (string $dir): array {
         $files = [];
+        $prefix = \str_replace('\\', '/', $dir) . '/';
         $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS));
         foreach ($iterator as $file) {
             if ($file instanceof \SplFileInfo && $file->getExtension() === 'php') {
-                $files[\str_replace($dir . '/', '', $file->getPathname())] = \file_get_contents($file->getPathname());
+                $path = \str_replace('\\', '/', $file->getPathname());
+                $key = \str_starts_with($path, $prefix) ? \substr($path, \strlen($prefix)) : $path;
+                $files[$key] = \file_get_contents($path);
             }
         }
         \ksort($files);
@@ -420,5 +426,10 @@ try {
     echo 'checked variable binding tests passed (' . $uses . ' uses, ' . $shadowed
         . ' shadowed, ' . $scrubbed . " scrubbed, cold and warm artifacts identical)\n";
 } finally {
+    if ($previousCache === false || $previousCache === '') {
+        \putenv('MOGGI_CACHE_DIR');
+    } else {
+        \putenv('MOGGI_CACHE_DIR=' . $previousCache);
+    }
     removeDirectory($work);
 }

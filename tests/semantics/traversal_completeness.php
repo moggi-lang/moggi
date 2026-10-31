@@ -13,7 +13,7 @@ use Moggi\Syntax\Ast;
  * not: annotation, constraints, doc, and source spans describe a node rather
  * than being children of it.
  */
-$notChildren = ['inferredType', 'pendingConstraints', 'doc', 'line', 'col', 'endCol', 'endLine'];
+$notChildren = ['inferredType', 'doc', 'line', 'col', 'endCol', 'endLine'];
 
 $assert = static function (bool $condition, string $message): void {
     if (! $condition) {

@@ -1141,11 +1141,9 @@ function substituteStmt(IR\Stmt $stmt, array $params, array $args, array $bound 
                 $stmt->args,
             ),
             $stmt->dest,
-            $stmt->intrinsic,
-            $stmt->runtime,
-            $stmt->foreign === null
-                ? null
-                : substituteOperand($stmt->foreign, $params, $args, $bound),
+            $stmt->op instanceof IR\IoForeign
+                ? new IR\IoForeign(substituteOperand($stmt->op->call, $params, $args, $bound), $stmt->op->runtime)
+                : $stmt->op,
             $stmt->srcLoc,
         ),
         IR\IoRun::class => new IR\IoRun(
@@ -1407,9 +1405,9 @@ function remapTempsInStmt(IR\Stmt $stmt, array $remap): IR\Stmt
             $stmt->callee,
             \array_map(static fn (IR\Operand $a): IR\Operand => remapTempsInOperand($a, $remap), $stmt->args),
             remapNullableTempId($stmt->dest, $remap),
-            $stmt->intrinsic,
-            $stmt->runtime,
-            $stmt->foreign === null ? null : remapTempsInOperand($stmt->foreign, $remap),
+            $stmt->op instanceof IR\IoForeign
+                ? new IR\IoForeign(remapTempsInOperand($stmt->op->call, $remap), $stmt->op->runtime)
+                : $stmt->op,
             $stmt->srcLoc,
         ),
         IR\IoRun::class => new IR\IoRun(

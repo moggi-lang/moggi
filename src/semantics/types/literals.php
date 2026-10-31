@@ -32,7 +32,7 @@ function inferIntegerLit(TypeCheckState $state, Ast\IntegerLit $expr): Type
     }
 
     $type = freshType($state);
-    $expr->pendingConstraints = [new Ast\PendingConstraint($literalClass, [$type])];
+    setPendingObligations($state, $expr, [new Ast\PendingConstraint($literalClass, [$type])]);
 
     return $type;
 }
@@ -415,15 +415,15 @@ function elaborateNumericLiterals(TypeCheckState $state, Ast\AstNode $expr): Ast
 
 function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): Ast\AstNode
 {
-    if ($expr->pendingConstraints === []) {
+    if (pendingConstraintsOf($state, $expr) === []) {
         return $expr;
     }
 
-    $constraints = refreshConstraintArgs($state, $expr->pendingConstraints);
+    $constraints = refreshConstraintArgs($state, pendingConstraintsOf($state, $expr));
     $type = canonicalPrimitiveType(prune($state, $constraints[0]->args[0] ?? freshType($state)));
 
     if ($type instanceof TInt) {
-        $expr->pendingConstraints = [];
+        setPendingObligations($state, $expr, []);
 
         return $expr;
     }
@@ -452,7 +452,7 @@ function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): A
     copyInferredType($integerValue, $expr);
 
     if ($type instanceof TCon && $type->name === canonicalTypeConName('Integer#') && $type->args === []) {
-        $expr->pendingConstraints = [];
+        setPendingObligations($state, $expr, []);
 
         return $integerValue;
     }
@@ -470,7 +470,7 @@ function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): A
         new Ast\Variable($literalMethod, $expr->line, $expr->col, $expr->endCol),
         $evidence,
     );
-    $expr->pendingConstraints = [];
+    setPendingObligations($state, $expr, []);
     $converted = new Ast\Apply($method, $integerValue, $expr->line, $expr->col, $expr->endCol);
     copyInferredType($converted, $expr);
 

@@ -220,7 +220,17 @@ function checkedTermsIn(Ast\AstNode $root): array
 
             $id = new TermId(++$next);
             $node->checkedTerm = $id->value;
-            $terms[$id->value] = new CheckedIntrinsicCall($id, CheckedFunction::termOrigin($node), $intrinsic);
+
+            $terms[$id->value] = $node instanceof Ast\Apply
+                ? new CheckedApplication(
+                    $id,
+                    CheckedFunction::termOrigin($node),
+                    remainingArity($node->inferredInternalType),
+                    $node->function,
+                    $node->argument,
+                    $intrinsic,
+                )
+                : new CheckedIntrinsicCall($id, CheckedFunction::termOrigin($node), $intrinsic);
 
             return;
         }
@@ -340,6 +350,8 @@ function checkedTermsIn(Ast\AstNode $root): array
                 $id,
                 CheckedFunction::termOrigin($node),
                 remainingArity($node->inferredInternalType),
+                $node->function,
+                $node->argument,
             );
 
             return;
@@ -493,6 +505,7 @@ function checkedTermsIn(Ast\AstNode $root): array
             $parameterNames,
             $parameterBinders,
             \array_values(\array_unique($captures)),
+            $node->body,
         );
     }
 

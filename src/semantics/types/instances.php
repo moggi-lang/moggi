@@ -1967,7 +1967,7 @@ function checkInstanceMethod(
 
     $wrapper = trivialIntrinsicWrapper($fn);
     resolveInstanceIntrinsicMethods($state, $fn->body);
-    $fn->body = rewriteIntrinsicApplies($fn->body);
+    $fn->body = rewriteIntrinsicApplies($state, $fn->body);
     if ($wrapper !== null) {
         $fn->intrinsicWrapper = $wrapper;
     }

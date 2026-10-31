@@ -507,6 +507,21 @@ final class TypeCheckState
      */
     public int $nextEvidenceParam = 0;
 
+    /**
+     * Pending dictionary obligations, and the solved dictionaries that belong with them, keyed by
+     * the node that carries them.
+     *
+     * These were two public arrays on `Ast\AstNode`. That made "this elaboration is settled" a
+     * convention the checker asserted rather than a property of the product: a published tree had a
+     * field in which an unresolved obligation could survive into the cache and into a later
+     * compilation. They live here instead, in the run that produced them, so a published AST has
+     * nowhere to put one, and a node a rewrite copies starts with none because the copy is a new
+     * key. A settled site is detached, so the table holds only the sites still outstanding.
+     *
+     * @var \SplObjectStorage<Ast\AstNode, array{0: list<Ast\PendingConstraint>, 1: list<Ast\PendingConstraint>}>
+     */
+    public \SplObjectStorage $obligations;
+
     public function __construct(
         public string $source,
         public string $filename = '',
@@ -516,5 +531,6 @@ final class TypeCheckState
     ) {
         $this->compileBackend = $compileBackend;
         $this->entryModules = $entryModules;
+        $this->obligations = new \SplObjectStorage();
     }
 }

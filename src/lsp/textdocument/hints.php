@@ -92,7 +92,10 @@ function svcInlayHints(AnalysisService $svc, string $uri, array $range): array
                 ];
             }
         }
-        foreach (\get_object_vars($node) as $prop) {
+        foreach (\get_object_vars($node) as $key => $prop) {
+            if ($key === 'core') {
+                continue;
+            }
             if (\is_object($prop)) {
                 $walk($prop);
             } elseif (\is_array($prop)) {

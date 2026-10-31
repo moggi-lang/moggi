@@ -351,9 +351,10 @@ function moduleUsesMoggiRuntime(IR\Module $module): bool
             if (isset($runtimeIntrinsics[$stmt->callee])) {
                 $found = true;
             }
-            if ($stmt->foreign !== null) {
-                $noteForeignPath($stmt->foreign->path);
-                if ($stmt->foreign->phpValueBox || $stmt->foreign->handleBox) {
+            if ($stmt->op instanceof IR\IoForeign) {
+                $foreign = $stmt->op->call;
+                $noteForeignPath($foreign->path);
+                if ($foreign->phpValueBox || $foreign->handleBox) {
                     $found = true;
                 }
             }

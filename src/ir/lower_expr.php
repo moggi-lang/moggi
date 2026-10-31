@@ -77,7 +77,7 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
         Ast\QualifiedRef::class => (static function () use ($expr, $ctx): Operand {
             $intrinsic = plannedIntrinsic($expr, $ctx);
             if ($intrinsic !== null) {
-                return lowerIntrinsicValue($intrinsic->intrinsic, [], $expr, $ctx);
+                return lowerIntrinsicValue($intrinsic, [], $expr, $ctx);
             }
 
             return new FnRef($expr->backendResolved ?? $expr->name);
@@ -89,11 +89,11 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
             $intrinsic = plannedIntrinsic($expr, $ctx)
                 ?? throw new \LogicException('an intrinsic call is always a primop site');
 
-            if (isIoExceptionPrimop($intrinsic->intrinsic)) {
+            if (isIoExceptionPrimop($intrinsic)) {
                 return lowerActionValueToBox($expr, $ctx);
             }
 
-            return lowerIntrinsic($expr, $intrinsic->intrinsic, $ctx);
+            return lowerIntrinsic($expr, $intrinsic, $ctx);
         })(),
         Ast\ForeignCall::class => lowerForeignCall($expr, $ctx),
         Ast\ExprHole::class => throw new \RuntimeException('typed hole reached IR lowering'),
@@ -155,7 +155,7 @@ function lowerIntrinsic(Ast\IntrinsicCall $expr, string $intrinsic, LowerCtx $ct
  * primop decided after publication — including one a lowering pass synthesized
  * itself, which can therefore no longer be lowered at all.
  */
-function plannedIntrinsic(Ast\AstNode $site, LowerCtx $ctx): ?CheckedIntrinsicCall
+function plannedIntrinsic(Ast\AstNode $site, LowerCtx $ctx): ?string
 {
     if (intrinsicNameFor($site) === null) {
         return null;
@@ -164,7 +164,11 @@ function plannedIntrinsic(Ast\AstNode $site, LowerCtx $ctx): ?CheckedIntrinsicCa
     $term = siteTerm($site, $ctx);
 
     if ($term instanceof CheckedIntrinsicCall) {
-        return $term;
+        return $term->intrinsic;
+    }
+
+    if ($term instanceof CheckedApplication && $term->intrinsic !== null) {
+        return $term->intrinsic;
     }
 
     throw new \RuntimeException(
@@ -226,7 +230,7 @@ function lowerVariable(Ast\Variable $expr, LowerCtx $ctx): Operand
 {
     $intrinsic = plannedIntrinsic($expr, $ctx);
     if ($intrinsic !== null) {
-        return lowerIntrinsicValue($intrinsic->intrinsic, [], $expr, $ctx);
+        return lowerIntrinsicValue($intrinsic, [], $expr, $ctx);
     }
 
     $deferred = ioDeferredActionValue($expr, $ctx);
@@ -521,7 +525,7 @@ function evidencePlanOperand(EvidencePlan $plan, LowerCtx $ctx): Operand
 
 function lowerInfix(Ast\Infix $expr, LowerCtx $ctx): Operand
 {
-    $intrinsic = plannedIntrinsic($expr, $ctx)?->intrinsic;
+    $intrinsic = plannedIntrinsic($expr, $ctx);
 
     if ($intrinsic !== null && isShortCircuitPrimop($intrinsic)) {
         return lowerShortCircuitAndOr($expr, $intrinsic, $ctx);
@@ -585,18 +589,39 @@ function lowerShortCircuitAndOr(Ast\Infix $expr, string $intrinsic, LowerCtx $ct
     return new Temp($dest);
 }
 
+/**
+ * An application spine, read from the checked application terms rather than from the node's
+ * `function`/`argument` links.
+ *
+ * Each `CheckedApplication` publishes the callee and argument it supplies, so `f a b` is two
+ * terms naming one callee and two arguments in source order. A term that does not publish them
+ * (a synthetic application lowering never reaches) stops the walk and is itself the callee, which
+ * lowers as an ordinary expression.
+ *
+ * @return array{callee: Ast\AstNode, args: list<Ast\AstNode>}
+ */
+function applySpine(Ast\Apply $expr, LowerCtx $ctx): array
+{
+    $args = [];
+    $callee = $expr;
+    while (($term = siteTerm($callee, $ctx)) instanceof CheckedApplication) {
+        $argument = $term->argument ?? throw new \RuntimeException(
+            "the application at {$term->origin} publishes no argument",
+        );
+        $args = [$argument, ...$args];
+        $callee = $term->callee ?? throw new \RuntimeException(
+            "the application at {$term->origin} publishes no callee",
+        );
+    }
+
+    return ['callee' => $callee, 'args' => $args];
+}
+
 function lowerApplyFromExpr(Ast\Apply $expr, LowerCtx $ctx): Operand
 {
     $intrinsic = plannedIntrinsic($expr, $ctx);
     if ($intrinsic !== null) {
-        $astArgs = [];
-        $callee = $expr;
-        while ($callee instanceof Ast\Apply) {
-            \array_unshift($astArgs, $callee->argument);
-            $callee = $callee->function;
-        }
-
-        return lowerIntrinsicValue($intrinsic->intrinsic, $astArgs, $expr, $ctx);
+        return lowerIntrinsicValue($intrinsic, applySpine($expr, $ctx)['args'], $expr, $ctx);
     }
 
     $partial = lowerDictMethodPartial($expr, plannedApplication($expr, $ctx), $ctx);
@@ -604,7 +629,7 @@ function lowerApplyFromExpr(Ast\Apply $expr, LowerCtx $ctx): Operand
         return $partial;
     }
 
-    return lowerApply($expr->function, $expr->argument, $ctx);
+    return lowerApply($expr, $ctx);
 }
 
 /**
@@ -621,10 +646,8 @@ function lowerApplyFromExpr(Ast\Apply $expr, LowerCtx $ctx): Operand
  */
 function lowerDictMethodPartial(Ast\Apply $expr, CheckedApplication $term, LowerCtx $ctx): ?Operand
 {
-    $callee = $expr->function;
-    while ($callee instanceof Ast\Apply) {
-        $callee = $callee->function;
-    }
+    $spine = applySpine($expr, $ctx);
+    $callee = $spine['callee'];
 
     if (! ($callee instanceof Ast\EvidenceMethod)) {
         return null;
@@ -633,13 +656,7 @@ function lowerDictMethodPartial(Ast\Apply $expr, CheckedApplication $term, Lower
     $methodArity = checkedEvidenceMethod($callee, $ctx)->arity;
     $missing = $term->remainingArity;
     if ($missing <= 0 && $methodArity !== null) {
-        $applied = 0;
-        $spine = $expr;
-        while ($spine instanceof Ast\Apply) {
-            ++$applied;
-            $spine = $spine->function;
-        }
-        $missing = $methodArity - $applied;
+        $missing = $methodArity - \count($spine['args']);
     }
     if ($missing <= 0) {
         return null;
@@ -650,12 +667,7 @@ function lowerDictMethodPartial(Ast\Apply $expr, CheckedApplication $term, Lower
         $paramNames[] = 'methodArg' . $i . '_' . $ctx->state->nextLambda;
     }
 
-    $argNodes = [];
-    $spine = $expr;
-    while ($spine instanceof Ast\Apply) {
-        \array_unshift($argNodes, $spine->argument);
-        $spine = $spine->function;
-    }
+    $argNodes = $spine['args'];
 
     return lowerLoweredLambda(
         $paramNames,
@@ -798,15 +810,9 @@ function lowerNamedApply(string $name, array $args, LowerCtx $ctx, ?SrcLoc $srcL
     return applyToValue(lowerCall($name, $first, $ctx, $srcLoc), $rest, $ctx, $srcLoc);
 }
 
-function lowerApply(Ast\AstNode $function, Ast\AstNode $argument, LowerCtx $ctx): Operand
+function lowerApply(Ast\Apply $expr, LowerCtx $ctx): Operand
 {
-    $callee = $function;
-    $argNodes = [$argument];
-
-    while ($callee instanceof Ast\Apply) {
-        \array_unshift($argNodes, $callee->argument);
-        $callee = $callee->function;
-    }
+    ['callee' => $callee, 'args' => $argNodes] = applySpine($expr, $ctx);
 
     $args = [];
     foreach ($argNodes as $argNode) {
@@ -1100,7 +1106,7 @@ function lambdaBody(Ast\Lambda $lambda, CheckedLambda $term): callable
             }
         }
 
-        return lowerExpr($lambda->body, $fnCtx);
+        return lowerExpr($term->body ?? $lambda->body, $fnCtx);
     };
 }
 

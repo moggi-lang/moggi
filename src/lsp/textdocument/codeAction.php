@@ -367,7 +367,10 @@ function findCaseNearLine(object $node, int $line): ?Ast\CaseExpr
                 $best = $n;
             }
         }
-        foreach (\get_object_vars($n) as $prop) {
+        foreach (\get_object_vars($n) as $key => $prop) {
+            if ($key === 'core') {
+                continue;
+            }
             if (\is_object($prop)) {
                 $walk($prop);
             } elseif (\is_array($prop)) {

@@ -196,19 +196,16 @@ function emitIoCall(IR\Stmt $stmt, int $indent, EmitEnv $env): string
     $pad = \str_repeat('    ', $indent);
     $dest = $stmt->dest;
     $assign = $dest === null ? '' : phpTemp($dest) . ' = ';
-    $runtime = $stmt->runtime ?? null;
+    $op = $stmt->op;
 
-    if (\is_string($stmt->intrinsic) && $stmt->intrinsic !== '') {
-        $expr = emitIntrinsic($env, new IR\Intrinsic($stmt->intrinsic, $stmt->args));
+    if ($op instanceof IR\IoIntrinsic) {
+        $expr = emitIntrinsic($env, new IR\Intrinsic($op->name, $stmt->args));
 
         return $pad . $assign . $expr . ";\n";
     }
 
-    if (\is_string($runtime) && \str_starts_with($runtime, 'foreign:')) {
-        $foreign = $stmt->foreign;
-        if (! ($foreign instanceof IR\ForeignCall)) {
-            throw new \RuntimeException('foreign IO call missing metadata');
-        }
+    if ($op instanceof IR\IoForeign && \is_string($op->runtime) && \str_starts_with($op->runtime, 'foreign:')) {
+        $foreign = $op->call;
 
         return emitForeignIoStatement(
             $foreign,

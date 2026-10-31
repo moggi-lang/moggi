@@ -163,6 +163,11 @@ function bindLambdaCapturesStmt(IR\Stmt $stmt, CallableTable $table): IR\Stmt
 /**
  * A call by name: its arguments, its captures, then either the call or — when the vector is a
  * proper prefix of what the entry publishes — the partial that holds it.
+ *
+ * A call the lowering built carries exactly the declared value parameters, so arity alone says
+ * whether its captures are missing: `|args| == |V|`. A vector that already carries its captures
+ * is never a `Call` — it is a `Partial` whose published arity is the runtime one — so there is no
+ * second shape to disambiguate.
  */
 function legalizeCall(IR\Call $call, CallableTable $table): IR\Stmt
 {
@@ -171,7 +176,12 @@ function legalizeCall(IR\Call $call, CallableTable $table): IR\Stmt
         $call->args,
     );
     $layout = publishedLayout($table, $call->callee);
-    $args = captureArgsForCall($layout, $args);
+    if ($layout !== null && $layout['captures'] !== [] && \count($args) === \count($layout['sig']->params)) {
+        $args = [
+            ...\array_map(static fn (string $capture): IR\Operand => new IR\Local($capture), $layout['captures']),
+            ...$args,
+        ];
+    }
 
     $partial = underapplied($call, $args, $layout);
     if ($partial !== null) {
@@ -201,68 +211,6 @@ function legalizeCallee(IR\Operand $callee, int $supplied, CallableTable $table)
 }
 
 /**
- * Captures a direct call has to pass before the arguments the source wrote.
- *
- * A call by name carries only the declared arguments, so a lifted function's
- * free locals are missing from it: a recursive `let`/`where` group lowers to a
- * plain `__letrecN` call, and an immediately applied lambda is called by name.
- * A specialized call, an `IR\Partial`, and the adapter a constrained local
- * binding lowers to (`λ(dict, p) -> λ3(dict, p)`) already carry them. Such a
- * call runs past the captures into the declared parameters, so it is only
- * left alone when it carries more than the captures -- exactly the declared
- * parameters can still need the prepend (the same evidence serving as the
- * local binding's own dictionaries), where skipping it would bind the
- * trailing arguments to the wrong parameters.
- *
- * @param array{sig: \Moggi\IR\Callables\CallableSig, captures: list<string>}|null $layout
- * @param list<IR\Operand> $args
- * @return list<IR\Operand>
- */
-function captureArgsForCall(?array $layout, array $args): array
-{
-    if ($layout === null) {
-        return $args;
-    }
-
-    $params = $layout['sig']->params;
-    $captures = $layout['captures'];
-    if ($captures === [] || \count($args) !== \count($params)) {
-        return $args;
-    }
-    if (\count($params) > \count($captures) && callArgsLeadWithCaptures($args, $captures)) {
-        return $args;
-    }
-
-    return [
-        ...\array_map(static fn (string $capture): IR\Operand => new IR\Local($capture), $captures),
-        ...$args,
-    ];
-}
-
-/**
- * Whether a call already passes its callee's captures in front of its
- * arguments, in which case they must not be added a second time.
- *
- * @param list<IR\Operand> $args
- * @param list<string> $captures
- */
-function callArgsLeadWithCaptures(array $args, array $captures): bool
-{
-    if (\count($args) < \count($captures)) {
-        return false;
-    }
-
-    foreach ($captures as $i => $capture) {
-        $arg = $args[$i] ?? null;
-        if (! ($arg instanceof IR\Local) || $arg->name !== $capture) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-/**
  * A partial of a lifted function counts its captures in `arity` as well, so one
  * built from the declared parameters alone is widened to the full arity.
  */
@@ -280,9 +228,6 @@ function bindCapturedPartial(IR\Partial $partial, CallableTable $table): IR\Part
     $params = $layout['sig']->params;
     $captures = $layout['captures'];
     if ($captures === [] || $partial->arity !== \count($params)) {
-        return new IR\Partial($partial->fn, $partial->arity, $args);
-    }
-    if (\count($params) > \count($captures) && callArgsLeadWithCaptures($args, $captures)) {
         return new IR\Partial($partial->fn, $partial->arity, $args);
     }
 
@@ -863,9 +808,14 @@ function normalizeApplyStmt(IR\Stmt $stmt, CallableTable $table, array $paramAri
  * Absorb a returned partial's missing arguments into the function's declared
  * parameters, accounting for captures in its effective arity.
  *
+ * `$table`, when supplied, is the authority on how many slots the returned partial still needs:
+ * the callee's published `runtimeArity()`. A result that is still under-applied stays a `Partial`
+ * at that arity instead of becoming a saturated `Call`, which is what used to hand the legalizer a
+ * completed vector whose length also looked like a source call's.
+ *
  * @param list<string> $captures
  */
-function specializePartialReturnFunction(IR\FunctionDecl $function, array $captures = []): IR\FunctionDecl
+function specializePartialReturnFunction(IR\FunctionDecl $function, array $captures = [], ?CallableTable $table = null): IR\FunctionDecl
 {
     $items = $function->body->items;
     if (\count($items) !== 1 || ! ($items[0] instanceof IR\Ret)) {
@@ -877,7 +827,9 @@ function specializePartialReturnFunction(IR\FunctionDecl $function, array $captu
         return $function;
     }
 
-    $missing = $partial->arity - \count($partial->args);
+    $layout = $table === null ? null : publishedLayout($table, $partial->fn);
+    $runtimeArity = $layout === null ? $partial->arity : $layout['sig']->runtimeArity();
+    $missing = $runtimeArity - \count($partial->args);
     if ($missing <= 0) {
         return $function;
     }
@@ -898,7 +850,13 @@ function specializePartialReturnFunction(IR\FunctionDecl $function, array $captu
     ];
 
     $body = [];
-    [$value] = scheduleCall($partial->fn, $callArgs, $body, maxTempInItems($items) + 1);
+    $nextTemp = maxTempInItems($items) + 1;
+    if (\count($callArgs) < $runtimeArity) {
+        $body[] = new IR\Assign($nextTemp, new IR\Partial($partial->fn, $runtimeArity, $callArgs));
+        $value = new IR\Temp($nextTemp);
+    } else {
+        [$value] = scheduleCall($partial->fn, $callArgs, $body, $nextTemp);
+    }
     $body[] = new IR\Ret($value);
 
     return $function->with([

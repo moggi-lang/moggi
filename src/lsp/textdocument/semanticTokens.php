@@ -289,7 +289,10 @@ function buildAstSemanticTokens(AnalysisResult $analysis): array
         } elseif ($node instanceof Ast\ExprHole && ($node->line ?? 0) > 0) {
             $emitAt($node->line, $node->col, '_', 22); // decorator
         }
-        foreach (\get_object_vars($node) as $prop) {
+        foreach (\get_object_vars($node) as $key => $prop) {
+            if ($key === 'core') {
+                continue;
+            }
             if (\is_object($prop)) {
                 $walk($prop);
             } elseif (\is_array($prop)) {

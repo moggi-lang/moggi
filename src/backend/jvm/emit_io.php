@@ -65,8 +65,10 @@ function emitPendingIoThunkMethods(
 
 function emitIoCall(EmitEnv $env, IR\IoCall $stmt): void
 {
-    if (\is_string($stmt->intrinsic) && $stmt->intrinsic !== '') {
-        emitIntrinsic($env, new IR\Intrinsic($stmt->intrinsic, $stmt->args));
+    $op = $stmt->op;
+
+    if ($op instanceof IR\IoIntrinsic) {
+        emitIntrinsic($env, new IR\Intrinsic($op->name, $stmt->args));
         if ($stmt->dest !== null) {
             $env->c->astore($env->localSlot('t' . $stmt->dest));
         } else {
@@ -76,12 +78,8 @@ function emitIoCall(EmitEnv $env, IR\IoCall $stmt): void
         return;
     }
 
-    $runtime = $stmt->runtime ?? null;
-    if (\is_string($runtime) && \str_starts_with($runtime, 'foreign:')) {
-        $foreign = $stmt->foreign;
-        if (! ($foreign instanceof IR\ForeignCall)) {
-            throw new \RuntimeException('foreign IO call missing metadata');
-        }
+    if ($op instanceof IR\IoForeign && \is_string($op->runtime) && \str_starts_with($op->runtime, 'foreign:')) {
+        $foreign = $op->call;
         $call = new IR\ForeignCall(
             $foreign->backend,
             $foreign->kind,

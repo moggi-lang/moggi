@@ -46,6 +46,24 @@ final class ImportQualified
  * three. `asCallable()` is the single place that decides "this is a call the module may make by
  * name", and it answers null both for a name with no symbol and for one that is ambiguous.
  */
+/**
+ * The callable facts one imported spelling publishes, in one record.
+ *
+ * Layout, action result and worker are three answers about the same entry, so they travel
+ * together; every import-side consumer projects the field it needs from this table instead of
+ * rebuilding a map of its own.
+ */
+final class ImportAbi
+{
+    /** @param array{evidence: int, params: int, arity: int} $layout */
+    public function __construct(
+        public readonly array $layout,
+        public readonly bool $actionReturn,
+        public readonly ?string $worker,
+    ) {
+    }
+}
+
 final class ImportSymbol
 {
     /**
@@ -72,6 +90,16 @@ final class ImportSymbol
         public readonly bool $actionReturn = false,
         public readonly ?string $worker = null,
     ) {
+    }
+
+    /** The callable facts this record publishes, or null when it names no callable. */
+    public function abi(): ?ImportAbi
+    {
+        if ($this->layout === null) {
+            return null;
+        }
+
+        return new ImportAbi($this->layout, $this->actionReturn, $this->worker);
     }
 
     /** Whether this spelling names a callable the module may call by this name. */
@@ -282,6 +310,28 @@ final class ImportInterface
     }
 
     /**
+     * The runtime ABI of every imported entry, as one table.
+     *
+     * This is the import side's single derivation: layout, action result and worker are read
+     * from each symbol once, here, and the projections below only select a field. A second map
+     * built from the symbol fields would be a second answer.
+     *
+     * @return array<string, ImportAbi>
+     */
+    public function abi(): array
+    {
+        $abi = [];
+        foreach ($this->symbols as $name => $imported) {
+            $record = $imported->abi();
+            if ($record !== null) {
+                $abi[$name] = $record;
+            }
+        }
+
+        return $abi;
+    }
+
+    /**
      * The runtime layout of every imported entry — a function, a data constructor or an evidence
      * factory — by the name this module calls it by.
      *
@@ -290,10 +340,8 @@ final class ImportInterface
     public function callables(): array
     {
         $callables = [];
-        foreach ($this->symbols as $name => $imported) {
-            if ($imported->layout !== null) {
-                $callables[$name] = $imported->layout;
-            }
+        foreach ($this->abi() as $name => $record) {
+            $callables[$name] = $record->layout;
         }
 
         return $callables;
@@ -309,10 +357,8 @@ final class ImportInterface
     public function externalFnRuntimeArity(): array
     {
         $arity = [];
-        foreach ($this->symbols as $name => $imported) {
-            if ($imported->layout !== null) {
-                $arity[$name] = $imported->layout['arity'];
-            }
+        foreach ($this->abi() as $name => $record) {
+            $arity[$name] = $record->layout['arity'];
         }
 
         return $arity;
@@ -470,8 +516,8 @@ final class ImportInterface
     public function actionReturn(): array
     {
         $actionReturn = [];
-        foreach ($this->symbols as $name => $imported) {
-            if ($imported->actionReturn) {
+        foreach ($this->abi() as $name => $record) {
+            if ($record->actionReturn) {
                 $actionReturn[$name] = true;
             }
         }
@@ -483,9 +529,9 @@ final class ImportInterface
     public function workers(): array
     {
         $workers = [];
-        foreach ($this->symbols as $name => $imported) {
-            if ($imported->worker !== null) {
-                $workers[$name] = $imported->worker;
+        foreach ($this->abi() as $name => $record) {
+            if ($record->worker !== null) {
+                $workers[$name] = $record->worker;
             }
         }
 

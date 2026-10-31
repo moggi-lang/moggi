@@ -1,0 +1,576 @@
+.class public abstract auto ansi sealed beforefieldinit Moggi.Main
+       extends [System.Runtime]System.Object
+{
+.method public hidebysig static object 'add3'(object, object, object) cil managed
+{
+  .maxstack 64
+  .line 14, 14 : 14, 14 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  .line 14, 14 : 14, 14 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  .line 14, 14 : 14, 14 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldarg.0
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  ldarg.1
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  add
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  ldarg.2
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  add
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'mul'(object, object) cil managed
+{
+  .maxstack 64
+  .line 17, 17 : 11, 11 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  .line 17, 17 : 11, 11 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldarg.0
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  ldarg.1
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  mul
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'triple'(object) cil managed
+{
+  .maxstack 64
+  .line 20, 20 : 12, 12 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  .line 17, 17 : 11, 11 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldc.i8 3
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  ldarg.0
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  mul
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'addOne'(object) cil managed
+{
+  .maxstack 64
+  .line 23, 23 : 12, 12 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  .line 23, 23 : 12, 12 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldarg.0
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  ldc.i8 1
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  add
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'apply3'(object, object, object, object) cil managed
+{
+  .maxstack 64
+  .line 27, 27 : 18, 18 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  .line 27, 27 : 18, 18 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldarg.0
+  ldc.i4.3
+  newarr object
+  dup
+  ldc.i4.0
+  ldarg.1
+  stelem.ref
+  dup
+  ldc.i4.1
+  ldarg.2
+  stelem.ref
+  dup
+  ldc.i4.2
+  ldarg.3
+  stelem.ref
+  call object Moggi.Rt.RT::Apply(object, object[])
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'apply2'(object, object, object) cil managed
+{
+  .maxstack 64
+  .line 32, 32 : 16, 16 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  .line 32, 32 : 16, 16 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldarg.0
+  ldc.i4.2
+  newarr object
+  dup
+  ldc.i4.0
+  ldarg.1
+  stelem.ref
+  dup
+  ldc.i4.1
+  ldarg.2
+  stelem.ref
+  call object Moggi.Rt.RT::Apply(object, object[])
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'compose'(object, object, object) cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  .line 36, 36 : 17, 17 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  .line 36, 36 : 17, 17 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldarg.1
+  ldarg.2
+  call object Moggi.Rt.RT::Apply1(object, object)
+  stloc.0
+  .line 36, 36 : 17, 17 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldarg.0
+  ldloc.0
+  call object Moggi.Rt.RT::Apply1(object, object)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'twice'(object, object) cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  .line 39, 39 : 13, 13 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  .line 39, 39 : 13, 13 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldarg.0
+  ldarg.1
+  call object Moggi.Rt.RT::Apply1(object, object)
+  stloc.0
+  .line 39, 39 : 13, 13 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldarg.0
+  ldloc.0
+  call object Moggi.Rt.RT::Apply1(object, object)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'stepwise'() cil managed
+{
+  .maxstack 64
+  .line 42, 42 : 1, 1 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldc.i8 10
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldc.i8 20
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldc.i8 12
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Main::'add3'(object, object, object)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'countdown'(object, object) cil managed
+{
+  .maxstack 64
+  .locals init (int64 V0, int64 V1, object V2, object V3, object V4)
+  .line 51, 51 : 19, 19 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+tail_loop_1:
+  .line 51, 51 : 24, 24 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldarg.1
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  stloc.0
+  ldc.i8 0
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  stloc.1
+  ldloc.0
+  ldloc.1
+  cgt
+  ldloc.0
+  ldloc.1
+  clt
+  sub
+  call class Moggi.Rt.Con Moggi.Rt.RT::OrderingFromInt(int32)
+  stloc.2
+  ldloc.2
+  castclass Moggi.Rt.Con
+  ldfld string Moggi.Rt.Con::tag
+  ldstr "EQ"
+  call bool [System.Runtime]System.String::Equals(string, string)
+  brfalse match_fail_V2_0
+  ldarg.0
+  ret
+match_fail_V2_0:
+  .line 53, 53 : 20, 20 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldarg.0
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  ldarg.1
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  add
+  call object Moggi.Rt.RT::BoxInt(int64)
+  stloc.3
+  .line 53, 53 : 30, 30 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldarg.1
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  ldc.i8 1
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  sub
+  call object Moggi.Rt.RT::BoxInt(int64)
+  stloc.s 4
+  ldloc.3
+  starg.s 0
+  ldloc.s 4
+  starg.s 1
+  br tail_loop_1
+match_fail_V2_1:
+  ldstr "non-exhaustive match"
+  newobj instance void [System.Runtime]System.Exception::.ctor(string)
+  throw
+match_end_V2:
+  ldnull
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'main'() cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1)
+  .line 56, 56 : 8, 8 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  .line 56, 56 : 8, 8 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldc.i4.0
+  newobj instance void Moggi.Fn.Moggi_Main____ioThunk0__0::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  stloc.0
+  ldloc.0
+  newobj instance void Moggi.Rt.IO::.ctor(object)
+  stloc.1
+  ldloc.1
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object '__w_main'() cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1, object V2, object V3, object V4, object V5, object V6, object V7, object V8, object V9, object V10, object V11, object V12, object V13, object V14, object V15, object V16, object V17)
+  .line 56, 56 : 8, 8 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  .line 57, 57 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldc.i4.3
+  newobj instance void Moggi.Fn.Moggi_Main__add3__3::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  ldc.i8 1
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldc.i8 2
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldc.i8 3
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Main::'apply3'(object, object, object, object)
+  stloc.0
+  .line 57, 57 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  call object Moggi.Data.Int::'__ev_Show_Int'()
+  stloc.1
+  .line 57, 57 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldloc.1
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.0
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.2
+  .line 57, 57 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldloc.2
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.3
+  .line 58, 58 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldc.i4.2
+  newobj instance void Moggi.Fn.Moggi_Main__mul__2::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  ldc.i8 6
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldc.i8 7
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Main::'apply2'(object, object, object)
+  stloc.s 4
+  .line 58, 58 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldloc.1
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.s 4
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.s 5
+  .line 58, 58 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldloc.s 5
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 6
+  .line 59, 59 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldloc.1
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  call object Moggi.Main::'stepwise'()
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.s 7
+  .line 59, 59 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldloc.s 7
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 8
+  .line 60, 60 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldc.i4.1
+  newobj instance void Moggi.Fn.Moggi_Main__addOne__1::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  ldc.i8 40
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Main::'twice'(object, object)
+  stloc.s 9
+  .line 60, 60 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldloc.1
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.s 9
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.s 10
+  .line 60, 60 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldloc.s 10
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 11
+  .line 61, 61 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldc.i4.1
+  newobj instance void Moggi.Fn.Moggi_Main__addOne__1::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  ldc.i4.1
+  newobj instance void Moggi.Fn.Moggi_Main__triple__1::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  ldc.i8 7
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Main::'compose'(object, object, object)
+  stloc.s 12
+  .line 61, 61 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldloc.1
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.s 12
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.s 13
+  .line 61, 61 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldloc.s 13
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 14
+  .line 62, 62 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldc.i8 0
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldc.i8 4
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Main::'countdown'(object, object)
+  stloc.s 15
+  .line 62, 62 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldloc.1
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.s 15
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.s 16
+  .line 62, 62 : 3, 3 'tests/backend/runtime/Exec-Apply-Collapse.mog'
+  ldloc.s 16
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 17
+  ldnull
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static void Main(string[]) cil managed
+{
+  .entrypoint
+  .maxstack 64
+  .locals init (class [System.Runtime]System.Exception V0, object V1)
+  .try
+  {
+  ldarg.0
+  call void Moggi.Rt.Platform::SetArgs(string[])
+  call object Moggi.Main::'main'()
+  call object Moggi.Rt.RT::IoRun(object)
+  pop
+  leave MAIN_END
+  }
+  catch [System.Runtime]System.Exception
+  {
+  stloc.0
+  ldloc.0
+  call void Moggi.Rt.RT::ReportUncaught(class [System.Runtime]System.Exception)
+  leave MAIN_END
+  }
+MAIN_END:
+  ret
+}
+
+.method public hidebysig static object __ioThunk0() cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  call object Moggi.Main::'__w_main'()
+  stloc.0
+  ldloc.0
+  ret
+}
+
+}
+
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main____ioThunk0__0
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    call object Moggi.Main::'__ioThunk0'()
+    ret
+  }
+}
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main__add3__3
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    ldarg 1
+    ldc.i4 0
+    ldelem.ref
+    ldarg 1
+    ldc.i4 1
+    ldelem.ref
+    ldarg 1
+    ldc.i4 2
+    ldelem.ref
+    call object Moggi.Main::'add3'(object, object, object)
+    ret
+  }
+}
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main__addOne__1
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    ldarg 1
+    ldc.i4 0
+    ldelem.ref
+    call object Moggi.Main::'addOne'(object)
+    ret
+  }
+}
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main__mul__2
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    ldarg 1
+    ldc.i4 0
+    ldelem.ref
+    ldarg 1
+    ldc.i4 1
+    ldelem.ref
+    call object Moggi.Main::'mul'(object, object)
+    ret
+  }
+}
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main__triple__1
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    ldarg 1
+    ldc.i4 0
+    ldelem.ref
+    call object Moggi.Main::'triple'(object)
+    ret
+  }
+}

@@ -92,6 +92,55 @@ final class Facts
         );
     }
 
+    /** Put the owner a nested run replaced back in place, or clear when there was none. */
+    public static function restore(?self $facts): void
+    {
+        self::$current = $facts;
+    }
+
+    /**
+     * Fold a nested run's program-derived discoveries back into its owner.
+     *
+     * Evidence tables and CAF trees are facts about the module set, not about the body a run
+     * rewrote, so a run that found one hands it up rather than taking it to the grave. The
+     * per-module index, its revision and the callable table are deliberately *not* absorbed: they
+     * describe the body that run optimized, and copying them onto the owner is exactly the
+     * clobbering the run-scoped stack exists to prevent.
+     */
+    public function absorb(self $child): void
+    {
+        $this->evidence += $child->evidence;
+        $this->nullary += $child->nullary;
+        $this->nullaryCtorCafs += $child->nullaryCtorCafs;
+    }
+
+    /**
+     * A run's own facts, seeded with the program-wide facts its owner already published.
+     *
+     * `optimize()` installs one of these per run and restores the previous owner afterwards, so a
+     * run that nests inside another — specialization re-optimizing a module, a pass that calls
+     * `optimize()` — publishes into its own revision instead of overwriting the enclosing run's
+     * index and callable table. The module-set maps are copied because they describe the program,
+     * not the one body being rewritten: a child that could not see them would answer "no evidence"
+     * and fold less. The per-module facts start empty, because the child is about to publish its
+     * own, and the transient inline arrays start empty for the same reason.
+     */
+    public function child(): self
+    {
+        return new self(
+            evidence: $this->evidence,
+            fnsByModule: $this->fnsByModule,
+            externalFnsByModule: $this->externalFnsByModule,
+            nullaryCtorCafs: $this->nullaryCtorCafs,
+            callableTable: null,
+            liftedCaptureNeeds: null,
+            fusionIndex: $this->fusionIndex,
+            inlineProtectedNames: [],
+            inlineTargetBoundNames: [],
+            nullary: $this->nullary,
+        );
+    }
+
     /** @param array<string, CtorTree> $cafs */
     public function publishNullaryCtorCafs(array $cafs): void
     {

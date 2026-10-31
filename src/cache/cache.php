@@ -398,6 +398,16 @@ function decodePayload(string $raw): mixed
 }
 
 /**
+ * The shape of a cached per-module payload.
+ *
+ * The payload is a `serialize()`d graph with no version of its own, so a module's shape is part of
+ * the entry's identity: a payload written by another shape is a different product and is refused
+ * rather than decoded into whatever the current classes mean. Bump this whenever the serialized
+ * graph changes incompatibly; products of an older shape then miss once and are rewritten.
+ */
+const MODULE_PRODUCT_SHAPE = 2;
+
+/**
  * Read a cached per-module artifact.
  *
  * `$key` is the module's declared cache key: its content Merkle plus the
@@ -440,7 +450,10 @@ function moduleGet(string $relPath, string $kind, string $key, string $target): 
         return null;
     }
 
-    if (($value['key'] ?? null) !== $key || ($value['target'] ?? null) !== $target) {
+    if (($value['key'] ?? null) !== $key
+        || ($value['target'] ?? null) !== $target
+        || ($value['shape'] ?? null) !== MODULE_PRODUCT_SHAPE
+    ) {
         @\unlink($path);
 
         return null;
@@ -467,6 +480,7 @@ function modulePut(string $relPath, string $kind, string $key, mixed $payload, s
     $raw = \serialize([
         'key' => $key,
         'target' => $target,
+        'shape' => MODULE_PRODUCT_SHAPE,
         'payload' => $payload,
     ]);
     atomicWrite(modulePath($relPath, $kind, $target), $raw);

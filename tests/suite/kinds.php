@@ -211,7 +211,7 @@ function testKindSnapshot(string $kind, string $input, string $backend): string
         'typed-ast' => sourceStageDump($input, 'typed-ast'),
         'ir' => irLoweringDump($input),
         'opt-ir' => $isIrFixture ? optimizedIrDump($input) : optimizedIrFromSource($input, $backend),
-        'emit' => $isIrFixture ? emitPhpArtifact($input) : emitFromSource($input),
+        'emit' => $isIrFixture ? emitPhpArtifact($input) : emitFromSource($input, $backend),
         default => throw new TestFailure("`{$kind}` is not a snapshot kind"),
     };
 }
@@ -230,15 +230,35 @@ function optimizedIrFromSource(string $path, string $backend): string
     return entryArtifact($outputs['opt-ir']['output'], $path, '.opt-ir');
 }
 
-/** The source the entry module of `$path` compiles to; emit goldens are php-only. */
-function emitFromSource(string $path): string
+/**
+ * The source the entry module of `$path` compiles to, for the backend owning the golden.
+ *
+ * PHP is compared as the module's source text. The other two backends publish no source
+ * artifact — JVM emit is classfile bytes and .NET emit is ILASM — so their `emit` golden is
+ * the backend's own `describeEmit` disassembly. That is the layer a run-only fixture cannot
+ * see: parameter/descriptor order, evidence and capture slots, worker wrappers, and the
+ * foreign-call shape are all named there, and a change to any of them moves the golden.
+ */
+function emitFromSource(string $path, string $backend = 'php'): string
 {
-    $outputs = compileFileCapturingErrorsBoth(testRelativePath($path), true, 'php');
+    $outputs = compileFileCapturingErrorsBoth(testRelativePath($path), true, $backend);
     if ($outputs['emit']['exitCode'] !== 0) {
-        throw new TestFailure("emit failed for {$path}:\n{$outputs['emit']['output']}");
+        throw new TestFailure("emit failed for {$path} on {$backend}:\n{$outputs['emit']['output']}");
     }
 
-    return entryArtifact($outputs['emit']['output'], $path, '.php');
+    if ($backend === 'php') {
+        return entryArtifact($outputs['emit']['output'], $path, '.php');
+    }
+
+    $emit = $outputs['emit']['output'];
+    if (\is_string($emit)) {
+        return $emit;
+    }
+    if (! \is_array($emit)) {
+        throw new TestFailure("no emit artifact for {$path} on {$backend}");
+    }
+
+    return Backend\backendById($backend)->describeEmit($emit);
 }
 
 /**

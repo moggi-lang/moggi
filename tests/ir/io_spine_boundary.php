@@ -53,6 +53,13 @@ $assert = static function (bool $condition, string $message): void {
     }
 };
 
+/** Paths on this host, spelled `/` and relative to `src/`, which is how the register pins them. */
+$canonical = static fn (string $path): string => \str_replace('\\', '/', $path);
+$srcPrefix = $canonical($root) . '/src/';
+$relativeToSrc = static fn (string $path): string => \str_starts_with($canonical($path), $srcPrefix)
+    ? \substr($canonical($path), \strlen($srcPrefix))
+    : $canonical($path);
+
 /** The IO node classes in the AST, and the only file that may read each family beyond them. */
 $statementClasses = ['IoAction', 'IoBind', 'IoCase', 'IoExpr', 'IoLet', 'IoLetAction', 'IoPure', 'IoSequence'];
 /** The expression classes that carry the published form: the four shapes a statement/body can be. */
@@ -136,7 +143,7 @@ foreach ($iterator as $file) {
         continue;
     }
     $body = (string) \file_get_contents($file->getPathname());
-    $relative = \str_replace($root . '/src/', '', $file->getPathname());
+    $relative = $relativeToSrc($file->getPathname());
     if (\preg_match_all('/(?<!function )\bioStatementForm\(/', $body) > 0) {
         $producers[] = $relative;
     }
@@ -187,7 +194,7 @@ foreach ($iterator as $file) {
         continue;
     }
     if (\preg_match('/->ioKind\s*=/', (string) \file_get_contents($file->getPathname())) === 1) {
-        $kindWriters[] = \str_replace($root . '/src/', '', $file->getPathname());
+        $kindWriters[] = $relativeToSrc($file->getPathname());
     }
 }
 \sort($kindWriters);
@@ -259,7 +266,7 @@ foreach ($iterator as $file) {
         continue;
     }
     if (\preg_match('/new\\s+\\\\?(?:Moggi\\\\Syntax\\\\)?Ast\\\\Io[A-Za-z]+\\s*\\(/', (string) \file_get_contents($file->getPathname())) === 1) {
-        $astConstructors[] = \str_replace($root . '/src/', '', $file->getPathname());
+        $astConstructors[] = $relativeToSrc($file->getPathname());
     }
 }
 \sort($astConstructors);
@@ -281,7 +288,7 @@ foreach ($iterator as $file) {
     $body = (string) \file_get_contents($file->getPathname());
     if (\preg_match('/use function Moggi\\\\Semantics\\\\StrictIoNormalize\\\\normalize;/', $body) === 1
         || \preg_match('/\bStrictIoNormalize\\\\normalize\\s*\(/', $body) === 1) {
-        $normalizerCallers[] = \str_replace($root . '/src/', '', $file->getPathname());
+        $normalizerCallers[] = $relativeToSrc($file->getPathname());
     }
 }
 \sort($normalizerCallers);
@@ -301,7 +308,7 @@ foreach ($iterator as $file) {
         continue;
     }
     if (\str_contains((string) \file_get_contents($file->getPathname()), 'ioActionStore')) {
-        $actualStore[] = \str_replace($root . '/src/', '', $file->getPathname());
+        $actualStore[] = $relativeToSrc($file->getPathname());
     }
 }
 \sort($actualStore);

@@ -50,7 +50,7 @@ use function Moggi\Backend\Php\Codegen\emitBlock;
 
 /**
  * @param IR\Module $module
- * @param array{namespace?: ?string, outputRelative?: string, artifactModuleName?: string, runtimeRequire?: string, plan: EmitPlan, irUsage?: array<string, mixed>, globalFnArity?: array<string, int>} $options
+ * @param array{namespace?: ?string, outputRelative?: string, artifactModuleName?: string, runtimeRequire?: string, plan: EmitPlan, irUsage?: array<string, mixed>, callableTables?: array<string, \Moggi\IR\Callables\CallableTable>} $options
  * @return array<string, string>
  */
 function emitModule(IR\Module $module, string $sourcePath, array $options = []): array

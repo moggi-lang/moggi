@@ -603,7 +603,7 @@ function foldKnownMatchesInItems(array $items, int $depth = 0): array
 
             $scrut = resolveOperand($item->scrutinee, $ctors, $aliases);
             $nextTemp = maxTempInItems([...$out, $item]) + 1;
-            $folded = tryFoldMatch($item, $scrut, $ctors, $aliases, $nextTemp);
+            $folded = tryFoldMatch($item, $scrut, $ctors, $aliases, $nextTemp, \count($out));
             if ($folded !== null) {
                 if ($item instanceof IR\MatchStmt) {
                     $folded = rewriteRetsToAssigns($folded, $item->dest);
@@ -841,6 +841,7 @@ function tryFoldMatch(
     array $ctors,
     array $aliases,
     int &$nextTemp,
+    int $seedBase = 0,
 ): ?array {
     $scrut = resolveMatchScrutinee($scrut, $ctors, $aliases);
     if (
@@ -878,13 +879,12 @@ function tryFoldMatch(
         }
 
         $body = [];
-        static $seedSeq = 0;
         $params = [];
         $args = [];
         foreach ($bindings as $name => $operand) {
             $leaf = materializeOperand($operand, $body, $nextTemp);
             if (operandIsNonDuplicable($leaf)) {
-                $fresh = $name . '__seed' . ($seedSeq++);
+                $fresh = $name . '__seed' . ($seedBase + \count($params));
                 $body[] = new IR\Let($fresh, $leaf);
                 $params[] = $name;
                 $args[] = new IR\Local($fresh);
