@@ -1,11 +1,15 @@
 <?php declare(strict_types=1);
 
-// The release manifest's scope: provenance, artifact, version, and now the
-// digest of the verbatim descriptor and of the rendered docs tree. The exact
-// bytes are pinned here as goldens, because the client (this PHP), the worker
-// (`manifest.ts`) and the website (`verify.js`) must build them identically or a
-// signature made by one will not verify under another. The signing checks need
-// the real `schnorr` CLI; without it they are skipped rather than faked.
+/**
+ * The release manifest covers provenance, artifact, version, and digests
+ * of the verbatim descriptor and rendered docs tree. Pin the exact bytes
+ * as goldens: the PHP client, worker (`manifest.ts`), and website
+ * (`verify.js`) must produce identical bytes for signatures to verify
+ * across all three.
+ *
+ * Signing checks require the real `schnorr` CLI; without it, they are
+ * skipped rather than faked.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -14,6 +18,7 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 require $root . '/src/compiler.php';
 
 use function Moggi\Registry\releaseMessage;
+use function Moggi\Registry\schnorrBinary;
 use function Moggi\Registry\verifyRelease;
 
 $checks = 0;
@@ -53,14 +58,10 @@ $assert(releaseMessage('x', '1.0.0', ['descriptor' => $descriptor . 'x'] + $base
 $assert(releaseMessage('x', '1.0.1', $full) !== releaseMessage('x', '1.0.0', $full), 'the version is still covered');
 
 // --- sign and verify with a throwaway key, if the CLI is here ----------------
-$binary = \getenv('MOGGI_SCHNORR');
-if (! \is_string($binary) || $binary === '') {
-    $binary = $root . '/schnorr/schnorr';
-}
-if (! \is_file($binary) || ! \is_executable($binary)) {
-    echo "  (skipped the signing checks: no schnorr CLI at {$binary})\n";
+$binary = schnorrBinary();
+if ($binary === null) {
+    echo "  (skipped the signing checks: no schnorr CLI in this installation)\n";
 } else {
-    \putenv('MOGGI_SCHNORR=' . $binary);
     $schnorr = static function (array $arguments, ?string $stdin = null) use ($binary): string {
         $process = \proc_open(
             \array_merge([$binary], $arguments),

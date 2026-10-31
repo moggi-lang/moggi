@@ -5,16 +5,13 @@ namespace Moggi\Semantics\Deriving;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
+use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Types\astType;
 use function Moggi\Semantics\Types\substitute;
-
-use Moggi\Semantics\Types\TypeCheckState;
-
 use function Moggi\Semantics\Types\typeFail;
 use function Moggi\Semantics\Types\typeToString;
-
-use Moggi\Syntax\Ast;
 
 /**
  * Deriving via: delegate a class instance to another representationally equal
@@ -31,6 +28,24 @@ use Moggi\Syntax\Ast;
  * type-level; they exist so the unqualified class-method call resolves at the
  * via type and therefore dispatches through the `C V` context.
  */
+/**
+ * The context a `deriving via` instance delegates to: `C V`, with the via type replacing the
+ * head's first class argument and the remaining arguments carried verbatim, so a multi-parameter
+ * class gets a full context like `Both W Bool`.
+ *
+ * The checked path and the project-instance stub that lets another module see the same instance
+ * both build it here.
+ *
+ * @param list<Ast\TypeNode> $headArgs
+ */
+function viaDelegationConstraint(string $className, array $headArgs, Ast\TypeNode $viaType): Ast\TypeNode
+{
+    $args = $headArgs;
+    $args[0] = $viaType;
+
+    return new Ast\TypeApp(new Ast\TypeCon($className), $args);
+}
+
 /**
  * Build a `deriving via` instance. `$headArgs` is the instance head's class
  * argument list; the via type replaces its first argument (the target's
@@ -73,11 +88,7 @@ function deriveVia(
     $classInfo = $state->classes[$className];
     $classParam = $classInfo['params'][0]['name'] ?? 'a';
 
-    $constraintArgs = $headArgs;
-    $constraintArgs[0] = $viaType;
-    $constraints = [
-        new Ast\TypeApp(new Ast\TypeCon($className), $constraintArgs),
-    ];
+    $constraints = [viaDelegationConstraint($className, $headArgs, $viaType)];
 
     $methods = [];
     foreach ($classInfo['methods'] as $methodName => $methodInfo) {

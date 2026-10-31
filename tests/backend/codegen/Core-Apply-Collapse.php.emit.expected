@@ -2,7 +2,7 @@
 
 namespace Main;
 
-const __MOGGI_MAP = [[26 => ['Main.apply2', 'tests/backend/codegen/Core-Apply-Collapse.mog', 8, 16], 30 => ['Main.apply3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 11, 18]], ['Main\\add2' => ['Main.add2', 'tests/backend/codegen/Core-Apply-Collapse.mog', 2, 12], 'Main\\add3' => ['Main.add3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 5, 14], 'Main\\apply2' => ['Main.apply2', 'tests/backend/codegen/Core-Apply-Collapse.mog', 8, 16], 'Main\\apply3' => ['Main.apply3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 11, 18], 'Main\\direct2' => ['Main.direct2', 'tests/backend/codegen/Core-Apply-Collapse.mog', 14, 11], 'Main\\direct3' => ['Main.direct3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 17, 11], 'Main\\loop2' => ['Main.loop2', 'tests/backend/codegen/Core-Apply-Collapse.mog', 20, 15], 'Main\\loop3' => ['Main.loop3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 25, 15]]];
+const __MOGGI_MAP = [[26 => 2, 30 => 3], ['Main\\add2' => 0, 'Main\\add3' => 1, 'Main\\apply2' => 2, 'Main\\apply3' => 3, 'Main\\direct2' => 4, 'Main\\direct3' => 5, 'Main\\loop2' => 6, 'Main\\loop3' => 7], [], [], [[0, 0, 2, 12], [1, 0, 5, 14], [2, 0, 8, 16], [3, 0, 11, 18], [4, 0, 14, 11], [5, 0, 17, 11], [6, 0, 20, 15], [7, 0, 25, 15]], ['Main.add2', 'Main.add3', 'Main.apply2', 'Main.apply3', 'Main.direct2', 'Main.direct3', 'Main.loop2', 'Main.loop3'], ['tests/backend/codegen/Core-Apply-Collapse.mog']];
 
 require_once __DIR__ . '/../../../_runtime.php';
 
@@ -44,9 +44,9 @@ function loop2($n, $acc) {
             return $acc;
         }
         else {
-            $__t8 = add2(1, $n);
+            $__t10 = add2(1, $n);
             $n = (\is_int($__m64 = $n - 1) ? $__m64 : moggi_u64_sub($n, 1));
-            $acc = (\is_int($__m64 = $acc + $__t8) ? $__m64 : moggi_u64_add($acc, $__t8));
+            $acc = (\is_int($__m64 = $acc + $__t10) ? $__m64 : moggi_u64_add($acc, $__t10));
             continue;
         }
     }
@@ -58,9 +58,9 @@ function loop3($n, $acc) {
             return $acc;
         }
         else {
-            $__t11 = add3(1, 2, $n);
+            $__t14 = add3(1, 2, $n);
             $n = (\is_int($__m64 = $n - 1) ? $__m64 : moggi_u64_sub($n, 1));
-            $acc = (\is_int($__m64 = $acc + $__t11) ? $__m64 : moggi_u64_add($acc, $__t11));
+            $acc = (\is_int($__m64 = $acc + $__t14) ? $__m64 : moggi_u64_add($acc, $__t14));
             continue;
         }
     }

@@ -2,7 +2,8 @@
 
 namespace Moggi\LSP;
 
-use function Moggi\Backend\setCompileBackend;
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
 
 use Moggi\LSP\Analysis\AnalysisService;
 
@@ -19,37 +20,13 @@ use function Moggi\LSP\Workspace\handleDidChangeWatchedFiles;
 /** The cancellation registry of the request currently being served. */
 function currentCancellations(): ?CancellationRegistry
 {
-    return $GLOBALS['__moggi_lsp_cancellations'] ?? null;
+    return RequestScope::current()?->cancellations;
 }
 
 /** The id of the request currently being served (null outside a request). */
 function currentRequestId(): int|string|null
 {
-    return $GLOBALS['__moggi_lsp_request_id'] ?? null;
-}
-
-/** @internal */
-function setRequestContext(int|string|null $id, CancellationRegistry $cancellations, ?int $token): void
-{
-    $GLOBALS['__moggi_lsp_request_id'] = $id;
-    $GLOBALS['__moggi_lsp_cancellations'] = $cancellations;
-    $GLOBALS['__moggi_lsp_progress_token'] = $token;
-}
-
-/** @internal */
-function clearRequestContext(): void
-{
-    unset(
-        $GLOBALS['__moggi_lsp_request_id'],
-        $GLOBALS['__moggi_lsp_cancellations'],
-        $GLOBALS['__moggi_lsp_progress_token'],
-    );
-}
-
-/** Active per-request progress token (null when none/no support). */
-function currentProgressToken(): int|string|null
-{
-    return $GLOBALS['__moggi_lsp_progress_token'] ?? null;
+    return RequestScope::current()?->id;
 }
 
 /**
@@ -65,11 +42,11 @@ function configureStdioErrors(): void
     \ini_set('display_errors', 'stderr');
 }
 
-function runServer(array $libDirs = []): int
+function runServer(array $libDirs = [], ?CompilationContext $context = null): int
 {
     configureStdioErrors();
-    setCompileBackend('php');
-    $svc = getAnalysisService($libDirs);
+    $context ??= CompilationContext::for('php', CompilePurpose::Library, roots: $libDirs);
+    $svc = getAnalysisService($libDirs, $context);
     $shutdownReceived = false;
     $initialized = false;
     $workDoneProgress = false;
@@ -313,7 +290,7 @@ function runHandler(
 
         return;
     }
-    setRequestContext($id, $cancellations, $token);
+    RequestScope::begin($id, $cancellations, $token);
 
     try {
         sendResult($id, $handler($svc, $params));
@@ -324,7 +301,7 @@ function runHandler(
         sendError($id, -32603, $e->getMessage());
         endRequestProgress($token, false);
     } finally {
-        clearRequestContext();
+        RequestScope::end();
         $cancellations->clear($id);
     }
     publishFlushedDiagnostics($svc, $clientSupportsProgress);

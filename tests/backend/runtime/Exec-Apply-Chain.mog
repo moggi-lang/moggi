@@ -1,0 +1,93 @@
+import System.IO
+import Control.Exception
+import Data.Maybe
+
+-- A function-typed parameter applied to its declared arity, in several value shapes: the
+-- flattened application must compute exactly what the per-argument chain did, optimized or not.
+
+data Box a = Box a
+
+apply2 :: (Int -> Int -> Int) -> Int -> Int -> Int
+apply2 f x y = f x y
+
+apply3 :: (Int -> Int -> Int -> Int) -> Int -> Int -> Int -> Int
+apply3 f x y z = f x y z
+
+named :: Int -> Int -> Int
+named a b = a * 100 + b
+
+named3 :: Int -> Int -> Int -> Int
+named3 a b c = a * 100 + b * 10 + c
+
+twoParam :: (Int -> Int -> Int)
+twoParam = \x y -> x * 100 + y
+
+curried :: (Int -> Int -> Int)
+curried = \x -> \y -> x * 100 + y
+
+curried3 :: (Int -> Int -> Int -> Int)
+curried3 = \a -> \b -> \c -> a * 100 + b * 10 + c
+
+unbox :: Box a -> a
+unbox (Box v) = v
+
+fromMaybe' :: a -> Maybe a -> a
+fromMaybe' d m = case m of
+  Just v -> v
+  Nothing -> d
+
+-- ---- shapes ----
+
+viaNamed :: Int
+viaNamed = apply2 named 1 2
+
+viaTwoParam :: Int
+viaTwoParam = apply2 twoParam 3 4
+
+viaCurried :: Int
+viaCurried = apply2 curried 5 6
+
+viaBox :: Int
+viaBox = apply2 (unbox (Box (\x y -> x * 100 + y))) 7 8
+
+viaMaybe :: Int
+viaMaybe = apply2 (fromMaybe' named (Just (\x y -> x * 100 + y))) 9 1
+
+threeLinks :: Int
+threeLinks = apply3 named3 1 2 3
+
+viaCurried3 :: Int
+viaCurried3 = apply3 curried3 4 5 6
+
+threeParamLambda :: Int
+threeParamLambda = apply3 (\a b c -> a * 100 + b * 10 + c) 7 8 9
+
+-- The application itself must still happen, and once: a callee whose body fails is
+-- reported, not skipped, whether the chain was flattened or left alone.
+failingCallee :: IO Int
+failingCallee = pure (apply2 (\a b -> error "callee-ran") 1 2)
+
+-- Arguments keep the order the chain evaluated them in: the producer's argument is
+-- evaluated before the consumer's, so the first failure is the one reported.
+firstArgFails :: IO Int
+firstArgFails = pure (apply2 (\a b -> a + b) (error "arg-one") (error "arg-two"))
+
+report :: Either ErrorCall Int -> IO ()
+report r = putStrLn (case r of
+  Left e -> "caught: " <> displayException e
+  Right n -> "value: " <> show n)
+
+main :: IO ()
+main = do
+  putStrLn (show viaNamed)
+  putStrLn (show viaTwoParam)
+  putStrLn (show viaCurried)
+  putStrLn (show viaBox)
+  putStrLn (show viaMaybe)
+  putStrLn (show threeLinks)
+  putStrLn (show viaCurried3)
+  putStrLn (show threeParamLambda)
+  r <- try failingCallee
+  report r
+  r2 <- try firstArgFails
+  report r2

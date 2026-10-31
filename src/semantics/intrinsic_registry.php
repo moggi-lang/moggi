@@ -3,9 +3,6 @@
 namespace Moggi\Semantics\IntrinsicRegistry;
 
 use Moggi\Semantics\TypeExpr\Scheme;
-
-use function Moggi\Semantics\TypeExpr\scheme;
-
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TBytes;
 use Moggi\Semantics\TypeExpr\TChar;
@@ -24,8 +21,9 @@ use Moggi\Semantics\TypeExpr\TWord16;
 use Moggi\Semantics\TypeExpr\TWord32;
 use Moggi\Semantics\TypeExpr\TWord64;
 use Moggi\Semantics\TypeExpr\TWord8;
-
 use Moggi\Semantics\TypeExpr\Type;
+
+use function Moggi\Semantics\TypeExpr\scheme;
 
 require_once __DIR__ . '/type_expr.php';
 
@@ -507,16 +505,6 @@ function typeSchemes(): array
         'platformArgv#' => scheme(new TCon('IO', [new TCon('List', [$str])]), []),
         'platformStdin#' => scheme(new TCon('Handle', []), []),
     ];
-}
-
-function isCon(Type $type, string $name): bool
-{
-    return $type instanceof TCon && $type->name === $name;
-}
-
-function isNullaryCon(Type $type, string $name): bool
-{
-    return isCon($type, $name) && $type->args === [];
 }
 
 const MODULE_PRIM = 'Moggi.Internal.Prim';

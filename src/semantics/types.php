@@ -3,7 +3,10 @@
 namespace Moggi\Semantics\Types;
 
 use function Moggi\Errors\formatDiagnostic;
+use function Moggi\Modules\checkedCoreFor;
+use function Moggi\Modules\standaloneImportContext;
 
+use Moggi\Modules\ImportContext;
 use Moggi\Pipeline\CompilePurpose;
 
 use function Moggi\Semantics\Deriving\commitProjectInstance;
@@ -23,10 +26,20 @@ require_once __DIR__ . '/type_expr.php';
 require_once __DIR__ . '/types/state.php';
 require_once __DIR__ . '/evidence_names.php';
 require_once __DIR__ . '/types/type_core.php';
+require_once __DIR__ . '/types/allocation.php';
 require_once __DIR__ . '/types/constraints.php';
 require_once __DIR__ . '/types/literals.php';
 require_once __DIR__ . '/types/instances.php';
 require_once __DIR__ . '/types/infer.php';
+require_once __DIR__ . '/types/declaration_check.php';
+require_once __DIR__ . '/types/signature_syntax.php';
+require_once __DIR__ . '/types/type_syntax.php';
+require_once __DIR__ . '/types/primops.php';
+require_once __DIR__ . '/types/evidence.php';
+require_once __DIR__ . '/types/local_bindings.php';
+require_once __DIR__ . '/types/patterns.php';
+require_once __DIR__ . '/types/records.php';
+require_once __DIR__ . '/types/recursive_declarations.php';
 require_once __DIR__ . '/types/normalize.php';
 require_once __DIR__ . '/types/declarations.php';
 require_once __DIR__ . '/registry.php';
@@ -114,7 +127,6 @@ function inferredFunctionDecls(Ast\Program $program): array
 }
 
 /**
- * @param array<string, mixed> $importContext
  * @param ?array{env: array<string, mixed>, data: array<string, mixed>, typeSynonyms: array<string, mixed>, intrinsicWrappers: array<string, string>} $interface
  *   receives the local type environment this check commits (its env, data,
  *   type synonyms and intrinsic wrappers), so the module interface is a product
@@ -124,16 +136,25 @@ function checkRaw(
     Ast\Program $program,
     string $source = '',
     string $filename = '',
-    array $importContext = [],
+    ?ImportContext $importContext = null,
     CompilePurpose $purpose = CompilePurpose::Executable,
     ?array &$interface = null,
+    array $entryModules = [],
+    string $backendId = 'php',
+    ?\Moggi\Semantics\Types\TypeCheckState &$stateOut = null,
 ): Ast\Program {
+    $importContext ??= standaloneImportContext($program, $backendId);
+
     $state = newState($source, $filename);
+    $stateOut = $state;
+    $state->compileBackend = $backendId;
+    $state->module = $program->module ?? '';
+    $state->entryModules = $entryModules;
 
     Registry\applyImportContext($state, $program, $importContext);
     Registry\registerTypeDeclarations($state, $program);
     Registry\registerFunctionSchemesFromProgram($state, $program);
-    discoverInferredSignatures($state, inferredFunctionDecls($program));
+    $checkedInferred = inferInferredDeclarations($state, inferredFunctionDecls($program));
 
     $interface = [
         'env' => $state->env,
@@ -185,7 +206,9 @@ function checkRaw(
                 validateForeignTypeDecl($state, $item);
                 $items[] = $item;
             })(),
-            Ast\FunctionDecl::class => $items[] = $item->signatureOnly ? $item : checkFunction($state, $item),
+            Ast\FunctionDecl::class => $items[] = $item->signatureOnly
+                ? $item
+                : ($checkedInferred[\spl_object_id($item)] ?? checkFunction($state, $item)),
             Ast\DataDecl::class => (function () use ($state, $item, &$items, &$seenData): void {
                 if (isset($seenData[$item->name])) {
                     throw typeFail($state, "duplicate data type `{$item->name}`", $item);
@@ -206,7 +229,10 @@ function checkRaw(
         };
     }
 
-    finishRestrictedDeclarations($state);
+    $settledRestricted = finishRestrictedDeclarations($state);
+    foreach ($settledRestricted as $name) {
+        $interface['env'][$name] = $state->env[$name];
+    }
 
     validateEntryPoint($state, $items, $program->module, $purpose);
 
@@ -223,24 +249,24 @@ function checkRaw(
     uniquifyCollidingInstanceMethods($state, $freeFnNames);
 
     $checked = new Ast\Program(
-        $items,
-        $program->module,
-        $program->imports,
-        $program->exports,
-        $importContext['codegen']['externalFns'] ?? [],
-        $state->constructorRenames,
-        $state->instanceEvidence,
-        $importContext['externalFnRuntimeArity'] ?? [],
-        $program->moduleBackend,
-        $program->backendMap,
-        exportedInferredSchemesFromEnv($state, $program),
-        $program->implicitMain,
-        $program->language,
-        $program->moduleDoc,
-        $program->fixityDocs,
-        externalActionReturnFns: $importContext['externalActionReturnFns'] ?? [],
-        externalTrueBindings: $importContext['externalTrueBindings'] ?? [],
+        items: $items,
+        module: $program->module,
+        imports: $program->imports,
+        exports: $program->exports,
+        interface: $importContext->interface,
+        constructorRenames: $state->constructorRenames,
+        instanceEvidence: $state->instanceEvidence,
+        moduleBackend: $program->moduleBackend,
+        backendMap: $program->backendMap,
+        exportedInferredSchemes: exportedInferredSchemesFromEnv($state, $program),
+        implicitMain: $program->implicitMain,
+        language: $program->language,
+        moduleDoc: $program->moduleDoc,
+        fixityDocs: $program->fixityDocs,
     );
+
+    $checked->core = checkedCoreFor($state, $items, $program->module ?? '');
+    $checked->instanceWorld = $state->instanceWorld?->id;
 
     return $checked;
 }

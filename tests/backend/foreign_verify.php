@@ -1,11 +1,5 @@
 <?php declare(strict_types=1);
 
-// A `foreign` declaration is checked against the host wherever the host can be asked: PHP reflects
-// the compiler's own process, the JVM is asked through `javap`, and the fixtures under
-// `tests/semantics/foreign/` prove both end to end. This asserts the two pieces a fixture cannot:
-// the `javap` output grammar (which no golden should freeze to one JDK's printing) and the PHP
-// verdicts themselves, in one process, with no toolchain in the loop.
-
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
@@ -26,8 +20,6 @@ $same = static function ($expected, $actual, string $message) use ($assert): voi
         $message . "\n  expected: " . \var_export($expected, true) . "\n  actual:   " . \var_export($actual, true),
     );
 };
-
-// --- `javap -s -p` output, as the grammar the parser is written against. ------------------------
 
 $javap = <<<'JAVAP'
 Compiled from "String.java"
@@ -90,10 +82,6 @@ $same(
     'an interface header names the interface',
 );
 
-// "Class not found" is a verdict about the declaration — unless vendor `.java` sources are
-// carried, which `javap` never sees. The grammar below only recognises the report; the verdict
-// itself is asserted through `javapClassTable` with a fake `javap`, and through a child compile
-// with no JDK at all, further down.
 $assert(
     \Moggi\Backend\Jvm\Verify\javapCouldNotReadClass("Error: class not found: p.T\n"),
     'javap reports a class it cannot find',
@@ -110,12 +98,9 @@ $same(1, \Moggi\Backend\Jvm\Verify\descriptorParameterCount('([Ljava/lang/Object
 $same(2, \Moggi\Backend\Jvm\Verify\descriptorParameterCount('([[II)V'), 'a nested array is one parameter');
 $same(4, \Moggi\Backend\Jvm\Verify\descriptorParameterCount('(ZLjava/lang/String;II)V'), 'four parameters');
 
-// --- The PHP verdicts, against the PHP running this test. --------------------------------------
-
 $int = new Ast\TypeCon('Int');
 $string = new Ast\TypeCon('String');
 $dateTime = new Ast\TypeCon('DateTime');
-// The declared argument count is the arrow count, so a signature is read as the arrows it has.
 $arity1 = new Ast\TypeArrow($string, $int);
 $arity2 = new Ast\TypeArrow($string, new Ast\TypeArrow($int, $int));
 $instantiate = new Ast\TypeArrow($string, new Ast\TypeArrow($string, $dateTime));
@@ -176,55 +161,19 @@ $same(
     'a class the host does not have is reported',
 );
 
-// --- There is no switch. -----------------------------------------------------------------------
-//
-// Verification was once skippable through the environment. It is not any more, and the proof is
-// that asking for it to be skipped changes nothing: the same declaration is refused with the same
-// diagnostic, from a child whose environment sets the old variable every way it used to read.
-
 require $root . '/tests/suite/support/process.php';
 
 $fixture = $root . '/tests/semantics/foreign/bad/Host-Arity.mog';
-$probe = static function (?string $verify) use ($root, $fixture): array {
-    $code = 'require ' . \var_export($root . '/src/compiler.php', true) . ';'
-        . ' $out = \Moggi\Compiler\compileFileCapturingErrorsBoth(' . \var_export($fixture, true) . ', true, "php");'
-        . ' echo $out["emit"]["output"];';
-    $env = \getenv();
-    unset($env['MOGGI_NO_FFI_VERIFY']);
-    if ($verify !== null) {
-        $env['MOGGI_NO_FFI_VERIFY'] = $verify;
-    }
+$code = 'require ' . \var_export($root . '/src/compiler.php', true) . ';'
+    . ' $out = \Moggi\Compiler\compileFileCapturingErrorsBoth(' . \var_export($fixture, true) . ', true, "php");'
+    . ' echo $out["emit"]["output"];';
+$plain = runCompiledProcess([\PHP_BINARY, '-r', $code], 60);
 
-    return runCompiledProcess([\PHP_BINARY, '-r', $code], 60, $env);
-};
-
-$plain = $probe(null);
 $same(0, $plain['exitCode'], 'the fixture compiles far enough to be refused: ' . $plain['stderr']);
 $assert(
     \str_contains($plain['stdout'], 'php function `strlen` takes at most 1 argument'),
     'the host rejection is what the fixture is for: ' . $plain['stdout'],
 );
-
-foreach (['1', 'php', 'all', 'jvm'] as $value) {
-    $skipped = $probe($value);
-    $same(
-        $plain['stdout'],
-        $skipped['stdout'],
-        "MOGGI_NO_FFI_VERIFY={$value} no longer changes the verdict",
-    );
-    $assert(
-        ! \str_contains($skipped['stderr'], 'FFI_VERIFY'),
-        'and nothing claims a check was skipped: ' . $skipped['stderr'],
-    );
-}
-
-// --- The vendor-tree stand-down (step-1 pin for F4). ---------------------------
-//
-// With a carried Composer tree, a name that does not resolve is accepted
-// today: the whole check stands down project-wide. Step 5 replaces this with
-// a lookup over the vendor maps, so a name the tree cannot have provided is
-// refused while a name that resolves is still verified. A child process is
-// needed because the stand-down memoizes per process.
 
 require_once $root . '/tests/suite/support/workspace.php';
 
@@ -232,8 +181,6 @@ $vendorParent = createTempDir('moggi-php-vendor-pin');
 \mkdir($vendorParent . '/vendor', 0777, true);
 \file_put_contents($vendorParent . '/vendor/autoload.php', '<?php // probe');
 
-// A second tree that actually provides names: a classmap class, a files-declared function, and a
-// PSR-4 prefix whose computed path exists — plus names in none of those, which stay errors.
 $richVendor = createTempDir('moggi-php-vendor-rich');
 \mkdir($richVendor . '/vendor/composer', 0777, true);
 \mkdir($richVendor . '/psr-src', 0777, true);
@@ -302,12 +249,6 @@ $same(
 removeDirectory($vendorParent);
 removeDirectory($richVendor);
 
-// --- The verifier without a JDK in the loop (step 4). --------------------------
-//
-// Fake-tool paths, so the verdicts hold on a machine that has no JDK: a fake
-// `javap` reporting "class not found" (non-zero exit) is a verdict, and no
-// `javap` anywhere is an error naming it rather than a stand-down.
-
 require_once $root . '/tests/suite/support/workspace.php';
 
 if (\PHP_OS_FAMILY !== 'Windows') {
@@ -322,9 +263,6 @@ if (\PHP_OS_FAMILY !== 'Windows') {
         $missing !== null && $missing['found'] === false,
         'a class `javap` cannot find is "not found", not "cannot answer"',
     );
-
-    // No `javap` anywhere: scrub the toolchain variables and `PATH` in-process
-    // (nothing spawns before the throw, so this is safe) and restore them after.
     $savedEnv = [];
     foreach (['JAVA_HOME', 'GRAALVM_HOME', 'JDK_HOME', 'PATH'] as $var) {
         $savedEnv[$var] = \getenv($var);
@@ -354,12 +292,6 @@ if (\PHP_OS_FAMILY !== 'Windows') {
     removeDirectory($fakeBin);
 }
 
-// --- Step 4 acceptance: the missing-tool and `PATH`-fallback verdicts ---------
-//
-// Child compiles, because the toolchain lookup, the warnings and the
-// `VerificationUnavailable` refusal are all per-process. The fixture is written
-// to a temp dir rather than `tests/` so it never becomes a suite case of its own.
-
 $toolchainWork = createTempDir('moggi-javap-toolchain');
 $badMember = $toolchainWork . '/Bad.mog';
 \file_put_contents($badMember, "foreign jvm function nosuch \"java.lang.String:nosuchmember\" :: String -> String\n");
@@ -382,8 +314,6 @@ $compileBadMember = static function (array $env) use ($root, $badMember): array 
 };
 
 if (\PHP_OS_FAMILY !== 'Windows') {
-    // No JDK on `PATH` and no toolchain variable: the bad declaration fails
-    // and the failure names `javap`.
     $emptyBin = $toolchainWork . '/empty-bin';
     \mkdir($emptyBin, 0777, true);
     $noJdkEnv = $scrubbedToolchainEnv();
@@ -394,9 +324,6 @@ if (\PHP_OS_FAMILY !== 'Windows') {
         \str_contains($noJdk['stdout'], '`javap`'),
         'the failure must name `javap`: ' . $noJdk['stdout'],
     );
-
-    // A fake `javap` early on `PATH` must not let the bad declaration pass,
-    // and the fallback warning must name the binary that answered.
     $fallbackBin = $toolchainWork . '/fallback-bin';
     \mkdir($fallbackBin, 0777, true);
     $fakeJavap = $fallbackBin . '/javap';

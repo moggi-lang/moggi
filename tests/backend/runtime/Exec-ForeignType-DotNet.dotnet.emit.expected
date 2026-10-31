@@ -1,0 +1,134 @@
+.class public abstract auto ansi sealed beforefieldinit Moggi.Main
+       extends [System.Runtime]System.Object
+{
+.method public hidebysig static object 'newStream'() cil managed
+{
+  .maxstack 64
+  newobj instance void [System.Runtime]System.IO.MemoryStream::.ctor()
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'streamLength'(object) cil managed
+{
+  .maxstack 64
+  ldarg.0
+  castclass [System.Runtime]System.IO.MemoryStream
+  callvirt instance int64 [System.Runtime]System.IO.MemoryStream::get_Length()
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'main'() cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1)
+  .line 10, 10 : 8, 8 'tests/backend/runtime/Exec-ForeignType-DotNet.mog'
+  .line 10, 10 : 8, 8 'tests/backend/runtime/Exec-ForeignType-DotNet.mog'
+  ldc.i4.0
+  newobj instance void Moggi.Fn.Moggi_Main____ioThunk0__0::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  stloc.0
+  ldloc.0
+  newobj instance void Moggi.Rt.IO::.ctor(object)
+  stloc.1
+  ldloc.1
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object '__w_main'() cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1, object V2, object V3)
+  .line 10, 10 : 8, 8 'tests/backend/runtime/Exec-ForeignType-DotNet.mog'
+  .line 12, 12 : 3, 3 'tests/backend/runtime/Exec-ForeignType-DotNet.mog'
+  call object Moggi.Main::'newStream'()
+  call object Moggi.Main::'streamLength'(object)
+  stloc.0
+  .line 12, 12 : 3, 3 'tests/backend/runtime/Exec-ForeignType-DotNet.mog'
+  call object Moggi.Data.Int::'__ev_Show_Int'()
+  stloc.1
+  .line 12, 12 : 3, 3 'tests/backend/runtime/Exec-ForeignType-DotNet.mog'
+  ldloc.1
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.0
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.2
+  .line 12, 12 : 3, 3 'tests/backend/runtime/Exec-ForeignType-DotNet.mog'
+  ldloc.2
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.3
+  ldnull
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static void Main(string[]) cil managed
+{
+  .entrypoint
+  .maxstack 64
+  .locals init (class [System.Runtime]System.Exception V0, object V1)
+  .try
+  {
+  ldarg.0
+  call void Moggi.Rt.Platform::SetArgs(string[])
+  call object Moggi.Main::'main'()
+  call object Moggi.Rt.RT::IoRun(object)
+  pop
+  leave MAIN_END
+  }
+  catch [System.Runtime]System.Exception
+  {
+  stloc.0
+  ldloc.0
+  call void Moggi.Rt.RT::ReportUncaught(class [System.Runtime]System.Exception)
+  leave MAIN_END
+  }
+MAIN_END:
+  ret
+}
+
+.method public hidebysig static object __ioThunk0() cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  call object Moggi.Main::'__w_main'()
+  stloc.0
+  ldloc.0
+  ret
+}
+
+}
+
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main____ioThunk0__0
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    call object Moggi.Main::'__ioThunk0'()
+    ret
+  }
+}

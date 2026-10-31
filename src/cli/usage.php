@@ -129,11 +129,19 @@ options:
     --json          version: machine-readable output; install/update: the lock
                     document and the requests the resolution cost
     --no-cache      bypass the on-disk compile cache for this run
-    --lib PATH      extra module search root (app / third-party library).
-                    Repeatable. The compiler stdlib (`libraries/` next to moggi) is
-                    used automatically; --lib is only needed for additional roots.
-    --lib-php PATH  precompiled stdlib PHP tree (e.g. from an earlier
-                    `moggi compile libraries/base -o out/lib`) for single-file compiles
+    --lib PATH      a Moggi library root: modules are looked up here. Repeatable.
+                    The compiler stdlib (`libraries/` next to moggi) is used
+                    automatically; --lib is only needed for additional Moggi roots.
+    --lib-composer PATH
+                    host PHP libraries: a Composer project, or its `vendor/`
+                    directory, whose autoloader the artifact carries. Repeatable.
+    --lib-maven PATH
+                    host JVM libraries: a directory of jars, as
+                    `mvn dependency:copy-dependencies` resolves them. Repeatable.
+    --lib-nuget PATH
+                    host .NET libraries: a directory of DLLs, as NuGet resolves
+                    them. A `.json` type sidecar beside them is what scopes a
+                    third-party CLR type to its own assembly. Repeatable.
     --script PATH   repl: run commands from a file (non-interactive; for tests)
     -h, --help      show this help
 
@@ -145,8 +153,9 @@ examples:
     moggi compile examples/twice --opt-ir        # optimized IR to stdout
     moggi compile examples/twice -o /tmp/twice.phar
     moggi compile examples/twice -o /tmp/out --unpacked --backend php
-    moggi compile app/src -o app.jar --backend jvm --lib vendor/foo
-    moggi compile lib -o out/lib --unpacked --backend php
+    moggi compile app/src -o app.jar --backend jvm --lib-maven target/dependency
+    moggi compile app/src -o app.phar --backend php --lib-composer vendor
+    moggi compile libraries/array/src -o out/lib --unpacked --backend php
     moggi check
     moggi verify
     moggi mogdoc lib -o out/doc
@@ -180,13 +189,6 @@ function rejectUnknownSubcommand(string $command): never
     if ($best !== null && $bestDistance > 0 && $bestDistance <= 2) {
         $message .= " (did you mean `{$best}`?)";
     }
-    \fwrite(STDERR, $message . "\n\n");
-    printUsage();
-    exit(1);
-}
-
-function cliError(string $message): never
-{
     \fwrite(STDERR, $message . "\n\n");
     printUsage();
     exit(1);

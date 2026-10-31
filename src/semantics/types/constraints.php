@@ -2,13 +2,8 @@
 
 namespace Moggi\Semantics\Types;
 
-use function Moggi\Errors\appendDidYouMean;
-
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
-
-use function Moggi\Semantics\TypeExpr\scheme;
-
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TNatLit;
@@ -17,9 +12,11 @@ use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
-
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\AstNode;
+
+use function Moggi\Semantics\TypeExpr\scheme;
+use function Moggi\Errors\appendDidYouMean;
 
 require_once __DIR__ . '/type_core.php';
 
@@ -71,8 +68,8 @@ function applyEvidenceMethodInfo(TypeCheckState $state, Ast\AstNode &$expr, arra
         classMethodRole($state, $info['class'], $info['method']),
         methodValueArity($state, $methodType, $methodUserConstraints),
     );
-    $method->pendingConstraints = $expr->pendingConstraints;
-    $method->inferredType = $expr->inferredType;
+    setPendingObligations($state, $method, pendingConstraintsOf($state, $expr));
+    copyInferredType($method, $expr);
     $expr = $method;
 }
 
@@ -331,12 +328,7 @@ function expandConstraintsWithSuperclasses(TypeCheckState $state, array $constra
         $add($constraint);
     }
 
-    $result = constraintsWithPositionalEvidence($expanded);
-    if (\getenv('MOGGI_ASSERT_EXPAND_CLOSED') !== false && ! constraintsSuperclassClosed($state, $result)) {
-        throw new \RuntimeException('dictionary expansion did not close its constraint list');
-    }
-
-    return $result;
+    return constraintsWithPositionalEvidence($expanded);
 }
 
 /**
@@ -732,15 +724,10 @@ function constraintHeadHasFlexibleVar(TypeCheckState $state, Type $type): bool
     if ($type instanceof TVar) {
         return ! isset($state->rigidVars[$type->name]);
     }
-    if ($type instanceof TArrow) {
-        return constraintHeadHasFlexibleVar($state, $type->from)
-            || constraintHeadHasFlexibleVar($state, $type->to);
-    }
-    if ($type instanceof TCon || $type instanceof TVarApp || $type instanceof TPromoted) {
-        foreach ($type->args as $arg) {
-            if (constraintHeadHasFlexibleVar($state, $arg)) {
-                return true;
-            }
+
+    foreach (typeChildren($type) as $child) {
+        if (constraintHeadHasFlexibleVar($state, $child)) {
+            return true;
         }
     }
 
@@ -1304,16 +1291,61 @@ function appliedEvidenceKeys(Ast\Apply $expr): array
 }
 
 /**
+ * The obligations this node carries, in the run that is checking it.
+ *
+ * The node is a key into the check's own table, not a field on the tree: a published AST has no
+ * place for an unsettled obligation, and a rewrite that copies a node starts with none because the
+ * copy is a different key. The state is the only way to ask, which is why no caller outside a
+ * check can observe one.
+ *
  * @return list<Ast\PendingConstraint>
  */
-function pendingConstraintsFromExpr(Ast\AstNode $expr): array
+function pendingConstraintsOf(TypeCheckState $state, Ast\AstNode $node): array
 {
-    if ($expr->pendingConstraints !== []) {
-        return $expr->pendingConstraints;
+    return $state->obligations->offsetExists($node) ? $state->obligations[$node][0] : [];
+}
+
+/** The solved dictionaries recorded beside this node's obligations, when it has any. */
+function pendingDictsOf(TypeCheckState $state, Ast\AstNode $node): array
+{
+    return $state->obligations->offsetExists($node) ? $state->obligations[$node][1] : [];
+}
+
+/**
+ * Record the obligations a node carries, or settle it with empty lists.
+ *
+ * Constraints and their solved dictionaries are written together, which is the invariant
+ * {@see assertPendingDictsConsistentInExpr()} checks: a site with neither is detached, so the table
+ * holds only outstanding work.
+ *
+ * @param list<Ast\PendingConstraint> $constraints
+ * @param list<Ast\PendingConstraint> $dicts
+ */
+function setPendingObligations(
+    TypeCheckState $state,
+    Ast\AstNode $node,
+    array $constraints,
+    array $dicts = [],
+): void {
+    if ($constraints === [] && $dicts === []) {
+        $state->obligations->offsetUnset($node);
+
+        return;
+    }
+
+    $state->obligations[$node] = [$constraints, $dicts];
+}
+
+/** @return list<Ast\PendingConstraint> */
+function pendingConstraintsFromExpr(TypeCheckState $state, Ast\AstNode $expr): array
+{
+    $pending = pendingConstraintsOf($state, $expr);
+    if ($pending !== []) {
+        return $pending;
     }
 
     if ($expr instanceof Ast\Apply) {
-        return pendingConstraintsFromExpr($expr->function);
+        return pendingConstraintsFromExpr($state, $expr->function);
     }
 
     return [];
@@ -1331,25 +1363,24 @@ function pendingConstraintsFromExpr(Ast\AstNode $expr): array
  *
  * @return array{0: list<Ast\PendingConstraint>, 1: list<Ast\PendingConstraint>}
  */
-function pendingConstraintsAndDicts(Ast\AstNode $expr): array
+function pendingConstraintsAndDicts(TypeCheckState $state, Ast\AstNode $expr): array
 {
-    if ($expr->pendingConstraints !== []) {
-        return [$expr->pendingConstraints, $expr->pendingDicts];
+    if ($state->obligations->offsetExists($expr)) {
+        return [$state->obligations[$expr][0], $state->obligations[$expr][1]];
     }
 
     if ($expr instanceof Ast\Apply) {
-        return pendingConstraintsAndDicts($expr->function);
+        return pendingConstraintsAndDicts($state, $expr->function);
     }
 
     return [[], []];
 }
 
-function clearPendingConstraints(Ast\AstNode $expr): void
+function clearPendingConstraints(TypeCheckState $state, Ast\AstNode $expr): void
 {
-    $expr->pendingConstraints = [];
-    $expr->pendingDicts = [];
+    setPendingObligations($state, $expr, []);
     if ($expr instanceof Ast\Apply) {
-        clearPendingConstraints($expr->function);
+        clearPendingConstraints($state, $expr->function);
     }
 }
 
@@ -1370,13 +1401,15 @@ function clearPendingConstraints(Ast\AstNode $expr): void
  */
 function pendingConstraintsDeep(Ast\AstNode $expr, ?TypeCheckState $state = null): array
 {
+    if ($state === null) {
+        return [];
+    }
+
     $found = [];
     $seen = [];
     $visit = static function (Ast\AstNode $node) use (&$found, &$seen, $state): void {
-        foreach ($node->pendingConstraints as $constraint) {
-            $args = $state === null
-                ? $constraint->args
-                : \array_map(static fn (Type $arg): Type => prune($state, $arg), $constraint->args);
+        foreach (pendingConstraintsOf($state, $node) as $constraint) {
+            $args = \array_map(static fn (Type $arg): Type => prune($state, $arg), $constraint->args);
             $key = $constraint->class . ':' . constraintArgsKey($args);
             if (isset($seen[$key])) {
                 continue;
@@ -1432,22 +1465,21 @@ function walkAstValues(Ast\AstNode $expr, callable $visit): void
  * the evidence passes read the second. A path that refreshes one without the
  * other leaves a list over variables the other never had (`Tag a` where the
  * definition took `Tag t122`), which the arity assertions cannot see because
- * both sides are still the same length. Gated, because it walks a body.
+ * both sides are still the same length. The walk runs on every elaborated body:
+ * it reads the tree the elaborator just built and costs no measurable time.
  */
 function assertPendingDictsConsistentInExpr(TypeCheckState $state, Ast\AstNode $expr): void
 {
-    if (\getenv('MOGGI_ASSERT_PENDING_DICTS') === false) {
-        return;
-    }
-
     walkAstValues($expr, static function (Ast\AstNode $node) use ($state): void {
-        if ($node->pendingConstraints === [] || $node->pendingDicts === []) {
+        $pending = pendingConstraintsOf($state, $node);
+        $dicts = pendingDictsOf($state, $node);
+        if ($pending === [] || $dicts === []) {
             return;
         }
 
         $dictClasses = [];
         $dictVars = [];
-        foreach ($node->pendingDicts as $dict) {
+        foreach ($dicts as $dict) {
             $dictClasses[$dict->class] = true;
             foreach ($dict->args as $arg) {
                 $dictVars += typeVars($arg);
@@ -1456,7 +1488,7 @@ function assertPendingDictsConsistentInExpr(TypeCheckState $state, Ast\AstNode $
 
         $constraintClasses = [];
         $constraintVars = [];
-        foreach ($node->pendingConstraints as $constraint) {
+        foreach ($pending as $constraint) {
             $constraintClasses[$constraint->class] = true;
             foreach ($constraint->args as $arg) {
                 $constraintVars += typeVars($arg);

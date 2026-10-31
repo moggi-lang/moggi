@@ -1,0 +1,455 @@
+.class public abstract auto ansi sealed beforefieldinit Moggi.Main
+       extends [System.Runtime]System.Object
+{
+.method public hidebysig static object 'adder'(object) cil managed
+{
+  .maxstack 64
+  .line 10, 10 : 11, 11 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldc.i4.2
+  ldc.i4.2
+  newobj instance void Moggi.Fn.Moggi_Main___m_cebb30__2::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldarg.0
+  stelem.ref
+  newobj instance void Moggi.Rt.Partial::.ctor(int32, class Moggi.Rt.Fn, object[])
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'apply'(object, object) cil managed
+{
+  .maxstack 64
+  .line 13, 13 : 13, 13 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  .line 13, 13 : 13, 13 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldarg.0
+  ldarg.1
+  call object Moggi.Rt.RT::Apply1(object, object)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'twice'(object, object) cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  .line 16, 16 : 13, 13 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  .line 16, 16 : 13, 13 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldarg.0
+  ldarg.1
+  call object Moggi.Rt.RT::Apply1(object, object)
+  stloc.0
+  .line 16, 16 : 13, 13 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldarg.0
+  ldloc.0
+  call object Moggi.Rt.RT::Apply1(object, object)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'wrapped'() cil managed
+{
+  .maxstack 64
+  .line 19, 19 : 11, 11 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  .line 19, 19 : 11, 11 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldc.i8 3
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Main::'adder'(object)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'main'() cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1)
+  .line 22, 22 : 8, 8 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  .line 22, 22 : 8, 8 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldc.i4.0
+  newobj instance void Moggi.Fn.Moggi_Main____ioThunk0__0::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  stloc.0
+  ldloc.0
+  newobj instance void Moggi.Rt.IO::.ctor(object)
+  stloc.1
+  ldloc.1
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object '__w_main'() cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1, object V2, object V3, object V4, object V5, object V6, object V7, object V8, object V9, object V10, object V11, object V12, object V13, object V14, object V15, object V16, object V17, object V18, object V19, object V20, object V21, object V22, object V23)
+  .line 22, 22 : 8, 8 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldc.i8 10
+  call object Moggi.Rt.RT::BoxInt(int64)
+  stloc.0
+  .line 22, 22 : 8, 8 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldc.i4.2
+  ldc.i4.2
+  newobj instance void Moggi.Fn.Moggi_Main___m_cebb31__2::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.0
+  stelem.ref
+  newobj instance void Moggi.Rt.Partial::.ctor(int32, class Moggi.Rt.Fn, object[])
+  ldc.i8 1
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Rt.RT::Apply1(object, object)
+  stloc.1
+  .line 27, 27 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldc.i4.2
+  ldc.i4.2
+  newobj instance void Moggi.Fn.Moggi_Main___m_cebb31__2::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.0
+  stelem.ref
+  newobj instance void Moggi.Rt.Partial::.ctor(int32, class Moggi.Rt.Fn, object[])
+  ldc.i8 1
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Rt.RT::Apply1(object, object)
+  stloc.2
+  .line 27, 27 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  call object Moggi.Data.Int::'__ev_Show_Int'()
+  stloc.3
+  .line 27, 27 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldloc.3
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.2
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.s 4
+  .line 27, 27 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldloc.s 4
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 5
+  .line 28, 28 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldc.i4.2
+  ldc.i4.2
+  newobj instance void Moggi.Fn.Moggi_Main___m_cebb31__2::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.0
+  stelem.ref
+  newobj instance void Moggi.Rt.Partial::.ctor(int32, class Moggi.Rt.Fn, object[])
+  ldc.i8 2
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Rt.RT::Apply1(object, object)
+  stloc.s 6
+  .line 28, 28 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldloc.3
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.s 6
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.s 7
+  .line 28, 28 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldloc.s 7
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 8
+  .line 29, 29 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldloc.3
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  .line 29, 29 : 19, 19 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldloc.1
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  ldc.i8 1
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  add
+  call object Moggi.Rt.RT::BoxInt(int64)
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.s 9
+  .line 29, 29 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldloc.s 9
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 10
+  .line 30, 30 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldc.i4.2
+  ldc.i4.2
+  newobj instance void Moggi.Fn.Moggi_Main___m_cebb31__2::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.0
+  stelem.ref
+  newobj instance void Moggi.Rt.Partial::.ctor(int32, class Moggi.Rt.Fn, object[])
+  ldc.i8 5
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Main::'apply'(object, object)
+  stloc.s 11
+  .line 30, 30 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldloc.3
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.s 11
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.s 12
+  .line 30, 30 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldloc.s 12
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 13
+  .line 31, 31 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldc.i4.2
+  ldc.i4.2
+  newobj instance void Moggi.Fn.Moggi_Main___m_cebb31__2::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.0
+  stelem.ref
+  newobj instance void Moggi.Rt.Partial::.ctor(int32, class Moggi.Rt.Fn, object[])
+  ldc.i8 1
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Main::'twice'(object, object)
+  stloc.s 14
+  .line 31, 31 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldloc.3
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.s 14
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.s 15
+  .line 31, 31 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldloc.s 15
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 16
+  .line 32, 32 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  call object Moggi.Main::'wrapped'()
+  stloc.s 17
+  .line 32, 32 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldloc.s 17
+  ldc.i8 4
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Rt.RT::Apply1(object, object)
+  stloc.s 18
+  .line 32, 32 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldloc.3
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.s 18
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.s 19
+  .line 32, 32 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldloc.s 19
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 20
+  ldc.i8 100
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldc.i8 7
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Main::'_m_cebb30'(object, object)
+  stloc.s 21
+  .line 33, 33 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldloc.3
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.s 21
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.s 22
+  .line 33, 33 : 3, 3 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldloc.s 22
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 23
+  ldnull
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object '_m_cebb30'(object, object) cil managed
+{
+  .maxstack 64
+  .line 10, 10 : 17, 17 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  .line 10, 10 : 17, 17 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldarg.1
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  ldarg.0
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  add
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object '_m_cebb31'(object, object) cil managed
+{
+  .maxstack 64
+  .line 24, 24 : 17, 17 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  .line 24, 24 : 17, 17 'tests/backend/runtime/Exec-Capture-Spelling.mog'
+  ldarg.1
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  ldarg.0
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  add
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static void Main(string[]) cil managed
+{
+  .entrypoint
+  .maxstack 64
+  .locals init (class [System.Runtime]System.Exception V0, object V1)
+  .try
+  {
+  ldarg.0
+  call void Moggi.Rt.Platform::SetArgs(string[])
+  call object Moggi.Main::'main'()
+  call object Moggi.Rt.RT::IoRun(object)
+  pop
+  leave MAIN_END
+  }
+  catch [System.Runtime]System.Exception
+  {
+  stloc.0
+  ldloc.0
+  call void Moggi.Rt.RT::ReportUncaught(class [System.Runtime]System.Exception)
+  leave MAIN_END
+  }
+MAIN_END:
+  ret
+}
+
+.method public hidebysig static object __ioThunk0() cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  call object Moggi.Main::'__w_main'()
+  stloc.0
+  ldloc.0
+  ret
+}
+
+}
+
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main____ioThunk0__0
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    call object Moggi.Main::'__ioThunk0'()
+    ret
+  }
+}
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main___m_cebb30__2
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    ldarg 1
+    ldc.i4 0
+    ldelem.ref
+    ldarg 1
+    ldc.i4 1
+    ldelem.ref
+    call object Moggi.Main::'_m_cebb30'(object, object)
+    ret
+  }
+}
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main___m_cebb31__2
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    ldarg 1
+    ldc.i4 0
+    ldelem.ref
+    ldarg 1
+    ldc.i4 1
+    ldelem.ref
+    call object Moggi.Main::'_m_cebb31'(object, object)
+    ret
+  }
+}

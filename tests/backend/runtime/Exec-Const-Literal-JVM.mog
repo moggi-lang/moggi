@@ -1,0 +1,19 @@
+-- Reading a JVM static field is one class file field of its descriptor's width, and a
+-- `long`/`double` field takes two operand slots. `getstatic` used to be counted as one slot
+-- unconditionally, so `java.lang.Long:MAX_VALUE` produced a method with a max stack of one and
+-- `java -jar` failed with `VerifyError: Operand stack overflow` in the accessor. This pins the
+-- wide fields beside the narrow ones, so a stack-accounting regression fails at the runner
+-- rather than in an example nobody runs.
+import Data.Int (Int32)
+
+foreign jvm const maxLong "java.lang.Long:MAX_VALUE" :: Int
+foreign jvm const minLong "java.lang.Long:MIN_VALUE" :: Int
+foreign jvm const pi "java.lang.Math:PI" :: Double
+foreign jvm const maxInt32 "java.lang.Integer:MAX_VALUE" :: Int32
+
+main :: IO ()
+main = do
+  putStrLn (show maxLong)
+  putStrLn (show minLong)
+  putStrLn (show pi)
+  putStrLn (show (fromIntegral maxInt32))

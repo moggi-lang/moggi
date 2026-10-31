@@ -1,10 +1,18 @@
 module
   function isFileP(p)
-      t1 = io_assign_action
-          t0 = io_call doesFileExist(p)
-        result t0
-      ret t1
+      t2 = io_assign_action
+          t1 = call __w_isFileP(p)
+        result t1
+      ret t2
+  function __w_isFileP(p)
+      t0 = call System.Directory::__w_doesFileExist(p)
+      ret t0
   function main()
-      t3 = io_call isFileP("\/tmp\/moggi-tc-io-foreign.txt")
-      t2 = io_run t3
-      ret call __tuple0()
+      t6 = io_assign_action
+          t5 = call __w_main()
+        result t5
+      ret t6
+  function __w_main()
+      t3 = call __w_isFileP("\/tmp\/moggi-tc-io-foreign.txt")
+      t4 = call __tuple0()
+      ret t4

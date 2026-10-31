@@ -1,0 +1,26 @@
+import Data.Eq
+import Text.Show
+
+-- One inferred recursive group whose members are *not* the same type: `hop`
+-- takes a `Bool` and realises `Tag Bool`, `start` counts an `Int` and realises
+-- `Tag Int`. The pair is declared in the reverse of the order it runs in, so
+-- the group is checked as a component rather than in source order: both members
+-- get their monotype and the group's dictionaries before either body is checked.
+--
+-- `start 2` = `tag 2` <> `hop False` = "i" <> ("b" <> `start 0`) = "ibz".
+
+class Tag a where
+  tag :: a -> String
+
+instance Tag Int where
+  tag x = "i"
+
+instance Tag Bool where
+  tag x = "b"
+
+hop b = tag b <> start 0
+
+start n = if n == 0 then "z" else tag n <> hop (n == 1)
+
+main :: IO ()
+main = putStrLn (start 2)

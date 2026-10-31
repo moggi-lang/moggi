@@ -1,10 +1,11 @@
 <?php declare(strict_types=1);
 
-// A distribution's `bin/moggi` is the compiler itself, so the environment the
-// retired C launcher used to prepare — bundled runtimes in front of PATH, and
-// the roots the compiler looks for handed to its child processes — is prepared
-// in PHP before any command runs. This drives the installation layout by hand
-// and asserts what `activateBundledRuntimes()` leaves behind.
+/**
+ * `bin/moggi` is the compiler itself, so PHP prepares the environment
+ * formerly set up by the C launcher: bundled runtimes precede PATH, and
+ * compiler roots are passed to child processes. Exercise the installation
+ * layout and assert the result of `activateBundledRuntimes()`.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -16,7 +17,7 @@ $work = \sys_get_temp_dir() . '/moggi-install-' . \bin2hex(\random_bytes(6));
 
 require $root . '/src/compiler.php';
 
-\define(\Moggi\Install\INSTALL_ROOT_CONSTANT, $work);
+\define('MOGGI_INSTALL_ROOT', $work);
 
 use function Moggi\Install\activateBundledRuntimes;
 use function Moggi\Install\bundledPhpBinDirectory;
@@ -112,10 +113,6 @@ try {
 
     $assert(! \is_dir($work . '/runtime/php-native'), 'the micro runtime is a file, not a directory of commands');
 
-    // The platform decisions are pure, so all three are asserted here, not only
-    // the one this machine runs. Windows has no loader variable and a flat PHP
-    // build; macOS reads dyld's fallback path; the exported paths are spelled
-    // the host's way.
     $assert(loaderVariable('Windows') === null, 'Windows has no dynamic-loader variable to prepend to');
     $assert(
         loaderVariable('Darwin') === 'DYLD_FALLBACK_LIBRARY_PATH',

@@ -12,3 +12,6 @@
 /.dist/
 /dist-out/
 /.dist-cache/
+
+# The documentation site built by docs/build.sh.
+/docs/_site/

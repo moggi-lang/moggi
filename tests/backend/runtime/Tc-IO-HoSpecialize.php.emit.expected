@@ -2,23 +2,38 @@
 
 namespace Tc\IO\HoSpecialize;
 
-const __MOGGI_MAP = [[12 => ['Tc.IO.HoSpecialize.runTwice', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 7, 3], 13 => ['Tc.IO.HoSpecialize.runTwice', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 8, 3], 19 => ['Tc.IO.HoSpecialize.main', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 11, 18], 22 => ['Tc.IO.HoSpecialize.main', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 11, 8]], ['Tc\\IO\\HoSpecialize\\runTwice' => ['Tc.IO.HoSpecialize.runTwice', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 6, 16], 'Tc\\IO\\HoSpecialize\\main' => ['Tc.IO.HoSpecialize.main', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 11, 8]]];
+const __MOGGI_MAP = [[10 => 0, 18 => 2, 19 => 3, 24 => 1, 32 => 4, 33 => 4, 36 => 2, 37 => 3], ['Tc\\IO\\HoSpecialize\\runTwice' => 0, 'Tc\\IO\\HoSpecialize\\__w_runTwice' => 0, 'Tc\\IO\\HoSpecialize\\main' => 1, 'Tc\\IO\\HoSpecialize\\__w_main' => 1], ['Tc\\IO\\HoSpecialize\\runTwice', 'Tc\\IO\\HoSpecialize\\main'], ['Tc\\IO\\HoSpecialize\\__w_runTwice', 'Tc\\IO\\HoSpecialize\\__w_main'], [[0, 0, 6, 16], [1, 0, 11, 8], [0, 0, 7, 3], [0, 0, 8, 3], [1, 0, 11, 18]], ['Tc.IO.HoSpecialize.runTwice', 'Tc.IO.HoSpecialize.main'], ['tests/backend/runtime/Tc-IO-HoSpecialize.mog']];
 
-require_once __DIR__ . '/../../../libraries/base/src/System/IO/PHP.php';
-
-use function System\IO\PHP\putStrLn;
+require_once __DIR__ . '/../../../libraries/base/src/System/IO.php';
 
 function runTwice($act) {
-    (\is_array($act) && ($act[0] ?? null) === '__io' ? ($act[1])() : $act);
-    (\is_array($act) && ($act[0] ?? null) === '__io' ? ($act[1])() : $act);
+    $__t1 = ['__io', static function() use (&$act): mixed {
+        $__t0 = __w_runTwice($act);
+        return $__t0;
+    }];
+    return $__t1;
+}
+
+function __w_runTwice($act) {
+    ($act[1])();
+    ($act[1])();
     return null;
 }
 
 function main() {
-    $__t0 = ['__io', static function(): mixed {
-        putStrLn("x");
+    $__t6 = ['__io', static function(): mixed {
+        $__t5 = __w_main();
+        return $__t5;
+    }];
+    return $__t6;
+}
+
+function __w_main() {
+    $__t3 = ['__io', static function(): mixed {
+        $__t2 = \System\IO\__w_putStrLn("x");
         return null;
     }];
-    runTwice($__t0);
+    ($__t3[1])();
+    ($__t3[1])();
     return null;
 }

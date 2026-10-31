@@ -3,18 +3,16 @@
 namespace Moggi\Semantics\Foreign;
 
 use Moggi\Backend;
-
-use function Moggi\Backend\backendById;
-use function Moggi\Backend\compileBackend;
-use function Moggi\Backend\implementedBackendIds;
-use function Moggi\Backend\isBackendImplemented;
-
-use function Moggi\Errors\formatKnownAlternatives;
-use function Moggi\Foreign\parseForeignPath;
-
 use Moggi\IR\IoWrap;
 use Moggi\Modules;
+use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
 
+use function Moggi\Backend\backendById;
+use function Moggi\Backend\implementedBackendIds;
+use function Moggi\Backend\isBackendImplemented;
+use function Moggi\Errors\formatKnownAlternatives;
+use function Moggi\Foreign\parseForeignPath;
 use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
 use function Moggi\Semantics\IoBoundary\isIoType;
 use function Moggi\Semantics\IoBoundary\isIoTypeConName;
@@ -26,12 +24,26 @@ use function Moggi\Semantics\Kernel\boundaryReifiedTypeName;
 use function Moggi\Semantics\Kernel\boundaryStringTypeName;
 use function Moggi\Semantics\Kernel\isBoundaryContainerType;
 use function Moggi\Semantics\Kernel\isBoundaryHandleType;
-
-use Moggi\Semantics\Types\TypeCheckState;
-
 use function Moggi\Semantics\Types\typeFail;
+use function Moggi\Semantics\Types\walkAstValues;
 
-use Moggi\Syntax\Ast;
+/**
+ * Does this module declare a host symbol?
+ *
+ * Such a module is checked against the carried host tree, so only it needs a host-specific cache key
+ * ({@see \Moggi\Pipeline\CompilationContext::checkedKey}); the library cache stays shared.
+ */
+function programDeclaresForeign(Ast\Program $program): bool
+{
+    $found = false;
+    walkAstValues($program, static function (Ast\AstNode $node) use (&$found): void {
+        if ($node instanceof Ast\ForeignImportDecl) {
+            $found = true;
+        }
+    });
+
+    return $found;
+}
 
 function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $item): Ast\FunctionDecl
 {
@@ -62,7 +74,7 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
         }
     }
 
-    $compileBackend = compileBackend();
+    $compileBackend = $state->compileBackend;
     if ($item->backend !== $compileBackend) {
         throw typeFail(
             $state,
@@ -77,7 +89,13 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
     $pathInfo['declaringRoot'] = Modules\declaringLibraryRoot($state->filename);
 
     try {
-        $nativeSig = backendById($item->backend)->foreignNativeSig($item->type, $item->kind, $pathInfo, $item->name);
+        $nativeSig = backendById($item->backend)->foreignNativeSig(
+            $item->type,
+            $item->kind,
+            $pathInfo,
+            $item->name,
+            $state->module,
+        );
     } catch (\Throwable $e) {
         throw typeFail($state, $e->getMessage(), $item);
     }
@@ -108,7 +126,7 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
         nativeSig: $nativeSig,
     );
 
-    return new Ast\FunctionDecl(
+    $axiom = new Ast\FunctionDecl(
         $item->name,
         $item->type,
         \array_map(
@@ -117,8 +135,19 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
         ),
         $body,
         false,
-        true
+        true,
     );
+    $site = Modules\sourceSite(
+        (string) $state->currentModule,
+        $item->sourceFile ?? $state->filename,
+        $item->line,
+        $item->col,
+    );
+    if ($site !== null) {
+        $axiom->sourceOrigin = $site;
+    }
+
+    return $axiom;
 }
 
 /**

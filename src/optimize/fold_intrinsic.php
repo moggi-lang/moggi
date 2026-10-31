@@ -5,20 +5,20 @@ namespace Moggi\Optimize\FoldIntrinsic;
 use Moggi\IR;
 
 use function Moggi\IR\Visit\mapGuards;
-use function Moggi\Optimize\CaseFold\isPlausibleConstructorName;
 use function Moggi\Optimize\Interproc\denseStmtItems;
-use function Moggi\Optimize\Support\foldExpr;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
 use function Moggi\Optimize\Support\operandEqual;
-use function Moggi\Optimize\Support\operandToExpr;
-use function Moggi\Optimize\Support\tryFoldBinopInt;
 use function Moggi\Semantics\IntrinsicRegistry\foldStrategy;
 use function Moggi\Semantics\IntrinsicRegistry\isListForm;
 
 /**
- * Fold intrinsics in a statement list, resolving Temps to known pure list/ctor
+ * Fold intrinsics in a statement list, resolving Temps to known pure list
  * values defined earlier in the same block so `listAppend#(t0, t1)` folds when
  * `t0`/`t1` are known list spines (even if multi-use blocked copy-prop).
+ *
+ * A list spine is a value, so a read of one is answered with the spine itself. A constructor
+ * application is a computation: the statement that ran it stays, and a read of its temp stays a
+ * read of its temp, so nothing puts a call where the schema allows only a value.
  *
  * @param list<IR\Stmt> $items
  * @return list<IR\Stmt>
@@ -29,16 +29,8 @@ function foldIntrinsicsItems(array $items): array
     $out = [];
     foreach (denseStmtItems($items) as $item) {
         $folded = foldIntrinsicsStmtWithKnown($item, $known);
-        if ($folded instanceof IR\Assign) {
-            $val = $folded->value;
-            if (isKnownListOperand($val) || isKnownCtorOperand($val)) {
-                $known[$folded->dest] = $val;
-            }
-        } elseif ($folded instanceof IR\Call) {
-            $asExpr = new IR\ExprCall($folded->callee, $folded->args);
-            if (isKnownCtorOperand($asExpr)) {
-                $known[$folded->dest] = $asExpr;
-            }
+        if ($folded instanceof IR\Assign && isKnownListOperand($folded->value)) {
+            $known[$folded->dest] = $folded->value;
         }
         $out[] = $folded;
     }
@@ -55,7 +47,6 @@ function foldIntrinsicsStmtWithKnown(IR\Stmt $stmt, array $known): IR\Stmt
         IR\Ret::class => new IR\Ret($foldOp($stmt->value)),
         IR\Assign::class => new IR\Assign($stmt->dest, $foldOp($stmt->value)),
         IR\Let::class => new IR\Let($stmt->name, $foldOp($stmt->value)),
-        IR\Binop::class => new IR\Binop($stmt->op, $foldOp($stmt->left), $foldOp($stmt->right), $stmt->dest),
         IR\Call::class => new IR\Call($stmt->callee, \array_map($foldOp, $stmt->args), $stmt->dest, $stmt->srcLoc),
         IR\CallValue::class => new IR\CallValue($foldOp($stmt->callee), \array_map($foldOp, $stmt->args), $stmt->dest, $stmt->srcLoc),
         IR\TailRecall::class => new IR\TailRecall(\array_map($foldOp, $stmt->args)),
@@ -121,37 +112,9 @@ function foldOperand(IR\Operand $operand, array $known = []): IR\Operand
             $known,
             argsAlreadyResolved: true,
         ),
-        IR\ExprBinop::class => operandFromExpr(foldExpr(new IR\ExprBinop(
-            $operand->op,
-            operandToExpr($resolve($operand->left)),
-            operandToExpr($resolve($operand->right)),
-        ))),
-        IR\ExprCall::class => new IR\ExprCall(
-            $operand->callee,
-            \array_map($resolve, $operand->args),
-            $operand->srcLoc,
-        ),
-        IR\ExprCallValue::class => new IR\ExprCallValue(
-            $resolve($operand->callee),
-            \array_map($resolve, $operand->args),
-            $operand->srcLoc,
-        ),
         IR\Partial::class => new IR\Partial($operand->fn, $operand->arity, \array_map($resolve, $operand->args)),
-        IR\ExprPartial::class => new IR\ExprPartial($operand->fn, $operand->arity, \array_map(operandToExpr(...), $operand->args)),
         IR\ListLit::class => new IR\ListLit(\array_map($resolve, $operand->elements)),
         default => $operand,
-    };
-}
-
-function operandFromExpr(IR\Operand $expr): IR\Operand
-{
-    return match ($expr::class) {
-        IR\ConstInt::class => $expr,
-        IR\ConstDouble::class => $expr,
-        IR\ConstStr::class => $expr,
-        IR\ConstChar::class => $expr,
-        IR\ExprBinop::class, IR\ExprCall::class, IR\ExprCallValue::class, IR\ExprPartial::class => $expr,
-        default => $expr,
     };
 }
 
@@ -174,7 +137,7 @@ function foldIntrinsicNode(IR\Intrinsic $node, array $known = [], bool $argsAlre
         ? null
         : match ($strategy) {
             'int-add' => foldIntAdd($args),
-            'int-sub' => foldIntBinop('-', $args),
+            'int-sub' => foldIntConstants('int-sub', $args),
             'int-mul' => foldIntMul($args),
             'string-append' => foldStringAppend($args),
             'bytes-append' => foldStringAppend($args),
@@ -201,7 +164,7 @@ function foldIntrinsicNode(IR\Intrinsic $node, array $known = [], bool $argsAlre
 /** @param list<IR\Operand> $args */
 function foldIntAdd(array $args): ?IR\Operand
 {
-    $const = foldIntBinop('+', $args);
+    $const = foldIntConstants('int-add', $args);
     if ($const !== null) {
         return $const;
     }
@@ -228,7 +191,7 @@ function foldIntAdd(array $args): ?IR\Operand
 /** @param list<IR\Operand> $args */
 function foldIntMul(array $args): ?IR\Operand
 {
-    $const = foldIntBinop('*', $args);
+    $const = foldIntConstants('int-mul', $args);
     if ($const !== null) {
         return $const;
     }
@@ -252,16 +215,29 @@ function foldIntMul(array $args): ?IR\Operand
     return null;
 }
 
-/** @param list<IR\Operand> $args */
-function foldIntBinop(string $op, array $args): ?IR\Operand
+/**
+ * An integer primop whose operands are both constants, keyed by the registry's own fold strategy
+ * (`int-add`, `int-sub`, `int-mul`) — never by a host operator, which is not a spelling this IR has.
+ *
+ * An overflowing fold is left alone: PHP promotes the arithmetic to float, while `Int` wraps at 64
+ * bits, so the constant would disagree with the code every backend emits for the same primop.
+ *
+ * @param list<IR\Operand> $args
+ */
+function foldIntConstants(string $strategy, array $args): ?IR\Operand
 {
     if (! ($args[0] instanceof IR\ConstInt) || ! ($args[1] instanceof IR\ConstInt)) {
         return null;
     }
 
-    $folded = tryFoldBinopInt($op, $args[0]->value, $args[1]->value);
+    $folded = match ($strategy) {
+        'int-add' => $args[0]->value + $args[1]->value,
+        'int-sub' => $args[0]->value - $args[1]->value,
+        'int-mul' => $args[0]->value * $args[1]->value,
+        default => null,
+    };
 
-    return $folded === null ? null : new IR\ConstInt($folded);
+    return \is_int($folded) ? new IR\ConstInt($folded) : null;
 }
 
 /** @param array<int, IR\Operand> $args */
@@ -364,22 +340,6 @@ function isKnownListOperand(IR\Operand $operand): bool
     return flattenKnownList($operand) !== null || isKnownEmptyList($operand);
 }
 
-function isKnownCtorOperand(IR\Operand $operand): bool
-{
-    if (! ($operand instanceof IR\ExprCall)) {
-        return false;
-    }
-    $leaf = $operand->callee;
-    if (\str_contains($leaf, '::')) {
-        $leaf = \substr($leaf, \strrpos($leaf, '::') + 2);
-    }
-    if (\preg_match('/^__tuple\d+$/', $leaf) === 1) {
-        return true;
-    }
-
-    return isPlausibleConstructorName($operand->callee);
-}
-
 /** @return list<IR\Operand>|null */
 function flattenKnownList(IR\Operand $operand): ?array
 {
@@ -414,7 +374,6 @@ function rebuildKnownList(array $elems): IR\Operand
             && ! ($el instanceof IR\ConstChar)
             && ! ($el instanceof IR\ConstDouble)
             && ! ($el instanceof IR\FnRef)
-            && ! ($el instanceof IR\ExprCall)
         ) {
             $allSimple = false;
 

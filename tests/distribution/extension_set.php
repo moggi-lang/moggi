@@ -1,11 +1,13 @@
 <?php declare(strict_types=1);
 
-// The extension set a distribution's bundled PHP is built with is derived from
-// the packages it ships, not typed beside the runtime's version. The compiler is
-// a native executable, so only a program's needs are declared, and the set is one
-// list. These checks cover the derivation from `base.moggi`, and the two
-// refusals: a pinned list that has drifted from what the packages require, and a
-// runtime that does not carry a declared name.
+/**
+ * The bundled PHP extension set is derived from the shipped packages, not
+ * duplicated beside the runtime version. Since the compiler is native, only
+ * program requirements are declared in one list.
+ *
+ * Checks cover derivation from `base.moggi`, rejection of a pinned list that
+ * has drifted, and rejection of runtimes missing a declared extension.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/packaging/runtimes.php') && \dirname($root) !== $root) {

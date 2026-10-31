@@ -3,12 +3,10 @@
 namespace Moggi\Semantics\Deriving;
 
 use Moggi\Semantics\Kinds;
+use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Kinds\classParamKind;
-
-use Moggi\Semantics\Types\TypeCheckState;
-
-use Moggi\Syntax\Ast;
 
 /**
  * The class facts a deriving-strategy decision needs, from whichever view of the

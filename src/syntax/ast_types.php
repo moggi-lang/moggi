@@ -3,6 +3,9 @@
 namespace Moggi\Syntax\Ast;
 
 use Moggi\IR;
+use Moggi\Modules\CheckedCore;
+use Moggi\Modules\ImportInterface;
+use Moggi\Modules\InstanceWorldId;
 use Moggi\Semantics\TypeExpr\Type;
 
 /** Surface-syntax type AST (distinct from `Moggi\Semantics\TypeExpr\Type`). */
@@ -106,23 +109,28 @@ final class PendingConstraint extends AstValue
 
 abstract class AstNode implements AstWalkable
 {
+    /**
+     * The checked term's type, in the checker's own algebra: the authority a
+     * consumer reads.
+     *
+     * {@see $inferredType} is this type's projection onto source syntax, written
+     * for tooling (hover, inlay hints, completion). Both halves are published
+     * together — {@see \Moggi\Semantics\Types\publishInferredType()} — so a
+     * reader never has to convert the projection back to recover the fact.
+     */
+    public ?Type $inferredInternalType = null;
+
     public ?TypeNode $inferredType = null;
 
     /** Doc comment attached by the parser (`-- |`, `{-|`, `-- ^`). */
     public ?string $doc = null;
 
-    /** @var list<PendingConstraint> */
-    public array $pendingConstraints = [];
-
     /**
-     * The solved dictionaries behind {@see $pendingConstraints}, when they came
-     * from a scheme that carried them: the expand-once list the definition was
-     * elaborated with, so a use site passes that list rather than expanding the
-     * obligations again after unification.
-     *
-     * @var list<PendingConstraint>
+     * The file this item was written in, when that is not the unit's own file: a
+     * module with a backend half is one unit whose declarations come from two
+     * files, and a diagnostic or a frame has to name the one it is written in.
      */
-    public array $pendingDicts = [];
+    public ?string $sourceFile = null;
 
     public function __construct(
         public int $line = 0,
@@ -439,12 +447,8 @@ final class Program extends AstNode
      * @param array<int, AstNode> $items
      * @param list<ImportDecl> $imports
      * @param ?list<array{tag: string, name: string, path?: list<string>, children?: array{mode: string, names: list<string>}}> $exports
-     * @param array<string, string> $externalFns
      * @param array<string, string> $constructorRenames
      * @param list<array<string, mixed>> $instanceEvidence
-     * @param array<string, int> $externalFnRuntimeArity
-     * @param array<string, true> $externalActionReturnFns imported functions whose body is a boxed action
-     * @param array<string, true> $externalTrueBindings imported `<Module>::<name>` bindings whose body is the host boolean `true`
      * @param array<string, string> $backendMap
      * @param array<string, true> $language LANGUAGE pragma flags (e.g. NoImplicitPrelude)
      */
@@ -453,10 +457,15 @@ final class Program extends AstNode
         public ?string $module = null,
         public array $imports = [],
         public ?array $exports = null,
-        public array $externalFns = [],
+
+        /**
+         * What the compilation published to this module: the imported ABI, one value
+         * (`Modules\ImportInterface`). Null only on a program that was parsed and not
+         * checked — lowering requires it.
+         */
+        public ?ImportInterface $interface = null,
         public array $constructorRenames = [],
         public array $instanceEvidence = [],
-        public array $externalFnRuntimeArity = [],
         public ?string $moduleBackend = null,
         public array $backendMap = [],
         public array $exportedInferredSchemes = [],
@@ -466,18 +475,34 @@ final class Program extends AstNode
         public ?string $moduleDoc = null,
         /** @var list<array{doc: string, operators: list<string>, assoc: string, prec: int}> */
         public array $fixityDocs = [],
-
-        /** Imported names whose body is an action value; callers must run the box. */
-        public array $externalActionReturnFns = [],
-
-        /** Imported `<Module>::<name>` bindings whose body is the host boolean `true` (e.g. `otherwise`). */
-        public array $externalTrueBindings = [],
         int $line = 0,
         int $col = 0,
         int $endCol = 0,
     ) {
         parent::__construct($line, $col, $endCol);
     }
+
+    /**
+     * The closed checked product for this module (see `Modules\CheckedCore`).
+     *
+     * Set by the check that produced this program, and carried inside every
+     * module product that the check publishes, so a module read back from the
+     * cache lowers from the same record. Null on a program nobody checked
+     * (parsing and dumping stop before this point); lowering refuses a category
+     * function without its record instead of falling back to the mutable tree.
+     */
+    public ?CheckedCore $core = null;
+
+    /**
+     * The instance world this module was checked against, as an identity rather
+     * than a copy of its records (see `Modules\InstanceWorldId`).
+     *
+     * Set by the check that produced this program, so a module product says
+     * which project-wide instance set its schemes mean — including one read back
+     * from the cache, which records the world it was checked against rather than
+     * the one that happens to be current. Null only on a program nobody checked.
+     */
+    public ?InstanceWorldId $instanceWorld = null;
 
     /**
      * Every name the export list re-exports: a plain value or type export, and
@@ -676,12 +701,21 @@ final class FunctionDecl extends AstNode
 
     public ?string $intrinsicWrapper = null;
 
+    /**
+     * Where the declaration is written when that is not the node's own span.
+     *
+     * An instance method synthesized from a class default has the class's body,
+     * not this module's: without this, the record it publishes would name a line
+     * of the wrong file. `module:line:col`, exactly the shape the record uses.
+     */
+    public ?string $sourceOrigin = null;
+
     /** Set by validateEntryPoint (Main) or the REPL session compiler (ReplExpression). */
     public ?IR\EntryPointKind $entryKind = null;
 
     public bool $export = false;
 
-    public IR\IoBodyKind $ioBodyKind = IR\IoBodyKind::StraightLine;
+    public IR\ActionConvention $actionConvention = IR\ActionConvention::Executes;
 
     /**
      * True once `checkFunction` has filled `$type` in from the inferred body type.
@@ -881,6 +915,9 @@ final class Variable extends AstNode
     /** Resolved `Module::name` for imported (or local) value refs; set during typecheck. */
     public ?string $resolvedOrigin = null;
 
+    /** True when this ref belongs to a copied default body and must keep its declaring module. */
+    public bool $declarationScoped = false;
+
     /** Local binder identity (same-file rename/refs); set during typecheck. */
     public ?int $binderId = null;
 
@@ -925,6 +962,9 @@ final class OperatorRef extends AstNode
 {
     /** Resolved `Module::name` when known. */
     public ?string $resolvedOrigin = null;
+
+    /** True when this ref belongs to a copied default body and must keep its declaring module. */
+    public bool $declarationScoped = false;
 
     public function __construct(public string $name, int $line = 0, int $col = 0, int $endCol = 0)
     {
@@ -1004,16 +1044,6 @@ final class ListLit extends AstNode
 
 final class Lambda extends AstNode
 {
-    /**
-     * Class constraints the type checker abstracted into this lambda's leading
-     * dictionary parameters. Empty for a source-level lambda; set only on the
-     * synthetic lambda that implements a constrained let/where binding, so the
-     * binding's scheme can be asserted against the adapter it was built for.
-     *
-     * @var list<PendingConstraint>
-     */
-    public array $abstractedConstraints = [];
-
     /** @param array<int, LambdaParam> $params */
     public function __construct(
         public array $params,
@@ -1255,6 +1285,7 @@ final class EvidenceMethod extends AstNode
     ) {
         parent::__construct($line, $col, $endCol);
     }
+
 }
 
 final class ForeignCall extends AstNode
@@ -1286,16 +1317,48 @@ final class ForeignCall extends AstNode
     }
 }
 
-final class IoAction extends AstNode
+/**
+ * One of the four expressions a `do` statement (or a `do` body) can be.
+ *
+ * The marker is the single answer to "may a form have been published for this node?": the checker
+ * fills `$ioForm` on every node carrying it ({@see \Moggi\Semantics\IoEscape\analyze}), and the IR
+ * spine reads that field instead of asking what the node's class is.
+ */
+interface IoStatementExpression
 {
+}
+
+/**
+ * What the checker publishes on an IO statement's node: the two answers lowering used to re-derive.
+ *
+ * A statement *expression* (`IoPure`, `IoCase`, `IoSequence`, `IoAction`) carries `$ioForm` — run or
+ * value. A `do` statement (`IoLet`, `IoLetAction`, `IoBind`, `IoExpr`) carries `$ioKind` — what it does
+ * with its expression. Both are written once, where the type and the `let`-bound actions in scope are
+ * both known ({@see \Moggi\Semantics\IoEscape}), and read once, by lowering. One carrier, because
+ * they are one question asked at two levels of the same construct.
+ */
+trait PublishesIoForm
+{
+    public ?\Moggi\IR\IoStatementForm $ioForm = null;
+
+    public ?\Moggi\IR\IoStatementKind $ioKind = null;
+}
+
+
+final class IoAction extends AstNode implements IoStatementExpression
+{
+    use PublishesIoForm;
+
     public function __construct(public AstNode $expr, int $line = 0, int $col = 0, int $endCol = 0)
     {
         parent::__construct($line, $col, $endCol);
     }
 }
 
-final class IoSequence extends AstNode
+final class IoSequence extends AstNode implements IoStatementExpression
 {
+    use PublishesIoForm;
+
     /** @param list<AstNode> $stmts */
     public function __construct(public array $stmts, int $line = 0, int $col = 0, int $endCol = 0)
     {
@@ -1305,6 +1368,9 @@ final class IoSequence extends AstNode
 
 final class IoLet extends AstNode
 {
+    use PublishesIoForm;
+
+
     /** @param list<Binding> $bindings */
     public function __construct(public array $bindings, int $line = 0, int $col = 0, int $endCol = 0)
     {
@@ -1314,7 +1380,8 @@ final class IoLet extends AstNode
 
 final class IoLetAction extends AstNode
 {
-    public bool $ioFoldHint = false;
+    use PublishesIoForm;
+
 
     public function __construct(
         public AstNode $pattern,
@@ -1329,6 +1396,9 @@ final class IoLetAction extends AstNode
 
 final class IoBind extends AstNode
 {
+    use PublishesIoForm;
+
+
     public function __construct(
         public AstNode $pattern,
         public AstNode $expr,
@@ -1342,22 +1412,29 @@ final class IoBind extends AstNode
 
 final class IoExpr extends AstNode
 {
+    use PublishesIoForm;
+
+
     public function __construct(public AstNode $expr, int $line = 0, int $col = 0, int $endCol = 0)
     {
         parent::__construct($line, $col, $endCol);
     }
 }
 
-final class IoPure extends AstNode
+final class IoPure extends AstNode implements IoStatementExpression
 {
+    use PublishesIoForm;
+
     public function __construct(public AstNode $expr, int $line = 0, int $col = 0, int $endCol = 0)
     {
         parent::__construct($line, $col, $endCol);
     }
 }
 
-final class IoCase extends AstNode
+final class IoCase extends AstNode implements IoStatementExpression
 {
+    use PublishesIoForm;
+
     /** @param list<Alt> $alts */
     public function __construct(
         public AstNode $scrutinee,

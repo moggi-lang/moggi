@@ -2,15 +2,12 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Errors\appendDidYouMean;
-
 use Moggi\Semantics\TypeExpr\Scheme;
-
-use function Moggi\Semantics\Types\ambiguousImportMessage;
-
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Errors\appendDidYouMean;
+use function Moggi\Semantics\Types\ambiguousImportMessage;
 use function Moggi\Syntax\exportedChildrenSpec;
 use function Moggi\Syntax\isConstructorName;
 use function Moggi\Syntax\surfaceConstructorAlias;
@@ -62,17 +59,6 @@ function isQualifiedSymbol(string $name): bool
 
     return $prefix !== ''
         && \preg_match('/^[A-Za-z_][A-Za-z0-9_]*(\\[A-Za-z_][A-Za-z0-9_]*)*$/', $prefix) === 1;
-}
-
-/** PHP FQN for a resolved symbol (emit / `use function` only). */
-function phpFqnFromResolved(string $resolved): string
-{
-    $parsed = parseResolvedSymbol($resolved);
-    if ($parsed === null) {
-        return $resolved;
-    }
-
-    return moduleNameToNamespace($parsed['module']) . '\\' . $parsed['name'];
 }
 
 /**
@@ -335,8 +321,6 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
             $available['origins'][$name] = exportOrigin($moduleName, $namespace, $name);
         }
     }
-
-    redirectFacadeOrigins($available, $program, $units, $moduleName);
 
     $exportItems = $program->exports;
     if ($exportItems === null) {

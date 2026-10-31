@@ -72,12 +72,6 @@ function parseJvmCoordinate(string $coordinate): array
     ];
 }
 
-/**
- * The module a bound library lives in: `com.acme:hello` is
- * `Maven.Com.Acme.Hello`. The ecosystem prefix keeps three backends' bindings
- * apart (R7); group dots become nesting so the module/file law resolves the
- * generated module with no new lookup rule.
- */
 function jvmBindModuleName(string $group, string $artifact): string
 {
     $segments = ['Maven'];
@@ -101,6 +95,9 @@ function jvmClassPrefix(string $group): string
  * Describe the bindable classes of a tree: jars under a `jvm` directory (the discovery
  * shape the backend itself scans), keeping the classes under the coordinate's
  * group prefix.
+ *
+ * `$treeRoot` is the resolver's tree, which holds the `jvm/` directory
+ * {@see \Moggi\Registry\hostToolArtifactRoot()} forwards to `--lib-maven` — not that root itself.
  *
  * @return array{backend: string, coordinate: string, module: string, jars: list<string>, types: list<array<string, mixed>>, functions: list<array<string, mixed>>, consts: list<array<string, mixed>>, skipped: list<array{symbol: string, reason: string}>}
  */

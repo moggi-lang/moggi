@@ -2,15 +2,13 @@
 
 namespace Moggi\CLI\Commands;
 
-use function Moggi\Registry\badPackageProblem;
+use Moggi\Registry\FetchLog;
 
+use function Moggi\Registry\badPackageProblem;
 use function Moggi\Registry\badPackagesAmong;
 use function Moggi\Registry\badPackagesRefusal;
 use function Moggi\Registry\bundledPackages;
 use function Moggi\Registry\demandsCloseLocally;
-
-use Moggi\Registry\FetchLog;
-
 use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\installLockedPackages;
 use function Moggi\Registry\lockDisagreements;

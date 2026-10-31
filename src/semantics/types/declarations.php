@@ -2,23 +2,23 @@
 
 namespace Moggi\Semantics\Types;
 
-use function Moggi\Backend\compileBackend;
-use function Moggi\Backend\DotNet\Foreign\registerDotNetForeignType;
-use function Moggi\Backend\Jvm\Foreign\registerJvmForeignType;
-use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
 
 use Moggi\Semantics\Kernel;
 use Moggi\Semantics\Kinds;
-
-use function Moggi\Semantics\TypeExpr\scheme;
-
 use Moggi\Semantics\TypeExpr\TArrow;
-
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
+
+use function Moggi\Backend\DotNet\Foreign\registerDotNetForeignType;
+use function Moggi\Backend\Jvm\Foreign\registerJvmForeignType;
+use function Moggi\IR\Projection\parse as projectionParse;
+use function Moggi\IR\Projection\tupleArity as projectionTupleArity;
+use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
+use function Moggi\Semantics\StBoundary\isTransparentPrimopWrapper;
+use function Moggi\Semantics\TypeExpr\scheme;
 
 require_once __DIR__ . '/type_core.php';
 require_once __DIR__ . '/constraints.php';
@@ -101,7 +101,7 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
         || $decl->name === Kinds\canonicalTypeConName('Array#')
         || $decl->name === Kinds\canonicalTypeConName('RealWorld#')
     ) {
-        if (! \Moggi\Semantics\StBoundary\isTransparentPrimopWrapper($decl)) {
+        if (! isTransparentPrimopWrapper($decl)) {
             throw typeFail(
                 $state,
                 "`{$decl->name}` is a compiler primitive and cannot be redefined",
@@ -376,6 +376,7 @@ function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $modul
             if (isset($methods[$methodName])) {
                 throw typeFail($state, \sprintf('duplicate method `%s` in class `%s`', $methodName, $name), $decl);
             }
+            assertNotGeneratedName($state, $methodName, $decl, 'method');
 
             [$constraintAsts, $bodyTypeAst] = splitTypeAst($method->type);
             $methodUserConstraints = $constraintAsts !== []
@@ -388,11 +389,22 @@ function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $modul
                 $methodType = new TArrow(new TCon('__Dict_' . $constraint->class), $methodType);
             }
 
+            $constraintArgTypes = [];
+            foreach ($methodUserConstraints as $constraint) {
+                foreach ($constraint->args as $argument) {
+                    $constraintArgTypes[] = $argument;
+                }
+            }
+
             $methods[$methodName] = [
                 'type' => $methodType,
                 'userConstraints' => $methodUserConstraints,
+                'kinds' => Kinds\declarationParameterKinds($state, $methodType, $constraintArgTypes),
                 'defaultParams' => $method->params,
                 'defaultBody' => $method->body,
+                'line' => $method->body?->line ?? 0,
+                'col' => $method->body?->col ?? 0,
+                'endCol' => $method->body?->endCol ?? 0,
             ];
             $owner = $state->classMethodOwners[$methodName] ?? null;
             if ($owner !== null && $owner !== $name) {
@@ -695,27 +707,6 @@ function syncAssociatedFamiliesFromClasses(TypeCheckState $state): void
 }
 
 /**
- * Index associated type equations from project/program instance records.
- *
- * @param list<array{class: string, module?: string, associatedEquations?: array<string, array{lhsArgs: list<Ast\TypeNode>, rhs: Ast\TypeNode}>}> $instances
- */
-function indexAssociatedEquations(TypeCheckState $state, array $instances): void
-{
-    $state->associatedEquations = [];
-    foreach ($instances as $instance) {
-        $className = $instance['class'];
-        $module = $instance['module'] ?? '';
-        foreach ($instance['associatedEquations'] ?? [] as $famName => $eq) {
-            $state->associatedEquations[$className][$famName][] = [
-                'lhsArgs' => $eq['lhsArgs'],
-                'rhs' => $eq['rhs'],
-                'module' => $module,
-            ];
-        }
-    }
-}
-
-/**
  * @return array<string, array{lhsArgs: list<Ast\TypeNode>, rhs: Ast\TypeNode}>
  */
 function associatedEquationsMapFromDecl(Ast\InstanceDecl $decl): array
@@ -802,19 +793,6 @@ function registerClassMethodExportSchemes(TypeCheckState $state, Ast\ClassDecl $
     }
 }
 
-function registerInstanceSchemes(TypeCheckState $state, Ast\AstNode $decl): void
-{
-    $registration = instanceMethodSchemes($state, $decl);
-    foreach ($registration['schemes'] as $methodName => $scheme) {
-        $state->instanceMethodNames[$methodName] = true;
-        $existing = $state->env[$methodName] ?? null;
-        if ($existing?->classMethod || isset($state->localDeclNames[$methodName])) {
-            continue;
-        }
-        $state->env[$methodName] = $scheme;
-    }
-}
-
 /**
  * Give a signature-less declaration a scheme before any body is checked, so a
  * call between two declarations of the same module (mutually recursive ones
@@ -824,6 +802,46 @@ function registerInstanceSchemes(TypeCheckState $state, Ast\AstNode $decl): void
  * of the same spelling in particular: `drop n s = length s` in a module that
  * also imports `Data.List.length` must call the module's own `length`.
  */
+/**
+ * A declaration may not enter a namespace the compiler generates names into.
+ *
+ * Two kinds of spelling are written by the compiler rather than by a program. `IR\Callables\workerName()`
+ * spells an action entry's worker `__w_<entry>`, and lowering spells a record field read `__fieldN`, a
+ * tuple field read `__tuple_fieldN` and a tuple construction `__tupleN`. Each is read back by its
+ * spelling where the declaration that wrote it is not at hand — the optimizer for a worker, the three
+ * emitters for a projection — so a source declaration in one of them would give that spelling two
+ * meanings. Refusing the name here is what keeps the reading exact.
+ *
+ * The projection spellings accepted are exactly `IR\Projection\parse()`'s and `tupleArity()`'s own, the
+ * two functions every reader already asks, so the reservation cannot drift from what is read.
+ *
+ * A class method is a declaration too: an instance implements it, but the name is written once, in
+ * the class, so that is where it is refused.
+ */
+function assertNotGeneratedName(
+    TypeCheckState $state,
+    string $name,
+    Ast\AstNode $at,
+    string $declarationKind = 'function',
+): void {
+    $prefix = Ast\generatedWorkerPrefix();
+    if (\str_starts_with($name, $prefix)) {
+        throw typeFail(
+            $state,
+            "{$declarationKind} `{$name}` is in the compiler's generated worker namespace (`{$prefix}`), which no declaration may name",
+            $at,
+        );
+    }
+
+    if (projectionParse($name) !== null || projectionTupleArity($name) !== null) {
+        throw typeFail(
+            $state,
+            "{$declarationKind} `{$name}` is in the compiler's generated projection namespace (`__fieldN`, `__tuple_fieldN`, `__tupleN`), which no declaration may name",
+            $at,
+        );
+    }
+}
+
 function registerInferredFunctionPlaceholder(TypeCheckState $state, Ast\ClassDecl|Ast\FunctionDecl $fn): void
 {
     if (isMagicHashName($fn->name)) {
@@ -832,6 +850,10 @@ function registerInferredFunctionPlaceholder(TypeCheckState $state, Ast\ClassDec
             "function `{$fn->name}` uses the reserved `#` suffix (compiler intrinsics only)",
             $fn instanceof Ast\AstNode ? $fn : null,
         );
+    }
+
+    if ($fn instanceof Ast\FunctionDecl) {
+        assertNotGeneratedName($state, $fn->name, $fn);
     }
 
     $fnType = freshType($state);
@@ -900,6 +922,8 @@ function registerFunctionScheme(TypeCheckState $state, Ast\FunctionDecl $fn): vo
             $fn,
         );
     }
+
+    assertNotGeneratedName($state, $fn->name, $fn);
 
     if (! Ast\hasDeclaredSignature($fn)) {
         throw typeFail($state, "exported function `{$fn->name}` needs a type signature", $fn);
@@ -972,10 +996,10 @@ function registerForeignType(TypeCheckState $state, Ast\ForeignTypeDecl $decl): 
 
     Kinds\registerTypeKind($state, $decl->name, new Kinds\KType());
 
-    if ($decl->backend === compileBackend()) {
+    if ($decl->backend === $state->compileBackend) {
         match ($decl->backend) {
-            'jvm' => registerJvmForeignType($decl->name, $decl->hostType),
-            'dotnet' => registerDotNetForeignType($decl->name, $decl->hostType),
+            'jvm' => registerJvmForeignType($state->module, $decl->name, $decl->hostType),
+            'dotnet' => registerDotNetForeignType($state->module, $decl->name, $decl->hostType),
             default => null,
         };
     }

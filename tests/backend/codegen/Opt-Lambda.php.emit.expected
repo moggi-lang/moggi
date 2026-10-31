@@ -14,7 +14,8 @@ function inc($x) {
 }
 
 function bump($x) {
-    return __apply(inc($x), 5);
+    $__t0 = inc($x);
+    return __apply($__t0, 5);
 }
 
 function __lambda_0($x, $y) {

@@ -6,9 +6,11 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 }
 require $root . '/src/compiler.php';
 
+use function Moggi\Modules\clearHostLibraryRoots;
+use function Moggi\Modules\hostLibraryRoots;
 use function Moggi\Modules\libraryModuleScan;
-
 use function Moggi\Modules\projectSourceClosure;
+use function Moggi\Modules\registerHostLibraryRoots;
 use function Moggi\Paths\canonicalPath;
 
 use Moggi\Semantics\Types\TypeError;
@@ -46,7 +48,7 @@ try {
     $threw = false;
 
     try {
-        projectSourceClosure([$dirs['a'] . '/Alpha.mog'], [$dirs['a'], $dirs['b']]);
+        projectSourceClosure([$dirs['a'] . '/Alpha.mog'], [$dirs['a'], $dirs['b']], 'php');
     } catch (TypeError $error) {
         $threw = true;
         $assert(
@@ -62,7 +64,7 @@ try {
     $assert($threw, 'a program that reaches a doubly offered name must be refused');
 
     $write($dirs['a'], 'Other');
-    [$files] = projectSourceClosure([$dirs['a'] . '/Other.mog'], [$dirs['a'], $dirs['b']]);
+    [$files] = projectSourceClosure([$dirs['a'] . '/Other.mog'], [$dirs['a'], $dirs['b']], 'php');
     $assert(
         \count($files) === 1 && canonicalPath($files[0]) === canonicalPath($dirs['a'] . '/Other.mog'),
         'a name no import reaches is not resolved, so nothing clashes',
@@ -81,6 +83,24 @@ try {
         \count($paths) === 2 && isset($paths['Alpha']) && $duplicates === [],
         'a root repeated in the list offers the same file, which is one root and not a clash',
     );
+
+    // Host roots belong to one compilation: a second compile in the same process starts empty and
+    // replaces the first tree instead of inheriting it.
+    foreach (['a', 'b'] as $key) {
+        \file_put_contents($dirs[$key] . '/probe.dll', '');
+        \file_put_contents($dirs[$key] . '/probe.json', '{"assemblies": {}}');
+    }
+    clearHostLibraryRoots();
+    $assert(hostLibraryRoots() === [], 'a fresh compilation owns no host roots');
+    registerHostLibraryRoots('dotnet', [$dirs['a']]);
+    registerHostLibraryRoots('dotnet', [$dirs['b']]);
+    $assert(
+        \array_map(static fn (string $path): string => canonicalPath($path), hostLibraryRoots())
+            === [canonicalPath($dirs['b'])],
+        'a second registration replaces the first tree instead of inheriting it',
+    );
+    clearHostLibraryRoots();
+    $assert(hostLibraryRoots() === [], 'the registry does not survive the compilation that filled it');
 
     echo "library root tests passed\n";
 } finally {

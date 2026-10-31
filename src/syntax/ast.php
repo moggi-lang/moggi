@@ -536,6 +536,19 @@ function instanceHeadMarker(): string
 }
 
 /**
+ * The namespace the compiler writes an action entry's worker into.
+ *
+ * One spelling for the module that creates the worker and for every importer that calls it
+ * (`IR\Callables\workerName()`), and a name no source declaration may use — that reservation is
+ * what lets a `__w_` call be read as a worker call wherever the callee's declaration is not at
+ * hand.
+ */
+function generatedWorkerPrefix(): string
+{
+    return '__w_';
+}
+
+/**
  * @param list<TypeNode> $args
  */
 function instanceHeadFromArgs(array $args): TypeNode
@@ -604,4 +617,37 @@ function dumpTypeInline(TypeNode $node): string
         )) . ' => ' . dumpTypeInline($node->body),
         default => throw new \InvalidArgumentException('unknown type: ' . $node::class),
     };
+}
+
+/**
+ * Name the file a tree is written in, so a diagnostic or a frame lands in it.
+ *
+ * A node built by desugaring starts out with no file: it is written where the
+ * construct it came from is.
+ */
+function markSourceFile(AstWalkable $root, string $path): void
+{
+    $seen = [];
+    markSourceFileBelow($root, $path, $seen);
+}
+
+/** @param array<int, true> $seen */
+function markSourceFileBelow(AstWalkable $root, string $path, array &$seen): void
+{
+    if ($root instanceof AstNode) {
+        if (isset($seen[\spl_object_id($root)])) {
+            return;
+        }
+
+        $seen[\spl_object_id($root)] = true;
+        $root->sourceFile ??= $path;
+    }
+
+    foreach ($root->childValues() as $child) {
+        foreach (\is_array($child) ? $child : [$child] as $value) {
+            if ($value instanceof AstWalkable) {
+                markSourceFileBelow($value, $path, $seen);
+            }
+        }
+    }
 }

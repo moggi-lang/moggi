@@ -50,21 +50,37 @@ function removeDirectory(string $path): void
  * Every compile elaborates the whole standard library before it reaches the program, which is what
  * the cache exists to avoid — but a case that wants a cache to itself (its own module, its own
  * project) would pay that elaboration again from an empty directory, seconds each time. The
- * library's entries (`compile/<backend>/lib/`) and the `stdlib-index` artifact the linker reads are
- * hard-linked out of the run's cache, which the harness keeps warm, while everything derived from
- * the *case's* sources stays absent: the program under test is still compiled from scratch, and the
- * case still sees a cache that has never built it.
+ * library modules' cached products (`compile/<backend>/libraries/`) and the `stdlib-index` artifact
+ * the linker reads are hard-linked out of the run's cache, which the harness keeps warm, while
+ * everything derived from the *case's* sources stays absent: the program under test is still
+ * compiled from scratch, and the case still sees a cache that has never built it.
  *
  * Hard links are safe here because every cache write replaces its file atomically (temp + rename)
  * instead of editing one in place, so a seeded directory cannot reach back into the run's cache.
  */
+/**
+ * The compiler's cache root, read without loading the compiler: a case that only spawns `moggi.php`
+ * must still be able to seed, which it could not while this asked the compiler what its cache was.
+ */
+function testCacheBaseDir(): string
+{
+    $override = \getenv('MOGGI_CACHE_DIR');
+    if (\is_string($override) && $override !== '') {
+        return \rtrim($override, '/');
+    }
+    $cwd = \getcwd();
+
+    return ($cwd === false ? '.' : $cwd) . '/.moggi';
+}
+
 function seedCacheDir(string $dir): void
 {
-    if (! \class_exists(\Moggi\Cache\CacheSwitch::class) || ! \Moggi\Cache\cacheEnabled()) {
+    $off = \getenv('MOGGI_NO_CACHE');
+    if (\is_string($off) && $off !== '' && $off !== '0') {
         return;
     }
 
-    $source = \Moggi\Cache\cacheBaseDir();
+    $source = testCacheBaseDir();
     if ($source === \rtrim($dir, '/')) {
         return;
     }
@@ -75,9 +91,9 @@ function seedCacheDir(string $dir): void
         @\copy($fingerprint, $dir . '/fingerprint');
     }
 
-    foreach (\Moggi\Paths\globPaths($source . '/compile/*/lib', \GLOB_ONLYDIR) as $entries) {
-        $backend = \basename(\dirname($entries));
-        hardlinkTree($entries, $dir . '/compile/' . $backend . '/lib');
+    foreach (\Moggi\Paths\globPaths($source . '/compile/*/libraries', \GLOB_ONLYDIR) as $libraries) {
+        $backend = \basename(\dirname($libraries));
+        hardlinkTree($libraries, $dir . '/compile/' . $backend . '/libraries');
     }
 
     foreach (\Moggi\Paths\globPaths($source . '/compile/artifacts/stdlib-index*.blob') as $blob) {
@@ -120,14 +136,23 @@ function hardlinkTree(string $source, string $target): void
  * (Windows): every scan in the compiler returns `/`-spelled paths, so a test
  * that joins onto this root with `/` compares equal to what a scan found.
  * PHP opens `/`-spelled paths on every host.
+ *
+ * A case that seeds its cache pays a copy of the library tree across filesystems;
+ * `seedCacheDir()` links where it can.
  */
 function createTempDir(string $prefix): string
 {
-    $base = \rtrim(\str_replace('\\', '/', (string) \sys_get_temp_dir()), '/');
-    for ($attempt = 0; $attempt < 10; ++$attempt) {
-        $dir = $base . '/' . $prefix . '-' . \getmypid() . '-' . \bin2hex(\random_bytes(8));
-        if (@\mkdir($dir, 0700)) {
-            return $dir;
+    $bases = [\rtrim(\str_replace('\\', '/', (string) \sys_get_temp_dir()), '/')];
+
+    foreach ($bases as $base) {
+        if (! \is_dir($base) && ! @\mkdir($base, 0700, true) && ! \is_dir($base)) {
+            continue;
+        }
+        for ($attempt = 0; $attempt < 10; ++$attempt) {
+            $dir = $base . '/' . $prefix . '-' . \getmypid() . '-' . \bin2hex(\random_bytes(8));
+            if (@\mkdir($dir, 0700)) {
+                return $dir;
+            }
         }
     }
 

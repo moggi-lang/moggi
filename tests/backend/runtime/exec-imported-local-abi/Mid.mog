@@ -1,0 +1,6 @@
+module Mid (module Types, twice) where
+
+import Types
+
+twice :: Area a => a -> Int
+twice x = area x + area x

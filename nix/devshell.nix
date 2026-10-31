@@ -12,17 +12,14 @@
 
 let
   pinnedVersions = {
-    php = "8.5.7";
+    # 8.5.12 is the minimum the compiler runs on (see `MOGGI_MINIMUM_PHP`);
+    php = "8.5.12";
     dotnet = "8";
     composer = "2.10.1";
     maven = "3.9.12";
   };
   moggiRootScript = ''
-    if [ -n "''${MOGGI_ROOT:-}" ]; then
-      echo "''${MOGGI_ROOT}"
-    else
-      git -C "''${PWD}" rev-parse --show-toplevel 2>/dev/null || pwd
-    fi
+    git -C "''${PWD}" rev-parse --show-toplevel 2>/dev/null || pwd
   '';
 in
 {
@@ -31,28 +28,14 @@ in
     php85
     # GraalVM CE provides the Java 21 toolchain plus native-image.
     graalvmPackages.graalvm-ce
-    # .NET 8 SDK for the DotNet IL backend (run + Native AOT). It also
-    # provides the NuGet CLI (`dotnet nuget`), so `nuget` is not a
-    # separate package here: nixpkgs' `nuget` is the discontinued
-    # mono-based tool, unrelated to the SDK's restore path.
+    # .NET 8 SDK for the DotNet IL backend (run + Native AOT).
     dotnet-sdk_8
-    # Composer drives `[php] composer` dependencies. It is versioned with
-    # the PHP it runs on, so it comes from php85's package set —
-    # nixpkgs no longer has a top-level `composer`.
+    # Composer drives `[php] composer` dependencies.
     php85.packages.composer
     # Maven resolves `[jvm] maven` coordinates onto this JDK.
     maven
-    # GraalVM's `native-image` links a native JVM executable with the
-    # host C compiler, but hands that compiler a *sanitised*
-    # environment: `NIX_LDFLAGS` — the only channel a nixpkgs gcc
-    # wrapper uses to add library search paths — never reaches it, so
-    # the `-lz` native-image always requests cannot be resolved and
-    # every native JVM build fails with "libz.a is missing". These
-    # wrappers reinstate the one path the shell already provides, as a
-    # command-line argument, which does survive `native-image`'s env
-    # scrub. They shadow `gcc`/`cc` only inside this shell; on a
-    # machine with the documented GraalVM prerequisite (zlib
-    # development files) nothing here is needed at all.
+    # The documentation site: jekyll 3.10 is the version GitHub Pages builds
+    (ruby.withPackages (ps: [ ps.jekyll ps.jekyll-relative-links ps.kramdown-parser-gfm ]))
     (writeShellScriptBin "gcc" ''
       exec ${pkgs.gcc}/bin/gcc -L${pkgs.zlib}/lib "$@"
     '')
@@ -74,9 +57,6 @@ in
   ];
 
   shellHook = ''
-    MOGGI_ROOT="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
-    export MOGGI_ROOT
-
     echo "PHP $(php --version | head -n1) (pinned ${pinnedVersions.php})"
     echo "nixpkgs ${nixpkgsRev}"
     echo "Java $(java -version 2>&1 | head -n1) (nixpkgs graalvmPackages.graalvm-ce; JVM backend target)"
@@ -85,5 +65,6 @@ in
     echo "nuget $(dotnet nuget --version 2>&1 | tail -n1) (from dotnet-sdk_8)"
     echo "composer $(composer --version 2>&1 | head -n1 | cut -d' ' -f1-3) (pinned ${pinnedVersions.composer})"
     echo "maven $(mvn --version 2>&1 | head -n1 | cut -d' ' -f1-3) (pinned ${pinnedVersions.maven})"
+    echo "jekyll $(jekyll --version | cut -d' ' -f2) (docs build: docs/build.sh; the GitHub Pages version)"
   '';
 }

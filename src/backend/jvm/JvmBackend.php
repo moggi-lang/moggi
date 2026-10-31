@@ -3,6 +3,7 @@
 namespace Moggi\Backend\Jvm;
 
 use Moggi\Backend\Backend;
+use Moggi\Foreign\ForeignTypeTable;
 
 use function Moggi\Backend\Inspect\describeJvmEmit;
 use function Moggi\Backend\Jvm\Codegen\emitModule;
@@ -29,6 +30,16 @@ require_once __DIR__ . '/dependencies.php';
 
 final class JvmBackend implements Backend
 {
+    public function id(): string
+    {
+        return 'jvm';
+    }
+
+    public function emitPlan(string $outputRelative, array $options = []): \Moggi\Modules\EmitPlan
+    {
+        return \Moggi\Modules\EmitPlan::forTarget($this->id(), $outputRelative);
+    }
+
     public function extension(): string
     {
         return '.class';
@@ -56,7 +67,8 @@ final class JvmBackend implements Backend
         return '';
     }
 
-    public function emit(Module $ir, string $sourcePath, array $options = []): string|array
+    /** @return array<string, string> */
+    public function emit(Module $ir, string $sourcePath, array $options = []): array
     {
         $emitted = emitModule($ir, $sourcePath, $options);
         $out = [];
@@ -85,7 +97,7 @@ final class JvmBackend implements Backend
         return $emit;
     }
 
-    public function describeEmit(string|array $emit, array $focusNames = []): string
+    public function describeEmit(array $emit, array $focusNames = []): string
     {
         return describeJvmEmit($emit, $focusNames);
     }
@@ -100,6 +112,7 @@ final class JvmBackend implements Backend
         string $kind,
         array $pathInfo,
         string $name,
+        ?string $module = null,
     ): ?string {
         $inferred = jvmDescriptorFromMoggiType(
             $type,
@@ -107,6 +120,7 @@ final class JvmBackend implements Backend
             $kind,
             $pathInfo['classPath'],
             $pathInfo['hostMember'],
+            $module,
         );
         if ($kind !== 'function'
             || ($pathInfo['dispatch'] ?? '') === 'intrinsic'
@@ -177,5 +191,16 @@ final class JvmBackend implements Backend
         string $name,
     ): ?string {
         return verifyForeignImportAgainstHost($kind, $pathInfo, $type, $nativeSig, $name);
+    }
+
+    /**
+     * The host types this target's checked modules declare. One table per backend object, which is
+     * the object the checker's `backendById()` and the emitter both reach.
+     */
+    private ?ForeignTypeTable $foreignTypes = null;
+
+    public function foreignTypes(): ForeignTypeTable
+    {
+        return $this->foreignTypes ??= new ForeignTypeTable();
     }
 }

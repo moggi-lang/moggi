@@ -130,8 +130,7 @@ function verifySignature(string $messageHex, string $signatureHex, string $npub)
 
 /**
  * The shared `verify-batch` channel, keyed by the binary it was started from: a
- * changed `MOGGI_SCHNORR` (the test harness swaps fakes) starts a new process
- * rather than answering from the old. `null` means there is no binary at all, and
+ * changed binary starts a new process rather than answering from the old. `null` means there is no binary at all, and
  * verification falls back to `verifySignatureOnce`, which reports exactly why.
  */
 function batchVerifier(): ?BatchVerifier

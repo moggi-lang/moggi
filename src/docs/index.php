@@ -11,6 +11,8 @@ use function Moggi\Modules\outputRelativePath;
 
 use Moggi\Modules\PreparedProject;
 
+use Moggi\Pipeline\CompilationContext;
+
 use function Moggi\Modules\syntheticLocalTypes;
 use function Moggi\Paths\canonicalSeparators;
 
@@ -84,6 +86,7 @@ function buildIndex(
     array $checkedPrograms = [],
     ?PreparedProject $prepared = null,
     ?string $sourceRoot = null,
+    ?CompilationContext $context = null,
 ): DocIndex {
     $byModule = [];
     $all = [];
@@ -370,9 +373,12 @@ function buildIndex(
     }
 
     if ($prepared !== null) {
-        attachReexportAliases($canonical, $modules, $prepared, $checkedPrograms);
+        $context ?? throw new \RuntimeException(
+            'documenting a prepared project needs the CompilationContext it was prepared with',
+        );
+        attachReexportAliases($canonical, $modules, $prepared, $checkedPrograms, $context);
         syncCanonicalIntoByModule($byModule, $all, $canonical);
-        addReexportModuleEntries($byModule, $canonical, $modules, $prepared, $all, $checkedPrograms);
+        addReexportModuleEntries($byModule, $canonical, $modules, $prepared, $all, $checkedPrograms, $context);
     }
 
     \ksort($byModule);
@@ -578,6 +584,7 @@ function attachReexportAliases(
     array $modules,
     PreparedProject $prepared,
     array $checkedPrograms,
+    CompilationContext $context,
 ): void {
     $units = $prepared->units;
     foreach ($modules as $moduleName => $_parsed) {
@@ -660,6 +667,7 @@ function addReexportModuleEntries(
     PreparedProject $prepared,
     array &$all,
     array $checkedPrograms,
+    CompilationContext $context,
 ): void {
     $units = $prepared->units;
     foreach ($modules as $moduleName => $_parsed) {
@@ -1305,12 +1313,26 @@ function entityFromRow(array $row): DocEntity
     );
 }
 
-function indexCachePath(string $inputPath, array $libDirs): string
+/**
+ * The index file one documented tree writes under this context.
+ *
+ * The context is the one the caller declared — target, purpose, entries and
+ * roots — not one extended with the sources the closure happened to resolve:
+ * the index carries its own source fingerprint, so the file it writes must not
+ * move when a header-only edit changes the closure. `sources` is the one input
+ * that cannot be here: the documented closure is a function of the input path
+ * and the roots, so a caller that happened to analyse another file first would
+ * otherwise move the index and rebuild it — for the language server, which
+ * seeds this from the standard library and analyses a file per request, that
+ * was a full index build per analysis.
+ */
+function indexCachePath(string $inputPath, array $libDirs, CompilationContext $context): string
 {
     $resolvedLibDirs = resolveLibraryDirs($libDirs);
     $key = \hash(
         'xxh3',
-        $inputPath . '|' . \implode(',', $resolvedLibDirs) . '|docs-v' . docIndexSchemaVersion(),
+        $inputPath . '|' . \implode(',', $resolvedLibDirs) . '|docs-v' . docIndexSchemaVersion()
+            . '|' . $context->inputsKey(),
     );
 
     return compileDir() . '/docs-index/' . \substr($key, 0, 16) . '.json';
@@ -1319,13 +1341,15 @@ function indexCachePath(string $inputPath, array $libDirs): string
 function loadOrBuildIndex(
     string $inputPath,
     array $libDirs,
+    CompilationContext $context,
     bool $rebuild = false,
     ?string &$sourceFingerprint = null,
 ): DocIndex {
-    $docClosure = resolveDocFileClosure($inputPath, $libDirs);
+    $docClosure = resolveDocFileClosure($inputPath, $libDirs, $context->backendId);
     $files = $docClosure[1];
     $mtimeFingerprint = docSourceFingerprintMtime($files);
-    $cachePath = indexCachePath($inputPath, $libDirs);
+    $cachePath = indexCachePath($inputPath, $libDirs, $context);
+    $context = $context->withSources($files);
     if (! $rebuild && \is_file($cachePath)) {
         $raw = \file_get_contents($cachePath);
         if (\is_string($raw)) {
@@ -1351,12 +1375,12 @@ function loadOrBuildIndex(
     $contentFingerprint = docSourceFingerprint($files);
     $sourceFingerprint = $contentFingerprint;
 
-    $project = loadDocProject($inputPath, $libDirs, $docClosure);
+    $project = loadDocProject($inputPath, $context, $libDirs, $docClosure);
     $prepared = $project['prepared'];
     $modules = $project['modules'];
     \fwrite(STDERR, 'mogdoc: loaded ' . \count($modules) . " module(s)\n");
     \fwrite(STDERR, 'mogdoc: type-checked ' . \count($prepared->checked) . " module(s)\n");
-    $index = buildIndex($modules, $prepared->checked, $prepared, docRootFor($inputPath));
+    $index = buildIndex($modules, $prepared->checked, $prepared, docRootFor($inputPath), $context);
     \fwrite(STDERR, 'mogdoc: indexed ' . \count($index->search) . " searchable entries\n");
     $payload = \json_encode(
         [

@@ -44,27 +44,18 @@ function detectedCpuCount(): int
 
 /**
  * The machine's CPU counts; `cores` is null when the platform cannot tell cores from threads.
- * `MOGGI_TEST_CPU_COUNT` overrides the whole probe.
  *
  * @return array{cores: ?int, threads: ?int}
  */
 function platformCpuTopology(): array
 {
-    $override = \getenv('MOGGI_TEST_CPU_COUNT');
-    if (\is_string($override) && \ctype_digit($override) && (int) $override > 0) {
-        return ['cores' => (int) $override, 'threads' => (int) $override];
-    }
-
     return match (PHP_OS_FAMILY) {
         'Linux' => linuxCpuTopology(),
-        // `hw.ncpu` is the older spelling of the logical count.
         'Darwin' => [
             'cores' => platformFirstNumber(platformShellOutput('sysctl -n hw.physicalcpu')),
             'threads' => platformFirstNumber(platformShellOutput('sysctl -n hw.logicalcpu'))
                 ?? platformFirstNumber(platformShellOutput('sysctl -n hw.ncpu')),
         ],
-        // CIM (PowerShell) reports both, summed over sockets; `NUMBER_OF_PROCESSORS` is the CPU set
-        // the OS gave this process.
         'Windows' => [
             'cores' => windowsCimInt('NumberOfCores'),
             'threads' => windowsCimInt('NumberOfLogicalProcessors')
@@ -200,8 +191,6 @@ function cgroupCpuQuota(string $v2Max, string $v1Quota, string $v1Period): ?int
     if ($quotaUs === null || $periodUs === null || $quotaUs <= 0 || $periodUs <= 0) {
         return null;
     }
-
-    // A quota smaller than one CPU's worth still allows one worker.
     return (int) \max(1, (int) \ceil($quotaUs / $periodUs));
 }
 
@@ -217,9 +206,6 @@ function cgroupCpuDirs(): array
     if (PHP_OS_FAMILY !== 'Linux' || ! \is_dir('/sys/fs/cgroup')) {
         return [];
     }
-
-    // "0::/user.slice/x.scope" is the unified hierarchy; "5:cpu,cpuacct:/docker/y" is v1, which
-    // mounts one hierarchy per controller.
     $dirs = [];
     foreach (\preg_split('/\R/', cgroupRead('/proc/self/cgroup')) ?: [] as $line) {
         if (\preg_match('#^\d+:([^:]*):(/.+)$#', $line, $match) !== 1) {

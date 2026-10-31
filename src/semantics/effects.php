@@ -2,16 +2,16 @@
 
 namespace Moggi\Semantics\Effects;
 
+use Moggi\Modules\ImportContext;
+use function Moggi\Modules\publishElaboration;
 use Moggi\Pipeline\CompilePurpose;
+use Moggi\Syntax\Ast\Program;
 
 use function Moggi\Semantics\IoBoundary\validate as validateIo;
 use function Moggi\Semantics\StBoundary\validate as validateSt;
-
 use function Moggi\Semantics\IoEscape\analyze;
 use function Moggi\Semantics\StrictIoNormalize\normalize;
 use function Moggi\Semantics\Types\checkRaw;
-
-use Moggi\Syntax\Ast\Program;
 
 /**
  * Semantic effect elaboration boundary.
@@ -22,11 +22,10 @@ use Moggi\Syntax\Ast\Program;
  * action is a re-executable description, so building one is pure and each use
  * runs it, which is what keeps allocation and read/write order.
  *
- * @param array<string, mixed> $importContext
  * @return Program
  */
 /**
- * @param array<string, mixed> $importContext
+ * @param ?ImportContext $importContext null when the module imports nothing
  * @param ?array{env: array<string, mixed>, data: array<string, mixed>, typeSynonyms: array<string, mixed>, intrinsicWrappers: array<string, string>} $interface
  *   receives the local type environment the check commits, so a caller can
  *   publish it as the module interface instead of building one separately
@@ -35,13 +34,29 @@ function checkAndNormalize(
     Program $program,
     string $source = '',
     string $filename = '',
-    array $importContext = [],
+    ?ImportContext $importContext = null,
     CompilePurpose $purpose = CompilePurpose::Executable,
     ?array &$interface = null,
+    array $entryModules = [],
+    string $backendId = 'php',
 ): Program {
-    $typed = checkRaw($program, $source, $filename, $importContext, $purpose, $interface);
+    $state = null;
+    $typed = checkRaw(
+        $program,
+        $source,
+        $filename,
+        $importContext,
+        $purpose,
+        $interface,
+        $entryModules,
+        $backendId,
+        $state,
+    );
     validateIo($typed, $source, $filename);
     validateSt($typed, $source, $filename);
 
-    return analyze(normalize($typed));
+    $final = analyze(normalize($typed));
+    publishElaboration($final, $state);
+
+    return $final;
 }

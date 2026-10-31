@@ -1,0 +1,25 @@
+-- Declared functions whose names look like generated symbols are ordinary
+-- declarations. Nothing may classify them as a clone, a lambda, a CAF or an
+-- evidence builder by spelling.
+module Main where
+
+import System.IO (putStrLn)
+import Text.Show (show)
+
+__spec_deadbeef :: Int -> Int
+__spec_deadbeef x = x + 2
+
+__caf_feedface :: Int -> Int
+__caf_feedface x = x + 3
+
+__ev_Unrelated_9 :: Int -> Int
+__ev_Unrelated_9 x = x + 4
+
+__fieldTotal :: Int -> Int
+__fieldTotal x = x + 5
+
+__tuple2abc :: Int -> Int
+__tuple2abc x = x + 6
+
+main :: IO ()
+main = putStrLn (show (__spec_deadbeef 1, __caf_feedface 1, __ev_Unrelated_9 1, __fieldTotal 1, __tuple2abc 1))

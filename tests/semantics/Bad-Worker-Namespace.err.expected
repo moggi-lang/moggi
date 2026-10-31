@@ -1,0 +1,4 @@
+tests/semantics/Bad-Worker-Namespace.mog:3:1: type error: function `__w_putStrLn` is in the compiler's generated worker namespace (`__w_`), which no declaration may name
+
+  3 | __w_putStrLn :: String -> IO ()
+    | ^^^^^^^^^^^^

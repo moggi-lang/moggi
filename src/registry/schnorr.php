@@ -18,21 +18,18 @@ use function Moggi\Install\installationRoot;
  *
  * Locations, in order:
  *
- *   - `MOGGI_SCHNORR`, a path to the binary (a test/CI override — still a path,
- *     never a `PATH` search);
- *   - `<MOGGI_ROOT>/bin/schnorr`;
  *   - `<installation>/bin/schnorr`, where the installation is the phar's parent
  *     (`<install>/bin/moggi.phar` → `<install>`);
  *   - a source checkout's `<root>/bin/schnorr` and the binary `make` writes
- *     beside the C sources, `<root>/schnorr/schnorr`.
+ *     beside the C sources, `<root>/schnorr/schnorr` — the checkout *is* the
+ *     installation when the compiler runs from source.
+ *
+ * There is no override, and deliberately so: the verifier is part of the
+ * compiler that uses it, so "which binary" has exactly one answer and no
+ * accident of environment can change it.
  */
 function schnorrBinary(): ?string
 {
-    $named = \getenv('MOGGI_SCHNORR');
-    if (\is_string($named) && $named !== '') {
-        return \is_file($named) && \is_executable($named) ? $named : null;
-    }
-
     foreach (schnorrCandidatePaths() as $candidate) {
         if (\is_file($candidate) && \is_executable($candidate)) {
             return $candidate;
@@ -56,14 +53,9 @@ function schnorrCandidatePaths(): array
     $separator = \DIRECTORY_SEPARATOR;
     $candidates = [];
 
-    $root = \getenv('MOGGI_ROOT');
-    if (\is_string($root) && $root !== '') {
-        $candidates[] = \rtrim($root, '/\\') . $separator . 'bin' . $separator . $name;
-    }
-
-    $installRoot = installationRoot();
-    if ($installRoot !== null) {
-        $candidates[] = $installRoot . $separator . 'bin' . $separator . $name;
+    $installation = installationRoot();
+    if ($installation !== null) {
+        $candidates[] = $installation . $separator . 'bin' . $separator . $name;
     }
 
     $checkout = \dirname(__DIR__, 2);
@@ -80,6 +72,5 @@ function schnorrMissingNote(): string
     $list = $tried === [] ? '' : ' (looked in: ' . \implode(', ', $tried) . ')';
 
     return 'no bundled `schnorr` binary found' . $list
-        . ' — install a distribution that ships it, build it with `make -C schnorr` in a source checkout,'
-        . ' or set MOGGI_SCHNORR to its path';
+        . ' — install a distribution that ships it, or build it with `make -C schnorr` in a source checkout';
 }

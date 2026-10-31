@@ -1,0 +1,2 @@
+-- This fixture also runs with the optimizer off (tests/suite/runners/runtime.php): the migrated
+-- entry/wrapper/worker ABI has to produce the same stdout and exit status where no pass rewrote it.

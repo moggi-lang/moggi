@@ -6,6 +6,10 @@
  *
  * Everything is a plain global function returning `['passed' => bool, 'message' => string]`.
  */
+// Per-pass IR checkpoints: on for the harness's own compiles (a stage case runs
+// the compiler in this process), so a pass that leaves an invalid module fails
+// with the pass's label.
+\Moggi\Optimize\PassCheckpoints\setEnabled(true);
 
 require_once __DIR__ . '/paths.php';
 require_once __DIR__ . '/assert.php';

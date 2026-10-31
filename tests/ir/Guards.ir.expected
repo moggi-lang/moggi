@@ -1,11 +1,12 @@
 module
   function clamp(x)
-      t1 = dict_call @__ev_Ord_Int-><(x, 0)
-      t2 = dict_call @__ev_Ord_Int->>(x, 10)
+      t2 = call __ev_Ord_Int()
+      t1 = dict_call t2-><(x, 0)
+      t3 = dict_call t2->>(x, 10)
       t0 = match 0
         arm _ when t1
             t0 = 0
-        arm _ when t2
+        arm _ when t3
             t0 = 10
         arm _ when intrinsic boolNot#(@False)
             t0 = x

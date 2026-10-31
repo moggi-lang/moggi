@@ -146,29 +146,6 @@ function ilInstructionSize(string $trimmed): int
     throw new \RuntimeException("DotNet IL size model: unknown instruction `{$op}`");
 }
 
-/**
- * Whether `$op` is an instruction of the host instruction set.
- *
- * The tables below are the compiler's own statement of CIL; this is the same statement read as
- * vocabulary rather than as sizes, for a caller that has to know whether a word belongs to the host
- * (the library-names guard exempts the host's vocabulary the way it exempts PHP and Java keywords).
- * Adding an opcode to a table below widens the answer by that one word.
- */
-function ilIsInstructionMnemonic(string $op): bool
-{
-    $op = \strtolower($op);
-
-    return isset(IL_ONE_BYTE[$op])
-        || isset(IL_TWO_BYTE[$op])
-        || isset(IL_COMPACT_LOCAL[$op])
-        || isset(IL_SHORT_LOCAL[$op])
-        || isset(IL_LONG_LOCAL[$op])
-        || isset(IL_BRANCH_SHORT[$op])
-        || isset(IL_BRANCH_LONG[$op])
-        || isset(IL_TOKEN[$op])
-        || isset(IL_PREFIXED_TOKEN[$op]);
-}
-
 /** @var array<string, true> */
 const IL_ONE_BYTE = [
     'nop' => true, 'break' => true,

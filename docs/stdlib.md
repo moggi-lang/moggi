@@ -1,114 +1,112 @@
 ---
 title: "Standard library"
+description: The packages that ship with the compiler, what each contains, and how to find the function you need.
 ---
 # Standard library
 
-The standard library is written in Moggi and lives in `libraries/`. It is part of the
-compiler: every program is compiled against it automatically, so you never
-compile the library yourself — you just `import` from it. In an installation that
-is the `libraries/` directory next to `bin/`, shipped as ordinary sources: read them
-whenever a signature is not obvious, they are covered by the same `LICENSE`. It
-is one package, `base` — `libraries/base/base.moggi` is its descriptor, and a release
-publishes it at `registry.moggi-lang.org/#/pkg/base`.
+The library is written in Moggi and ships as ordinary sources under
+`libraries/`. It is part of the compiler distribution: you never compile it
+yourself, and its `LICENSE` covers it like the rest of the installation.
 
-`libraries/` holds `.mog` sources and nothing else. The .NET host metadata the
-stdlib's own `foreign dotnet` declarations need (`dotnet/*.json` sidecars:
-which assembly defines a type, whether it is a value type) lives mirrored in
-`lib-meta/` — `lib-meta/Data/Char/dotnet/dependencies.json` describes
-`libraries/base/src/Data/Char/DotNet.mog` — shipped beside `libraries/` and attributed back to the
-tree it mirrors, so a sidecar never applies to another tree's imports.
+Seven packages are bundled:
 
-```moggi
-import Data.Map as M            -- from the containers package (see below)
-import System.Directory (removeFile)
+| Package | What it provides |
+|---|---|
+| `base` | the Prelude, the core types and classes, `System.IO`, `System.Environment`, `System.Exit`, `System.Info`, `Control.Exception`, `Control.Monad.ST`, `Data.STRef`, `Moggi.Generics` |
+| `array` | immutable and mutable boxed arrays: `Data.Array`, `Data.Array.ST`, `Data.Array.IO`, `Data.Array.MArray`, `Data.Array.IArray` |
+| `containers` | `Data.Map`, `Data.Set`, `Data.IntMap`, `Data.IntSet`, `Data.Sequence`, `Data.Tree`, `Data.Graph` |
+| `directory` | `System.Directory` |
+| `filepath` | `System.FilePath`, `System.FilePath.Posix`, `System.FilePath.Windows` |
+| `json` | `Data.JSON`, `Data.JSON.Class`, `Data.JSON.Types`, `Data.JSON.Generic`, `Data.JSON.Encoding` |
+| `time` | `Data.Time`, `Data.Time.Calendar`, `Data.Time.Clock`, `Data.Time.LocalTime`, `Data.Time.Format` |
+
+## Which packages are on the module path
+
+Only `base` is compiled against automatically; `Prelude` is its export list. The
+other six are separate library roots. In a checkout, add one with `--lib`:
+
+```bash
+moggi run app.mog --lib libraries/json/src --lib libraries/containers/src
 ```
 
-Module names follow the names you would expect from the language Moggi borrows
-its shape from (`Data.List`, `Data.Maybe`, `System.IO`,
-`Control.Monad`, …), and so do the names each module exports. Two namespaces are
-worth knowing about:
+In a package, declare the dependency in the package descriptor and let
+`moggi build` add the roots:
 
-* `Moggi.Internal.*` is where implementation lives — primitives
-  (`Moggi.Internal.Prim`, `Moggi.Internal.IO`), the numeric types, the
-  `Show`/`Read` machinery. Public modules re-export from it, and the Prelude is
-  the re-export list. Import it only if you are working on the library.
-* `Data.Foo.PHP` / `Data.Foo.JVM` / `Data.Foo.DotNet` are the per-backend
-  implementations of a module that has one; a facade module declares which one
-  to use, and you import the facade, never the backend module.
-* `Platform.PHP` is the exception to that split — it is not portable code behind
-  a facade but the host boundary itself, the PHP reification of an untyped value
-  into an inspectable `PHPValue`. Importing it makes a module PHP-only; the
-  guide is [ffi.md](ffi.md#6-php-the-special-case-platformphp).
+```ini
+[dependencies]
+containers = >=0.1.0
+```
 
-The Prelude (implicitly imported everywhere) carries the basic types, classes
-and functions — see [tour.md](tour.md#modules-imports-and-the-prelude) for what
-is in it and what needs an explicit import.
+A distribution ships all seven packages under `libraries/`, so the sources are
+readable even when a program does not use them.
 
-## What is in it today
+## What is in `base`
 
-Grouped by namespace, these are the modules a program can import. The list is the
-honest one: a name appears here because `libraries/` has it, and the API of each is
-Haskell `base`'s API (porting rules and the few deliberate differences are in
-[differences-to-haskell.md](differences-to-haskell.md)).
+Public modules, grouped by namespace. Implementation modules (`Data.Char.PHP`,
+`System.IO.JVM`, …) exist beside a facade and are not imported directly; a
+facade with a `{-# BACKEND … #-}` pragma chooses the implementation per target.
 
 | Namespace | Modules |
 |---|---|
-| `Prelude` | implicitly imported everywhere; the re-export list |
-| `Control.*` | `Applicative`, `Monad`, `Monad.Fail`, `Exception` (+ `Exception.Base`) |
-| `Data.*` | `Bits`, `Bifunctor`, `Bool`, `Bounded`, `ByteString` (+ `Char8`), `Char`, `Either`, `Enum`, `Eq`, `Foldable`, `Function`, `Functor`, `Int`, `List` (+ `NonEmpty`), `Maybe`, `Monoid`, `Ord`, `Proxy`, `Semigroup`, `String`, `Traversable`, `Tuple`, `Void`, `Word` |
-| `Data.Time.*` | in the bundled `time` package, not `base` (see below) |
+| `Prelude` | the implicit import; see `libraries/base/src/Prelude.mog` |
+| `Control.*` | `Applicative`, `Monad`, `Monad.Fail`, `Monad.ST`, `Exception`, `Exception.Base` |
+| `Data.*` | `Bits`, `Bifunctor`, `Bifoldable`, `Bool`, `Bounded`, `ByteString` (+ `Char8`), `Char`, `Double`, `Either`, `Enum`, `Eq`, `Foldable`, `Function`, `Functor`, `Functor.Const`, `Int`, `Integer`, `Ix`, `List`, `List.NonEmpty`, `Maybe`, `Monoid`, `Num`, `Ord`, `Proxy`, `Real`, `Semigroup`, `STRef`, `String`, `Traversable`, `Tuple`, `Version`, `Void`, `Word` |
 | `Numeric.*` | `Natural` |
-| `System.*` | `Environment`, `Exit`, `IO` (+ `IO.Base`, `IO.Error`, `IO.Types`) |
-| `System.FilePath` | in the bundled `filepath` package, not `base` |
-| `System.Directory` | in the bundled `directory` package, not `base` |
+| `System.*` | `Environment`, `Exit`, `IO` (+ `IO.Base`, `IO.Error`, `IO.Types`), `Info` |
 | `Text.*` | `Show`, `Read` |
-| `Moggi.*` | the compiler-facing side: `Internal.*` (the primitives, the numeric types, `Show`/`Read` machinery), `Exception`, `Err`, `Generics`, `IO.Exception` |
+| `Moggi.*` | `Err`, `Exception`, `Generics`, `IO.Exception`, `Internal.*` (primitives and the numeric backend) |
+| `Platform.PHP` | PHP reification (`PHPValue`); importing it makes a module PHP-only ([FFI](ffi.md)) |
 
-Not there yet, and listed so nobody hunts for them: `Data.Ratio`,
-`Data.Complex`, `Data.Fixed`, `Data.Functor.Identity`, `Data.Functor.Const`, and
-`Control.Monad.Reader`/`State`/`ST`. Classes that exist only in part (`RealFrac`,
-`RealFloat`, most `Read` instances, `CallStack`) are listed in §7 of
-[differences-to-haskell.md](differences-to-haskell.md), which is the one place
-that tracks what is still missing.
+`Moggi.Internal.*` is implementation: primitives, the numeric types and the
+`Show`/`Read` machinery. Import it only when you are working on the library.
 
-## Finding your way around it
+## What is not there
 
-You do not have to know a module name in advance. Two tools read the same index,
-built from the `-- |` doc comments in the sources:
+Listed so nobody hunts for it: `Float` (the only floating type is `Double`),
+`Data.Ratio`, `Data.Complex`, `Data.Fixed`, `Data.Text`, `Control.Monad.Reader`,
+`Control.Monad.State`. `Text.Read` provides the class and `read`, not the wider
+`reads`/`readMaybe` family. `System.Environment` provides lookup but not the
+setters, because the hosts do not uniformly expose them. The
+[differences page](differences-to-haskell.md) tracks the remaining gaps in
+detail.
 
-```bash
-moggi moogle fromMaybe                # search by name
-moggi moogle -- "a -> a"              # search by type (`--` so `-` is not a flag)
-moggi moogle --json "Maybe a"         # machine-readable, for your own tooling
+## Finding your way around
 
-moggi mogdoc lib -o out/doc           # static HTML for every module
-moggi mogdoc serve --port 8080        # local preview while you read
-```
-
-Open `out/doc/index.html` and the pages are browsable: each module lists its
-declarations with signatures and doc comments, a facade module's page links to
-its backend implementations, and the internal modules are indexed too. `moogle`
-is the terminal version of the same search, and it answers the question you
-type — "what is it called", "what has this type", "where is `Foldable`".
-
-Searching by type is the one worth remembering, because it is how you find the
-function you want without knowing its name:
+You do not have to know a module name in advance. `moogle` searches the names,
+signatures and doc comments of the library — or of a tree of your own — and
+`mogdoc` renders the same index as HTML:
 
 ```bash
-moggi moogle -- "Maybe a -> a"        # -> fromMaybe
-moggi moogle -- "[a] -> Int"          # -> length
+moggi moogle fromMaybe                # -> Data.Maybe.fromMaybe — fromMaybe :: a -> Maybe a -> a
+moggi moogle -- "Maybe a -> a"        # by type, for when you do not know the name
+moggi mogdoc libraries/base/src -o out/doc   # one page per module
+moggi mogdoc serve --port 8080               # local preview
 ```
 
-Both commands take `--lib` for extra library roots and `--root` to search a
-directory of your own code instead of the standard library.
+[API documentation and search](api-docs.md) covers the query syntax, `--json`,
+`--root` and `--lib`, the doc-comment markup, and the generated site.
 
-## Building it on its own
+## Reading the sources
+
+The library is the reference for behaviour as well as names. Signatures,
+instances and doc comments are next to each other, and the Prelude's export list
+is the answer to "is this in scope without an import?".
 
 ```bash
-moggi compile lib -o out/lib      # a library build: nothing is stripped
+sed -n 1,80p libraries/base/src/Prelude.mog
 ```
 
-An executable build (`moggi compile app`) keeps only what `main` reaches. A
-library build keeps everything, which is what you want when the compiled library
-is an output in its own right: `--lib-php out/lib` then lets a later single-file
-compile reuse that precompiled tree.
+A library build keeps everything rather than only what a `main` reaches, which
+is what you want when the compiled library is the output:
+
+```bash
+moggi compile libraries/base/src -o out/lib --unpacked
+```
+
+## Host libraries are a different axis
+
+`--lib` names **Moggi** library roots. A Composer, Maven or NuGet package is a
+host library, reached through `foreign` declarations and named with
+`--lib-composer`, `--lib-maven` or `--lib-nuget`
+([calling the host](ffi.md), [host libraries](host-packages.md)). A host tree
+passed as `--lib` is never searched for modules.

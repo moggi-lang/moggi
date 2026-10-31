@@ -41,9 +41,9 @@ function moduleFromArray(array $module): IR\Module
 
 function functionFromArray(array $fn): IR\FunctionDecl
 {
-    $ioBodyKind = IR\IoBodyKind::StraightLine;
+    $actionConvention = IR\ActionConvention::Executes;
     if ($fn['ioActionReturn'] ?? false) {
-        $ioBodyKind = IR\IoBodyKind::ActionReturn;
+        $actionConvention = IR\ActionConvention::ReturnsAction;
     }
 
     $entryKind = null;
@@ -53,18 +53,25 @@ function functionFromArray(array $fn): IR\FunctionDecl
         $entryKind = IR\EntryPointKind::Main;
     }
 
+    // One shape from the fixture's flat keys: a fixture names the traits it cares about and the
+    // defaults answer the rest, so a new trait needs no fixture edit at all.
     return new IR\FunctionDecl(
         $fn['name'],
         $fn['params'],
         typeFromArray($fn['type'] ?? null),
         blockFromArray($fn['body']),
-        $fn['export'] ?? false,
-        $fn['instanceMethod'] ?? false,
-        $entryKind,
-        $fn['ioEffect'] ?? false,
-        $fn['ioStraightLine'] ?? false,
-        $fn['foreign'] ?? false,
-        $ioBodyKind,
+        new IR\FunctionShape(
+            export: $fn['export'] ?? false,
+            instanceMethod: $fn['instanceMethod'] ?? false,
+            entryKind: $entryKind,
+            foreign: $fn['foreign'] ?? false,
+            actionConvention: $actionConvention,
+            ioEffect: $fn['ioEffect'] ?? false,
+            ioStraightLine: $fn['ioStraightLine'] ?? false,
+            kind: isset($fn['kind']) && \is_string($fn['kind'])
+                ? IR\FunctionKind::from($fn['kind'])
+                : IR\FunctionKind::Source,
+        ),
     );
 }
 
@@ -93,10 +100,9 @@ function stmtFromArray(array $stmt): IR\Stmt
 {
     return match ($stmt['tag']) {
         'ret' => new IR\Ret(operandFromArray($stmt['value'])),
-        'binop' => new IR\Binop($stmt['op'], operandFromArray($stmt['left']), operandFromArray($stmt['right']), $stmt['dest']),
         'call' => new IR\Call($stmt['callee'], \array_map(operandFromArray(...), $stmt['args']), $stmt['dest']),
         'call_value' => new IR\CallValue(operandFromArray($stmt['callee']), \array_map(operandFromArray(...), $stmt['args']), $stmt['dest']),
-        'dict_call' => new IR\DictCall(operandFromArray($stmt['evidence']), $stmt['method'], \array_map(operandFromArray(...), $stmt['args']), $stmt['dest']),
+        'dict_call' => new IR\DictCall(operandFromArray($stmt['evidence']), $stmt['method'], \array_map(operandFromArray(...), $stmt['args']), $stmt['dest'], null, $stmt['localEvidence']),
         'assign' => new IR\Assign($stmt['dest'], operandFromArray($stmt['value'])),
         'let' => new IR\Let($stmt['name'], operandFromArray($stmt['value'])),
         'match' => new IR\MatchStmt(
@@ -124,7 +130,6 @@ function stmtFromArray(array $stmt): IR\Stmt
         'io_match' => new IR\IoMatch(
             operandFromArray($stmt['scrutinee']),
             \array_map(armFromArray(...), $stmt['arms']),
-            $stmt['dest'] ?? null,
             $stmt['exhaustive'] ?? false,
         ),
         'io_assign_action' => new IR\IoAssignAction(
@@ -184,14 +189,9 @@ function operandFromArray(array $operand): IR\Operand
         'list_lit' => new IR\ListLit(\array_map(operandFromArray(...), $operand['elements'] ?? [])),
         'unit' => new IR\Unit(),
         'partial' => new IR\Partial($operand['fn'], $operand['arity'], \array_map(operandFromArray(...), $operand['args'] ?? [])),
-        'expr_partial' => new IR\ExprPartial($operand['fn'], $operand['arity'], \array_map(operandFromArray(...), $operand['args'] ?? [])),
-        'expr_binop' => new IR\ExprBinop($operand['op'], operandFromArray($operand['left']), operandFromArray($operand['right'])),
-        'expr_call' => new IR\ExprCall($operand['callee'], \array_map(operandFromArray(...), $operand['args'] ?? [])),
-        'expr_call_value' => new IR\ExprCallValue(operandFromArray($operand['callee']), \array_map(operandFromArray(...), $operand['args'] ?? [])),
         'intrinsic' => new IR\Intrinsic($operand['name'], \array_map(operandFromArray(...), $operand['args'] ?? [])),
-        'dict_method' => new IR\DictMethod(operandFromArray($operand['evidence']), $operand['method']),
+        'dict_method' => new IR\DictMethod(operandFromArray($operand['evidence']), $operand['method'], $operand['localEvidence']),
         'foreign_call' => foreignFromArray($operand),
-        'io_action' => new IR\IoAction(operandFromArray($operand['expr'])),
         default => throw new \RuntimeException('unsupported IR operand tag in fixture: ' . $operand['tag']),
     };
 }
@@ -220,8 +220,5 @@ function foreignFromArray(array $foreign): IR\ForeignCall
 
 function typeFromArray(mixed $type): ?Ast\TypeNode
 {
-    // Fixtures embed type ASTs as arrays; only object-typed fixtures that
-    // already carry a `TypeNode` survive. Optimizer/codegen mostly need null
-    // or an `Ast\TypeNode` for IO checks.
     return $type instanceof Ast\TypeNode ? $type : null;
 }

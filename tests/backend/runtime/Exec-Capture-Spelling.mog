@@ -1,0 +1,33 @@
+-- One lifted lambda, reached under every spelling the optimizer can see: a
+-- direct call, a local alias, a partial application of the alias, a
+-- higher-order argument, a top-level wrapper whose body is a partial of
+-- another function, and a curried chain. Its capture set is one fact, so every
+-- path must bind the same local and print the same arithmetic.
+import Text.Show
+import System.IO
+
+adder :: Int -> Int -> Int
+adder k = \x -> x + k
+
+apply :: (Int -> Int) -> Int -> Int
+apply f x = f x
+
+twice :: (Int -> Int) -> Int -> Int
+twice f x = f (f x)
+
+wrapped :: Int -> Int
+wrapped = adder 3
+
+main :: IO ()
+main = do
+  let k = 10
+      f = \x -> x + k
+      g = f
+      p = f 1
+  putStrLn (show (f 1))
+  putStrLn (show (g 2))
+  putStrLn (show (p + 1))
+  putStrLn (show (apply f 5))
+  putStrLn (show (twice g 1))
+  putStrLn (show (wrapped 4))
+  putStrLn (show (adder 100 7))

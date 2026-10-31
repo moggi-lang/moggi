@@ -2,22 +2,18 @@
 
 namespace Moggi\Repl;
 
-use function Moggi\Backend\backendById;
-
+use Moggi\Modules\ImportContext;
 use Moggi\Modules\PreparedProject;
-
-use function Moggi\Paths\moduleNameToPath;
-
-use Moggi\Pipeline\CompilePurpose;
+use Moggi\Syntax\Ast;
+use Moggi\Syntax\Ast\Program;
 use Moggi\Pipeline\PipelineArtifacts;
 use Moggi\Pipeline\PipelineRequest;
 use Moggi\Pipeline\PipelineStage;
 
+use function Moggi\Backend\backendById;
+use function Moggi\Modules\planEmission;
+use function Moggi\Paths\moduleNameToPath;
 use function Moggi\Pipeline\run as pipelineRun;
-
-use Moggi\Syntax\Ast;
-use Moggi\Syntax\Ast\Program;
-
 use function Moggi\Syntax\Parser\parse;
 
 /**
@@ -45,12 +41,11 @@ function interactivePipelineRequest(
     ?PipelineStage $stopAt = null,
 ): PipelineRequest {
     return new PipelineRequest(
-        purpose: CompilePurpose::Repl,
         filename: $state->interactivePath(),
         program: $stopAt === PipelineStage::Ast ? interactiveParseTree($state, $ctx) : null,
         typedProgram: $ctx['typedProgram'],
         optimize: $optimize,
-        backend: $state->backend,
+        context: $state->context,
         importContext: $ctx['importContext'],
         emitOptions: emitOptionsForInteractive($state, $ctx),
     );
@@ -93,7 +88,7 @@ function compileInteractiveInspect(State $state, PipelineStage $stopAt, bool $op
 }
 
 /**
- * @param array{prepared: PreparedProject, checked: Program, importContext: array<string, mixed>} $ctx
+ * @param array{prepared: PreparedProject, checked: Program, importContext: ImportContext} $ctx
  */
 function compileFromInteractiveCtx(
     State $state,
@@ -117,21 +112,18 @@ function compileFromInteractiveCtx(
 }
 
 /**
- * @param array{prepared: PreparedProject, checked: Program, importContext: array<string, mixed>} $ctx
+ * @param array{prepared: PreparedProject, checked: Program, importContext: ImportContext} $ctx
  * @return array<string, mixed>
  */
 function emitOptionsForInteractive(State $state, array $ctx): array
 {
     $unit = $ctx['prepared']->units[$state->moduleName];
-    $codegen = $ctx['importContext']['codegen'] ?? [];
 
     return [
         'namespace' => $unit['namespace'],
         'artifactModuleName' => $state->moduleName,
-        'imports' => $codegen,
+        'plan' => $ctx['importContext']->plan,
         'outputRelative' => moduleNameToPath($state->moduleName)
             . backendById($state->backend)->extension(),
-        'externalFns' => $codegen['externalFns'] ?? [],
-        'externalFnRuntimeArity' => $ctx['importContext']['externalFnRuntimeArity'] ?? [],
     ];
 }

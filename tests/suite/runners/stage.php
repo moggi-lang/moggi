@@ -5,13 +5,13 @@
  * `kinds.php` picks the producer by the golden's kind.
  */
 
-use function Moggi\Backend\compileBackend;
-use function Moggi\Backend\Php\Codegen\emit;
-use function Moggi\Backend\setCompileBackend;
+use function Moggi\Backend\Php\Codegen\emitModule;
 
 use function Moggi\Compiler\compileFile;
 use function Moggi\IR\Dump\dump as dumpIr;
 use function Moggi\Optimize\optimize;
+
+use Moggi\Modules\EmitPlan;
 
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Lexer\LexError;
@@ -32,10 +32,15 @@ function diagnosticText(\Throwable $e): string
 /**
  * One pre-lowering stage of a source, dumped by the compiler — the same producer that answers the
  * CLI's `--tokens`/`--ast`/`--typed-ast`, so a flag and a golden cannot describe a stage differently.
+ *
+ * `$backend` matters from `typed-ast` on: the check records the compile backend in the request's
+ * context, and a diagnostic about a foreign import names it (`… does not match compile backend
+ * `jvm``). The suite asks for a stage "as this backend", exactly as `--backend` does on the CLI, so
+ * a `.jvm.err.expected` golden is compared against a jvm compile rather than the php default.
  */
-function sourceStageDump(string $path, string $stage): string
+function sourceStageDump(string $path, string $stage, ?string $backend = null): string
 {
-    $dump = compileFile($path, $stage);
+    $dump = compileFile($path, $stage, backend: $backend);
     if (! \is_string($dump)) {
         throw new TestFailure("{$stage} dump unexpectedly produced multiple artifacts");
     }
@@ -46,7 +51,7 @@ function sourceStageDump(string $path, string $stage): string
 /** The unoptimized IR of a `.mog` fixture, as the lowering golden stores it (backend-neutral). */
 function irLoweringDump(string $path): string
 {
-    $actual = withCompileBackend('php', static fn () => compileFile($path, 'ir', false));
+    $actual = compileFile($path, 'ir', false);
     if (! \is_string($actual)) {
         throw new TestFailure('lowering dump unexpectedly produced multiple artifacts');
     }
@@ -59,21 +64,19 @@ function optimizedIrDump(string $path): string
 {
     $module = loadIrFixture($path);
 
-    return withCompileBackend('php', static fn (): string => dumpIr(optimize($module)));
+    return dumpIr(optimize($module));
 }
 
-/** The PHP module `emit` produces for an IR fixture, with the source map dropped. */
+/** The PHP module `emitModule` produces for an IR fixture, with the source map dropped. */
 function emitPhpArtifact(string $path): string
 {
     $module = loadIrFixture($path);
     $sourcePath = testRelativePath($path);
-    $actual = emit($module, $sourcePath, [
-        'outputRelative' => \preg_replace('/\.ir\.php$/', '.php', $sourcePath) ?? $sourcePath,
+    $outputRelative = \preg_replace('/\.ir\.php$/', '.php', $sourcePath) ?? $sourcePath;
+    $actual = emitModule($module, $sourcePath, [
+        'outputRelative' => $outputRelative,
+        'plan' => EmitPlan::forTarget('php', $outputRelative),
     ]);
-    if (\is_string($actual)) {
-        return $actual;
-    }
-
     foreach ($actual as $relative => $bytes) {
         if (\is_string($relative) && \is_string($bytes) && \str_ends_with($relative, '.php') && ! \str_ends_with($relative, '.moggi.map')) {
             return $bytes;
@@ -105,15 +108,3 @@ function loadIrFixture(string $path): \Moggi\IR\Module
     return moduleFromArray($fixture['module']);
 }
 
-/** Run $body with the compile backend pinned: stage goldens are backend-neutral. */
-function withCompileBackend(string $backend, callable $body): mixed
-{
-    $previous = compileBackend();
-    setCompileBackend($backend);
-
-    try {
-        return $body();
-    } finally {
-        setCompileBackend($previous);
-    }
-}

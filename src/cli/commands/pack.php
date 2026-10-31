@@ -2,7 +2,7 @@
 
 namespace Moggi\CLI\Commands;
 
-use function Moggi\Backend\setCompileBackend;
+use function Moggi\Docs\docsContext;
 use function Moggi\Docs\generateMogdoc;
 use function Moggi\Docs\loadOrBuildIndex;
 use function Moggi\Registry\archiveDigest;
@@ -36,9 +36,7 @@ function packDocs(string $directory, array $descriptor): array
     $docsDir = \rtrim($directory, '/') . '/' . \trim((string) $descriptor['docs']['targetDir'], '/');
     [$input, $libDirs] = packDocsRoots($directory, $descriptor);
 
-    setCompileBackend('php');
-
-    $index = loadOrBuildIndex($input, $libDirs, true);
+    $index = loadOrBuildIndex($input, $libDirs, docsContext('php', $libDirs), true);
     generateMogdoc($index, $docsDir, \trim($descriptor['name'] . ' ' . $descriptor['version']));
 
     return [

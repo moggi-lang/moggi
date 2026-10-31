@@ -2,65 +2,48 @@
 
 namespace Moggi\Registry;
 
+/**
+ * `moggi add` — descriptor edits, text in and text out.
+ *
+ * One command fetches, inspects, generates and records. Resolution already
+ * exists for registry packages and host coordinates; recording the requirement
+ * is the missing step. It needs neither a host toolchain nor new resolution
+ * logic, so it comes before binding generators.
+ *
+ * Bare names denote our packages; prefixes select external ecosystems:
+ * `moggi add json` writes `[dependencies]`, while
+ * `moggi add jvm:com.google.code.gson:gson:2.11.0` writes `[jvm.maven]`.
+ * Unknown bare names are rejected with the likely missing prefix rather than
+ * guessed across four tables. `moggi:` explicitly spells the bare case.
+ *
+ * Host coordinates belong to one backend. Cross-backend libraries use a
+ * hand-written facade (`{-# BACKEND php = … jvm = … dotnet = … #-}`) over
+ * separate ecosystem packages; three `add` commands for one feature are
+ * expected.
+ *
+ * The descriptor schema (`src/registry/descriptor.php`) dictates the output:
+ * package dependencies and Maven/NuGet coordinates are individual keys;
+ * `[php] composer` is a comma-separated list, while `[php.extensions]` is
+ * a table. The writer uses the spellings read by `readDescriptor()` and
+ * `hostToolCoordinates()`, ensuring additions resolve and re-read as `present`.
+ *
+ * Edits are line-based to preserve hand-maintained comments, key order and
+ * `[package]` content. Only the necessary line changes; identical requirements
+ * leave the file byte-identical. Before writing, `descriptorAdditionProblems()`
+ * validates the candidate with `descriptorProblems()`, preventing the command
+ * from writing a descriptor the parser rejects.
+ */
+
 use function Moggi\Backend\implementedBackendIds;
 
 /**
- * `moggi add` — the descriptor edit, as text in and text out.
+ * Parsed requirement fields, independent of the target descriptor table.
  *
- * The attractive half of Sky's `sky add <go module>` is the verb: one command
- * that fetches, inspects, generates and records, with nothing hand-typed. Of the
- * four steps, three already exist here — a dependency of ours is resolved by the
- * registry and a host coordinate by `resolveHostTools()` — and this file is the
- * one that did not: *records*. Writing one requirement into the table it belongs
- * to is the whole of it, and it needs no host toolchain and no new resolution
- * path, which is why it comes before any binding generator.
- *
- * **A bare name is a package of ours; a prefix is somebody else's ecosystem.**
- * `moggi add json` writes `[dependencies] json = …` — the registry we already
- * resolve and lock — and `moggi add jvm:com.google.code.gson:gson:2.11.0` writes
- * `[jvm.maven]`. So the verb is one, the table is decided by the spelling, and
- * there is no guessing: a name that is not a package name is refused with the
- * prefix it was probably missing, because with four tables a silent guess is the
- * expensive kind of convenience. `moggi:` is accepted as the explicit spelling of
- * the bare case, for a script that would rather say it.
- *
- * A host coordinate belongs to exactly one backend — a Maven artifact has no PHP
- * or .NET meaning — so the host half is per-backend by construction, and that is
- * the whole of the multi-backend answer. There is nothing to marry: the portable
- * half of a three-backend library is a facade
- * (`{-# BACKEND php = … jvm = … dotnet = … #-}`), hand-written, because the three
- * ecosystems' packages are three different packages. Three `add`s for one feature
- * is the expected shape, not a failure.
- *
- * The descriptor format is closed (`src/registry/descriptor.php`), so two rules
- * follow from it:
- *
- * 1. **The writer follows the descriptor's own shape.** `[dependencies]` is one
- *    key per package, `[jvm.maven]` and `[dotnet.nuget]` likewise, while
- *    `[php] composer` is one comma-separated list (`composer` is a list,
- *    `[php.extensions]` is a table). The spellings written here are the ones
- *    `readDescriptor()` and `hostToolCoordinates()` read back, so a written
- *    descriptor resolves immediately and re-reading it reports `present`.
- * 2. **The edit is line-based.** A descriptor is hand-maintained and in version
- *    control: comments, key order and the `[package]` block survive untouched,
- *    because a canonical re-render would destroy all three. Only the one line the
- *    requirement needs is rewritten; a requirement already declared identically
- *    leaves the file byte-identical. `descriptorAdditionProblems()` runs the
- *    candidate through `descriptorProblems()` before anything is written, so the
- *    one command that writes a descriptor cannot write one the parser refuses.
- */
-
-/**
- * Every field a parsed requirement carries, whichever table it goes in.
- *
- * `kind` is which world it came from (`registry` — a package of ours — or `host`),
- * `package` is the part a key or a list entry is judged by (the name, the
- * `vendor/package` for Composer, the `group:artifact` for Maven, the id for NuGet),
- * `entry` is the requirement as the ecosystem spells it, and `requires` is what
- * "already declared" compares — so an existing line is judged by its requirement
- * rather than by its whitespace. `deferred` marks the one thing a parser cannot
- * know: a registry dependency added without a constraint, whose constraint the
- * registry decides (`withAddConstraint()` fills it in).
+ * `kind` distinguishes registry packages from host dependencies. `package`
+ * identifies the package in its ecosystem's terms; `coordinate` and `entry`
+ * preserve its ecosystem spelling. `requires` drives duplicate detection
+ * independently of whitespace. `deferred` marks registry dependencies whose
+ * constraint is supplied later by `withAddConstraint()`.
  *
  * @return array{kind: string, ecosystem: string, package: string, coordinate: string, section: string, key: string, value: string, entry: string, requires: string, list: bool, deferred: bool}
  */

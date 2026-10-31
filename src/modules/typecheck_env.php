@@ -2,36 +2,28 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Backend\compileBackend;
-use function Moggi\Cache\moduleGet;
-use function Moggi\Cache\modulePut;
+/**
+ * Type-environment plumbing for the module pipeline: project-wide class index,
+ * export/type merging for the modules an interface hands on, class default-body
+ * scopes, and the module subset selection used for `--only` typechecking.
+ *
+ * Nothing here produces a module's interface: that is the product of the module's
+ * own check (`prepareProject`), read back from the module cache by a later run.
+ */
 
 use Moggi\IR;
 use Moggi\Semantics\Deriving\ClassDeriveFacts;
-
-use function Moggi\Semantics\Deriving\derivedProjectInstanceRecords;
-use function Moggi\Semantics\Kernel\boolTypeName;
-
 use Moggi\Semantics\Kinds;
-
-use function Moggi\Semantics\Registry\foreignFunctionDecl;
-
-use function Moggi\Semantics\Registry\registerSurfaceConstructorAlias;
-
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\Types;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Semantics\Kernel\boolTypeName;
+use function Moggi\Semantics\Registry\projectInstancesFromProgram;
 use function Moggi\Syntax\Ast\moduleName;
 use function Moggi\Syntax\isConstructorName;
 
 require_once \dirname(__DIR__) . '/semantics/deriving/framework.php';
-
-/**
- * Type-environment plumbing for the module pipeline: project-wide class index,
- * per-module local type environments, import/export env merging, and the
- * module subset selection used for `--only` typechecking.
- */
 
 /**
  * Types stay module-scoped: the state starts from the module's declared names and
@@ -48,6 +40,7 @@ function updateProjectClassesForModule(
     array &$projectClasses,
 ): void {
     $state = Types\newState($unit['source'], $unit['path']);
+    $state->module = $moduleName;
     $state->classes = $projectClasses;
 
     foreach ($unit['program']->imports as $import) {
@@ -89,224 +82,6 @@ function updateProjectClassesForModule(
         }
 
         $projectClasses[$name] = $state->classes[$name];
-    }
-}
-
-/**
- * @param array<string, array<string, mixed>> $units
- * @param array<string, mixed> $projectClasses
- * @param array{
- *   byClass?: array<string, list<array<string, mixed>>>,
- *   byClassHead?: array<string, array<string, list<array<string, mixed>>>>,
- *   associatedEquations?: array<string, array<string, list<array<string, mixed>>>>
- * } $projectInstanceIndex an empty array is the "no project instances" index
- */
-function buildModuleLocalTypes(
-    array &$units,
-    string $moduleName,
-    array $projectClasses,
-    array $projectInstanceIndex = [],
-): void {
-    $contentKey = $units[$moduleName]['contentKey'] ?? null;
-    if ($contentKey !== null) {
-        $cached = moduleGet(
-            $units[$moduleName]['cacheRelPath'],
-            'localtypes',
-            $contentKey,
-        );
-        if (\is_array($cached)) {
-            $units[$moduleName]['localTypes'] = $cached;
-
-            return;
-        }
-    }
-
-    $unit = $units[$moduleName];
-    $state = Types\newState($unit['source'], $unit['path']);
-    $state->classes = $projectClasses;
-    Types\syncAssociatedFamiliesFromClasses($state);
-    installProjectInstanceIndex($state, $projectInstanceIndex);
-
-    foreach ($unit['program']->imports as $import) {
-        $targetName = moduleName($import->path);
-        if (isset($units[$targetName])) {
-            $localPrefix = $import->asName ?? $targetName;
-            $state->qualifiedModules[$localPrefix] = $units[$targetName]['namespace'];
-            mergeExportedTypes($state, $units[$targetName], $units);
-        }
-    }
-
-    mergeImportedEnv($state, $units, $moduleName);
-    mergeFacadeTypesForImpl($state, $units, $moduleName);
-
-    $localFunctionNames = [];
-    foreach ($unit['program']->items as $item) {
-        if ($item instanceof Ast\FunctionDecl) {
-            $localFunctionNames[$item->name] = true;
-        }
-    }
-
-    mergeFacadeBackendEnv(
-        $state->env,
-        $state->intrinsicWrappers,
-        $units,
-        $moduleName,
-        $localFunctionNames,
-        $state,
-    );
-
-    foreach ($unit['program']->items as $item) {
-        if ($item instanceof Ast\DataDecl || $item instanceof Ast\TypeSynonymDecl) {
-            $state->declaredTypeNames[$item->name] = true;
-        }
-    }
-
-    foreach ($unit['program']->items as $item) {
-        if ($item instanceof Ast\FunctionDecl || $item instanceof Ast\ForeignImportDecl) {
-            $state->localDeclNames[$item->name] = true;
-        }
-    }
-
-    foreach ($unit['program']->items as $item) {
-        if ($item instanceof Ast\DataDecl) {
-            Types\registerData($state, $item);
-            registerSurfaceConstructorAlias($state, $item, $unit['program']->exports);
-        }
-
-        if ($item instanceof Ast\ForeignTypeDecl) {
-            Types\registerForeignType($state, $item);
-        }
-
-        if ($item instanceof Ast\TypeSynonymDecl) {
-            Types\registerTypeSynonym($state, $item);
-        }
-
-        if ($item instanceof Ast\ClassDecl) {
-            if (! isset($state->classes[$item->name])) {
-                Types\registerClass($state, $item, $moduleName);
-            }
-
-            Types\registerClassMethodExportSchemes($state, $item);
-        }
-    }
-
-    $inferredFunctions = [];
-    foreach ($unit['program']->items as $item) {
-        if ($item instanceof Ast\InstanceDecl) {
-            Types\registerInstanceSchemes($state, $item);
-
-            continue;
-        }
-
-        if ($item instanceof Ast\ForeignImportDecl) {
-            Types\registerFunctionScheme($state, foreignFunctionDecl($item));
-
-            continue;
-        }
-
-        if (! $item instanceof Ast\FunctionDecl) {
-            continue;
-        }
-
-        if (Ast\hasDeclaredSignature($item)) {
-            Types\registerFunctionScheme($state, $item);
-        } elseif ($item->inferredSignatureType !== null) {
-            Types\registerInferredSignatureScheme($state, $item);
-        } elseif (! $item->signatureOnly) {
-            $inferredFunctions[] = $item;
-        }
-    }
-
-    foreach ($inferredFunctions as $function) {
-        Types\registerInferredFunctionPlaceholder($state, $function);
-    }
-
-    Types\discoverInferredSignatures($state, $inferredFunctions);
-
-    $units[$moduleName]['localTypes'] = [
-        'env' => $state->env,
-        'data' => $state->data,
-        'typeSynonyms' => $state->typeSynonyms,
-        'intrinsicWrappers' => $state->intrinsicWrappers,
-    ];
-
-    if ($contentKey !== null) {
-        modulePut(
-            $units[$moduleName]['cacheRelPath'],
-            'localtypes',
-            $contentKey,
-            $units[$moduleName]['localTypes'],
-        );
-    }
-}
-
-/** @param array<string, array<string, mixed>> $units */
-function mergeImportedEnv(Types\TypeCheckState $state, array $units, string $moduleName): void
-{
-    foreach ($units[$moduleName]['program']->imports as $import) {
-        $targetName = moduleName($import->path);
-        if (! isset($units[$targetName])) {
-            continue;
-        }
-
-        $target = $units[$targetName];
-
-        try {
-            $exports = $target['exports'] ?? collectExports($target['program'], $target['localTypes'], $units, $targetName);
-            $selected = selectImportedNames($import, $exports);
-        } catch (Types\TypeError $e) {
-            if ($e->filename !== '') {
-                throw $e;
-            }
-
-            throw new Types\TypeError(
-                $e->getMessage(),
-                $units[$moduleName]['path'],
-                $units[$moduleName]['source'],
-                $import->line,
-                $import->col,
-                $import->endCol,
-            );
-        }
-
-        $localPrefix = $import->asName ?? $targetName;
-        foreach ($selected['env'] as $name => $scheme) {
-            $state->qualifiedEnv[$localPrefix][$name] = $scheme;
-            if (isset($selected['intrinsicWrappers'][$name])) {
-                $state->intrinsicWrappers[$name] = $selected['intrinsicWrappers'][$name];
-            }
-            if ($import->qualifiedOnly) {
-                continue;
-            }
-
-            if (! isset($state->env[$name])) {
-                $state->env[$name] = $scheme;
-            }
-        }
-
-        foreach ($selected['typeSynonyms'] as $name => $type) {
-            if (! isset($state->typeSynonyms[$name])) {
-                $state->typeSynonyms[$name] = $type;
-            }
-            Types\installTypeSynonymKind($state, $name, $type);
-        }
-
-        foreach ($selected['data'] as $name => $info) {
-            if (! isset($state->data[$name])) {
-                $state->data[$name] = $info;
-                Kinds\registerTypeKind(
-                    $state,
-                    $name,
-                    Kinds\dataKind(\count($info['params'])),
-                );
-            }
-        }
-
-        if (! $import->qualifiedOnly) {
-            foreach ($selected['constructorRenames'] as $local => $canonical) {
-                $state->constructorRenames[$local] = $canonical;
-            }
-        }
     }
 }
 
@@ -368,8 +143,13 @@ function mergeExportedTypes(Types\TypeCheckState $state, array $unit, array $uni
  */
 function desugarDoForScope(Ast\AstWalkable $node): void
 {
-    if ($node instanceof Ast\DoExpr && $node->desugared === null && $node->stmts !== []) {
-        $node->desugared = Ast\desugarDo($node->stmts, '(>>=)');
+    if ($node instanceof Ast\DoExpr && $node->stmts !== []) {
+        if ($node->desugared === null) {
+            $node->desugared = Ast\desugarDo($node->stmts, '(>>=)');
+        }
+        if ($node->sourceFile !== null) {
+            Ast\markSourceFile($node->desugared, $node->sourceFile);
+        }
     }
 
     foreach ($node->childValues() as $child) {
@@ -395,8 +175,12 @@ function desugarDoForScope(Ast\AstWalkable $node): void
  * @param ?list<string> $onlyModules
  * @return array<string, array<string, mixed>>
  */
-function classModuleScopes(array $units, array $projectClasses, ?array $onlyModules = null): array
-{
+function classModuleScopes(
+    array $units,
+    array $projectClasses,
+    ?array $onlyModules,
+    string $backendId,
+): array {
     $wanted = $onlyModules !== null ? \array_fill_keys($onlyModules, true) : null;
 
     $referenced = [];
@@ -414,7 +198,10 @@ function classModuleScopes(array $units, array $projectClasses, ?array $onlyModu
 
             $scoped = Ast\copyNode($body);
             desugarDoForScope($scoped);
-            foreach (IR\freeVarsExpr($scoped, []) as $name) {
+            $evidenceParameter = static fn (Ast\EvidenceMethod $method): ?string
+                => $method->evidence === '' ? null : $method->evidence;
+
+            foreach (IR\freeVarsExpr($scoped, [], $evidenceParameter) as $name) {
                 $referenced[$module][$name] = true;
             }
 
@@ -439,7 +226,6 @@ function classModuleScopes(array $units, array $projectClasses, ?array $onlyModu
         );
         $fns = [];
         $dataRefs = [];
-        $constructorArity = [];
         foreach (\array_keys($names) as $name) {
             $scheme = $env[$name] ?? null;
             if (! $scheme instanceof Scheme || $scheme->classMethod) {
@@ -457,9 +243,6 @@ function classModuleScopes(array $units, array $projectClasses, ?array $onlyModu
                     'origin' => $origin,
                     'scheme' => $scheme,
                 ];
-                $constructorArity[$name] = \count(
-                    $dataRefs[$owner]['constructors'][$name]['fields'] ?? [],
-                );
 
                 continue;
             }
@@ -472,131 +255,18 @@ function classModuleScopes(array $units, array $projectClasses, ?array $onlyModu
 
         $scopes[$module] = [
             'env' => $env,
-            'constructorArity' => $constructorArity,
             'fns' => $fns,
             'dataRefs' => $dataRefs,
-            'visible' => classModuleVisibleTypes($units, $module),
+            'visible' => classModuleVisibleTypes($units, $module, $backendId),
             'wrappers' => \is_array($units[$module]['localTypes']['intrinsicWrappers'] ?? null)
                 ? $units[$module]['localTypes']['intrinsicWrappers']
                 : [],
             'names' => $names,
+            'path' => (string) ($units[$module]['path'] ?? ''),
         ];
     }
 
     return $scopes;
-}
-
-/**
- * Types a facade module needs from the impl it re-exports: the impl's foreign
- * types and the facade ADTs copied into it.
- *
- * @param array<string, array<string, mixed>> $units
- * @return array{data: array<string, mixed>, typeSynonyms: array<string, mixed>}
- */
-function facadeImplExtraTypes(array $units, string $moduleName, Ast\Program $program): array
-{
-    $implName = facadeImplModuleNameFor($moduleName, $units);
-    if ($implName === null || ! isset($units[$implName])) {
-        return ['data' => [], 'typeSynonyms' => []];
-    }
-
-    $implExports = implExportsForFacadeMerge($units[$implName], $units, $implName);
-    if ($implExports === null) {
-        return ['data' => [], 'typeSynonyms' => []];
-    }
-
-    $declaredData = [];
-    foreach ($program->items as $item) {
-        if ($item instanceof Ast\DataDecl || $item instanceof Ast\ForeignTypeDecl) {
-            $declaredData[$item->name] = true;
-        }
-    }
-
-    $data = [];
-    foreach ($implExports['data'] ?? [] as $name => $info) {
-        if (! isset($declaredData[$name])) {
-            $data[$name] = $info;
-        }
-    }
-
-    return ['data' => $data, 'typeSynonyms' => []];
-}
-
-/**
- * Types a module needs but does not declare: the facade's ADTs and the
- * primitive data its facade introduces (for an impl), or the impl's foreign
- * types and ADTs (for a facade).
- *
- * A module's check registers its own declarations, so the only interface data it
- * cannot derive is what the other side of the facade contributes; the caller
- * merges this into the check's import context, where the interface pass used to
- * put it as `localTypes`.
- *
- * @param array<string, array<string, mixed>> $units
- * @param array<string, mixed> $projectClasses
- * @param array<string, mixed> $projectInstanceIndex
- * @return array{data: array<string, mixed>, typeSynonyms: array<string, mixed>}
- */
-function moduleFacadeExtraTypes(
-    array $units,
-    string $moduleName,
-    array $projectClasses,
-    array $projectInstanceIndex = [],
-): array {
-    $unit = $units[$moduleName];
-    $program = $unit['program'] ?? null;
-    if (! $program instanceof Ast\Program) {
-        return ['data' => [], 'typeSynonyms' => []];
-    }
-
-    if (isFacadeProgram($program)) {
-        return facadeImplExtraTypes($units, $moduleName, $program);
-    }
-
-    if (facadeModuleForImpl($units, $moduleName) === null) {
-        return ['data' => [], 'typeSynonyms' => []];
-    }
-
-    $state = Types\newState($unit['source'], $unit['path']);
-    $state->classes = $projectClasses;
-    installProjectInstanceIndex($state, $projectInstanceIndex);
-
-    foreach ($unit['program']->imports as $import) {
-        $targetName = moduleName($import->path);
-        if (isset($units[$targetName])) {
-            mergeExportedTypes($state, $units[$targetName], $units);
-        }
-    }
-
-    mergeFacadeTypesForImpl($state, $units, $moduleName);
-
-    $declaredData = [];
-    $declaredSynonyms = [];
-    foreach ($unit['program']->items as $item) {
-        if ($item instanceof Ast\DataDecl || $item instanceof Ast\ForeignTypeDecl) {
-            $declaredData[$item->name] = true;
-        }
-
-        if ($item instanceof Ast\TypeSynonymDecl) {
-            $declaredSynonyms[$item->name] = true;
-        }
-    }
-
-    $data = [];
-    foreach ($state->data as $name => $info) {
-        if (! isset($declaredData[$name])) {
-            $data[$name] = $info;
-        }
-    }
-
-    $synonyms = [];
-    foreach ($state->typeSynonyms as $name => $type) {
-        if (! isset($declaredSynonyms[$name])) {
-            $synonyms[$name] = $type;
-        }
-    }
-
-    return ['data' => $data, 'typeSynonyms' => $synonyms];
 }
 
 /**
@@ -749,14 +419,9 @@ function classModuleValueOrigins(array $units, string $moduleName, array $names)
  */
 function moduleLocalValueNames(array $units, string $moduleName): array
 {
-    static $cache = [];
-    if (isset($cache[$moduleName])) {
-        return $cache[$moduleName];
-    }
-
     $program = $units[$moduleName]['program'] ?? null;
     if (! $program instanceof Ast\Program) {
-        return $cache[$moduleName] = [];
+        return [];
     }
 
     $names = [];
@@ -766,7 +431,7 @@ function moduleLocalValueNames(array $units, string $moduleName): array
         }
     }
 
-    return $cache[$moduleName] = $names;
+    return $names;
 }
 
 /**
@@ -786,15 +451,10 @@ function moduleLocalValueNames(array $units, string $moduleName): array
  */
 function moduleLocalDataNames(array $units, string $moduleName): array
 {
-    static $cache = [];
-    if (isset($cache[$moduleName])) {
-        return $cache[$moduleName];
-    }
-
     $names = [boolTypeName() => true];
     $program = $units[$moduleName]['program'] ?? null;
     if (! $program instanceof Ast\Program) {
-        return $cache[$moduleName] = $names;
+        return $names;
     }
 
     foreach ($program->items as $item) {
@@ -803,7 +463,7 @@ function moduleLocalDataNames(array $units, string $moduleName): array
         }
     }
 
-    return $cache[$moduleName] = $names;
+    return $names;
 }
 
 /**
@@ -826,7 +486,7 @@ function moduleLocalDataNames(array $units, string $moduleName): array
  *   synonyms: array<string, mixed>
  * }
  */
-function classModuleVisibleTypes(array $units, string $moduleName): array
+function classModuleVisibleTypes(array $units, string $moduleName, string $backendId): array
 {
     $types = [];
     $synonyms = [];
@@ -869,24 +529,28 @@ function classModuleVisibleTypes(array $units, string $moduleName): array
  *
  * @param array<string, array<string, mixed>> $units
  * @param array<string, array<string, mixed>> $classScopes
- * @return array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>, origins: array<string, string>, actionReturn: array<string, true>}
+ * @return array{externalFns: array<string, string>, callables: array<string, array{evidence: int, params: int, arity: int}>, dataRefs: array<string, array<string, mixed>>, origins: array<string, string>, actionReturn: array<string, true>, workers: array<string, string>}
  */
 function classScopeFunctionRefs(array $units, array $classScopes): array
 {
     $externalFns = [];
-    $arity = [];
+    $callables = [];
     $dataRefs = [];
     $origins = [];
     $actionReturn = [];
+    $workers = [];
     foreach ($classScopes as $scope) {
         foreach ($scope['fns'] ?? [] as $name => $fn) {
             $origin = $fn['origin'];
             $externalFns[$name] = resolvedSymbol($origin['module'], $origin['phpName']);
-            $arity[$name] = $scope['constructorArity'][$name]
-                ?? externalFunctionRuntimeArity($units, $origin['module'], $name, $fn['scheme']);
+            $callables[$name] = publishedCallableLayout($units, $origin['module'], $origin['phpName']);
             $origins[$name] = $origin['module'];
             if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
                 $actionReturn[$name] = true;
+            }
+            $worker = importedWorkerSymbol($units, $origin);
+            if ($worker !== null) {
+                $workers[$name] = $worker;
             }
         }
 
@@ -895,63 +559,62 @@ function classScopeFunctionRefs(array $units, array $classScopes): array
         }
     }
 
-    return ['externalFns' => $externalFns, 'arity' => $arity, 'dataRefs' => $dataRefs, 'origins' => $origins, 'actionReturn' => $actionReturn];
+    return ['externalFns' => $externalFns, 'callables' => $callables, 'dataRefs' => $dataRefs, 'origins' => $origins, 'actionReturn' => $actionReturn, 'workers' => $workers];
 }
 
 /**
- * Fold class-scope symbol and data references into a module's codegen imports.
+ * Fold class-scope symbol and data references into a module's interface.
  *
- * @param array<string, mixed> $importContext
- * @param array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>, origins?: array<string, string>, actionReturn?: array<string, true>} $refs
+ * Nothing is re-rendered here: the target plan is rendered from the interface
+ * when the module is emitted, so a fact published after the import walk reaches
+ * the emitter without a second view of the interface being kept in step.
+ *
+ * @param array{externalFns: array<string, string>, callables: array<string, array{evidence: int, params: int, arity: int}>, dataRefs: array<string, array<string, mixed>>, origins?: array<string, string>, actionReturn?: array<string, true>} $refs
  * @param array<string, true> $localNames names the module binds itself
- * @param array<string, array<string, mixed>> $units project units, for origin output paths
- * @return array<string, mixed>
  */
 function mergeClassScopeRefs(
-    array $importContext,
+    ImportContext $importContext,
     array $refs,
     array $localNames = [],
     array $seenData = [],
-    array $units = [],
-    string $moduleName = '',
-    string $rootPrefix = '',
-): array {
-    foreach ($refs['actionReturn'] ?? [] as $name => $_) {
-        if (isset($localNames[$name])) {
-            continue;
-        }
-        $importContext['externalActionReturnFns'][$name] = true;
-    }
+): ImportContext {
+    $interface = $importContext->interface->withClassScopeRefs($refs, $localNames);
 
-    foreach ($refs['externalFns'] as $name => $symbol) {
-        if (isset($localNames[$name])) {
-            continue;
-        }
-        $importContext['codegen']['externalFns'][$name] ??= $symbol;
-        $importContext['externalFnRuntimeArity'][$name] ??= $refs['arity'][$name] ?? 0;
-        $originModule = $refs['origins'][$name] ?? null;
-        if (! \is_string($originModule) || $originModule === '' || $originModule === $moduleName) {
-            continue;
-        }
-        $importContext['codegen']['fnOriginModules'][$name] ??= $originModule;
-        if (! isset($importContext['codegen']['moduleOutputPaths'][$originModule])
-            && isset($units[$originModule]['path'])
-        ) {
-            $importContext['codegen']['moduleOutputPaths'][$originModule] = mogPathToOutputRelative(
-                $units[$originModule]['path'],
-                $rootPrefix,
-            );
-        }
-    }
-
+    $dataRefs = [];
     foreach ($refs['dataRefs'] ?? [] as $typeName => $info) {
-        if (isset($seenData[$typeName])) {
-            continue;
+        if (! isset($seenData[$typeName])) {
+            $dataRefs[$typeName] = $info;
         }
-        $importContext['data'][$typeName] ??= $info;
     }
 
-    return $importContext;
+    return $importContext->withInterface(
+        $dataRefs === []
+            ? $interface
+            : $interface->withExtraTypes(['data' => $dataRefs]),
+    );
+}
+
+/**
+ * The modules a project-wide scan runs over, in one canonical order.
+ *
+ * The scans below (class declarations, instance records) feed the checked
+ * product's instance world, so their order must not depend on the route that
+ * prepared the units — a full project compile, a single-file compile's focus
+ * base and the language server all reach here with different insertion orders.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @param list<string>|null $onlyModules
+ * @return list<string>
+ */
+function canonicalModuleOrder(array $units, ?array $onlyModules = null): array
+{
+    $names = \array_values(\array_unique(\array_map(
+        static fn (mixed $name): string => (string) $name,
+        $onlyModules ?? \array_keys($units),
+    )));
+    \sort($names);
+
+    return $names;
 }
 
 /** @param array<string, array<string, mixed>> $units @param list<string>|null $onlyModules @return list<array{module: string, class: string, head: array<string, mixed>}> */
@@ -971,8 +634,8 @@ function mergeClassScopeRefs(
 function projectClassDeclarations(array $units): array
 {
     $declarations = [];
-    foreach ($units as $unit) {
-        $program = $unit['program'] ?? null;
+    foreach (canonicalModuleOrder($units) as $moduleName) {
+        $program = $units[$moduleName]['program'] ?? null;
         if (! $program instanceof Ast\Program) {
             continue;
         }
@@ -986,40 +649,67 @@ function projectClassDeclarations(array $units): array
     return $declarations;
 }
 
+/**
+ * Every data/newtype declaration the units parsed, keyed by type constructor name.
+ *
+ * A standalone `deriving instance` may name a type another module declares, so the answer it
+ * needs is the project's, not the declaring unit's. The first declaration of a name wins: two
+ * modules cannot both declare it, and preparation has already refused that.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @return array<string, Ast\DataDecl>
+ */
+function projectDataDeclarations(array $units): array
+{
+    $declarations = [];
+    foreach (canonicalModuleOrder($units) as $moduleName) {
+        $program = $units[$moduleName]['program'] ?? null;
+        if (! $program instanceof Ast\Program) {
+            continue;
+        }
+        foreach ($program->items as $item) {
+            if ($item instanceof Ast\DataDecl) {
+                $declarations[$item->name] ??= $item;
+            }
+        }
+    }
+
+    return $declarations;
+}
+
+/**
+ * The instance records the project's units declare, in canonical module order.
+ *
+ * {@see projectInstancesFromProgram()} is the only place a record is shaped, so
+ * a fact added to one route's records cannot be missing from another's and give
+ * the same modules two identities.
+ *
+ * A named module whose unit preparation did not parse is refused rather than
+ * skipped: the world's identity names the module set it was collected over, so
+ * a module that contributed no records would claim coverage it does not have,
+ * and that is indistinguishable from a route that legitimately sees fewer
+ * modules.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @param list<string>|null $onlyModules
+ * @return list<array<string, mixed>>
+ */
 function collectProjectInstances(array $units, ?array $onlyModules = null): array
 {
-    $instances = [];
     $facts = ClassDeriveFacts::fromClassDeclarations(projectClassDeclarations($units));
-    $allowed = $onlyModules !== null ? \array_fill_keys($onlyModules, true) : null;
+    $dataDecls = projectDataDeclarations($units);
 
-    foreach ($units as $moduleName => $unit) {
-        if ($allowed !== null && ! isset($allowed[$moduleName])) {
-            continue;
+    $instances = [];
+    foreach (canonicalModuleOrder($units, $onlyModules) as $moduleName) {
+        $unit = $units[$moduleName] ?? null;
+        if ($unit === null || ($unit['parsed'] ?? false) !== true) {
+            throw new \LogicException(
+                "the instance world was asked for `{$moduleName}`, which preparation did not parse",
+            );
         }
 
-        if (($unit['parsed'] ?? false) !== true) {
-            continue;
-        }
-
-        foreach ($unit['program']->items as $item) {
-            if ($item instanceof Ast\InstanceDecl) {
-                $instances[] = [
-                    'module' => $moduleName,
-                    'class' => $item->class,
-                    'instanceHead' => $item->head,
-                    'constraints' => $item->constraints,
-                    'intrinsicMethods' => Types\instanceIntrinsicMethods($item),
-                    'associatedEquations' => Types\associatedEquationsMapFromDecl($item),
-                ];
-
-                continue;
-            }
-
-            if ($item instanceof Ast\DataDecl && $item->derivingClasses !== []) {
-                foreach (derivedProjectInstanceRecords($item, $moduleName, $facts) as $record) {
-                    $instances[] = $record;
-                }
-            }
+        foreach (projectInstancesFromProgram($unit['program'], $facts, $moduleName, $dataDecls) as $record) {
+            $instances[] = $record;
         }
     }
 
@@ -1079,20 +769,6 @@ function indexProjectInstances(array $projectInstances): array
 }
 
 /**
- * @param array{
- *   byClass?: array<string, list<array<string, mixed>>>,
- *   byClassHead?: array<string, array<string, list<array<string, mixed>>>>,
- *   associatedEquations?: array<string, array<string, list<array<string, mixed>>>>
- * } $index
- */
-function installProjectInstanceIndex(Types\TypeCheckState $state, array $index): void
-{
-    $state->projectInstancesByClass = $index['byClass'] ?? [];
-    $state->projectInstancesByClassHead = $index['byClassHead'] ?? [];
-    $state->associatedEquations = $index['associatedEquations'] ?? [];
-}
-
-/**
  * @param array<string, array<string, mixed>> $units
  * @param array<string, Scheme> $schemes
  */
@@ -1113,29 +789,3 @@ function syncExportedInferredSchemesFromTypeEnv(
     }
 }
 
-/**
- * Backend impl modules for a non-selected compile backend are parsed for the
- * module graph but must not be typechecked/codegen'd (their foreign imports
- * target a different backend).
- *
- * @param array<string, array<string, mixed>> $units
- */
-function isModuleActiveForCompileBackend(array $units, string $moduleName): bool
-{
-    $lower = \strtolower($moduleName);
-    foreach (['php', 'jvm', 'js', 'dotnet'] as $backend) {
-        if (\str_ends_with($lower, '.' . $backend)) {
-            return $backend === compileBackend();
-        }
-    }
-
-    $facade = facadeModuleForImpl($units, $moduleName);
-    if ($facade === null) {
-        return true;
-    }
-
-    $backendMap = $units[$facade]['program']->backendMap
-        ?? ($units[$facade]['backendMap'] ?? []);
-
-    return resolveImplModuleName($backendMap) === $moduleName;
-}

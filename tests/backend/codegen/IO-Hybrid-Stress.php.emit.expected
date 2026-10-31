@@ -2,60 +2,113 @@
 
 namespace IO\Hybrid\Stress;
 
-const __MOGGI_MAP = [[14 => ['IO.Hybrid.Stress.logMsg', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 6, 14], 19 => ['IO.Hybrid.Stress.emitA', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 9, 9], 24 => ['IO.Hybrid.Stress.emitB', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 12, 9], 29 => ['IO.Hybrid.Stress.equalBranch', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 16, 3], 30 => ['IO.Hybrid.Stress.equalBranch', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 17, 8], 31 => ['IO.Hybrid.Stress.equalBranch', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 18, 3], 36 => ['IO.Hybrid.Stress.notEqualBranch', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 22, 3], 37 => ['IO.Hybrid.Stress.notEqualBranch', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 23, 8], 38 => ['IO.Hybrid.Stress.notEqualBranch', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 24, 3], 44 => ['IO.Hybrid.Stress.branchOn', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 28, 11], 48 => ['IO.Hybrid.Stress.branchOn', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 29, 12], 54 => ['IO.Hybrid.Stress.main', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 33, 8], 55 => ['IO.Hybrid.Stress.main', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 34, 8], 56 => ['IO.Hybrid.Stress.main', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 36, 3], 57 => ['IO.Hybrid.Stress.main', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 38, 3], 58 => ['IO.Hybrid.Stress.main', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 40, 3], 59 => ['IO.Hybrid.Stress.main', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 41, 3]], ['IO\\Hybrid\\Stress\\logMsg' => ['IO.Hybrid.Stress.logMsg', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 6, 14], 'IO\\Hybrid\\Stress\\emitA' => ['IO.Hybrid.Stress.emitA', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 9, 9], 'IO\\Hybrid\\Stress\\emitB' => ['IO.Hybrid.Stress.emitB', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 12, 9], 'IO\\Hybrid\\Stress\\equalBranch' => ['IO.Hybrid.Stress.equalBranch', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 15, 15], 'IO\\Hybrid\\Stress\\notEqualBranch' => ['IO.Hybrid.Stress.notEqualBranch', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 21, 20], 'IO\\Hybrid\\Stress\\branchOn' => ['IO.Hybrid.Stress.branchOn', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 27, 16], 'IO\\Hybrid\\Stress\\main' => ['IO.Hybrid.Stress.main', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 32, 8]]];
+const __MOGGI_MAP = [[10 => 0, 18 => 0, 23 => 1, 31 => 1, 36 => 2, 44 => 2, 49 => 3, 57 => 7, 58 => 8, 59 => 9, 64 => 4, 72 => 10, 73 => 11, 74 => 12, 79 => 5, 88 => 13, 92 => 14, 99 => 6, 107 => 15, 108 => 16, 109 => 17, 110 => 18, 111 => 19, 112 => 20], ['IO\\Hybrid\\Stress\\logMsg' => 0, 'IO\\Hybrid\\Stress\\__w_logMsg' => 0, 'IO\\Hybrid\\Stress\\emitA' => 1, 'IO\\Hybrid\\Stress\\__w_emitA' => 1, 'IO\\Hybrid\\Stress\\emitB' => 2, 'IO\\Hybrid\\Stress\\__w_emitB' => 2, 'IO\\Hybrid\\Stress\\equalBranch' => 3, 'IO\\Hybrid\\Stress\\__w_equalBranch' => 3, 'IO\\Hybrid\\Stress\\notEqualBranch' => 4, 'IO\\Hybrid\\Stress\\__w_notEqualBranch' => 4, 'IO\\Hybrid\\Stress\\branchOn' => 5, 'IO\\Hybrid\\Stress\\__w_branchOn' => 5, 'IO\\Hybrid\\Stress\\main' => 6, 'IO\\Hybrid\\Stress\\__w_main' => 6], ['IO\\Hybrid\\Stress\\logMsg', 'IO\\Hybrid\\Stress\\emitA', 'IO\\Hybrid\\Stress\\emitB', 'IO\\Hybrid\\Stress\\equalBranch', 'IO\\Hybrid\\Stress\\notEqualBranch', 'IO\\Hybrid\\Stress\\branchOn', 'IO\\Hybrid\\Stress\\main'], ['IO\\Hybrid\\Stress\\__w_logMsg', 'IO\\Hybrid\\Stress\\__w_emitA', 'IO\\Hybrid\\Stress\\__w_emitB', 'IO\\Hybrid\\Stress\\__w_equalBranch', 'IO\\Hybrid\\Stress\\__w_notEqualBranch', 'IO\\Hybrid\\Stress\\__w_branchOn', 'IO\\Hybrid\\Stress\\__w_main'], [[0, 0, 6, 14], [1, 0, 9, 9], [2, 0, 12, 9], [3, 0, 15, 15], [4, 0, 21, 20], [5, 0, 27, 16], [6, 0, 32, 8], [3, 0, 16, 3], [3, 0, 17, 8], [3, 0, 18, 3], [4, 0, 22, 3], [4, 0, 23, 8], [4, 0, 24, 3], [5, 0, 28, 11], [5, 0, 29, 12], [6, 0, 33, 8], [6, 0, 34, 8], [6, 0, 36, 3], [6, 0, 38, 3], [6, 0, 40, 3], [6, 0, 41, 3]], ['IO.Hybrid.Stress.logMsg', 'IO.Hybrid.Stress.emitA', 'IO.Hybrid.Stress.emitB', 'IO.Hybrid.Stress.equalBranch', 'IO.Hybrid.Stress.notEqualBranch', 'IO.Hybrid.Stress.branchOn', 'IO.Hybrid.Stress.main'], ['tests/backend/codegen/IO-Hybrid-Stress.mog']];
 
 require_once __DIR__ . '/../../../libraries/base/src/System/IO.php';
-require_once __DIR__ . '/../../../libraries/base/src/System/IO/PHP.php';
-
-use function System\IO\PHP\putStrLn;
-use function System\IO\readFile;
 
 function logMsg($msg) {
-    putStrLn($msg);
+    $__t2 = ['__io', static function() use (&$msg): mixed {
+        $__t1 = __w_logMsg($msg);
+        return $__t1;
+    }];
+    return $__t2;
+}
+
+function __w_logMsg($msg) {
+    $__t0 = \System\IO\__w_putStrLn($msg);
     return null;
 }
 
 function emitA() {
-    putStrLn("A");
+    $__t5 = ['__io', static function(): mixed {
+        $__t4 = __w_emitA();
+        return $__t4;
+    }];
+    return $__t5;
+}
+
+function __w_emitA() {
+    $__t3 = \System\IO\__w_putStrLn("A");
     return null;
 }
 
 function emitB() {
-    putStrLn("B");
+    $__t8 = ['__io', static function(): mixed {
+        $__t7 = __w_emitB();
+        return $__t7;
+    }];
+    return $__t8;
+}
+
+function __w_emitB() {
+    $__t6 = \System\IO\__w_putStrLn("B");
     return null;
 }
 
 function equalBranch() {
-    putStrLn("equal");
-    $__t0 = readFile("input.txt");
-    putStrLn($__t0);
+    $__t13 = ['__io', static function(): mixed {
+        $__t12 = __w_equalBranch();
+        return $__t12;
+    }];
+    return $__t13;
+}
+
+function __w_equalBranch() {
+    $__t9 = \System\IO\__w_putStrLn("equal");
+    $__t10 = \System\IO\__w_readFile("input.txt");
+    $__t11 = \System\IO\__w_putStrLn($__t10);
     return null;
 }
 
 function notEqualBranch($y) {
-    putStrLn("not equal");
-    $__t1 = readFile($y);
-    putStrLn($__t1);
+    $__t18 = ['__io', static function() use (&$y): mixed {
+        $__t17 = __w_notEqualBranch($y);
+        return $__t17;
+    }];
+    return $__t18;
+}
+
+function __w_notEqualBranch($y) {
+    $__t14 = \System\IO\__w_putStrLn("not equal");
+    $__t15 = \System\IO\__w_readFile($y);
+    $__t16 = \System\IO\__w_putStrLn($__t15);
     return null;
 }
 
 function branchOn($x, $y) {
+    $__t22 = ['__io', static function() use (&$x, &$y): mixed {
+        $__t21 = __w_branchOn($x, $y);
+        return $__t21;
+    }];
+    return $__t22;
+}
+
+function __w_branchOn($x, $y) {
     if (($x === $y) === true) {
-        equalBranch();
+        $__t19 = __w_equalBranch();
         return null;
     }
     elseif (($x === $y) === false) {
-        notEqualBranch($y);
+        $__t20 = __w_notEqualBranch($y);
         return null;
     }
+    return null;
 }
 
 function main() {
-    $__t2 = readFile("input.txt");
-    $__t3 = readFile($__t2);
-    logMsg("start processing");
-    branchOn($__t2, $__t3);
-    emitA();
-    emitB();
+    $__t30 = ['__io', static function(): mixed {
+        $__t29 = __w_main();
+        return $__t29;
+    }];
+    return $__t30;
+}
+
+function __w_main() {
+    $__t23 = \System\IO\__w_readFile("input.txt");
+    $__t24 = \System\IO\__w_readFile($__t23);
+    $__t25 = __w_logMsg("start processing");
+    $__t26 = __w_branchOn($__t23, $__t24);
+    $__t27 = __w_emitA();
+    $__t28 = __w_emitB();
     return null;
 }

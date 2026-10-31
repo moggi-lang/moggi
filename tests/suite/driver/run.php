@@ -118,6 +118,8 @@ function runBackendCases(array $cases, string $backend, bool $multiBackend = fal
             native: ($outcome['native'] ?? false) === true,
         );
 
+        recordCaseDuration($backend, $result);
+
         if ($result->isFailure() && $message !== '') {
             $result->logPath = writeCaseLog($case->name, $message);
             $result->repro = \sprintf('runtest --backend %s %s', $backend, $case->name);
@@ -251,6 +253,9 @@ function runSuite(): int
  * ones; a serial selection is not warmed, because the case it is about to run pays for the library
  * itself and a warm-up in front of it would only add to that.
  *
+ * A backend whose prepared library tree has to be built says so before it starts and then reports
+ * the build's duration, so the seconds before the first case read as work rather than a stall.
+ *
  * @param list<string> $backends
  */
 function warmSharedCache(array $backends): void
@@ -271,35 +276,29 @@ function warmSharedCache(array $backends): void
         return;
     }
 
+    $multiBackend = \count($backends) > 1;
     foreach ($backends as $backend) {
+        if (! libBackendTreeReady($projectRoot, $backend)) {
+            suiteEcho(renderLibWarmupStart($backend, $multiBackend));
+        }
         try {
-            \Moggi\Backend\setCompileBackend($backend);
             \Moggi\Compiler\compileFile($source, 'php');
         } catch (\Throwable) {
-            // A backend that cannot emit here is warmed by nothing; its cases pay as they did.
         }
-
-        // The compile above holds the whole elaborated standard-library closure;
-        // release it before the `lib/` build assembles its own, so the two never
-        // sit in memory at once (each is a few hundred megabytes at 1G limits).
         \Moggi\Modules\ProjectCache::clearCheckedModules();
         \Moggi\Modules\ProjectCache::clearPreparedProjects();
         if (\function_exists('gc_collect_cycles')) {
             gc_collect_cycles();
         }
-
-        // The published `lib/` tree is built once per run under a lock; building it here keeps that
-        // one-off cost out of whichever case happened to ask for it first.
+        $startedAt = \microtime(true);
+        $built = false;
         try {
-            writeLibBackendOutputs($projectRoot, $backend);
+            writeLibBackendOutputs($projectRoot, $backend, $built);
         } catch (\Throwable) {
-            // Nothing to publish: the case that needs it will report what went wrong.
         }
-
-        // One backend's elaborated closure is a few hundred megabytes and is keyed by backend, so
-        // the next backend can use none of it: holding all of them is what a three-backend warm-up
-        // would otherwise need room for at once. The workers read the disk cache this loop fills,
-        // not this process's memos, so releasing here costs the warm-up nothing.
+        if ($built || libBackendTreeReady($projectRoot, $backend)) {
+            suiteEcho(renderLibWarmupDone($backend, $built, \microtime(true) - $startedAt, $multiBackend));
+        }
         \Moggi\Modules\ProjectCache::clearCheckedModules();
         \Moggi\Modules\ProjectCache::clearPreparedProjects();
     }
@@ -347,7 +346,6 @@ function runSelection(array $cases, array $backends, array $pathFilters): int
     $multi = \count($backends) > 1;
 
     foreach ($backends as $backend) {
-        \Moggi\Backend\setCompileBackend($backend);
         $selected = selectCases($cases, $pathFilters, $testArgs['groups'], $backend);
         if ($selected === []) {
             continue;
@@ -443,6 +441,8 @@ function emitBackendTail(ResultSet $set, string $backend, float $startedAt): arr
 function finishRun(string $report, array $jsonBackends, array $backends, bool $failed, float $runStarted): int
 {
     global $testArgs;
+
+    writeDurationLedger();
 
     if (\count($backends) > 1) {
         $verdict = [];

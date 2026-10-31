@@ -4,7 +4,6 @@ namespace Moggi\Backend\Php\Naming;
 
 use Moggi\IR\Module;
 
-use function Moggi\Optimize\Support\isLambdaName;
 use function Moggi\Syntax\isSafeName;
 
 /** @return array<string, true> */
@@ -113,9 +112,21 @@ function allocatePhpFunctionName(string $name, array &$used): string
     return $candidate;
 }
 
+/**
+ * A lifted lambda's IR name (`λ3`) spelled for PHP, and the only place the `λ` prefix is read.
+ *
+ * This is presentation, not classification: which callables take captures is
+ * `FunctionKind::takesCaptures()`, and nothing semantic may be decided from a name. Keeping the
+ * check here, next to the mangling it feeds, is what stops it from becoming one again.
+ */
+function isLiftedLambdaName(string $name): bool
+{
+    return \str_starts_with($name, 'λ');
+}
+
 function basePhpFunctionName(string $name): string
 {
-    if (isLambdaName($name)) {
+    if (isLiftedLambdaName($name)) {
         return '__lambda_' . \substr($name, \strlen('λ'));
     }
 

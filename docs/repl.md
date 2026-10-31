@@ -68,9 +68,9 @@ Maybe :: Type -> Type
 so `:backend jvm` is how you check that a program behaves the same off PHP —
 including the host calls in a `foreign jvm` declaration.
 
-## Looking inside the compiler
+## Looking at the stages
 
-The same stages the compiler runs are available for a fragment, or for the whole
+Each stage of a compile is available for a fragment, or for the whole
 interactive module:
 
 | Command | Shows |
@@ -94,9 +94,8 @@ moggi compile hello.mog --ir            # backend-neutral IR
 moggi compile hello.mog --opt-ir        # after optimization
 ```
 
-[pipeline.md](pipeline.md) explains what each stage produces and where it lives,
-and [optimizations.md](development/optimizations.md) documents the passes
-themselves.
+[pipeline.md](pipeline.md) explains when to reach for each stage and what the
+flags do to the artifact.
 
 ## Next
 

@@ -2,44 +2,51 @@
 
 namespace Moggi\IR;
 
+use Moggi\Modules\CheckedApplication;
+use Moggi\Modules\CheckedCase;
+use Moggi\Modules\CheckedCaseArm;
+use Moggi\Modules\CheckedGuards;
+use Moggi\Modules\CheckedLiteral;
+use Moggi\Modules\CheckedRecord;
+use Moggi\Modules\CheckedEvidenceMethod;
+use Moggi\Modules\CheckedEvidenceRef;
+use Moggi\Modules\CheckedForeignCall;
+use Moggi\Modules\CheckedIntrinsicCall;
+use Moggi\Modules\CheckedLambda;
+use Moggi\Modules\CheckedLetGroup;
+use Moggi\Modules\CheckedTerm;
+use Moggi\Modules\CheckedVariable;
+use Moggi\Modules\EvidencePlan;
+use Moggi\Modules\EvidencePlanKind;
+use Moggi\Modules\LiteralShape;
+use Moggi\Modules\PatternShape;
+use Moggi\Semantics\TypeExpr;
+use Moggi\Syntax\Ast;
+
+use function Moggi\Debug\normalizeDisplayPath;
+
+use function Moggi\Modules\intrinsicNameFor;
 use function Moggi\Semantics\Exhaustiveness\guardIsConstantTrue;
 use function Moggi\Semantics\IntrinsicRegistry\isIoExceptionPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\isShortCircuitPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\primopForPublicOperator;
 use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
-
 use function Moggi\Semantics\IntrinsicRegistry\shortCircuitPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
-use function Moggi\Semantics\IoBoundary\isIoType;
+use function Moggi\Semantics\IoBoundary\isIoCheckedType;
 use function Moggi\Semantics\Kernel\boolFalseCtor;
 use function Moggi\Semantics\Kernel\boolTrueCtor;
-
-use Moggi\Semantics\TypeExpr;
-
-use function Moggi\Semantics\Types\bindingGroupSccs;
-use function Moggi\Semantics\Types\evidenceRefOperand;
 use function Moggi\Semantics\Types\peelBindingAnnotation;
-use function Moggi\Semantics\Types\prune;
-
-use Moggi\Syntax\Ast;
-
 use function Moggi\Syntax\isIdentifier;
 
 function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
 {
     return match ($expr::class) {
-        Ast\IntegerLit::class => new ConstInt($expr->value),
-        Ast\DoubleLit::class => new ConstDouble($expr->value),
-        Ast\StringLit::class => new ConstStr($expr->value),
-        Ast\CharLit::class => new ConstChar($expr->value),
-        Ast\Variable::class => (static function () use ($expr, $ctx): Operand {
-            if ($expr->intrinsicWrapper !== null) {
-                return lowerIntrinsicValue($expr->intrinsicWrapper, [], $expr, $ctx);
-            }
-
-            return $ctx->env[$expr->name]
-                ?? throw new \RuntimeException(\sprintf('undefined variable `%s` in IR lowering', $expr->name));
-        })(),
+        Ast\IntegerLit::class,
+        Ast\DoubleLit::class,
+        Ast\StringLit::class,
+        Ast\CharLit::class => lowerLiteral($expr, $ctx),
+        Ast\Variable::class => lowerVariable($expr, $ctx),
         Ast\ConstructorRef::class => new FnRef(
             $ctx->constructorRenames[$expr->name] ?? $expr->name,
         ),
@@ -49,49 +56,67 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
                 return lowerIntrinsicValue($primop, [], $expr, $ctx);
             }
 
+            $origin = crossModuleOrigin($expr, $ctx);
+            if ($origin !== null) {
+                return new FnRef($origin);
+            }
+
             return new FnRef($expr->name);
         })(),
         Ast\Infix::class => lowerInfix($expr, $ctx),
         Ast\Apply::class => lowerApplyFromExpr($expr, $ctx),
         Ast\Tuple::class => lowerTuple($expr->elements, $ctx),
         Ast\ListLit::class => lowerList($expr->elements, $ctx),
-        Ast\Lambda::class => lowerLambda($expr->params, $expr->body, $ctx),
+        Ast\Lambda::class => lowerCheckedLambda($expr, $ctx),
         Ast\DoExpr::class => lowerDoExpr($expr, $ctx),
-        Ast\Let::class => lowerLet($expr->bindings, $expr->body, $ctx),
-        Ast\Where::class => lowerWhere($expr->expr, $expr->bindings, $ctx),
-        Ast\CaseExpr::class => lowerCase($expr->scrutinee, $expr->alts, $ctx, $expr->exhaustive),
+        Ast\Let::class, Ast\Where::class => lowerLetGroup($expr, $ctx),
+        Ast\CaseExpr::class => lowerCase($expr, $ctx),
         Ast\GuardsExpr::class => lowerGuards($expr, $ctx),
-        Ast\RecordCon::class => lowerRecordCon($expr, $ctx),
-        Ast\RecordUpdate::class => lowerRecordUpdate($expr, $ctx),
+        Ast\RecordCon::class, Ast\RecordUpdate::class => lowerRecord($expr, $ctx),
         Ast\FieldAccess::class => lowerFieldAccess($expr, $ctx),
         Ast\QualifiedRef::class => (static function () use ($expr, $ctx): Operand {
-            if ($expr->intrinsicWrapper !== null) {
-                return lowerIntrinsicValue($expr->intrinsicWrapper, [], $expr, $ctx);
+            $intrinsic = plannedIntrinsic($expr, $ctx);
+            if ($intrinsic !== null) {
+                return lowerIntrinsicValue($intrinsic, [], $expr, $ctx);
             }
 
             return new FnRef($expr->backendResolved ?? $expr->name);
         })(),
         Ast\TypeAsc::class => lowerExpr($expr->expr, $ctx),
-        Ast\EvidenceRef::class => lowerEvidenceRef($expr, $ctx),
+        Ast\EvidenceRef::class => evidencePlanOperand(plannedEvidence($expr, $ctx)->plan, $ctx),
         Ast\EvidenceMethod::class => lowerEvidenceMethod($expr, $ctx),
         Ast\IntrinsicCall::class => (static function () use ($expr, $ctx): Operand {
-            if (isIoExceptionPrimop($expr->name)) {
-                return lowerIoActionToBox(new Ast\IoAction($expr), $ctx);
+            $intrinsic = plannedIntrinsic($expr, $ctx)
+                ?? throw new \LogicException('an intrinsic call is always a primop site');
+
+            if (isIoExceptionPrimop($intrinsic)) {
+                return lowerActionValueToBox($expr, $ctx);
             }
 
-            return lowerIntrinsic($expr, $ctx);
+            return lowerIntrinsic($expr, $intrinsic, $ctx);
         })(),
         Ast\ForeignCall::class => lowerForeignCall($expr, $ctx),
         Ast\ExprHole::class => throw new \RuntimeException('typed hole reached IR lowering'),
-        default => throw new \RuntimeException('unsupported expression in IR lowering: ' . $expr::class),
+        default => throw new \RuntimeException(\sprintf(
+            'unsupported expression in IR lowering: %s at %s::%s line %d',
+            $expr::class,
+            $ctx->moduleName,
+            $ctx->functionName,
+            $expr->line,
+        )),
     };
 }
 
 function lowerEvidenceMethod(Ast\EvidenceMethod $expr, LowerCtx $ctx): Operand
 {
-    $method = new DictMethod(evidenceMethodOperand($expr, $ctx), $expr->method);
+    $term = checkedEvidenceMethod($expr, $ctx);
+    $method = new DictMethod(
+        evidencePlanOperand($term->plan, $ctx),
+        $term->method,
+        $term->plan->contextWidth(),
+    );
 
-    if ($expr->methodNullary) {
+    if ($term->nullary) {
         return lowerDictMethodCallFromValue($method, [], $ctx, srcLocFromAst($expr, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile));
     }
 
@@ -107,7 +132,7 @@ function lowerDoExpr(Ast\DoExpr $expr, LowerCtx $ctx): Operand
     return lowerExpr($expr->desugared, $ctx);
 }
 
-function lowerIntrinsic(Ast\IntrinsicCall $expr, LowerCtx $ctx): Intrinsic
+function lowerIntrinsic(Ast\IntrinsicCall $expr, string $intrinsic, LowerCtx $ctx): Intrinsic
 {
     $args = [];
     foreach ($expr->args as $arg) {
@@ -115,80 +140,397 @@ function lowerIntrinsic(Ast\IntrinsicCall $expr, LowerCtx $ctx): Intrinsic
     }
 
     return new Intrinsic(
-        $expr->name,
+        $intrinsic,
         $args,
         srcLocFromAst($expr, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile),
     );
 }
 
+/**
+ * The checked term for the primop a site names, or null when the site names none.
+ *
+ * `null` answers "this node is not a primop site", which is the shape question
+ * {@see intrinsicNameFor()} settles once for the producer and for lowering. A site
+ * that *is* one and has no term is refused: a primop the record does not plan is a
+ * primop decided after publication — including one a lowering pass synthesized
+ * itself, which can therefore no longer be lowered at all.
+ */
+function plannedIntrinsic(Ast\AstNode $site, LowerCtx $ctx): ?string
+{
+    if (intrinsicNameFor($site) === null) {
+        return null;
+    }
+
+    $term = siteTerm($site, $ctx);
+
+    if ($term instanceof CheckedIntrinsicCall) {
+        return $term->intrinsic;
+    }
+
+    if ($term instanceof CheckedApplication && $term->intrinsic !== null) {
+        return $term->intrinsic;
+    }
+
+    throw new \RuntimeException(
+        "lowering `{$ctx->moduleName}::{$ctx->functionName}` met a primop site"
+        . ' (`' . $site::class . "` at line {$site->line}) that its checked-core record does not plan",
+    );
+}
+
+/**
+ * The checked term for a lambda, or a refusal.
+ *
+ * A lambda's slots and capture set are published facts; without them lowering
+ * would have to answer both from the node it is handed, which is what a
+ * lowering-built callable cannot offer.
+ */
+function plannedLambda(Ast\Lambda $site, LowerCtx $ctx): CheckedLambda
+{
+    $term = siteTerm($site, $ctx);
+
+    if ($term instanceof CheckedLambda) {
+        return $term;
+    }
+
+    throw new \RuntimeException(
+        "lowering `{$ctx->moduleName}::{$ctx->functionName}` met a lambda at line {$site->line}"
+        . ' that its checked-core record does not plan',
+    );
+}
+
+/**
+ * The checked term for an application, or a refusal.
+ *
+ * The one fact lowering needs and cannot derive is how many arguments the applied
+ * expression still wants, which the checker settled on the term's own evidence.
+ * A site the record does not cover — including one a lowering pass built itself —
+ * is refused rather than answered from whichever type the node happens to carry.
+ */
+function plannedApplication(Ast\Apply $site, LowerCtx $ctx): CheckedApplication
+{
+    $term = siteTerm($site, $ctx);
+
+    if ($term instanceof CheckedApplication) {
+        return $term;
+    }
+
+    throw new \RuntimeException(
+        "lowering `{$ctx->moduleName}::{$ctx->functionName}` met an application at line {$site->line}"
+        . ' that its checked-core record does not plan',
+    );
+}
+
+/**
+ * A variable use, lowered through the term that says what it refers to.
+ *
+ * A primop site keeps the intrinsic family's answer: a `Variable` can carry a primop wrapper, and
+ * that arm already owns it.
+ */
+function lowerVariable(Ast\Variable $expr, LowerCtx $ctx): Operand
+{
+    $intrinsic = plannedIntrinsic($expr, $ctx);
+    if ($intrinsic !== null) {
+        return lowerIntrinsicValue($intrinsic, [], $expr, $ctx);
+    }
+
+    $deferred = ioDeferredActionValue($expr, $ctx);
+    if ($deferred !== null) {
+        return $deferred;
+    }
+
+    return variableOperand($expr, $ctx);
+}
+
+/**
+ * The operand a variable use resolves to, without lowering it into a call site.
+ *
+ * Two kinds of reader ask this — the value arm, and the IO lowering that asks "is this name bound
+ * to something I can run" — and both get the same answer, because the answer is the term's. A use
+ * whose term names a binder is answered by that binder's operand: the slot the pattern allocated
+ * for it, or the entry a recursive group pre-bound. The spelling on the node is not consulted, so
+ * two binders of one name cannot answer for each other, and a use the record does not cover is
+ * refused rather than resolved from whichever map holds the name.
+ */
+function variableOperand(Ast\Variable $expr, LowerCtx $ctx): Operand
+{
+    $term = siteTerm($expr, $ctx);
+    if (! $term instanceof CheckedVariable) {
+        throw new \RuntimeException(
+            "lowering `{$ctx->moduleName}::{$ctx->functionName}` met a variable"
+            . " (`{$expr->name}` at line {$expr->line}) that its checked-core record does not plan",
+        );
+    }
+
+    if ($term->binder !== null) {
+        return $ctx->binders[$term->binder]
+            ?? throw new \RuntimeException(
+                "lowering `{$ctx->moduleName}::{$ctx->functionName}` met a use of `{$expr->name}`"
+                . " at line {$expr->line} whose binder this scope does not hold",
+            );
+    }
+
+    $origin = crossModuleOrigin($expr, $ctx);
+    if ($origin !== null) {
+        return new FnRef($origin);
+    }
+
+    return $ctx->env[$expr->name]
+        ?? throw new \RuntimeException(\sprintf('undefined variable `%s` in IR lowering', $expr->name));
+}
+
+/**
+ * The checked term for one foreign call, or a refusal.
+ *
+ * The host target, the native signature and the boxing convention were decided when the
+ * import was checked; they are read from the term. A foreign site the record does not
+ * cover is reported rather than lowered from whatever the node still carries.
+ */
+function plannedForeignCall(Ast\ForeignCall $site, LowerCtx $ctx): CheckedForeignCall
+{
+    $term = siteTerm($site, $ctx);
+
+    if ($term instanceof CheckedForeignCall) {
+        return $term;
+    }
+
+    throw new \RuntimeException(
+        "lowering `{$ctx->moduleName}::{$ctx->functionName}` met a foreign call"
+        . " (`{$site->name}` at line {$site->line}) that its checked-core record does not plan",
+    );
+}
+
 function lowerForeignCall(Ast\ForeignCall $expr, LowerCtx $ctx): ForeignCall
 {
+    $term = plannedForeignCall($expr, $ctx);
+
     $args = [];
     foreach ($expr->args as $arg) {
         $args[] = lowerExpr($arg, $ctx);
     }
 
+    return foreignCallOperand($term, $args);
+}
+
+/** The IR foreign call a resolved term and its already-lowered arguments name. */
+function foreignCallOperand(CheckedForeignCall $term, array $args): ForeignCall
+{
     return new ForeignCall(
-        backend: $expr->backend,
-        kind: $expr->kind,
-        path: $expr->path,
-        dispatch: $expr->dispatch,
+        backend: $term->backend,
+        kind: $term->kind,
+        path: $term->path,
+        dispatch: $term->dispatch,
         args: $args,
-        classPath: $expr->classPath,
-        member: $expr->member,
-        ioWrap: $expr->ioWrap,
-        phpValueBox: $expr->phpValueBox,
-        handleBox: $expr->handleBox,
-        handleUnboxArgs: $expr->handleUnboxArgs,
-        nativeSig: $expr->nativeSig,
+        classPath: $term->classPath,
+        member: $term->member,
+        ioWrap: $term->ioWrap,
+        phpValueBox: $term->phpValueBox,
+        handleBox: $term->handleBox,
+        handleUnboxArgs: $term->handleUnboxArgs,
+        nativeSig: $term->nativeSig,
     );
 }
 
-function evidenceMethodOperand(Ast\EvidenceMethod $expr, LowerCtx $ctx): Operand
+/**
+ * The checked term for one evidence position, or a refusal.
+ *
+ * The position carries the id the producer wrote on the final elaboration, and
+ * the record answers with the term that id names — not the node's object id and
+ * not its origin string. Nothing here reads the node's evidence fields, so a
+ * record that does not cover this position is reported instead of papered over.
+ */
+/**
+ * The term published for one site, or null when publication covered none.
+ *
+ * The one read of the node→term link: an id the producer wrote, resolved in the
+ * declaration's own record. Every family's reader starts here, so the lookup and
+ * its "no term" answer are spelled once.
+ */
+function siteTerm(Ast\AstNode $site, LowerCtx $ctx): ?CheckedTerm
 {
-    if ($expr->evidenceInstance !== null) {
-        return lowerEvidenceRefValue(
-            $expr->class,
-            $expr->evidenceInstance,
-            $expr->contextEvidence,
-            $ctx,
-        );
-    }
-
-    return new Local($expr->evidence);
+    return $ctx->terms->termFor($site);
 }
 
-function lowerEvidenceRef(Ast\EvidenceRef $expr, LowerCtx $ctx): Operand
-{
-    return lowerEvidenceRefValue($expr->class, $expr->head, $expr->context, $ctx);
+function plannedEvidence(
+    Ast\EvidenceRef|Ast\EvidenceMethod $site,
+    LowerCtx $ctx,
+): CheckedEvidenceRef|CheckedEvidenceMethod {
+    $term = siteTerm($site, $ctx);
+
+    if ($term instanceof CheckedEvidenceRef || $term instanceof CheckedEvidenceMethod) {
+        return $term;
+    }
+
+    $class = $site::class;
+    throw new \RuntimeException(
+        "lowering `{$ctx->moduleName}::{$ctx->functionName}` met an evidence site"
+        . " (`{$class}` at line {$site->line}) that its checked-core record does not plan",
+    );
 }
 
 /**
- * @param list<Ast\AstNode> $context
+ * The checked term that owns a `case`'s structure, or a refusal.
+ *
+ * The arms, their order, their guard flattening and the match's totality are published
+ * facts; without them lowering would have to read `CaseExpr::$alts` and re-ask each arm
+ * whether its body is a `GuardsExpr`. A `case` the record does not cover — one built after
+ * publication — is refused rather than answered from whatever the node holds.
  */
-function lowerEvidenceRefValue(string $class, Ast\TypeNode $head, array $context, LowerCtx $ctx): Operand
+function plannedCase(Ast\CaseExpr|Ast\IoCase $site, LowerCtx $ctx): CheckedCase
 {
-    $fn = evidenceRefOperand($class, $head);
-    if ($context === []) {
-        return $fn;
+    $term = siteTerm($site, $ctx);
+
+    if ($term instanceof CheckedCase) {
+        return $term;
+    }
+
+    throw new \RuntimeException(
+        "lowering `{$ctx->moduleName}::{$ctx->functionName}` met a `case` at line {$site->line}"
+        . ' that its checked-core record does not plan',
+    );
+}
+
+/**
+ * The checked term that owns a binding group's members and order, or a refusal.
+ *
+ * One term covers the three shapes that carry a binding group: `let`, `where` and a `do`
+ * statement's `let`. Their decomposition — which members bind together and in what order —
+ * is the answer the check published, not a second derivation lowering runs for itself.
+ */
+function plannedLetGroup(Ast\AstNode $site, LowerCtx $ctx): CheckedLetGroup
+{
+    $term = siteTerm($site, $ctx);
+
+    if ($term instanceof CheckedLetGroup) {
+        return $term;
+    }
+
+    throw new \RuntimeException(
+        "lowering `{$ctx->moduleName}::{$ctx->functionName}` met a binding group (`" . $site::class
+        . "` at line {$site->line}) that its checked-core record does not plan",
+    );
+}
+
+/**
+ * The checked term that owns a record construction's or update's fields, or a refusal.
+ *
+ * Both node shapes are one family: a construction is an update with no receiver, and the
+ * constructor of either is the checker's answer. A site the record does not cover — one built
+ * after publication — is refused rather than read.
+ */
+function plannedRecord(Ast\RecordCon|Ast\RecordUpdate $site, LowerCtx $ctx): CheckedRecord
+{
+    $term = siteTerm($site, $ctx);
+
+    if ($term instanceof CheckedRecord) {
+        return $term;
+    }
+
+    throw new \RuntimeException(
+        "lowering `{$ctx->moduleName}::{$ctx->functionName}` met a record (`" . $site::class
+        . "` at line {$site->line}) that its checked-core record does not plan",
+    );
+}
+
+/** The checked term that owns a literal's value, or a refusal. */
+function plannedLiteral(Ast\AstNode $site, LowerCtx $ctx): CheckedLiteral
+{
+    $term = siteTerm($site, $ctx);
+
+    if ($term instanceof CheckedLiteral) {
+        return $term;
+    }
+
+    throw new \RuntimeException(
+        "lowering `{$ctx->moduleName}::{$ctx->functionName}` met a literal (`" . $site::class
+        . "` at line {$site->line}) that its checked-core record does not plan",
+    );
+}
+
+/** The checked term that owns a guard chain's clauses, or a refusal. */
+function plannedGuards(Ast\GuardsExpr $site, LowerCtx $ctx): CheckedGuards
+{
+    $term = siteTerm($site, $ctx);
+
+    if ($term instanceof CheckedGuards) {
+        return $term;
+    }
+
+    throw new \RuntimeException(
+        "lowering `{$ctx->moduleName}::{$ctx->functionName}` met a guard chain at line {$site->line}"
+        . ' that its checked-core record does not plan',
+    );
+}
+
+/** The checked term for a method position, or a refusal when the family is wrong. */
+function checkedEvidenceMethod(Ast\EvidenceRef|Ast\EvidenceMethod $site, LowerCtx $ctx): CheckedEvidenceMethod
+{
+    $term = plannedEvidence($site, $ctx);
+    if (! $term instanceof CheckedEvidenceMethod) {
+        throw new \RuntimeException(
+            "lowering `{$ctx->moduleName}::{$ctx->functionName}` met a method position at line"
+            . " {$site->line} whose checked term is " . $term::class,
+        );
+    }
+
+    return $term;
+}
+
+/**
+ * Lower one planned evidence decision.
+ *
+ * A parameter is the local its slot names, a reference is the instance's builder
+ * (applied to its own dictionaries when the instance takes any), and a projection
+ * acquires its owner dictionary once per block — a dictionary is immutable, so
+ * later uses in the same block read the operand the first one produced.
+ */
+function evidencePlanOperand(EvidencePlan $plan, LowerCtx $ctx): Operand
+{
+    if ($plan->kind === EvidencePlanKind::Parameter) {
+        return new Local($plan->parameter
+            ?? throw new \LogicException("an evidence plan for `{$plan->class}` names no dictionary parameter"));
     }
 
     $args = [];
-    foreach ($context as $ev) {
-        $args[] = lowerExpr($ev, $ctx);
+    foreach ($plan->context as $inner) {
+        $args[] = evidencePlanOperand($inner, $ctx);
     }
 
-    return lowerCall($fn->name, $args, $ctx);
+    $fn = new FnRef(
+        $plan->builder
+            ?? throw new \LogicException("an evidence plan for `{$plan->class}` names no evidence builder"),
+        $plan->class,
+        $plan->builderHead,
+    );
+
+    if ($plan->kind === EvidencePlanKind::Reference) {
+        return $args === [] ? $fn : lowerCall($fn->name, $args, $ctx);
+    }
+
+    if ($args !== []) {
+        return lowerCall($fn->name, $args, $ctx);
+    }
+
+    $bound = $ctx->evidenceBindings[$fn->name] ?? null;
+    if ($bound !== null) {
+        return $bound;
+    }
+
+    $value = lowerCall($fn->name, [], $ctx);
+    $ctx->evidenceBindings[$fn->name] = $value;
+
+    return $value;
 }
 
 function lowerInfix(Ast\Infix $expr, LowerCtx $ctx): Operand
 {
-    if (isShortCircuitPrimop($expr->resolvedIntrinsic)) {
-        return lowerShortCircuitAndOr($expr, $ctx);
+    $intrinsic = plannedIntrinsic($expr, $ctx);
+
+    if ($intrinsic !== null && isShortCircuitPrimop($intrinsic)) {
+        return lowerShortCircuitAndOr($expr, $intrinsic, $ctx);
     }
 
-    if ($expr->resolvedIntrinsic !== null) {
-        return new Intrinsic($expr->resolvedIntrinsic, [
+    if ($intrinsic !== null) {
+        return new Intrinsic($intrinsic, [
             lowerExpr($expr->left, $ctx),
             lowerExpr($expr->right, $ctx),
         ], srcLocFromAst($expr, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile));
@@ -219,35 +561,73 @@ function lowerInfix(Ast\Infix $expr, LowerCtx $ctx): Operand
  * `boolOr#`, so `True`/`False` cover the scrutinee and the match cannot fall
  * through.
  */
-function lowerShortCircuitAndOr(Ast\Infix $expr, LowerCtx $ctx): Operand
+function lowerShortCircuitAndOr(Ast\Infix $expr, string $intrinsic, LowerCtx $ctx): Operand
 {
-    $isAnd = shortCircuitPrimop($expr->resolvedIntrinsic) === 'bool-and';
+    $isAnd = shortCircuitPrimop($intrinsic) === 'bool-and';
+    $scrutineeOp = lowerExpr($expr->left, $ctx);
+    $dest = freshTemp($ctx);
+    $rightCtx = newArmCtx($ctx, $expr->right);
+    $arms = [];
 
-    return lowerCase($expr->left, [
-        new Ast\Alt(new Ast\PatCon(boolTrueCtor(), []), $isAnd ? $expr->right : new Ast\ConstructorRef(boolTrueCtor())),
-        new Ast\Alt(new Ast\PatCon(boolFalseCtor(), []), $isAnd ? new Ast\ConstructorRef(boolFalseCtor()) : $expr->right),
-    ], $ctx, true);
+    foreach ([boolTrueCtor(), boolFalseCtor()] as $ctor) {
+        $takesRight = $isAnd === ($ctor === boolTrueCtor());
+        $value = $takesRight
+            ? lowerExpr($expr->right, $rightCtx)
+            : new FnRef($ctx->constructorRenames[$ctor] ?? $ctor);
+        $constructor = $ctx->constructorRenames[$ctor] ?? $ctor;
+        $arms[] = new MatchArm(
+            new PatCon($constructor, []),
+            new Block([...($takesRight ? $rightCtx->items : []), new Assign($dest, $value)]),
+            [],
+        );
+    }
+
+    $ctx->items[] = new MatchStmt($scrutineeOp, $arms, $dest, true);
+
+    return new Temp($dest);
+}
+
+/**
+ * An application spine, read from the checked application terms rather than from the node's
+ * `function`/`argument` links.
+ *
+ * Each `CheckedApplication` publishes the callee and argument it supplies, so `f a b` is two
+ * terms naming one callee and two arguments in source order. A term that does not publish them
+ * (a synthetic application lowering never reaches) stops the walk and is itself the callee, which
+ * lowers as an ordinary expression.
+ *
+ * @return array{callee: Ast\AstNode, args: list<Ast\AstNode>}
+ */
+function applySpine(Ast\Apply $expr, LowerCtx $ctx): array
+{
+    $args = [];
+    $callee = $expr;
+    while (($term = siteTerm($callee, $ctx)) instanceof CheckedApplication) {
+        $argument = $term->argument ?? throw new \RuntimeException(
+            "the application at {$term->origin} publishes no argument",
+        );
+        $args = [$argument, ...$args];
+        $callee = $term->callee ?? throw new \RuntimeException(
+            "the application at {$term->origin} publishes no callee",
+        );
+    }
+
+    return ['callee' => $callee, 'args' => $args];
 }
 
 function lowerApplyFromExpr(Ast\Apply $expr, LowerCtx $ctx): Operand
 {
-    if ($expr->intrinsicWrapper !== null) {
-        $astArgs = [];
-        $callee = $expr;
-        while ($callee instanceof Ast\Apply) {
-            \array_unshift($astArgs, $callee->argument);
-            $callee = $callee->function;
-        }
-
-        return lowerIntrinsicValue($expr->intrinsicWrapper, $astArgs, $expr, $ctx);
+    $intrinsic = plannedIntrinsic($expr, $ctx);
+    if ($intrinsic !== null) {
+        return lowerIntrinsicValue($intrinsic, applySpine($expr, $ctx)['args'], $expr, $ctx);
     }
 
-    $partial = lowerDictMethodPartial($expr, $ctx);
+    $partial = lowerDictMethodPartial($expr, plannedApplication($expr, $ctx), $ctx);
     if ($partial !== null) {
         return $partial;
     }
 
-    return lowerApply($expr->function, $expr->argument, $ctx);
+    return lowerApply($expr, $ctx);
 }
 
 /**
@@ -257,60 +637,70 @@ function lowerApplyFromExpr(Ast\Apply $expr, LowerCtx $ctx): Operand
  * eta-expanded into a lambda, the same way an unsaturated primop is (see
  * {@see lowerIntrinsicValue}); a saturated call still lowers to a plain
  * `DictCall` with no closure.
+ *
+ * The missing count is the application term's (`remainingArity`), and the lambda's
+ * body is IR — the checked application applied to the new slots — so no
+ * post-publication node is built for it.
  */
-function lowerDictMethodPartial(Ast\Apply $expr, LowerCtx $ctx): ?Operand
+function lowerDictMethodPartial(Ast\Apply $expr, CheckedApplication $term, LowerCtx $ctx): ?Operand
 {
-    $callee = $expr->function;
-    while ($callee instanceof Ast\Apply) {
-        $callee = $callee->function;
-    }
+    $spine = applySpine($expr, $ctx);
+    $callee = $spine['callee'];
 
     if (! ($callee instanceof Ast\EvidenceMethod)) {
         return null;
     }
 
-    $missing = remainingArity($ctx, $expr->inferredType);
-    if ($missing <= 0 && $callee->methodArity !== null) {
-        $applied = 0;
-        $spine = $expr;
-        while ($spine instanceof Ast\Apply) {
-            ++$applied;
-            $spine = $spine->function;
-        }
-        $missing = $callee->methodArity - $applied;
+    $methodArity = checkedEvidenceMethod($callee, $ctx)->arity;
+    $missing = $term->remainingArity;
+    if ($missing <= 0 && $methodArity !== null) {
+        $missing = $methodArity - \count($spine['args']);
     }
     if ($missing <= 0) {
         return null;
     }
 
-    $params = [];
-    $body = $expr;
+    $paramNames = [];
     for ($i = 0; $i < $missing; ++$i) {
-        $param = 'methodArg' . $i . '_' . $ctx->state->nextLambda;
-        $params[] = new Ast\PatVar($param);
-        $body = new Ast\Apply($body, new Ast\Variable($param));
+        $paramNames[] = 'methodArg' . $i . '_' . $ctx->state->nextLambda;
     }
 
-    return lowerLambda($params, $body, $ctx);
+    $argNodes = $spine['args'];
+
+    return lowerLoweredLambda(
+        $paramNames,
+        freeVarsExpr($expr, [], evidenceParameterFromTerms($ctx), $ctx->terms),
+        static function (LowerCtx $fnCtx) use ($callee, $argNodes, $paramNames): Operand {
+            $args = [];
+            foreach ($argNodes as $argNode) {
+                $args[] = lowerExpr($argNode, $fnCtx);
+            }
+            foreach ($paramNames as $param) {
+                $args[] = new Local($param);
+            }
+
+            return lowerApplySpine($callee, $args, $fnCtx);
+        },
+        null,
+        $ctx,
+    );
 }
 
 /**
  * How many user-facing arrows an expression's type still has -- the arguments
- * it is still waiting for. 0 when the type is not known here. The typechecker
- * leaves either the internal type or the surface type it was written from, and
- * both carry the arrow spine.
+ * it is still waiting for. 0 when the type is not known here.
+ *
+ * A term's type is the checker's internal type; a declaration's signature is
+ * still the surface type it was written as. Both carry the arrow spine, so the
+ * one counting here does not care which it was handed.
  */
-function remainingArity(LowerCtx $ctx, ?Ast\TypeNode $type): int
+function remainingArity(Ast\TypeNode|TypeExpr\Type|null $type): int
 {
     $remaining = 0;
     while (true) {
         if ($type instanceof Ast\TypeArrow) {
             $type = $type->to;
-        } elseif ($type instanceof TypeExpr\Type) {
-            $type = prune($ctx->state, $type);
-            if (! ($type instanceof TypeExpr\TArrow)) {
-                return $remaining;
-            }
+        } elseif ($type instanceof TypeExpr\TArrow) {
             $type = $type->to;
         } else {
             return $remaining;
@@ -349,17 +739,37 @@ function lowerIntrinsicValue(string $name, array $astArgs, Ast\AstNode $node, Lo
         );
     }
 
-    $params = [];
-    $callArgs = $astArgs;
+    $paramNames = [];
     for ($i = 0; $i < $missing; ++$i) {
-        $param = 'primopArg' . $i . '_' . $ctx->state->nextLambda;
-        $params[] = new Ast\PatVar($param);
-        $callArgs[] = new Ast\Variable($param);
+        $paramNames[] = 'primopArg' . $i . '_' . $ctx->state->nextLambda;
     }
 
-    return lowerLambda(
-        $params,
-        new Ast\IntrinsicCall($name, $callArgs, $node->line, $node->col, $node->endCol),
+    $evidenceParameter = static fn (Ast\EvidenceMethod $method): ?string
+        => checkedEvidenceMethod($method, $ctx)->plan->parameter;
+    $captures = [];
+    foreach ($astArgs as $arg) {
+        $captures = [...$captures, ...freeVarsExpr($arg, [], $evidenceParameter, $ctx->terms)];
+    }
+
+    return lowerLoweredLambda(
+        $paramNames,
+        $captures,
+        static function (LowerCtx $fnCtx) use ($name, $astArgs, $paramNames, $node, $ctx): Operand {
+            $args = [];
+            foreach ($astArgs as $arg) {
+                $args[] = lowerExpr($arg, $fnCtx);
+            }
+            foreach ($paramNames as $param) {
+                $args[] = new Local($param);
+            }
+
+            return new Intrinsic(
+                $name,
+                $args,
+                srcLocFromAst($node, $ctx->moduleName, $fnCtx->functionName, $ctx->sourceFile),
+            );
+        },
+        $node,
         $ctx,
     );
 }
@@ -398,28 +808,39 @@ function lowerNamedApply(string $name, array $args, LowerCtx $ctx, ?SrcLoc $srcL
     return applyToValue(lowerCall($name, $first, $ctx, $srcLoc), $rest, $ctx, $srcLoc);
 }
 
-function lowerApply(Ast\AstNode $function, Ast\AstNode $argument, LowerCtx $ctx): Operand
+function lowerApply(Ast\Apply $expr, LowerCtx $ctx): Operand
 {
-    $callee = $function;
-    $argNodes = [$argument];
-
-    while ($callee instanceof Ast\Apply) {
-        \array_unshift($argNodes, $callee->argument);
-        $callee = $callee->function;
-    }
+    ['callee' => $callee, 'args' => $argNodes] = applySpine($expr, $ctx);
 
     $args = [];
     foreach ($argNodes as $argNode) {
         $args[] = lowerExpr($argNode, $ctx);
     }
 
+    return lowerApplySpine($callee, $args, $ctx);
+}
+
+/**
+ * One application, once its callee and its already-lowered arguments are in hand.
+ *
+ * Split out because two callers reach this decision with arguments no node holds:
+ * an application's own spine, flattened out of the tree, and a method partial's
+ * eta-expanded body, which is the checked application applied to the lambda's new
+ * slots. Both hand over the same shape, so "dispatch it, call it by name, or apply
+ * the value" is written once.
+ *
+ * @param list<Operand> $args
+ */
+function lowerApplySpine(Ast\AstNode $callee, array $args, LowerCtx $ctx): Operand
+{
     $srcLoc = srcLocFromAst($callee, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile);
 
     if ($callee instanceof Ast\EvidenceMethod) {
-        if ($callee->methodArity !== null && \count($args) > $callee->methodArity) {
-            $result = lowerDictMethodCall($callee, \array_slice($args, 0, $callee->methodArity), $ctx, $srcLoc);
+        $methodArity = checkedEvidenceMethod($callee, $ctx)->arity;
+        if ($methodArity !== null && \count($args) > $methodArity) {
+            $result = lowerDictMethodCall($callee, \array_slice($args, 0, $methodArity), $ctx, $srcLoc);
 
-            return applyToValue($result, \array_slice($args, $callee->methodArity), $ctx, $srcLoc);
+            return applyToValue($result, \array_slice($args, $methodArity), $ctx, $srcLoc);
         }
 
         return lowerDictMethodCall($callee, $args, $ctx, $srcLoc);
@@ -446,14 +867,16 @@ function lowerApply(Ast\AstNode $function, Ast\AstNode $argument, LowerCtx $ctx)
 function lowerDictMethodCall(Ast\EvidenceMethod $expr, array $args, LowerCtx $ctx, ?SrcLoc $srcLoc = null): Operand
 {
     $dest = freshTemp($ctx);
+    $term = checkedEvidenceMethod($expr, $ctx);
     $ctx->items[] = new DictCall(
-        evidenceMethodOperand($expr, $ctx),
-        $expr->method,
+        evidencePlanOperand($term->plan, $ctx),
+        $term->method,
         $args,
         $dest,
         $ctx->stmtSrcLoc
             ?? $srcLoc
             ?? srcLocFromAst($expr, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile),
+        $term->plan->contextWidth(),
     );
 
     return new Temp($dest);
@@ -463,7 +886,14 @@ function lowerDictMethodCall(Ast\EvidenceMethod $expr, array $args, LowerCtx $ct
 function lowerDictMethodCallFromValue(DictMethod $value, array $args, LowerCtx $ctx, ?SrcLoc $srcLoc = null): Operand
 {
     $dest = freshTemp($ctx);
-    $ctx->items[] = new DictCall($value->evidence, $value->method, $args, $dest, $ctx->stmtSrcLoc ?? $srcLoc);
+    $ctx->items[] = new DictCall(
+        $value->evidence,
+        $value->method,
+        $args,
+        $dest,
+        $ctx->stmtSrcLoc ?? $srcLoc,
+        $value->localEvidence,
+    );
 
     return new Temp($dest);
 }
@@ -536,6 +966,11 @@ function applyCalleeName(Ast\AstNode $expr, LowerCtx $ctx): ?string
         Ast\OperatorRef::class => $expr->name,
         Ast\QualifiedRef::class => $expr->backendResolved ?? $expr->name,
         Ast\Variable::class => (static function () use ($expr, $ctx): ?string {
+            $origin = crossModuleOrigin($expr, $ctx);
+            if ($origin !== null) {
+                return $origin;
+            }
+
             $binding = $ctx->env[$expr->name] ?? null;
             if ($binding instanceof FnRef) {
                 return $binding->name;
@@ -549,6 +984,23 @@ function applyCalleeName(Ast\AstNode $expr, LowerCtx $ctx): ?string
         })(),
         default => null,
     };
+}
+
+function crossModuleOrigin(Ast\Variable|Ast\OperatorRef $expr, LowerCtx $ctx): ?string
+{
+    $origin = $expr->resolvedOrigin;
+    $term = siteTerm($expr, $ctx);
+    $bound = $term instanceof CheckedVariable && $term->binder !== null;
+    if (! $expr->declarationScoped || $origin === null || $bound || $ctx->moduleName === '') {
+        return null;
+    }
+
+    $separator = \strpos($origin, '::');
+    if ($separator === false) {
+        return null;
+    }
+
+    return \substr($origin, 0, $separator) === $ctx->moduleName ? null : $origin;
 }
 
 /** @param list<Operand> $args */
@@ -589,8 +1041,8 @@ function lowerTuple(array $elements, LowerCtx $ctx): Operand
 function lowerIoValueExpr(Ast\AstNode $element, LowerCtx $ctx): Operand
 {
     if (astExprReturnsIo($element)) {
-        return lowerIoActionToBox(
-            $element instanceof Ast\IoAction ? $element : new Ast\IoAction($element),
+        return lowerActionValueToBox(
+            $element,
             $ctx,
         );
     }
@@ -610,93 +1062,234 @@ function lowerList(array $elements, LowerCtx $ctx): ListLit
 }
 
 /**
- * @param array<int, Ast\LambdaParam|Ast\AstNode> $params
+ * A source lambda, lowered from its checked term.
+ *
+ * The slots it takes and the names it closes over are the term's
+ * ({@see \Moggi\Modules\CheckedLambda}); the body is the term's child and is
+ * lowered in place, and the type the callable table records is the checker's
+ * projection already on the node.
  */
-function lowerLambda(array $params, Ast\AstNode $body, LowerCtx $ctx): FnRef
+function lowerCheckedLambda(Ast\Lambda $expr, LowerCtx $ctx): FnRef
 {
-    $name = 'λ' . $ctx->state->nextLambda++;
+    $term = plannedLambda($expr, $ctx);
 
-    return lowerNamedLambda($name, $params, $body, $ctx);
+    return lowerLoweredLambda(
+        $term->parameterNames,
+        $term->captures,
+        lambdaBody($expr, $term),
+        $expr->body,
+        $ctx,
+        $expr->inferredType,
+    );
 }
 
 /**
- * @param array<int, Ast\LambdaParam|Ast\AstNode> $params
+ * A source lambda's body, lowered in the frame its own parameters open.
+ *
+ * The frame's binders are the term's, not the node's: `CheckedLambda` publishes each slot's
+ * identity beside its name, so a use of a parameter inside the body reaches *its* binder even when
+ * an enclosing scope binds the same spelling, and a node whose parameter list was re-parsed or
+ * scrubbed cannot change which binder a use reaches. Both callers that lower a source lambda body
+ * (a lambda expression and a recursive group's lambda member) go through this one helper, because
+ * a frame without its own parameters' binders could only answer by spelling.
+ *
+ * @return callable(LowerCtx): Operand
  */
-function lowerNamedLambda(string $name, array $params, Ast\AstNode $body, LowerCtx $ctx): FnRef
+function lambdaBody(Ast\Lambda $lambda, CheckedLambda $term): callable
 {
-    $paramNames = patternParams($params);
+    return static function (LowerCtx $fnCtx) use ($lambda, $term): Operand {
+        foreach ($term->parameterBinders as $index => $binder) {
+            if ($binder !== null && isset($term->parameterNames[$index])) {
+                $fnCtx->binders[$binder] = new Local($term->parameterNames[$index]);
+            }
+        }
+
+        return lowerExpr($term->body ?? $lambda->body, $fnCtx);
+    };
+}
+
+/**
+ * A lifted callable's declaration. `$type` is the checker's type for the lambda, recorded where
+ * the declaration is made — the callable table publishes the entry's result convention from it,
+ * which is why a lifted entry is no longer `Unclassified`.
+ *
+ * The slots and the capture set are handed in rather than read off a node: a source lambda
+ * publishes both ({@see \Moggi\Modules\CheckedLambda}) and an eta-expanded one has no node at
+ * all, so one builder taking them as facts is the only shape that serves both. `$body` is a
+ * closure of the same reason — the checked body for a source lambda, IR for a lifted one.
+ * `$origin` is the node whose span names the lifted entry, or null for a callable lowered from
+ * facts only (its site is then line 0, as a synthesized declaration's is).
+ *
+ * @param list<string> $paramNames the callable's slots, in positional order
+ * @param list<string> $captures the body's free names; entry references stay in scope but are not slots
+ * @param callable(LowerCtx): Operand $body the callable's result, lowered in its own context
+ * @param ?Ast\AstNode $origin the site whose span names this declaration, when it has one
+ * @param ?Ast\AstNode $type the lambda's inferred type, when the checker left one on the node
+ */
+function lowerNamedLambda(
+    string $name,
+    array $paramNames,
+    array $captures,
+    ?Ast\AstNode $origin,
+    callable $body,
+    LowerCtx $ctx,
+    FunctionKind $kind,
+    ?Ast\AstNode $type = null,
+): FnRef {
+    // A name the enclosing scope resolves to a `FnRef` is an entry reference, not a local slot:
+    // a recursive group member, a nested lambda that mentions one, or any other lifted entry.
+    // Free-variable analysis can name it, but passing it as a capture would emit `Local('showl')`
+    // for a name nothing binds. Keep it in the body environment (the body still names it), but
+    // never publish it as a capture slot. What stays a slot is a genuine local value, whose scope
+    // entry is a `Local`.
+    $captureSlots = \array_values(\array_filter(
+        $captures,
+        static fn (string $free): bool => ! (($ctx->env[$free] ?? null) instanceof FnRef),
+    ));
+
+    $srcLoc = $origin === null
+        ? new SrcLoc($ctx->moduleName, $name, normalizeDisplayPath($ctx->sourceFile), 0, 0)
+        : srcLocFromAst($origin, $ctx->moduleName, $name, $ctx->sourceFile);
+
     $fnCtx = newCtx($paramNames, $ctx->state, $ctx->data, $ctx->newtypes, $ctx);
     $fnCtx->functionArity = $ctx->functionArity;
     $fnCtx->externalFnNames = $ctx->externalFnNames;
     $fnCtx->functionName = $name;
-    if ($body->line > 0) {
-        $fnCtx->stmtSrcLoc = srcLocFromAst($body, $ctx->moduleName, $name, $ctx->sourceFile);
+    if ($origin !== null && $origin->line > 0) {
+        $fnCtx->stmtSrcLoc = $srcLoc;
     }
 
-    foreach (freeVarsExpr($body, \array_fill_keys($paramNames, true)) as $free) {
+    foreach ($captures as $free) {
         if (isset($ctx->env[$free])) {
             $fnCtx->env[$free] = $ctx->env[$free];
         }
     }
 
-    $tail = lowerExpr($body, $fnCtx);
+    $tail = $body($fnCtx);
     $fnCtx->items[] = new Ret($tail);
     $ctx->state->functions[] = new FunctionDecl(
         $name,
         $paramNames,
-        null,
+        $type,
         new Block($fnCtx->items),
-        srcLoc: srcLocFromAst($body, $ctx->moduleName, $name, $ctx->sourceFile),
+        new FunctionShape(kind: $kind),
+        $srcLoc,
+        $ctx->evidenceNames,
+        $kind->takesCaptures() ? $captureSlots : null,
     );
     $ctx->functionArity[$name] = \count($paramNames);
 
     return new FnRef($name);
 }
 
-function lowerNamedNullary(string $name, Ast\AstNode $body, LowerCtx $ctx): FnRef
+function lowerNamedNullary(string $name, Ast\AstNode $body, LowerCtx $ctx, FunctionKind $kind): FnRef
 {
-    return lowerNamedLambda($name, [], $body, $ctx);
+    return lowerNamedLambda(
+        $name,
+        [],
+        freeVarsExpr($body, [], evidenceParameterFromTerms($ctx), $ctx->terms),
+        $body,
+        static fn (LowerCtx $fnCtx): Operand => lowerExpr($body, $fnCtx),
+        $ctx,
+        $kind,
+    );
 }
 
-/** @param array<int, Ast\Binding> $bindings */
-function lowerLet(array $bindings, Ast\AstNode $body, LowerCtx $ctx): Operand
+/**
+ * The dictionary-parameter answer for an evidence site, read from the term.
+ *
+ * The one spelling of "where does this method get its dictionary", shared by every
+ * lowering caller that has to scope a body before lowering it (a lambda's capture
+ * scan, a letrec thunk's).
+ */
+function evidenceParameterFromTerms(LowerCtx $ctx): callable
 {
+    return static fn (Ast\EvidenceMethod $method): ?string
+        => checkedEvidenceMethod($method, $ctx)->plan->parameter;
+}
+
+/**
+ * A lambda whose body is IR the lowering pass already decided.
+ *
+ * Eta-expansion builds a body the elaboration never had: an unsaturated primop
+ * becomes `\a b -> primop a b`, and there is no checked node for that application.
+ * Fabricating one was the inversion the checked core exists to remove — a node
+ * created after publication has no term, so asking it for its primop both invented
+ * a tree the checker never saw and then read that tree for a decision. The builder
+ * takes the body as a closure over its own context instead, and the trees capture
+ * analysis needs (`$captures`, resolved from the checked arguments by the caller)
+ * are passed in, because the node that would have carried them no longer exists.
+ *
+ * Everything else is the declaration {@see lowerNamedLambda()} makes: same slot
+ * order, same function kind, same source site, same evidence scope.
+ *
+ * @param list<string> $paramNames the lambda's parameters, in positional order
+ * @param list<string> $captures free names of the body, as the caller resolved them
+ * @param callable(LowerCtx): Operand $body the lambda's result, lowered in its own context
+ * @param ?Ast\AstNode $origin the span that names this lambda, or null when lowering has none
+ * @param ?Ast\AstNode $type the lambda's inferred type, when the checker left one on the node
+ */
+function lowerLoweredLambda(
+    array $paramNames,
+    array $captures,
+    callable $body,
+    ?Ast\AstNode $origin,
+    LowerCtx $ctx,
+    ?Ast\AstNode $type = null,
+): FnRef {
+    return lowerNamedLambda(
+        'λ' . $ctx->state->nextLambda++,
+        $paramNames,
+        $captures,
+        $origin,
+        $body,
+        $ctx,
+        FunctionKind::Lambda,
+        $type,
+    );
+}
+
+/**
+ * A `let`/`where` group, lowered from the term that owns its members and their order.
+ *
+ * The components arrive already decomposed ({@see plannedLetGroup()}), so this function binds
+ * them in the order the check published and then lowers the expression the term names as their
+ * scope. The node's own `$bindings` list is never read: an order re-derived here would be a
+ * second answer to a question inference already answered.
+ */
+function lowerLetGroup(Ast\AstNode $node, LowerCtx $ctx): Operand
+{
+    $term = plannedLetGroup($node, $ctx);
+    $body = $term->body
+        ?? throw new \LogicException(
+            'the checked term for the `' . $node::class . "` at line {$node->line} names no scoped expression",
+        );
+
     $savedEnv = $ctx->env;
-    lowerBindingGroups($bindings, $ctx);
+    lowerBindingGroups($term, $ctx);
     $result = lowerExpr($body, $ctx);
     $ctx->env = $savedEnv;
 
     return $result;
 }
 
-/** @param array<int, Ast\Binding> $bindings */
-function lowerWhere(Ast\AstNode $expr, array $bindings, LowerCtx $ctx): Operand
+/**
+ * A `do` statement's binding group: the same members and order, scoped by the surrounding
+ * statement list rather than by an expression the term names.
+ */
+/** Bind one group's components in the order its term publishes. */
+function lowerBindingGroups(CheckedLetGroup $term, LowerCtx $ctx): void
 {
-    $savedEnv = $ctx->env;
-    lowerBindingGroups($bindings, $ctx);
-    $result = lowerExpr($expr, $ctx);
-    $ctx->env = $savedEnv;
-
-    return $result;
-}
-
-/** @param list<Ast\Binding> $bindings */
-function lowerBindingGroups(array $bindings, LowerCtx $ctx): void
-{
-    foreach (bindingGroupSccs($bindings) as $component) {
-        $group = [];
-        foreach ($component['indices'] as $index) {
-            $group[] = $bindings[$index];
-        }
-        if ($component['recursive']) {
-            lowerRecursiveBindings($group, $ctx);
+    foreach ($term->components as $component) {
+        if ($component->recursive) {
+            lowerRecursiveBindings($component->bindings, $ctx);
 
             continue;
         }
-        foreach ($group as $binding) {
+        foreach ($component->bindings as $binding) {
             [$rhs] = peelBindingAnnotation($binding->value);
             bindPattern(
-                lowerPattern($binding->pattern, $ctx->constructorRenames, $ctx->data),
+                lowerPattern($binding->pattern, $ctx),
                 lowerExpr($rhs, $ctx),
                 $ctx,
             );
@@ -716,78 +1309,102 @@ function lowerRecursiveBindings(array $bindings, LowerCtx $ctx): void
     $planned = [];
 
     foreach ($bindings as $binding) {
-        if (! $binding->pattern instanceof Ast\PatVar) {
+        $site = plannedPattern($binding->pattern, $ctx);
+        if ($site->shape !== PatternShape::Var) {
             continue;
         }
         [$rhs] = peelBindingAnnotation($binding->value);
-        $name = $binding->pattern->name;
+        $name = $site->name
+            ?? throw new \RuntimeException("the recursive binder at {$site->origin} publishes no name");
         $fnName = '__letrec' . $ctx->state->nextLambda++;
         if ($rhs instanceof Ast\Lambda) {
             $planned[$name] = ['kind' => 'lambda', 'fnName' => $fnName, 'rhs' => $rhs];
-            $ctx->functionArity[$fnName] = \count($rhs->params);
+            $ctx->functionArity[$fnName] = plannedLambda($rhs, $ctx)->arity();
         } else {
             $planned[$name] = ['kind' => 'nullary', 'fnName' => $fnName, 'rhs' => $rhs];
             $ctx->functionArity[$fnName] = 0;
         }
         $ctx->env[$name] = new FnRef($fnName);
+        $identity = $site->binder;
+        if ($identity !== null) {
+            $ctx->binders[$identity] = new FnRef($fnName);
+        }
     }
 
     foreach ($planned as $plan) {
         if ($plan['kind'] === 'lambda') {
             /** @var Ast\Lambda $lambda */
             $lambda = $plan['rhs'];
-            lowerNamedLambda($plan['fnName'], $lambda->params, $lambda->body, $ctx);
+            $term = plannedLambda($lambda, $ctx);
+            lowerNamedLambda(
+                $plan['fnName'],
+                $term->parameterNames,
+                $term->captures,
+                $lambda->body,
+                lambdaBody($lambda, $term),
+                $ctx,
+                FunctionKind::Letrec,
+            );
         } else {
-            lowerNamedNullary($plan['fnName'], $plan['rhs'], $ctx);
+            lowerNamedNullary($plan['fnName'], $plan['rhs'], $ctx, FunctionKind::Letrec);
         }
     }
 
     foreach ($bindings as $binding) {
-        if ($binding->pattern instanceof Ast\PatVar) {
+        $site = plannedPattern($binding->pattern, $ctx);
+        if ($site->shape === PatternShape::Var) {
             continue;
         }
         [$rhs] = peelBindingAnnotation($binding->value);
         bindPattern(
-            lowerPattern($binding->pattern, $ctx->constructorRenames, $ctx->data),
+            lowerPatternTerm($site, $ctx),
             lowerExpr($rhs, $ctx),
             $ctx,
         );
     }
 }
 
-/** @param array<int, Ast\Alt> $alts */
-function lowerCase(Ast\AstNode $scrutinee, array $alts, LowerCtx $ctx, bool $exhaustive = false): Operand
+/**
+ * A `case`, lowered from the term that owns its arms.
+ *
+ * The arms, their order and their guard clauses are published facts ({@see CheckedCaseArm}), so
+ * this arm no longer asks each alternative whether its body happens to be a `GuardsExpr` nor
+ * reads `CaseExpr::$alts`: it walks the term's clauses, one match arm each, in the order the term
+ * names them. The scrutinee stays the node's — it is one expression, lowered in place.
+ *
+ * "Every arm always matches" is decided here rather than published because it is not a fact of
+ * the source alone: the last clause's guard has to be a name the lowering context already proved
+ * `True` ({@see guardIsConstantTrue()}), and that context is only complete once enclosing branches
+ * have been lowered.
+ */
+function lowerCase(Ast\CaseExpr $expr, LowerCtx $ctx): Operand
 {
-    $scrutineeOp = lowerExpr($scrutinee, $ctx);
+    $term = plannedCase($expr, $ctx);
+    $scrutineeOp = lowerExpr($expr->scrutinee, $ctx);
     $dest = freshTemp($ctx);
     $arms = [];
     $guardsAlwaysHold = true;
 
-    foreach ($alts as $alt) {
-        if ($alt->body instanceof Ast\GuardsExpr) {
-            $guardsAlwaysHold = $guardsAlwaysHold && guardsExhaustive($alt->body, $ctx);
-            $clauses = \array_map(
-                static fn (Ast\Guarded $guarded): array => [$guarded->guard, $guarded->body],
-                $alt->body->clauses,
-            );
-        } else {
-            $clauses = [[null, $alt->body]];
+    foreach ($term->arms as $arm) {
+        $lastGuard = $arm->lastGuard();
+        if ($lastGuard !== null) {
+            $guardsAlwaysHold = $guardsAlwaysHold && guardIsConstantTrue($lastGuard, $ctx->trueBindings);
         }
 
-        foreach ($clauses as [$guard, $body]) {
-            $armCtx = newArmCtx($ctx, $body);
-            $pattern = lowerPattern($alt->pattern, $ctx->constructorRenames, $ctx->data);
+        foreach ($arm->clauses as $clause) {
+            $armCtx = newArmCtx($ctx, $clause['body']);
+            $pattern = lowerPattern($arm->pattern, $ctx);
             bindPattern($pattern, $scrutineeOp, $armCtx);
-            if ($guard === null) {
+            if ($clause['guard'] === null) {
                 $guards = [];
             } else {
                 $bindings = $armCtx->items;
-                $isVarPattern = $alt->pattern instanceof Ast\PatVar;
+                $isVarPattern = $pattern instanceof PatVar;
                 $armCtx->items = [];
-                $guards = [lowerArmGuard($guard, $armCtx, $isVarPattern ? $bindings : [])];
+                $guards = [lowerArmGuard($clause['guard'], $armCtx, $isVarPattern ? $bindings : [])];
                 $armCtx->items = $isVarPattern ? [] : $bindings;
             }
-            $value = lowerExpr($body, $armCtx);
+            $value = lowerExpr($clause['body'], $armCtx);
             $arms[] = new MatchArm(
                 eraseNewtypesInPattern($pattern, $armCtx->newtypes),
                 new Block([...$armCtx->items, new Assign($dest, $value)]),
@@ -796,17 +1413,26 @@ function lowerCase(Ast\AstNode $scrutinee, array $alts, LowerCtx $ctx, bool $exh
         }
     }
 
-    $ctx->items[] = new MatchStmt($scrutineeOp, $arms, $dest, $exhaustive && $guardsAlwaysHold);
+    $ctx->items[] = new MatchStmt($scrutineeOp, $arms, $dest, $term->exhaustive && $guardsAlwaysHold);
 
     return new Temp($dest);
 }
 
+/**
+ * A bare guard chain, lowered from the term that owns its clauses.
+ *
+ * The clauses, their order and their count are the term's; each clause's guard and body stay
+ * children, lowered in place. "The chain always succeeds" is decided here rather than published,
+ * because it needs the lowering context's proved-true bindings, and that context is only complete
+ * once enclosing branches have been lowered.
+ */
 function lowerGuards(Ast\GuardsExpr $expr, LowerCtx $ctx): Operand
 {
+    $term = plannedGuards($expr, $ctx);
     $dest = freshTemp($ctx);
     $arms = [];
 
-    foreach ($expr->clauses as $clause) {
+    foreach ($term->clauses as $clause) {
         $guard = lowerExpr($clause->guard, $ctx);
         $armCtx = newArmCtx($ctx, $clause->body);
         $value = lowerExpr($clause->body, $armCtx);
@@ -817,7 +1443,12 @@ function lowerGuards(Ast\GuardsExpr $expr, LowerCtx $ctx): Operand
         );
     }
 
-    $ctx->items[] = new MatchStmt(new ConstInt(0), $arms, $dest, guardsExhaustive($expr, $ctx));
+    $ctx->items[] = new MatchStmt(
+        new ConstInt(0),
+        $arms,
+        $dest,
+        guardIsConstantTrue($term->lastGuard(), $ctx->trueBindings),
+    );
 
     return new Temp($dest);
 }
@@ -862,50 +1493,36 @@ function lowerArmGuard(Ast\AstNode $guard, LowerCtx $armCtx, array $bindings): G
 }
 
 /**
- * Whether a guard chain's last clause always succeeds, read from the *declaration* its predicate
- * resolves to (`otherwise = True`) rather than from the spelling — see `trueBindingOrigins`.
+ * A record construction or update, lowered from the term that owns its fields.
+ *
+ * One function for both shapes because they are one family — a construction is an update with no
+ * receiver. The term names the constructor (for an update, the checker's answer from the
+ * receiver's type), the fields in source order and whether a `newtype` update is identity; the
+ * declared field order is lowering's context, as it is for a record pattern. What the term
+ * removes is the node read: `RecordCon::$name`, `RecordUpdate::$constructor`,
+ * `::$fieldOnNewtype` and both `$fields` lists.
  */
-function guardsExhaustive(Ast\GuardsExpr $expr, LowerCtx $ctx): bool
+function lowerRecord(Ast\RecordCon|Ast\RecordUpdate $expr, LowerCtx $ctx): Operand
 {
-    $last = $expr->clauses[\count($expr->clauses) - 1]->guard ?? null;
-
-    return guardIsConstantTrue($last, $ctx->trueBindings);
-}
-
-function lowerRecordCon(Ast\RecordCon $expr, LowerCtx $ctx): Operand
-{
-    $order = $ctx->data[$expr->name]
-        ?? throw new \RuntimeException("unknown record constructor `{$expr->name}` in IR lowering");
-    $byName = [];
-    foreach ($expr->fields as $field) {
-        $byName[$field->name] = $field->expr;
-    }
-
-    $args = \array_map(
-        static fn (string $fieldName): Operand => lowerExpr($byName[$fieldName], $ctx),
-        $order,
-    );
-
-    return lowerCall($expr->name, $args, $ctx);
-}
-
-/**
- * `r { f = e }`: build the constructor the type checker named, with `e` at the
- * field's position and a read of the receiver at every other one.
- */
-function lowerRecordUpdate(Ast\RecordUpdate $expr, LowerCtx $ctx): Operand
-{
-    $constructor = $expr->constructor
-        ?? throw new \RuntimeException('record update reached IR lowering without a constructor');
-    $order = $ctx->data[$constructor]
-        ?? throw new \RuntimeException("unknown record constructor `{$constructor}` in IR lowering");
+    $term = plannedRecord($expr, $ctx);
+    $order = $ctx->data[$term->constructor]
+        ?? throw new \RuntimeException("unknown record constructor `{$term->constructor}` in IR lowering");
 
     $byName = [];
-    foreach ($expr->fields as $field) {
-        $byName[$field->name] = $field->expr;
+    foreach ($term->fields as $field) {
+        $byName[$field->name] = $field->value;
     }
 
-    $receiver = stabilizeOperand(lowerExpr($expr->object, $ctx), $ctx);
+    if (! $term->isUpdate()) {
+        $args = \array_map(
+            static fn (string $fieldName): Operand => lowerExpr($byName[$fieldName], $ctx),
+            $order,
+        );
+
+        return lowerCall($term->constructor, $args, $ctx);
+    }
+
+    $receiver = stabilizeOperand(lowerExpr($term->receiver, $ctx), $ctx);
     $args = [];
     foreach ($order as $position => $name) {
         if (isset($byName[$name])) {
@@ -914,19 +1531,55 @@ function lowerRecordUpdate(Ast\RecordUpdate $expr, LowerCtx $ctx): Operand
             continue;
         }
 
-        $args[] = $expr->fieldOnNewtype
+        $args[] = $term->fieldOnNewtype
             ? $receiver
             : lowerCall('__field' . $position, [$receiver], $ctx);
     }
 
-    return lowerCall($constructor, $args, $ctx);
+    return lowerCall($term->constructor, $args, $ctx);
+}
+
+/**
+ * A literal, lowered from its term.
+ *
+ * The term's shape says which constant to build and its value is the one the checker settled; the
+ * node's `value` is not read. The shape check on the value is a refusal, not a coercion: a term
+ * whose value does not fit its shape is a producer defect, and emitting a coerced constant would
+ * hide it.
+ */
+function lowerLiteral(Ast\AstNode $site, LowerCtx $ctx): Operand
+{
+    $term = plannedLiteral($site, $ctx);
+
+    return match ($term->shape) {
+        LiteralShape::Int => new ConstInt(
+            \is_int($term->value)
+                ? $term->value
+                : throw new \RuntimeException("the integer literal at {$term->origin} publishes a non-integer value"),
+        ),
+        LiteralShape::Double => new ConstDouble(
+            \is_float($term->value)
+                ? $term->value
+                : throw new \RuntimeException("the double literal at {$term->origin} publishes a non-float value"),
+        ),
+        LiteralShape::Str => new ConstStr(
+            \is_string($term->value)
+                ? $term->value
+                : throw new \RuntimeException("the string literal at {$term->origin} publishes a non-string value"),
+        ),
+        LiteralShape::Char => new ConstChar(
+            \is_int($term->value)
+                ? $term->value
+                : throw new \RuntimeException("the character literal at {$term->origin} publishes a non-integer value"),
+        ),
+    };
 }
 
 /**
  * Bind a value to a temp so it can be read more than once.
  *
  * An operand is usually a `Temp` a previous statement wrote, but some shapes are
- * the expression themselves (`ExprBinop`, `Intrinsic`, `Partial`) and would be
+ * the expression themselves (`Intrinsic`, `Partial`) and would be
  * recomputed by every read. A record update reads its receiver once per field it
  * keeps, so the receiver goes through here first.
  */
@@ -961,7 +1614,7 @@ function lowerFieldAccess(Ast\FieldAccess $expr, LowerCtx $ctx): Operand
 
 function astExprReturnsIo(Ast\AstNode $expr): bool
 {
-    $type = $expr->inferredType;
+    $type = $expr->inferredInternalType;
 
-    return $type !== null && isIoType($type);
+    return $type !== null && isIoCheckedType($type);
 }

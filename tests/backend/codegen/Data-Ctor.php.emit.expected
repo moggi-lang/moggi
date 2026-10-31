@@ -2,7 +2,7 @@
 
 namespace StructureDataCtor;
 
-const __MOGGI_MAP = [[28 => ['StructureDataCtor.square', 'tests/backend/codegen/Data-Ctor.mog', 11, 12]], ['StructureDataCtor\\area' => ['StructureDataCtor.area', 'tests/backend/codegen/Data-Ctor.mog', 6, 10], 'StructureDataCtor\\square' => ['StructureDataCtor.square', 'tests/backend/codegen/Data-Ctor.mog', 11, 12]]];
+const __MOGGI_MAP = [[28 => 1], ['StructureDataCtor\\area' => 0, 'StructureDataCtor\\square' => 1], [], [], [[0, 0, 6, 10], [1, 0, 11, 12]], ['StructureDataCtor.area', 'StructureDataCtor.square'], ['tests/backend/codegen/Data-Ctor.mog']];
 
 function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
 function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }

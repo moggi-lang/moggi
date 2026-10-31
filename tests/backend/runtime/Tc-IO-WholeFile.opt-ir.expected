@@ -4,11 +4,16 @@ module
   function letPath()
       ret "\/tmp\/moggi-tc-io-whole-let.txt"
   function main()
-      io_call putStrLn("bind")
-      io_call writeFile(@bindPath, "bind-linear")
-      t0 = io_call readFile(@bindPath)
-      io_call putStrLn(t0)
-      io_call putStrLn("let")
-      t1 = io_call readFile(@letPath)
-      io_call putStrLn(t1)
+      t8 = io_assign_action
+          t7 = call __w_main()
+        result t7
+      ret t8
+  function __w_main()
+      t0 = call System.IO::__w_putStrLn("bind")
+      t1 = call System.IO::__w_writeFile(@bindPath, "bind-linear")
+      t2 = call System.IO::__w_readFile(@bindPath)
+      t3 = call System.IO::__w_putStrLn(t2)
+      t4 = call System.IO::__w_putStrLn("let")
+      t5 = call System.IO::__w_readFile(@letPath)
+      t6 = call System.IO::__w_putStrLn(t5)
       ret ()

@@ -2,6 +2,7 @@
 
 namespace Moggi\Backend;
 
+use Moggi\Foreign\ForeignTypeTable;
 use Moggi\IR\Module;
 use Moggi\Syntax\Ast\TypeNode;
 
@@ -11,7 +12,21 @@ use Moggi\Syntax\Ast\TypeNode;
  */
 interface Backend
 {
-    /** Stable id: "php", "jvm", "dotnet", … */
+    /** Stable id: "php", "jvm", "dotnet". */
+    public function id(): string;
+
+    /**
+     * The emit plan for one output path, built by the target it describes.
+     *
+     * A plan is target layout, not module meaning: `EmitPlan::forTarget()` needs no IR, so a
+     * caller can ask before lowering. Keeping the construction here is what stops shared
+     * pipeline code from assembling a plan *for* a target, and stops a target from being handed
+     * one another target built.
+     *
+     * @param array<string, mixed> $options
+     */
+    public function emitPlan(string $outputRelative, array $options = []): \Moggi\Modules\EmitPlan;
+
     /**
      * Primary on-disk unit for a compiled module (before packaging).
      * e.g. ".php", ".class", ".il".
@@ -41,13 +56,16 @@ interface Backend
     public function runtimeFiles(): array;
 
     /**
-     * Emit one compiled module. Return value is backend-specific
-     * (source string, or map of relative-path => bytes/text).
+     * Emit one compiled module as a map of relative path => bytes/text.
+     *
+     * One shape for every target: a module can fan out into more than one artifact (a
+     * php module's host companions, one classfile or IL type per declared type), so the
+     * map is the honest answer and callers never branch on which backend answered.
      *
      * @param array<string, mixed> $options
-     * @return string|array<string, string> string body, or map of relative-path => bytes
+     * @return array<string, string>
      */
-    public function emit(Module $ir, string $sourcePath, array $options = []): string|array;
+    public function emit(Module $ir, string $sourcePath, array $options = []): array;
 
     /**
      * Extra state this backend's `emit()` reads that the module closure does not
@@ -82,10 +100,10 @@ interface Backend
      * `:dump emit`). Each backend owns the shape of its own artifacts, so
      * callers never have to sniff file extensions.
      *
-     * @param string|array<string, string> $emit
+     * @param array<string, string> $emit
      * @param list<string> $focusNames Moggi names to keep (empty = whole module)
      */
-    public function describeEmit(string|array $emit, array $focusNames = []): string;
+    public function describeEmit(array $emit, array $focusNames = []): string;
 
     /**
      * Finalize a build directory into a runnable artifact.
@@ -101,13 +119,26 @@ interface Backend
      * @param 'function'|'const' $kind
      * @param array{dispatch: string, classPath: ?string, hostMember: ?string, path?: string} $pathInfo
      * @param string $name the Moggi binding name of the foreign import
+     * @param ?string $module the module whose declaration this is, so a foreign type it
+     *   declares is read from that declaration rather than from whichever module a
+     *   process-wide registry happened to see last; null keeps the module-less read
      */
     public function foreignNativeSig(
         TypeNode $type,
         string $kind,
         array $pathInfo,
         string $name,
+        ?string $module = null,
     ): ?string;
+
+    /**
+     * The host types the modules checked for this target declare.
+     *
+     * A `foreign jvm type Path "…"` is written while *checking* and read while *emitting*, and the
+     * emitter sees IR rather than the checker's state, so the facts belong to the target object those
+     * two steps share rather than to the process they happen to run in.
+     */
+    public function foreignTypes(): ForeignTypeTable;
 
     /**
      * Backend-specific foreign-import rules (path shape, receiver constraints).
@@ -173,25 +204,9 @@ function knownBackendIds(): array
     return ['php', 'jvm', 'dotnet'];
 }
 
-function compileBackend(): string
-{
-    return $GLOBALS['moggi_compile_backend'] ?? 'php';
-}
-
 function isBackendImplemented(string $backend): bool
 {
     return \in_array($backend, implementedBackendIds(), true);
-}
-
-function setCompileBackend(string $backend): void
-{
-    assertBackend($backend);
-    if (! isBackendImplemented($backend)) {
-        throw new \InvalidArgumentException(
-            "code generation for backend `{$backend}` is not implemented",
-        );
-    }
-    $GLOBALS['moggi_compile_backend'] = $backend;
 }
 
 /** @param list<string> $allowed */
@@ -228,11 +243,6 @@ function backendById(string $id): Backend
     }
 
     return $registry[$id];
-}
-
-function currentBackend(): Backend
-{
-    return backendById(compileBackend());
 }
 
 /** @return list<string> */

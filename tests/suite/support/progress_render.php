@@ -25,8 +25,8 @@ function progressCursorUp(int $lines): string
 }
 
 /**
- * The terminal size in columns and rows. `MOGGI_TEST_COLUMNS`/`LINES` pin it for a test with no pty,
- * `COLUMNS`/`LINES` are what a shell exports, `tput` is the last resort.
+ * The terminal size in columns and rows: `COLUMNS`/`LINES` when the shell exports them, `tput`
+ * otherwise (a run with no pty has neither), and 80×24 when both are silent.
  *
  * @return array{cols: int, rows: int}
  */
@@ -38,16 +38,16 @@ function terminalSize(): array
     }
 
     return $size = [
-        'cols' => terminalDimension('MOGGI_TEST_COLUMNS', 'COLUMNS', 'tput cols', 80),
-        'rows' => terminalDimension('MOGGI_TEST_LINES', 'LINES', 'tput lines', 24),
+        'cols' => terminalDimension('COLUMNS', 'tput cols', 80),
+        'rows' => terminalDimension('LINES', 'tput lines', 24),
     ];
 }
 
-/** One dimension of `terminalSize`: the test override, the exported variable, `tput`, a default. */
-function terminalDimension(string $testEnv, string $shellVar, string $command, int $fallback): int
+/** One dimension of `terminalSize`: the exported variable, `tput`, then the default. */
+function terminalDimension(string $shellVar, string $command, int $fallback): int
 {
-    $declared = \getenv($testEnv) ?: ($_SERVER[$shellVar] ?? null);
-    if ($declared !== null && (int) $declared > 0) {
+    $declared = $_SERVER[$shellVar] ?? \getenv($shellVar);
+    if (\is_string($declared) && (int) $declared > 0) {
         return (int) $declared;
     }
 
@@ -157,13 +157,9 @@ function progressRender(): void
         return;
     }
 
-    // Leave the last column free: writing into it can itself wrap on some terminals.
     $columns = \max(20, terminalSize()['cols'] - 1);
 
     $rows = \array_map(static fn (string $key): array => $state['rows'][$key], $state['order']);
-
-    // Fold the earliest rows away until the rest fits the screen, headers included. One at a time,
-    // because the aggregate row itself takes lines and can change how many backends are on screen.
     $maxRows = \max(2, terminalSize()['rows'] - 2);
     $folded = [];
     $lines = progressLines($rows, $columns);
@@ -176,7 +172,6 @@ function progressRender(): void
         $lines = progressLines($rows, $columns);
     }
 
-    // The previous paint left the cursor on the last line; rewrite the block on its own lines.
     $out = $state['painted'] > 0 ? "\r" . progressCursorUp($state['painted'] - 1) : '';
 
     $last = \count($lines) - 1;

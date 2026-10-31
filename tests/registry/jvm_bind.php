@@ -1,12 +1,18 @@
 <?php declare(strict_types=1);
 
-// Bindings Phase 2: `moggi bind jvm:com.acme:hello` reads the fixture jar and
-// writes the `Maven.Com.Acme.Hello` module, which then compiles and runs on
-// the JVM backend. One targeted test only: the inspector/writer units, the
-// golden render, the CLI surface (`--print`, `--out`, the dotnet refusal), the
-// round-trip self-check, and the emit-cache discriminator in the bind cache
-// key. Needs a JDK (`javac` for the fixture, `javap` for the binder, `java`
-// for the run) — resolved from JAVA_HOME, then PATH, then beside `java`.
+/**
+ * The JVM binding: `moggi bind jvm:com.acme:hello` inspects a fixture JAR
+ * and generates `Maven.Com.Acme.Hello`, which must compile and run on the
+ * JVM backend.
+ *
+ * One targeted test covers inspector/writer units, golden output, CLI
+ * options (`--print`, `--out`, and .NET refusal), round-trip validation,
+ * and the emit-cache discriminator in the bind cache key.
+ *
+ * Requires a JDK: `javac` for the fixture, `javap` for inspection, and
+ * `java` for execution. Tools are resolved from `JAVA_HOME`, then `PATH`,
+ * then beside `java`.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -46,7 +52,6 @@ $work = createTempDir('moggi-jvm-bind');
 $fixture = $root . '/tests/registry/bind/fixtures/acme-hello-jvm';
 $golden = (string) \file_get_contents($root . '/tests/registry/bind/Maven.Com.Acme.Hello.mog.expected');
 
-// The coordinate shape, and the module it names.
 $parts = parseJvmCoordinate('com.acme:hello:1.0.0');
 $assert(
     $parts === ['group' => 'com.acme', 'artifact' => 'hello', 'version' => '1.0.0'],
@@ -64,8 +69,6 @@ foreach (['hello', 'com.acme:', ':hello', 'a:b:c:d'] as $bad) {
     }
 }
 
-// The fixture tree: sources compiled into a jar under `jvm/`, the discovery
-// shape the backend itself scans.
 $tree = $work . '/tree';
 $compileFixture = static function () use ($javac, $jar, $fixture, $tree, $assert): void {
     foreach (['classes', 'jvm'] as $dir) {
@@ -158,16 +161,13 @@ $assert(
     ($byName['newGreeter']['sig'] ?? '') === 'String -> Greeter',
     'constructor: ' . ($byName['newGreeter']['sig'] ?? ''),
 );
-// The round-trip self-check fired on nothing: no skip names a mismatch.
 foreach ($descriptor['skipped'] as $skip) {
     $assert(! \str_contains($skip['reason'], 'round-trip'), 'round-trip mismatch: ' . \json_encode($skip));
 }
 
-// The render is the golden, byte for byte.
 $rendered = renderBinding($descriptor);
 $assert(normalize($rendered) === normalize($golden), "render differs from golden:\n" . diffText(normalize($golden), normalize($rendered)));
 
-// The bind cache key folds the JVM emit discriminator in.
 $key = bindCacheKey('jvm', 'com.acme:hello');
 $discriminator = (new JvmBackend())->emitCacheDiscriminator();
 $assert(
@@ -177,8 +177,6 @@ $assert(
 $assert(bindCacheKey('jvm', 'com.acme:hello') === $key, 'cache key is not deterministic');
 $assert(bindCacheKey('php', 'com.acme:hello') !== $key, 'cache key ignores the backend');
 
-// The CLI: `--print` renders the golden, and an unknown backend is refused
-// (`dotnet:` binds since Phase 3, see dotnet_bind_test.php).
 $env = \getenv();
 $env['MOGGI_CACHE_DIR'] = $work . '/cache';
 seedCacheDir($env['MOGGI_CACHE_DIR']);
@@ -197,10 +195,6 @@ $refused = $moggi(['bind', 'go:github.com/acme/hello', '--tree', $tree]);
 $assert(($refused['exitCode'] ?? 0) !== 0, 'a go: coordinate bound');
 $assert(\str_contains((string) ($refused['stderr'] ?? ''), 'only `php:`, `jvm:` and `dotnet:`'), 'refusal says: ' . ($refused['stderr'] ?? ''));
 
-// End to end: bind to a directory, compile a program against it, run it on
-// the JVM backend. The tree rides along as a library root, so the verifier
-// reads its jars and the artifact merges them — including the interface call,
-// which emits `invokeinterface` from the generated prefix alone.
 $gen = $work . '/gen';
 $written = $moggi(['bind', 'jvm:com.acme:hello', '--tree', $tree, '--out', $gen]);
 $assert(($written['exitCode'] ?? 1) === 0, 'bind --out failed: ' . ($written['stderr'] ?? ''));
@@ -253,13 +247,15 @@ foreach ($walk as $file) {
     // The pathname carries `\` on Windows; compare `/`-spelled, the way the
     // dotnet bind test already does with `DIRECTORY_SEPARATOR`.
     $spelling = \str_replace('\\', '/', $file->getPathname());
-    if ($file->isFile() && \str_ends_with($spelling, 'Directory/JVM.class')) {
+    // The unit's own class: the facade is the compiled unit, so the directory library's jvm half is
+    // emitted into `System/Directory.class` rather than a `Directory/JVM.class` beside it.
+    if ($file->isFile() && \str_ends_with($spelling, 'System/Directory.class')) {
         $dirClass = $spelling;
 
         break;
     }
 }
-$assert($dirClass !== null, 'no Directory/JVM.class in unpacked output');
+$assert($dirClass !== null, 'no System/Directory.class in unpacked output');
 $javap = resolveJdkBinary('javap');
 $assert($javap !== null, 'no `javap` found');
 $uout = \str_replace('\\', '/', $work . '/uout/');

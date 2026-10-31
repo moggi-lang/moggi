@@ -3,8 +3,6 @@
 /** Resolve `java` / `javac` from JAVA_HOME, PATH, or a sibling of `java`. */
 function resolveJdkBinary(string $name): ?string
 {
-    // On Windows the binaries are `name.exe`; the PATH lookup below already
-    // knows that, but the JAVA_HOME and sibling spellings do not.
     $names = [$name];
     if (\PHP_OS_FAMILY === 'Windows' && ! \str_ends_with(\strtolower($name), '.exe')) {
         $names[] = $name . '.exe';
@@ -533,9 +531,6 @@ function normalizeDiagnosticPaths(string $text, string $projectRoot): string
         return $text;
     }
 
-    // The root reaches the text with whatever separators built the path. A Windows checkout is the
-    // awkward one: `__DIR__` is `D:\a\moggi\moggi` while the case paths below it are joined with
-    // `/`, so the text carries `D:\a\moggi\moggi/tests/…` and no single prefix covers every case.
     $text = \str_replace(
         [$root . DIRECTORY_SEPARATOR, $root . '/', \str_replace('\\', '/', $root) . '/'],
         '',

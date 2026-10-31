@@ -3,16 +3,18 @@
 namespace Moggi\Semantics\IoBoundary;
 
 use Moggi\IR\EntryPointKind;
+use Moggi\Semantics\TypeExpr\TArrow;
+use Moggi\Semantics\TypeExpr\TCon;
+use Moggi\Semantics\TypeExpr\TUnit;
+use Moggi\Semantics\TypeExpr\Type;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
 use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
-
 use function Moggi\Semantics\IntrinsicRegistry\primopArity;
 use function Moggi\Semantics\Kernel\bindRole;
 use function Moggi\Semantics\Kinds\canonicalTypeConName;
-
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
 
 /**
  * Validate IO surface constraints on a typed program.
@@ -242,15 +244,29 @@ function isIoUnitType(Ast\TypeNode $type): bool
         && $type->args[0] instanceof Ast\TypeUnit;
 }
 
-function isNestedIoType(Ast\TypeNode $type): bool
+/**
+ * The same IO tests over the checker's own types — the authority a term's type
+ * carries.
+ *
+ * A declaration's signature is still read as the source syntax it was written
+ * as, so the projection-based tests above keep their callers; a *term*, whose
+ * annotation is only a projection, is read here.
+ */
+function isIoCheckedType(Type $type): bool
 {
-    if (! isIoType($type)) {
-        return false;
-    }
+    return $type instanceof TCon
+        && isIoTypeConName($type->name)
+        && \count($type->args) === 1;
+}
 
-    $inner = $type->args[0] ?? null;
+function isIoUnitCheckedType(Type $type): bool
+{
+    return isIoCheckedType($type) && $type->args[0] instanceof TUnit;
+}
 
-    return $inner instanceof Ast\TypeNode && isIoType($inner);
+function isNestedIoCheckedType(Type $type): bool
+{
+    return isIoCheckedType($type) && isIoCheckedType($type->args[0]);
 }
 
 function typeMentionsIo(Ast\TypeNode $type): bool
@@ -436,14 +452,14 @@ function validateStraightLineDo(array $stmts, string $source, string $filename):
         }
 
         if ($last && $stmt->expr instanceof Ast\Variable) {
-            $varType = $stmt->expr->inferredType;
-            if ($varType !== null && isIoType($varType)) {
+            $varType = $stmt->expr->inferredInternalType;
+            if ($varType !== null && isIoCheckedType($varType)) {
                 continue;
             }
         }
 
-        $stmtType = $stmt->expr->inferredType;
-        if (! $last && ! ($stmtType !== null && isIoUnitType($stmtType))) {
+        $stmtType = $stmt->expr->inferredInternalType;
+        if (! $last && ! ($stmtType !== null && isIoUnitCheckedType($stmtType))) {
             fail('intermediate IO statements must return ()', $stmt->expr, $source, $filename);
         }
 
@@ -619,9 +635,9 @@ function validateIoActionArgs(Ast\AstNode $expr, string $source, string $filenam
 
 function exprIsIoContinuation(Ast\AstNode $expr): bool
 {
-    $type = $expr->inferredType;
-    while ($type instanceof Ast\TypeArrow) {
-        if (isIoType($type->to)) {
+    $type = $expr->inferredInternalType;
+    while ($type instanceof TArrow) {
+        if (isIoCheckedType($type->to)) {
             return true;
         }
         $type = $type->to;
@@ -640,9 +656,9 @@ function exprIsIoContinuation(Ast\AstNode $expr): bool
  */
 function exprReturnsIo(Ast\AstNode $expr): bool
 {
-    $type = $expr->inferredType;
+    $type = $expr->inferredInternalType;
 
-    return $type !== null && isIoType($type);
+    return $type !== null && isIoCheckedType($type);
 }
 
 function validateIoBindExpr(Ast\AstNode $expr, string $source, string $filename): void
@@ -666,16 +682,16 @@ function validateIoBindExpr(Ast\AstNode $expr, string $source, string $filename)
 
 function doBindingHasIoType(Ast\DoBind $binding): bool
 {
-    $type = $binding->expr->inferredType;
+    $type = $binding->expr->inferredInternalType;
 
-    return $type !== null && isIoType($type);
+    return $type !== null && isIoCheckedType($type);
 }
 
 function validateIoBuildExpr(Ast\AstNode $expr, string $source, string $filename): void
 {
     if (exprReturnsIo($expr)) {
-        $type = $expr->inferredType;
-        if ($type !== null && isNestedIoType($type)) {
+        $type = $expr->inferredInternalType;
+        if ($type !== null && isNestedIoCheckedType($type)) {
             fail('nested IO actions are not supported', $expr, $source, $filename);
         }
 
@@ -808,12 +824,12 @@ function isUnsaturatedPartialIo(Ast\AstNode $expr): bool
         return false;
     }
 
-    $type = $expr->inferredType;
-    if (! $type instanceof Ast\TypeArrow) {
+    $type = $expr->inferredInternalType;
+    if (! $type instanceof TArrow) {
         return false;
     }
 
-    return ! isIoType($type->to);
+    return ! isIoCheckedType($type->to);
 }
 
 /** @return ?array{left: Ast\AstNode, right: Ast\AstNode} */
@@ -884,4 +900,58 @@ function fail(string $message, Ast\AstNode $at, string $source, string $filename
         $at->col,
         $at->endCol,
     );
+}
+
+/**
+ * The form of a `do` statement's expression (or of a `do` body) — the one action-versus-value
+ * question, answered here and published on the node by {@see \Moggi\Semantics\IoEscape\analyze}.
+ *
+ * This is the only caller of this function: lowering reads the published field
+ * (`Lower\Io::ioStatementFormOf`) and never re-asks, so a node cannot be classified twice with two
+ * answers. `Deferred` is lexical: the producer passes the binder identities its `let`-bound actions
+ * introduced in the enclosing sequence.
+ *
+ * Anything this function does not recognise is `Action`: an expression whose value is an action the
+ * action ABI handles at the call site. That is deliberate — statement and body positions are
+ * guarded at publication, where an unclassified shape is a compiler error rather than a quiet
+ * fallback.
+ *
+ * @param array<int, true> $deferred binder identities a `let` bound to an action, in scope here
+ */
+function ioStatementForm(Ast\AstNode $expr, array $deferred): \Moggi\IR\IoStatementForm
+{
+    if ($expr instanceof Ast\IoPure) {
+        return \Moggi\IR\IoStatementForm::Pure;
+    }
+
+    if ($expr instanceof Ast\IoCase) {
+        return \Moggi\IR\IoStatementForm::Case;
+    }
+
+    if ($expr instanceof Ast\IoSequence) {
+        return \Moggi\IR\IoStatementForm::Sequence;
+    }
+
+    $inner = $expr instanceof Ast\IoAction ? $expr->expr : $expr;
+    if ($inner instanceof Ast\Variable
+        && $inner->binderId !== null
+        && isset($deferred[$inner->binderId])) {
+        return \Moggi\IR\IoStatementForm::Deferred;
+    }
+
+    return \Moggi\IR\IoStatementForm::Action;
+}
+
+/**
+ * Whether a node is one of the four shapes a `do` statement's expression (or a `do` body) can have.
+ *
+ * The answer is the AST's own marker ({@see Ast\IoStatementExpression}), not a list kept here, so a
+ * new IO expression node is classified by declaring itself one. The producer refuses an expression
+ * outside the marker, by class and line, so a new IO node reaches the boundary as an error rather
+ * than as an unclassified expression lowering has to guess at. A nested `do` in bind position
+ * arrived exactly that way once.
+ */
+function isIoStatementExpression(Ast\AstNode $expr): bool
+{
+    return $expr instanceof Ast\IoStatementExpression;
 }

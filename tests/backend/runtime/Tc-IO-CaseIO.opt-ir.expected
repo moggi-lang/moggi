@@ -1,34 +1,58 @@
 module
   function emitWhen(b)
+      t3 = io_assign_action
+          t2 = call __w_emitWhen(b)
+        result t2
+      ret t3
+  function __w_emitWhen(b)
       io_match b
         arm True
-            io_call putStrLn("y")
+            t0 = call System.IO::__w_putStrLn("y")
             ret ()
         arm False
-            io_call putStrLn("n")
+            t1 = call System.IO::__w_putStrLn("n")
             ret ()
+      ret ()
   function pick(b)
+      t7 = io_assign_action
+          t6 = call __w_pick(b)
+        result t6
+      ret t7
+  function __w_pick(b)
       io_match b
         arm True
-            io_call putStrLn("yes")
+            t4 = call System.IO::__w_putStrLn("yes")
             ret ()
         arm False
-            io_call putStrLn("no")
+            t5 = call System.IO::__w_putStrLn("no")
             ret ()
+      ret ()
   function pickOrError(b)
+      t11 = io_assign_action
+          t10 = call __w_pickOrError(b)
+        result t10
+      ret t11
+  function __w_pickOrError(b)
       io_match b
         arm True
-            io_call putStrLn("yes")
+            t8 = call System.IO::__w_putStrLn("yes")
             ret ()
         arm False
-            io_call error("no")
+            t9 = io_call error("no")
+            io_run t9
             ret ()
+      ret ()
   function main()
-      io_call putStrLn("linear")
-      io_call emitWhen(@True)
-      io_call putStrLn("deferred")
-      io_call putStrLn("before")
-      io_call pick(@True)
-      io_call putStrLn("error-branch")
-      io_call pickOrError(@True)
+      t20 = io_assign_action
+          t19 = call __w_main()
+        result t19
+      ret t20
+  function __w_main()
+      t12 = call System.IO::__w_putStrLn("linear")
+      t13 = call __w_emitWhen(@True)
+      t14 = call System.IO::__w_putStrLn("deferred")
+      t15 = call System.IO::__w_putStrLn("before")
+      t16 = call __w_pick(@True)
+      t17 = call System.IO::__w_putStrLn("error-branch")
+      t18 = call __w_pickOrError(@True)
       ret ()

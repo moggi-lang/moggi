@@ -5,6 +5,37 @@ namespace Moggi\IR\Visit;
 use Moggi\IR;
 
 /**
+ * A node class the traversal does not know. Rejected by name: an unlisted node
+ * used to be read as a leaf, which silently validated an incomplete program.
+ */
+final class UnknownIrNode extends \InvalidArgumentException
+{
+    public static function for(object $node): self
+    {
+        return new self('unknown IR node `' . $node::class . '`');
+    }
+}
+
+/**
+ * An operand tree deeper than the documented bound. Failing is the point: the
+ * old cap returned the node it had reached, so a deep program was traversed
+ * partially and reported as if it had been traversed in full.
+ */
+final class TraversalDepthExceeded extends \RuntimeException
+{
+    public static function at(int $depth): self
+    {
+        return new self('IR operand traversal exceeded depth ' . $depth);
+    }
+}
+
+/** The documented bound on operand-tree recursion ({@see walkOperand}). */
+function maxOperandDepth(): int
+{
+    return 64;
+}
+
+/**
  * Rebuild a guard list through `$mapCond` and `$mapStmt`.
  *
  * A guard owns the statements that compute it, so a pass that rewrites an arm's
@@ -36,17 +67,14 @@ function mapGuards(array $guards, callable $mapCond, callable $mapStmt): array
 function operandChildren(IR\Operand $operand): array
 {
     return match ($operand::class) {
-        IR\ExprBinop::class => [$operand->left, $operand->right],
-        IR\ExprCall::class => $operand->args,
-        IR\ExprCallValue::class => [$operand->callee, ...$operand->args],
-        IR\ExprPartial::class => $operand->args,
         IR\Partial::class => $operand->args,
         IR\Intrinsic::class => $operand->args,
         IR\DictMethod::class => [$operand->evidence],
         IR\ListLit::class => $operand->elements,
         IR\ForeignCall::class => $operand->args,
-        IR\IoAction::class => [$operand->expr],
-        default => [],
+        IR\ConstInt::class, IR\ConstStr::class, IR\ConstChar::class, IR\ConstDouble::class,
+        IR\Local::class, IR\Temp::class, IR\FnRef::class, IR\Unit::class => [],
+        default => throw UnknownIrNode::for($operand),
     };
 }
 
@@ -62,34 +90,6 @@ function operandChildren(IR\Operand $operand): array
 function mapOperandChildren(IR\Operand $operand, callable $mapChild): IR\Operand
 {
     return match ($operand::class) {
-        IR\ExprBinop::class => (function () use ($operand, $mapChild): IR\Operand {
-            $left = $mapChild($operand->left);
-            $right = $mapChild($operand->right);
-            if ($left === $operand->left && $right === $operand->right) {
-                return $operand;
-            }
-
-            return new IR\ExprBinop($operand->op, $left, $right);
-        })(),
-        IR\ExprCall::class => (function () use ($operand, $mapChild): IR\Operand {
-            [$args, $changed] = mapChildList($operand->args, $mapChild);
-
-            return $changed ? new IR\ExprCall($operand->callee, $args, $operand->srcLoc) : $operand;
-        })(),
-        IR\ExprCallValue::class => (function () use ($operand, $mapChild): IR\Operand {
-            $callee = $mapChild($operand->callee);
-            [$args, $changed] = mapChildList($operand->args, $mapChild);
-            if (! $changed && $callee === $operand->callee) {
-                return $operand;
-            }
-
-            return new IR\ExprCallValue($callee, $args, $operand->srcLoc);
-        })(),
-        IR\ExprPartial::class => (function () use ($operand, $mapChild): IR\Operand {
-            [$args, $changed] = mapChildList($operand->args, $mapChild);
-
-            return $changed ? new IR\ExprPartial($operand->fn, $operand->arity, $args) : $operand;
-        })(),
         IR\Partial::class => (function () use ($operand, $mapChild): IR\Operand {
             [$args, $changed] = mapChildList($operand->args, $mapChild);
 
@@ -105,7 +105,7 @@ function mapOperandChildren(IR\Operand $operand, callable $mapChild): IR\Operand
 
             return $evidence === $operand->evidence
                 ? $operand
-                : new IR\DictMethod($evidence, $operand->method);
+                : new IR\DictMethod($evidence, $operand->method, $operand->localEvidence);
         })(),
         IR\ListLit::class => (function () use ($operand, $mapChild): IR\Operand {
             [$elements, $changed] = mapChildList($operand->elements, $mapChild);
@@ -133,7 +133,9 @@ function mapOperandChildren(IR\Operand $operand, callable $mapChild): IR\Operand
                 $operand->nativeSig,
             );
         })(),
-        default => $operand,
+        IR\ConstInt::class, IR\ConstStr::class, IR\ConstChar::class, IR\ConstDouble::class,
+        IR\Local::class, IR\Temp::class, IR\FnRef::class, IR\Unit::class => $operand,
+        default => throw UnknownIrNode::for($operand),
     };
 }
 
@@ -170,8 +172,8 @@ function mapChildList(array $children, callable $mapChild): array
  */
 function mapOperandTree(IR\Operand $operand, callable $map, int $depth = 0): IR\Operand
 {
-    if ($depth > 64) {
-        return $operand;
+    if ($depth > maxOperandDepth()) {
+        throw TraversalDepthExceeded::at($depth);
     }
 
     $operand = $map($operand);
@@ -185,8 +187,8 @@ function mapOperandTree(IR\Operand $operand, callable $map, int $depth = 0): IR\
 /** @param callable(IR\Operand): void $visit */
 function walkOperand(IR\Operand $operand, callable $visit, int $depth = 0): void
 {
-    if ($depth > 64) {
-        return;
+    if ($depth > maxOperandDepth()) {
+        throw TraversalDepthExceeded::at($depth);
     }
 
     $visit($operand);
@@ -208,7 +210,6 @@ function stmtDirectOperands(IR\Stmt $stmt): array
 {
     return match ($stmt::class) {
         IR\Ret::class, IR\Assign::class, IR\Let::class => [$stmt->value],
-        IR\Binop::class => [$stmt->left, $stmt->right],
         IR\Call::class => $stmt->args,
         IR\IoCall::class => $stmt->args,
         IR\IoRun::class => [$stmt->action],
@@ -229,7 +230,8 @@ function stmtDirectOperands(IR\Stmt $stmt): array
             ),
         ),
         IR\TailRecall::class => $stmt->args,
-        default => [],
+        IR\Loop::class => [],
+        default => throw UnknownIrNode::for($stmt),
     };
 }
 
@@ -252,7 +254,10 @@ function stmtNestedBlocks(IR\Stmt $stmt): array
         ),
         IR\Loop::class => [$stmt->body],
         IR\IoAssignAction::class => [$stmt->body],
-        default => [],
+        IR\Ret::class, IR\Call::class, IR\CallValue::class, IR\DictCall::class,
+        IR\Assign::class, IR\Let::class, IR\TailRecall::class, IR\IoCall::class, IR\IoRun::class,
+        IR\IoThrow::class, IR\IoCatch::class, IR\IoFinally::class => [],
+        default => throw UnknownIrNode::for($stmt),
     };
 }
 
@@ -291,8 +296,6 @@ function collectIrCodegenUsage(IR\Module $module): array
         match ($operand::class) {
             IR\FnRef::class => $callees[$operand->name] = true,
             IR\Partial::class => $callees[$operand->fn] = true,
-            IR\ExprCall::class => $callees[$operand->callee] = true,
-            IR\ExprPartial::class => $callees[$operand->fn] = true,
             IR\Intrinsic::class => $intrinsics[$operand->name] = true,
             default => null,
         };
@@ -348,9 +351,10 @@ function moduleUsesMoggiRuntime(IR\Module $module): bool
             if (isset($runtimeIntrinsics[$stmt->callee])) {
                 $found = true;
             }
-            if ($stmt->foreign !== null) {
-                $noteForeignPath($stmt->foreign->path);
-                if ($stmt->foreign->phpValueBox || $stmt->foreign->handleBox) {
+            if ($stmt->op instanceof IR\IoForeign) {
+                $foreign = $stmt->op->call;
+                $noteForeignPath($foreign->path);
+                if ($foreign->phpValueBox || $foreign->handleBox) {
                     $found = true;
                 }
             }
@@ -420,35 +424,6 @@ function collectLambdaRefsInBlock(IR\Block $block, callable $isLambda): array
 }
 
 /**
- * @param callable(string): bool $isLambda
- * @return array{locals: list<string>, lambdaRefs: list<string>}
- */
-function analyzeBlockForCodegen(IR\Block $block, callable $isLambda): array
-{
-    $locals = [];
-    $lambdaRefs = [];
-    walkBlock(
-        $block,
-        static function (IR\Stmt $stmt) use (&$locals, &$lambdaRefs): void {
-        },
-        static function (IR\Operand $op) use (&$locals, &$lambdaRefs, $isLambda): void {
-            if ($op instanceof IR\Local) {
-                $locals[] = $op->name;
-            }
-
-            if ($op instanceof IR\FnRef && $isLambda($op->name)) {
-                $lambdaRefs[] = $op->name;
-            }
-        },
-    );
-
-    return [
-        'locals' => \array_values(\array_unique($locals)),
-        'lambdaRefs' => \array_values(\array_unique($lambdaRefs)),
-    ];
-}
-
-/**
  * Names bound by an IR pattern (match-arm binders, including nested
  * constructor / cons / record / tuple sub-patterns).
  *
@@ -482,8 +457,14 @@ function irPatternBoundNames(IR\Pattern $pattern): array
     if ($pattern instanceof IR\PatCons) {
         return [...irPatternBoundNames($pattern->head), ...irPatternBoundNames($pattern->tail)];
     }
+    if ($pattern instanceof IR\PatWild
+        || $pattern instanceof IR\PatLit
+        || $pattern instanceof IR\PatChar
+        || $pattern instanceof IR\PatNil) {
+        return [];
+    }
 
-    return [];
+    throw UnknownIrNode::for($pattern);
 }
 
 /**

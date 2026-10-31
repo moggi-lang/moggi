@@ -103,16 +103,6 @@ function patternDuplicateBinder(Ast\AstNode $pattern): ?array
 }
 
 /**
- * First duplicate variable name in a single pattern, if any.
- */
-function patternDuplicateName(Ast\AstNode $pattern): ?string
-{
-    $dup = patternDuplicateBinder($pattern);
-
-    return $dup === null ? null : $dup[0];
-}
-
-/**
  * @return list<array{0: string, 1: Ast\AstNode}>
  */
 function patternVariableBindersOrdered(Ast\AstNode $pattern): array

@@ -1,303 +1,252 @@
 ---
-title: "Compiler Architecture"
+title: "Architecture and invariants"
+description: The phases, the representations they exchange, and the rules a change must not break.
 ---
-# Compiler Architecture
+# Architecture and invariants
 
-This document describes the bootstrap compiler as a set of phases. It is both
-the current navigation guide and the target contract for ongoing refactors:
-each phase should own one concept, consume one representation, and produce the
-next representation without leaking backend details into earlier phases.
+The compiler is a pipeline of phases, each owning one representation. A phase
+may be incomplete; a leak of one phase's facts into another is the defect this
+page exists to prevent.
 
-## Current Pipeline
-
-Standalone and module codegen share `Moggi\Pipeline\run` in `src/pipeline/`:
+## The pipeline
 
 ```text
 source
-  -> Lexer\lex
-  -> Parser\parse
-  -> Types\checkRaw          (CompilePurpose: Executable | Library | Repl)
-  -> IoBoundary\validate
-  -> StrictIoNormalize\normalize
-  -> IR\lower                (Module.entry: EntryPoint{name, kind})
-  -> Optimize\optimize
-  -> Codegen\emit            (bootstrap only for EntryPointKind::Main)
+  → lexer                    tokens
+  → parser                   raw AST
+  → checking                 typed AST (kinds, schemes, evidence, exhaustiveness)
+  → IO/ST validation         checked effect surface
+  → normalization            elaborated AST (monad elaboration, explicit sequencing)
+  → IR lowering              backend-neutral IR
+  → optimization             optimized IR
+  → code generation          target source / bytecode
+  → packaging                .phar / .jar / .dll
 ```
 
-`CompilePurpose` controls entry validation and (with strip) tree-shake roots.
-`EntryPointKind` is `Main` (application) or `ReplExpression` (callable eval thunk,
-no auto-run bootstrap).
+Kind inference is not a separate pass over the tree: it runs inside checking
+(`src/semantics/kinds.php`) as declarations and signatures are registered.
 
-CLI `compile` / `compileFile` and `compilePreparedProject` are thin wrappers over
-this driver (`stopAt` cuts stages for `--ast` / `--ir` / `--opt-ir`).
-
-Module compilation starts in `src/modules/modules.php`. It wraps the same semantic
-pipeline with project preparation:
+`Moggi\Pipeline\run` (`src/pipeline/`) is the single-module driver; its
+`stopAt` parameter is what `--ast`, `--typed-ast`, `--ir` and `--opt-ir` cut
+with. A program is a set of modules, so the project layer
+(`src/modules/modules.php`) runs first:
 
 ```text
-input files
-  -> module closure discovery
-  -> imported fixity collection
-  -> dependency sorting
-  -> prelude/import/export resolution
-  -> type/codegen import context construction
-  -> per-module Pipeline::run (from typed AST when already prepared)
+inputs → module closure → fixity collection → dependency order
+       → import/export resolution → per-module pipeline (cached)
+       → cross-module specialization → reachability/stripping
+       → per-module codegen → packaging
 ```
 
-## Phase Responsibilities
+Instances are global: an instance is visible to every module without an import.
+That is why cross-module specialization can rewrite a call the declaring module
+cannot see. For an executable build, only what `main` (plus exports and foreign
+bindings) can still reach is kept; a library build has no root and keeps
+everything.
 
-### Lexing
+## Who owns what
 
-`src/syntax/lexer.php` owns tokenization and lexical diagnostics. It should not know
-about parsing, modules, type checking, IR, or backend output.
+| Phase | Owns | Produces | Must not know |
+|---|---|---|---|
+| Lexing (`src/syntax/lexer.php`) | tokens, lexical diagnostics | token stream | parsing, modules, types |
+| Parsing (`src/syntax/parser.php`, `parse_*.php`) | surface grammar, fixity, layout, sugar that is purely syntactic | raw AST | types, evidence, backend names |
+| Modules (`src/modules/`) | closure, import/export selection, fixity collection, project preparation | import contexts, checked core | target syntax |
+| Kinds (`src/semantics/kinds.php`) | kind inference and unification | kinded constructors | values, codegen |
+| Types (`src/semantics/types/`) | declaration registration, inference, classes/evidence, records, exhaustiveness | typed AST | PHP names, IR-only control flow |
+| IO boundary / normalization (`io_boundary.php`, `strict_io_normalize.php`) | the pure/effect split and explicit sequencing | elaborated AST | backend emission |
+| IR (`src/ir/`) | backend-neutral operations, types, lowering | IR | source-only syntax, unresolved evidence |
+| Optimizer (`src/optimize/`) | IR-to-IR rewrites and their ordering | optimized IR | resolver state |
+| Backends (`src/backend/`) | names, layouts, emission, runtime, packaging | target code, artifact | type-class semantics, name resolution |
 
-### Parsing
+The type checker is the largest phase. When changing it, keep these
+sub-concerns separable: type core (inference, schemes, substitution,
+unification), declaration registry, class/evidence elaboration, pattern and
+exhaustiveness semantics, record semantics, entry-point validation.
 
-`src/syntax/parser.php` owns surface grammar, fixity-aware expression parsing, module
-headers, imports, declarations, expressions, patterns, and parse diagnostics.
+## Representation contracts
 
-Parser output is raw source AST. Any source-level sugar that remains in this
-phase should be purely syntactic. Semantic decisions, symbol resolution,
-typeclass elaboration, IO lowering, and backend naming belong later.
+| Representation | Contains | Must not contain |
+|---|---|---|
+| Raw AST | source syntax, spans, module/import headers | inferred types, evidence, backend names |
+| Typed AST | inferred/declared types, resolved symbols, exhaustiveness facts, evidence | PHP require/use lines, output paths |
+| Elaborated AST | evidence insertion, monad elaboration, strict IO sequencing | raw `do` or unresolved evidence |
+| IR | functions, blocks, explicit calls/matches/operands | source syntax, unresolved types |
+| Optimized IR | IR plus documented pass metadata | frontend state |
+| Target source | the backend's own code | compiler-internal metadata |
 
-### Raw AST
+## Invariants
 
-`src/syntax/ast.php` owns raw AST constructors and AST dumping. Raw AST nodes describe
-source syntax and module headers. They should not require type information,
-symbol origins, evidence dictionaries, backend-resolved names, or IR-only nodes.
+These are the rules that make the phases separable; each has a fixture or a
+type-level enforcement behind it.
 
-### Module Graph And Imports
+* **One owner per fact.** Effects, callable shape, constructor layout, evidence
+  plans and generated-name spellings each have exactly one module that answers
+  questions about them. A second table or a name-shaped test is a defect.
+  `src/backend/ir_meta.php` owns backend-neutral IR facts; `IR\Projection` owns
+  which callees are field/tuple projections; `Optimize\Effects\Model` owns what
+  an operand may do.
+* **A callee is a spelling; the table says which entry it names.**
+  `IR\Callables\table()` publishes one `CallableSig` and one capture vector per
+  entry, and every consumer that needs an entry's arity, hidden slots or capture
+  layout asks it through `sig()` — which is also the only place that knows a
+  `Module::name` spelling for this module means the bare entry. The optimizer's
+  partial legalization (`Optimize\Partial`) therefore threads the table, not a
+  name-keyed map, and reads a call's layout with `publishedLayout()`. The run
+  republishes that table in its facts whenever the function list changes, and the
+  inline pass and the partial-return specialisation answer their capture questions
+  through `publishedCaptures()`, so an entry that cannot be resolved is reported
+  instead of assumed capture-free; a second arity map or a second capture table is
+  a defect, not an optimisation. One fact is deliberately separate: DCE and copy
+  propagation publish `Optimize\GlobalPass`'s liveness set, which follows every
+  reference kind (`FnRef`, `Partial`, call callee) because those are the locals a
+  bound capture prefix reads, where the ABI vector follows value references only.
+* **The checked core is a decision overlay, not a structural tree.** Terms in
+  `src/modules/checked_term.php` own the facts inference decides at a site — its
+  binder identities, its evidence, the arity an application still wants, a
+  `case`'s arms — and lowering reads them where a construct has one. The
+  structural children a term names are still AST nodes, so the source tree
+  remains the structure: lowering dispatches on AST shape for any construct
+  without a term, and free-variable/capture analysis walks the tree. Migrating a
+  construct means publishing its decisions as terms, not moving its structure;
+  claiming a closed core before structure moves would be false.
+* **One capture order: the binder's.** `IR\Callables\table()` publishes each
+  entry's `captures` in the order the binder produced them (body order), and a
+  call prepends exactly that vector (`Optimize\Partial::publishedLayout`). It is
+  not re-sorted into an `E`-first order: for a lifted callable `E` and `C` are a
+  split of that one vector, so reordering it would bind the wrong locals.
+* **No backend facts before codegen.** The typed AST and IR never carry PHP
+  function names, import lines or output paths.
+* **IO is strict sequencing, not a state token.** `do` desugars through `>>=`;
+  IO is an ordinary `Monad` whose methods bottom out at `ioPure#`/`ioBind#`.
+  `strict_io_normalize.php` turns the typed form into explicit sequencing
+  nodes, and IR lowering translates them mechanically.
+* **Evidence has one shape.** Dictionaries are inserted by the type checker and
+  consumed by IR; there is no backend-specific evidence protocol.
+* **Generated names are reserved.** `__fieldN`, `__tupleN`, evidence names and
+  worker names cannot be declared in source; `assertNotGeneratedName()` is the
+  single refusal, and the readers share its spelling rules.
+* **The REPL loads one runtime.** PHP evaluation `require`s generated modules
+  into the process, so exactly one `_runtime.php` may load per process; the
+  scratch tree forwards to the compiler's copy.
+* **The cache is keyed by the compiler.** A stored product is served only to a
+  compiler whose source fingerprint matches; the compiler-owned half of the
+  cache is dropped otherwise.
+* **Foreign types are exact.** A `foreign` declaration names a specific host
+  type or a portable boundary type (`Handle`, `Resource`, primitives, `String`),
+  never a generic host object. Distinct foreign types never unify; `Maybe` and
+  `Either` cross only as a result, a list only in a trailing position (or
+  anywhere on PHP, where an array is the same value), `IO` only outermost in a
+  result; and the compiler checks the declaration against the host wherever the
+  backend can ask. What it cannot check is behaviour, so a lying signature is
+  still a runtime failure.
 
-Module discovery, dependency ordering, prelude injection, and import/export
-selection are project-level frontend work. They should produce a semantic import
-context: visible value names, type synonyms, data constructors, classes,
-instances, and stable symbol origins.
+## Backend layout
 
-Backend import planning is a separate concern. PHP `require` lines, namespace
-`as` names, function `use` lines, output paths, and stdlib PHP remapping should be
-computed after semantic resolution and close to code generation.
+Every target implements the same `Backend` contract and uses the same file set;
+only the toolchain-specific files differ.
 
-### Name Resolution
+| File | Responsibility |
+|---|---|
+| `<backend>/<X>Backend.php` | target id, artifact extension/path, mangling, foreign validation |
+| `<backend>/naming.php` | module → type/package names, symbol mangling |
+| `<backend>/codegen.php` | `emitModule`: module → target code, function/evidence/main/data |
+| `<backend>/emit_env.php` | the one env object an emission threads, and its module-wide counters/registries |
+| `<backend>/emit_stmt.php` | statements and blocks: `emitBlock`, `emitStmt`, tail loops, termination |
+| `<backend>/emit_expr.php` | operands and values: `emitOperand`, boxes, field reads, enum/dict method operands |
+| `<backend>/emit_call.php` | calls: `emitCallValue`, `emitStaticCall`, the call-argument shaping they share |
+| `<backend>/emit_fn_value.php` | function values: `emitTopLevelFnValue`, `emitPartialValue`, lambda/wrapper construction |
+| `<backend>/emit_literal.php` | literal and constant loading (`formatDoubleLiteral`, the backend's integer push) |
+| `<backend>/emit_pattern.php` | `emitPatternTest` and the pattern tests/bindings behind it |
+| `<backend>/emit_data.php` | `emitDataDecl`: data declarations, constructors and their accessors |
+| `<backend>/emit_match.php` | matches: `emitMatchStmt`, `emitMatchReturn`, `emitMatchIo` |
+| `<backend>/emit_intrinsic.php` | `emitIntrinsic`: the exception/fix intrinsics, the dispatch into the families below, and (php) the module's intrinsic helper functions |
+| `<backend>/emit_primop.php` | numeric primop families: `emitIntrinsicPrimop` (arithmetic, bit operations, width conversion) and `emitIntrinsicCompare` (equality, ordering, boolean), with the operand and comparison helpers they expand to |
+| `<backend>/emit_value.php` | `emitIntrinsicValue` (list, maybe, string, bytes, platform intrinsics), boxing, literal values and source locations |
+| `<backend>/emit_io.php` | IO statements: runs, binds, throw/catch/finally, thunks; `emitIntrinsicState` (ST refs and arrays) |
+| `<backend>/foreign.php` | host path/descriptor rules, foreign call emission (`emitForeign`, `emitForeignIoWrap`) |
+| `<backend>/verify.php` | `verifyForeignImportAgainstHost`: the declaration checked against the host |
+| `<backend>/dependencies.php` | library-owned dependency discovery |
+| `<backend>/runtime_abi.php` | generated runtime (JVM/.NET) |
+| `<backend>/frames.php` | host frames → `.mog` source locations |
+| `<backend>/package.php` | build tree → deployable artifact |
+| `src/backend/stack/source_lines.php` | the stack backends' one rule for which locations reach the line and frame tables |
+| `src/backend/stack/scalar_intrinsics.php` | the stack backends' scalar intrinsic vocabulary: every name, and the job it does |
+| `src/backend/ir_meta.php` | shared IR facts (constructor layout, backing, throwing call site) |
+| `src/backend/inspect.php` | rendering emitted artifacts for `:emit` |
 
-Name resolution should eventually be an explicit pass between parsing and type
-checking. Its target output is a resolved AST that uses stable symbol/origin
-metadata rather than backend names.
+The `emit_*.php` set is the same in all three backends and the functions in it carry
+the same names; a backend differs where its host language does. That is enforced, not
+assumed: `tests/backend/emit_surface.php` fails when a backend's file set differs from the
+shared set plus its documented host files (`$shared` / `$hostOnly` there), or when a target
+stops declaring one of the shared role names. Adding a host-only module or a new shared
+role is therefore a deliberate edit to that case and to this table, never a silent drift.
 
-Today, resolution is distributed across parser qualification handling,
-`src/modules/modules.php` import contexts, `src/semantics/types.php` environment lookup, and
-`src/backend/php/codegen.php` import metadata. Refactors should move this toward a single
-resolver-owned contract.
+An intrinsic is emitted by name: `emitIntrinsic` asks each family reader in turn (`emitIntrinsicPrimop`,
+`emitIntrinsicCompare`, `emitIntrinsicState`, `emitIntrinsicValue`) and the first that
+knows the name answers for it, so a new intrinsic lands in the family file that owns it
+and the dispatcher never grows a case list. In the two stack backends the scalar families are
+driven from one table: `src/backend/stack/scalar_intrinsics.php` names every scalar intrinsic
+and the job it does, so `emitIntrinsicPrimop` and `emitIntrinsicCompare` switch on the *job*
+(about forty arms) instead of on the name (about a hundred and fifty cases), and a name can
+no longer exist on one target while missing on the other. A job a backend does not implement
+is a `RuntimeException` at emit time, never a fallthrough; where the two hosts answer one job
+differently (`word64Equality` is `moggi/rt/Word64.eq` on the JVM and object equality on the
+CLR) the job names the question and each backend answers it with the operation it has. The one difference is the answer: the stack
+backends push and return `true`, php returns the expression text (or `null`) and takes
+the argument expressions its caller already emitted, because a php operand *is* a string.
+The same holds in `emit_foreign.php`: `emitForeign` emits one foreign call and
+`emitForeignIoWrap` applies its `ioWrap`, in all three backends; php's `emitForeignCall`,
+`emitInstanceCall` and `emitForeignIoStatement` read the host's dispatch kinds and
+assemble statement text, where the stack backends' `emitForeign` resolves descriptors
+and packs JVM/.NET argument slots. Debug info has one policy too. Which locations are noted is decided once, in
+`src/backend/stack/source_lines.php`: a statement that declares `$srcLoc`, and an intrinsic operand
+(which carries the expression it replaced). Both stack emitters call those two functions at the two
+points every emitter has — the statement prefix and the intrinsic operand — so a statement class or
+intrinsic added later reaches both targets without touching either. Each then derives its frame
+table from the debug info it actually emitted (the classfile `LineNumberTable`, the IL sequence
+points), so a frame row exists exactly where the host can report a position, and a line noted twice
+keeps the location that opened it. php is not a user of this rule: its module is one expression tree
+with a runtime source map, so it records throw sites only.
 
-### Type And Kind Checking
+Each emitter threads
+exactly one `EmitEnv` (`emit_env.php`): the module facts `emitModule` sets once, and the
+per-function values `emitFunction` sets on a clone. A clone — not an array copy — is how
+a deeper emit derives a scope, so counters that must outlive one (`$__scrut_N` here, the
+wrapper and thunk registries on JVM/.NET) sit in an object the clone shares. The hosts
+differ where the targets do: `classfile.php` (a JVM class writer) against
+`il.php`/`il_size.php` (CIL text and sizes), with PHP expression-valued so its
+`emitIntrinsic` answers a string where the other two push to the stack. The PHP runtime is
+hand-written (`php/runtime.php`, shipped as `_runtime.php`); JVM and .NET generate theirs
+per build.
 
-`src/semantics/kinds.php` owns kind inference and kind unification.
+## Changing the compiler
 
-`src/semantics/types.php` currently owns the full semantic pass: declaration registration,
-type inference, unification, class and instance checking, dictionary evidence,
-record typing, case exhaustiveness, IO-related typing, and entry-point
-validation. The target split is:
+1. Find the owner in the table above; if a fact has two owners, merge them
+   first.
+2. Add the smallest fixture that fails for the old behaviour, under the group
+   that names the phase ([testing.md](testing.md)).
+3. Preserve the representation boundary: a semantic decision goes in the
+   earliest phase that can make it.
+4. If you add a pass, give it a checkpoint, document its effects, and put it in
+   the order in [optimizations.md](optimizations.md).
+5. Run the affected group, then the full suite. Goldens change only when the
+   new output is the intended one.
 
-- type core: inference, schemes, substitution, unification
-- declaration registry: data, type synonyms, classes, and instances
-- class/evidence elaboration: constraints and dictionary insertion
-- pattern/exhaustiveness semantics
-- record semantics
-- entry-point validation
+A semantic decision is only real if something fails when it changes, so each one
+has a fixture whose golden shows the lowering. A few that anchor the type
+checker and codegen:
 
-The type phase should produce typed AST. Typed AST may carry source types,
-inferred types, resolved symbols, exhaustiveness facts, and semantic evidence,
-but should not carry PHP names or output-path decisions.
+| Decision | Fixture |
+|---|---|
+| `<>` on `String` lowers to `stringAppend#` | `tests/backend/codegen/Tc-Semigroup-String.mog` |
+| `1 + 2` lowers to `intAdd#` | `tests/semantics/Tc-Num-Add.mog` |
+| a literal stays polymorphic until a use pins it | `tests/semantics/Tc-Constrained-Let.mog` |
+| an ambiguous constraint is rejected | `tests/semantics/Bad-Ambiguous-Constraint.mog` |
+| list patterns and cons | `tests/backend/codegen/Tc-List.mog` |
+| a missing or duplicated instance method is an error | `tests/semantics/Bad-Instance-Method-Unresolved-Constraint.mog` |
 
-### Monad And Evidence Elaboration
-
-Generic monadic `do` and typeclass dictionaries are semantic elaboration, not
-backend work. Evidence insertion should have one owner and one output shape.
-
-`do` always desugars through `Ast\desugarDo()` into `>>=`. IO participates via
-ordinary `Functor` / `Applicative` / `Monad` instances in `System.IO` (methods
-bottom out at `intrinsic ioPure#` / `intrinsic ioBind#`). There is no ambient
-`__io_*` evidence and no explicit state token: an IO action is a value that
-performs its effect when it is run, and the sequencing nodes say in what order.
-
-### IO Boundary And Strict IO Lowering
-
-Moggi IO is **strict effect sequencing**, not a state monad and not a RealWorld
-token. An IO statement means “perform this effect now, in order.”
-
-`src/semantics/io_boundary.php` validates the pure/effect surface (what may
-appear in pure code vs IO-returning functions).
-`src/semantics/strict_io_normalize.php` rewrites typed `>>=` / `pure` / `do`
-into explicit sequencing nodes (`IoSequence`, `IoBind`, `IoPure`, …).
-
-```text
-typed AST (ordinary Monad evidence for IO)
-  -> validated effect AST with explicit sequencing
-```
-
-IR lowering translates normalized effect nodes mechanically.
-
-### IR Lowering
-
-`src/ir/ir.php` owns the IR representation and AST-to-IR lowering. The target
-boundary is:
-
-```text
-typed/elaborated AST
-  -> backend-neutral IR
-```
-
-IR should not need unresolved typeclass evidence, raw `do` nodes, or backend
-PHP import decisions. Lowering may still own mechanical transformations such as
-lambda lifting, temporary generation, and pattern-to-IR translation until a
-dedicated pattern compiler exists.
-
-### Optimization
-
-`src/optimize/optimize.php` owns optimization pass ordering. The individual
-`src/optimize/*.php` files own IR-to-IR rewrites.
-
-Every pass should document:
-
-- required input tags and metadata
-- produced tags and metadata
-- whether it preserves effects
-- whether it may remove functions
-- whether it is local, interprocedural, or whole-module
-
-Language-semantic decisions should happen before generic IR optimization unless
-the pass explicitly documents why it needs semantic metadata.
-
-### Code Generation
-
-Each target implements the `Backend` interface (`src/backend/Backend.php`) and
-keeps the same file set, so a concern has the same home on every backend:
-
-| File | Owner of |
-| --- | --- |
-| `<backend>/<X>Backend.php` | Target id, artifact extension/path, symbol mangling, foreign validation |
-| `<backend>/naming.php` | Module → package/type names, symbol mangling |
-| `<backend>/codegen.php` | IR → target code |
-| `<backend>/foreign.php` | Foreign-import path/descriptor rules |
-| `<backend>/dependencies.php` | Library-owned dependency discovery |
-| `<backend>/runtime_abi.php` | Generated language runtime (JVM / .NET) |
-| `<backend>/frames.php` | Host stack trace → `.mog` frame table |
-| `<backend>/package.php` | Build-directory → deployable artifact |
-| `src/backend/inspect.php` | Shared `describeEmit` helpers: human-readable dumps of emitted artifacts (PHP declarations, import preamble elided; javap; .NET IL) |
-
-Backend-neutral IR facts live once in `src/backend/ir_meta.php`: constructor
-layout/arity, newtype and `Bool` backing, registry conversion, the transitive
-lambda-capture closure (`Optimize\Support\buildLambdaMeta` delegates its
-fixpoint here), and the throwing-call source location. An emitter must not keep
-a private copy — that is how identical helpers drift between targets.
-
-An emitter may decide backend names, constructor layout, match emission
-strategy, runtime requires, entry bootstrap, and target syntax. It should not be
-the owner of typeclass semantics, name resolution, or IO surface validation. It
-consumes already-resolved IR plus backend import metadata.
-
-Target-specific files keep their own names where the toolchain differs
-(`jvm/classfile.php`, `dotnet/il.php` + `dotnet/il_size.php`,
-`php/emit_expr.php` + `php/emit_match.php`, `php/intrinsics.php` +
-`php/io.php`, `php/native.php`). The PHP backend ships a hand-written
-`php/runtime.php`, copied into every build as `_runtime.php` at the root of the
-generated tree;
-the JVM and .NET backends generate their runtime in `runtime_abi.php`.
-`php/native.php` owns what the other two leave to an external driver: the micro
-SAPI runtime is resolved by path (bundled under `runtime/php-native/`, or
-`MOGGI_MICRO_SFX`) and the PHAR is appended to it directly, so `--native` on php
-needs no command-line toolchain — only the runtime file. That file is a build
-artifact rather than a download: at packaging time `packaging/runtimes.php`
-compiles it with static-php-cli's `spc` for the same extension set the `php`
-runtime carries.
-
-### Intrinsics And Primitives
-
-Primitive operations have two distinct concerns:
-
-- backend-neutral metadata: type schemes, operator resolution, effects, and
-  runtime identity (`src/semantics/intrinsic_registry.php`, synthetic modules
-  `Moggi.Internal.Prim` / `Moggi.Internal.IO`)
-- PHP backend emission: helper PHP code and emitted call syntax
-
-`IO#` / `ioPure#` / `ioBind#` live in `Moggi.Internal.IO` because IO has special
-strict-normalization and lowering rules. General Magichash types and primops
-live in `Moggi.Internal.Prim`. A primop's `#`-suffixed MagicHash name is its only
-name, and is used verbatim as the IR/backend id.
-
-`src/backend/php/intrinsics.php` currently contains both. Refactors should split the
-primitive registry from the PHP intrinsic emitter.
-
-### REPL
-
-`src/repl/` is split by concern. Dependencies only point downward: `commands`
-knows the session and the inspection layer, the inspection layer knows the
-session, and the session knows neither.
-
-| File | Owner of |
-| --- | --- |
-| `state.php` | `State`: scratch dir, declarations, loaded closure, memoized contexts |
-| `session.php` | Interactive-module assembly, typecheck (`prepareInteractive`), evaluation, `:load` / `:reload` / `:clear` |
-| `compile.php` | Prepared module → pipeline artifacts, for `:ir` / `:dump` |
-| `inspect.php` | `:ast` / `:ir` / `:emit` fragment dispatch and the stage dumps |
-| `commands.php` | The `:` command table, usage text, and diagnostics |
-| `eval_runner.php` | Running an interactive entry: in-process PHP include, or a packaged subprocess on JVM / .NET |
-| `input.php`, `shadow.php` | Readline/multi-line buffer helpers; rebinding of shadowed declarations between REPL entries |
-
-Two invariants matter when touching this code:
-
-* The PHP backend evaluates by `require`-ing generated modules into the REPL
-  process, so exactly **one** copy of `_runtime.php` may be loaded per
-  process. The scratch dependency tree forwards to the compiler's copy
-  (`EvalRunner\writeDepsRuntimeShim`) rather than shipping its own: two copies are
-  a `Cannot redeclare` fatal, because PHP binds top-level functions while
-  *compiling* a file, before any guard inside it can run.
-* The scratch directory is created by `createSession` and removed by
-  `destroySession` when the session ends. It is never an output, and nothing
-  outside the process reads it.
-
-## Representation Contracts
-
-The compiler should converge on these phase representations:
-
-| Representation | Owner | Contains | Must not contain |
-| --- | --- | --- | --- |
-| Raw AST | parser/ast | source syntax, spans, module/import headers | inferred types, evidence, backend names |
-| Resolved AST | resolver | raw syntax plus stable symbol origins | PHP require/use lines |
-| Typed AST | type checker | inferred types, checked declarations, class facts | PHP names, IR-only control flow |
-| Elaborated AST | semantic lowering | evidence, monad elaboration, strict IO sequencing | raw unresolved `do`/evidence nodes |
-| IR | IR lowering | functions, blocks, operands, explicit calls/matches | source-only syntax, unresolved types |
-| Optimized IR | optimizer | IR plus documented optimization metadata | frontend resolver state |
-| Target source | `<backend>/codegen.php` | backend output | compiler-internal metadata |
-
-## Refactoring Rules
-
-When moving code between modules:
-
-1. Preserve behavior with `nix develop -c runtest` after each major slice.
-2. Split by compiler concept, not by file size alone.
-3. Keep one owner for each semantic concept.
-4. Avoid pass-through wrappers that only move complexity elsewhere.
-5. Prefer explicit phase contracts over defensive checks deep in later phases.
-6. Keep backend metadata out of frontend representations unless documented as a
-   temporary bridge.
-
-## CLI
-
-The user-facing command line is intentionally thin:
-
-```text
-moggi.php
-  -> Moggi\CLI\main          (src/cli/main.php)
-       -> commands/compile|run|repl|cache|mogdoc|moogle
-```
-
-| Layer | Location | Responsibility |
-|-------|----------|----------------|
-| Entry shim | `moggi.php` | `require compiler.php`; `exit(CLI\main($argv))` |
-| Dispatch | `src/cli/main.php` | Subcommand table; typo detection |
-| Shared argv | `src/cli/args.php`, `paths.php`, `usage.php` | Flags, library roots, help |
-| Commands | `src/cli/commands/*.php` | Per-subcommand parse + orchestration |
-| Libraries | `pipeline/`, `modules/`, `docs/`, `repl/` | Compile, index, REPL — no argv |
-
-`findMogFiles` and `resolveLibraryDirs` live in `src/cli/paths.php` and are reused by mogdoc (`src/docs/project.php`). For production doc hosting, run `moggi mogdoc -o` and serve static HTML; `moggi mogdoc serve` uses a dev-only PHP socket server in `src/docs/serve.php`.
-
+The IR optimizer's model and pass order are in
+[optimizations.md](optimizations.md); the test contract is in
+[testing.md](testing.md). The CLI is a thin shim: `src/cli/main.php` dispatches,
+`src/cli/commands/*.php` parse argv and call libraries, and no library reads
+argv.

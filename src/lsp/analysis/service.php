@@ -4,50 +4,39 @@ namespace Moggi\LSP\Analysis;
 
 require_once __DIR__ . '/../../paths.php';
 
-use function Moggi\Backend\setCompileBackend;
 
 use Moggi\Docs\DocIndex;
+use Moggi\LSP\Index\DeclInfo;
+use Moggi\LSP\Index\ModuleIndex;
+use Moggi\LSP\Index\OccurrenceIndex;
+use Moggi\Modules\PreparedProject;
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
 
+use function Moggi\Cache\moduleGet;
 use function Moggi\Docs\dumpTypeForDocs;
 use function Moggi\Docs\loadOrBuildIndex;
 use function Moggi\LSP\applyContentChanges;
 use function Moggi\LSP\Index\buildDeclsFromProgram;
 use function Moggi\LSP\Index\buildOccurrenceIndex;
-
-use Moggi\LSP\Index\DeclInfo;
-
 use function Moggi\LSP\Index\indexTypeRelations;
-
-use function Moggi\LSP\Index\merge;
-
-use Moggi\LSP\Index\ModuleIndex;
-use Moggi\LSP\Index\OccurrenceIndex;
-
 use function Moggi\LSP\Protocol\nodeToLspRange;
 use function Moggi\LSP\Protocol\pathToUri;
 use function Moggi\LSP\Protocol\uriToPath;
 use function Moggi\Modules\bundledStdlibLibPath;
 use function Moggi\Modules\moduleFileClosureCached;
-
-use Moggi\Modules\PreparedProject;
-
 use function Moggi\Modules\prepareFocusBase;
 use function Moggi\Modules\prepareProjectCached;
 use function Moggi\Modules\projectSourceClosure;
 use function Moggi\Modules\setStdlibLibPath;
 use function Moggi\Modules\stdlibSourcesMissingFrom;
 use function Moggi\Paths\globPaths;
-
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Syntax\Lexer\lex;
-
-use Moggi\Syntax\Lexer\LexError;
-
 use function Moggi\Syntax\Parser\parse;
-
-use Moggi\Syntax\Parser\ParseError;
 
 final class VirtualFS
 {
@@ -251,7 +240,7 @@ final class AnalysisService
     /** Client capabilities / config */
     public bool $inlaysEnabled = false;
 
-    public string $backend = 'php';
+    public CompilationContext $context;
 
     /** Raw initialize-request client capabilities (linkSupport etc.). */
     public array $clientCapabilities = [];
@@ -259,12 +248,17 @@ final class AnalysisService
     /**
      * @param list<string> $libDirs
      */
-    public function __construct(array $libDirs = [])
+    public function __construct(array $libDirs = [], ?CompilationContext $context = null)
     {
         $this->vfs = new VirtualFS();
         $this->modules = new ModuleIndex();
         $this->occurrences = new OccurrenceIndex();
         $this->libDirs = $libDirs;
+        $this->context = $context ?? CompilationContext::for(
+            'php',
+            CompilePurpose::Library,
+            roots: $libDirs,
+        );
     }
 
     public function setWorkspaceRoot(?string $root): void
@@ -473,17 +467,6 @@ final class AnalysisService
         return $kept;
     }
 
-    public function seedResult(string $uri, AnalysisResult $result): void
-    {
-        unset($this->dirty[$uri], $this->pendingAnalyze[$uri]);
-        $this->results[$uri] = $result;
-        $this->completedVersions[$uri] = $this->vfs->version($uri);
-        if (! $this->vfs->has($uri)) {
-            $this->vfs->open($uri, $result->source, 1);
-        }
-        $this->indexResult($uri, $result);
-    }
-
     public function ensureAnalyzed(string $uri): ?AnalysisResult
     {
         if (isset($this->dirty[$uri]) || ! isset($this->results[$uri]) || isset($this->pendingAnalyze[$uri])) {
@@ -525,8 +508,6 @@ final class AnalysisService
             } catch (\Throwable) {
             }
         }
-        setCompileBackend($this->backend);
-
         $path = uriToPath($uri);
         if (\str_contains($uri, '://') && ! \str_starts_with($uri, 'file:')) {
             $tmp = $this->vfs->sessionRoot() . '/untitled/' . \md5($uri) . '.mog';
@@ -649,12 +630,12 @@ final class AnalysisService
             }
 
             try {
-                [$files, $projRoot] = projectSourceClosure([$filename], $libs);
+                [$files, $projRoot] = projectSourceClosure([$filename], $libs, $this->context->backendId);
             } catch (\Throwable) {
-                [$files, $projRoot] = moduleFileClosureCached($filename);
+                [$files, $projRoot] = moduleFileClosureCached($filename, $this->context->backendId);
             }
 
-            $files = [...$files, ...stdlibSourcesMissingFrom($files, $stdlib)];
+            $files = [...$files, ...stdlibSourcesMissingFrom($files, $stdlib, $this->context->backendId)];
             $files = \array_map(
                 static function (string $path) use ($overlayByReal): string {
                     $real = \realpath($path) ?: $path;
@@ -668,7 +649,8 @@ final class AnalysisService
                 $files[] = $filename;
             }
 
-            $prepared = prepareProjectCached($files, $projRoot, $parsed->module ?? null);
+            $this->context = $this->context->withSources($files);
+            $prepared = prepareProjectCached($files, $projRoot, $this->context, $parsed->module ?? null);
             $this->project = $prepared;
             $mod = $parsed->module ?? 'Main';
             $importNames = [];
@@ -731,7 +713,7 @@ final class AnalysisService
                 if (! ($prog instanceof Ast\Program)) {
                     continue;
                 }
-                $this->indexModule($mUri, $mSource, $prog, $mName, $prog->externalFns ?? []);
+                $this->indexModule($mUri, $mSource, $prog, $mName, $this->importedNames($prog, $mName));
             }
         } catch (TypeError|LexError|ParseError $e) {
             if (! $e instanceof TypeError || $e->filename === '' || $e->filename === $filename) {
@@ -773,6 +755,7 @@ final class AnalysisService
             $imports,
             $content,
             $uri,
+            checked: $checked !== null,
         );
     }
 
@@ -817,7 +800,13 @@ final class AnalysisService
         if (! \is_string($rel) || ! \is_string($key)) {
             return null;
         }
-        $cached = \Moggi\Cache\moduleGet($rel, 'checked', $key);
+        $module = $unit['program'] instanceof Ast\Program ? $unit['program']->module : null;
+        $cached = moduleGet(
+            $rel,
+            'checked',
+            $this->context->moduleKey($module, $key),
+            $this->context->backendId,
+        );
         if (! \is_array($cached)) {
             return null;
         }
@@ -832,8 +821,41 @@ final class AnalysisService
         if ($result->program instanceof Ast\Program && $result->program->module !== null) {
             $moduleName = $result->program->module;
         }
-        $external = $result->program instanceof Ast\Program ? $result->program->externalFns : [];
+        $external = $result->program instanceof Ast\Program
+            ? $this->importedNames($result->program, $moduleName, checkedOnly: $result->checked)
+            : [];
         $this->indexModule($uri, $result->source, $result->program, $moduleName, $external);
+    }
+
+    /**
+     * The imported names a navigation index needs for one program.
+     *
+     * A checked program always carries its import interface (`checkRaw` stamps it on the
+     * program it returns). A hydrated dependency whose interface did not survive would index as
+     * "imports nothing" — hover, definition and references on every imported name would degrade
+     * — so a checked program without one is refused: the index is never built from a guess about
+     * what a module imports.
+     *
+     * `$checkedOnly: false` is for the parsed fallback, where a module has not been checked and
+     * so has no interface to carry.
+     *
+     * @return array<string, string>
+     */
+    private function importedNames(Ast\Program $program, string $moduleName, bool $checkedOnly = true): array
+    {
+        $interface = $program->interface;
+        if ($interface === null) {
+            if ($checkedOnly) {
+                throw new \LogicException(
+                    "checked program `{$moduleName}` carries no import interface; the analysis index "
+                    . 'cannot name its imports',
+                );
+            }
+
+            return [];
+        }
+
+        return $interface->externalFns();
     }
 
     /**
@@ -879,9 +901,10 @@ final class AnalysisService
                 ];
             }
             foreach (\get_object_vars($node) as $key => $prop) {
-                if ($key === 'inferredType') {
+                if (\in_array($key, ['inferredType', 'inferredInternalType', 'core'], true)) {
                     continue;
                 }
+
                 if (\is_object($prop)) {
                     $walk($prop);
                 } elseif (\is_array($prop)) {
@@ -918,8 +941,8 @@ final class AnalysisService
         }
         if ($seed !== null && \is_file($seed)) {
             try {
-                [$files, $root] = moduleFileClosureCached($seed);
-                prepareFocusBase($files, $root);
+                [$files, $root] = moduleFileClosureCached($seed, $this->context->backendId);
+                prepareFocusBase($files, $root, $this->context->withSources($files));
             } catch (\Throwable) {
             }
         }
@@ -951,7 +974,7 @@ final class AnalysisService
         }
 
         try {
-            $this->docIndex = loadOrBuildIndex($seed, \array_values(\array_unique($libs)));
+            $this->docIndex = loadOrBuildIndex($seed, \array_values(\array_unique($libs)), $this->context);
         } catch (\Throwable) {
             $this->docIndex = null;
         }
@@ -1004,11 +1027,11 @@ final class AnalysisService
     }
 }
 
-function getAnalysisService(?array $libDirs = null): AnalysisService
+function getAnalysisService(?array $libDirs = null, ?CompilationContext $context = null): AnalysisService
 {
     static $svc = null;
-    if ($libDirs !== null || $svc === null) {
-        $svc = new AnalysisService($libDirs ?? []);
+    if ($libDirs !== null || $context !== null || $svc === null) {
+        $svc = new AnalysisService($libDirs ?? [], $context);
     }
 
     return $svc;

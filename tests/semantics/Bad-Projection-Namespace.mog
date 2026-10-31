@@ -1,0 +1,9 @@
+-- Fail: `__fieldN` is the spelling lowering writes a record field read in, and the emitters read it
+-- back by that name. A source declaration in it would typecheck and then be emitted as a field read.
+module Bad.Projection.Namespace
+
+__field0 :: Int -> Int
+__field0 n = n + 1
+
+main :: IO ()
+main = pure ()

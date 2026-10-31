@@ -4,6 +4,8 @@ namespace Moggi\Optimize\Dict;
 
 use Moggi\IR;
 
+use function Moggi\Optimize\Support\callArgsAreLeaves;
+use function Moggi\Optimize\Support\dropUnreadTemps;
 use function Moggi\Optimize\Support\preserveMatchArm;
 
 /**
@@ -26,12 +28,6 @@ function specializeDictCallsStmt(IR\Stmt $stmt, array $evidenceByName = [], arra
     return match ($stmt::class) {
         IR\Assign::class => new IR\Assign($stmt->dest, specializeDictCallsOperand($stmt->value, $evidenceByName)),
         IR\Let::class => new IR\Let($stmt->name, specializeDictCallsOperand($stmt->value, $evidenceByName)),
-        IR\Binop::class => new IR\Binop(
-            $stmt->op,
-            specializeDictCallsOperand($stmt->left, $evidenceByName),
-            specializeDictCallsOperand($stmt->right, $evidenceByName),
-            $stmt->dest,
-        ),
         IR\Call::class => new IR\Call(
             $stmt->callee,
             \array_map(
@@ -98,6 +94,8 @@ function specializeDictCallsBlockWithEnv(
     array $localFns = [],
 ): IR\Block {
     $out = [];
+    /** @var array<int, true> $evidenceBindings dests of factory calls this block introduced */
+    $evidenceBindings = [];
 
     foreach ($block->items as $item) {
         if ($item instanceof IR\MatchStmt || $item instanceof IR\MatchReturn) {
@@ -108,12 +106,14 @@ function specializeDictCallsBlockWithEnv(
 
         $item = specializeDictCallsStmt($item, $evidenceByName, $tempEvidence, $localEvidence, $localFns);
 
-        if ($item instanceof IR\Call
-            && (isset($evidenceByName[$item->callee]) || \str_starts_with($item->callee, '__ev_'))) {
+        if ($item instanceof IR\Call && isset($evidenceByName[$item->callee])) {
             $tempEvidence[$item->dest] = [
                 'name' => $item->callee,
                 'args' => $item->args,
             ];
+            if (callArgsAreLeaves($item->args)) {
+                $evidenceBindings[$item->dest] = true;
+            }
         }
 
         if ($item instanceof IR\Assign) {
@@ -133,9 +133,8 @@ function specializeDictCallsBlockWithEnv(
         $out[] = $item;
     }
 
-    return new IR\Block($out);
+    return new IR\Block(dropUnreadTemps($out, $evidenceBindings));
 }
-
 /**
  * @param array<string, IR\InstanceEvidence> $evidenceByName
  * @param array<int, array{name: string, args: list<IR\Operand>}> $tempEvidence
@@ -148,14 +147,8 @@ function resolveEvidenceBinding(
     array $tempEvidence,
     array $localEvidence,
 ): ?array {
-    if ($value instanceof IR\FnRef
-        && (isset($evidenceByName[$value->name]) || \str_starts_with($value->name, '__ev_'))) {
+    if ($value instanceof IR\FnRef && isset($evidenceByName[$value->name])) {
         return ['name' => $value->name, 'args' => []];
-    }
-
-    if ($value instanceof IR\ExprCall
-        && (isset($evidenceByName[$value->callee]) || \str_starts_with($value->callee, '__ev_'))) {
-        return ['name' => $value->callee, 'args' => $value->args];
     }
 
     if ($value instanceof IR\Temp && isset($tempEvidence[$value->id])) {
@@ -220,7 +213,7 @@ function specializeDictCall(
         return $stmt;
     }
 
-    if ($localFns !== [] && ! isset($localFns[$resolved])) {
+    if (! isset($localFns[$resolved])) {
         return $stmt;
     }
 
@@ -247,35 +240,6 @@ function resolveMethodCallee(
 function specializeDictCallsOperand(IR\Operand $operand, array $evidenceByName = []): IR\Operand
 {
     return match ($operand::class) {
-        IR\ExprBinop::class => new IR\ExprBinop(
-            $operand->op,
-            specializeDictCallsOperand($operand->left, $evidenceByName),
-            specializeDictCallsOperand($operand->right, $evidenceByName),
-        ),
-        IR\ExprCall::class => new IR\ExprCall(
-            $operand->callee,
-            \array_map(
-                static fn (IR\Operand $a): IR\Operand => specializeDictCallsOperand($a, $evidenceByName),
-                $operand->args,
-            ),
-            $operand->srcLoc,
-        ),
-        IR\ExprCallValue::class => new IR\ExprCallValue(
-            specializeDictCallsOperand($operand->callee, $evidenceByName),
-            \array_map(
-                static fn (IR\Operand $a): IR\Operand => specializeDictCallsOperand($a, $evidenceByName),
-                $operand->args,
-            ),
-            $operand->srcLoc,
-        ),
-        IR\ExprPartial::class => new IR\ExprPartial(
-            $operand->fn,
-            $operand->arity,
-            \array_map(
-                static fn (IR\Operand $a): IR\Operand => specializeDictCallsOperand($a, $evidenceByName),
-                $operand->args,
-            ),
-        ),
         IR\Intrinsic::class => new IR\Intrinsic(
             $operand->name,
             \array_map(
@@ -303,7 +267,11 @@ function specializeDictMethodOperand(IR\DictMethod $operand, array $evidenceByNa
         }
     }
 
-    return new IR\DictMethod(specializeDictCallsOperand($evidence, $evidenceByName), $operand->method);
+    return new IR\DictMethod(
+        specializeDictCallsOperand($evidence, $evidenceByName),
+        $operand->method,
+        $operand->localEvidence,
+    );
 }
 
 /**
@@ -334,7 +302,7 @@ function specializeDictCallsFunctions(array $functions, array $evidenceByName): 
 
     return \array_map(
         static function (IR\FunctionDecl $function) use ($evidenceByName, $localFns): IR\FunctionDecl {
-            if ($function->ioStraightLine) {
+            if ($function->shape->ioStraightLine) {
                 return $function;
             }
 

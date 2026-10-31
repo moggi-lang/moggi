@@ -2,21 +2,17 @@
 
 namespace Moggi\Repl;
 
-use function Moggi\Backend\backendById;
-use function Moggi\Backend\knownBackendIds;
-use function Moggi\Backend\setCompileBackend;
-use function Moggi\formatExceptionReport;
-
 use Moggi\Pipeline\PipelineStage;
 use Moggi\Semantics\Types\TypeError;
-
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Lexer\LexError;
 use Moggi\Syntax\Parser\ParseError;
-
-use function Moggi\Syntax\Parser\parseReplFragment;
-
 use Moggi\Syntax\Parser\ReplFragment;
+
+use function Moggi\Backend\backendById;
+use function Moggi\Backend\knownBackendIds;
+use function Moggi\formatExceptionReport;
+use function Moggi\Syntax\Parser\parseReplFragment;
 
 function formatReplThrowable(\Throwable $e, string $userSource = ''): string
 {
@@ -132,8 +128,7 @@ function handleCommand(State $state, string $line): array
                 if (! \in_array($arg, $ids, true)) {
                     return 'usage: :backend ' . \implode('|', $ids) . "\n";
                 }
-                $state->backend = $arg;
-                setCompileBackend($arg);
+                $state->setBackend($arg);
                 clearSession($state);
 
                 return "backend = {$arg}\n";

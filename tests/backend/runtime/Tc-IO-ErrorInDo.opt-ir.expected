@@ -1,8 +1,19 @@
 module
   function abort()
-      io_call putStrLn("before")
-      io_call error("boom")
+      t3 = io_assign_action
+          t2 = call __w_abort()
+        result t2
+      ret t3
+  function __w_abort()
+      t0 = call System.IO::__w_putStrLn("before")
+      t1 = io_call error("boom")
+      io_run t1
       ret ()
   function main()
-      io_call abort()
+      t6 = io_assign_action
+          t5 = call __w_main()
+        result t5
+      ret t6
+  function __w_main()
+      t4 = call __w_abort()
       ret ()

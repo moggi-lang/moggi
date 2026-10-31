@@ -2,19 +2,16 @@
 
 namespace Moggi\LSP\Index;
 
+use Moggi\Syntax\Ast;
+use Moggi\Syntax\Lexer\TokenKind;
+use Moggi\Syntax\Parser\Token;
+
 use function Moggi\Docs\schemeToString;
 use function Moggi\Docs\surfaceTypeSignature;
 use function Moggi\LSP\Protocol\compilerPosToLsp;
-
 use function Moggi\LSP\Protocol\nodeToLspRange;
 use function Moggi\Modules\resolvedSymbol;
-
-use Moggi\Syntax\Ast;
-
 use function Moggi\Syntax\Lexer\lex;
-
-use Moggi\Syntax\Lexer\TokenKind;
-use Moggi\Syntax\Parser\Token;
 
 final class ModuleIndex
 {

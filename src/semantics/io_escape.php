@@ -2,33 +2,19 @@
 
 namespace Moggi\Semantics\IoEscape;
 
-use Moggi\IR\IoBodyKind;
+use Moggi\IR\ActionConvention;
+use Moggi\IR\IoStatementKind;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
-
+use function Moggi\Semantics\IoBoundary\ioStatementForm;
+use function Moggi\Semantics\IoBoundary\isIoStatementExpression;
 use function Moggi\Semantics\IoBoundary\isIoType;
 use function Moggi\Semantics\IoBoundary\isIoUnitType;
 use function Moggi\Semantics\IoBoundary\stripConstraints;
 
-use Moggi\Syntax\Ast;
-
-/** True for Data.Foo.PHP / Data.Foo.JVM / Data.Foo.DotNet / … backend implementation modules. */
-function isBackendImplModuleName(string $moduleName): bool
-{
-    $lower = \strtolower($moduleName);
-    foreach (['.php', '.jvm', '.js', '.dotnet'] as $suffix) {
-        if (\str_ends_with($lower, $suffix)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 function analyze(Ast\Program $program): Ast\Program
 {
-    $backendImpl = isBackendImplModuleName($program->module ?? '');
-
     foreach ($program->items as $item) {
         if (! $item instanceof Ast\FunctionDecl) {
             continue;
@@ -38,160 +24,128 @@ function analyze(Ast\Program $program): Ast\Program
             continue;
         }
 
+        if (isIoStatementExpression($item->body)) {
+            annotateIoBodies($item->body);
+        }
+
         if (! functionReturnsIo($item->type) && ! returnsMonadicValue($item->type)) {
             continue;
         }
 
-        annotateFunction($item, $backendImpl);
+        annotateFunction($item);
     }
 
     return $program;
 }
 
-function annotateFunction(Ast\FunctionDecl $fn, bool $backendImpl = false): void
+/**
+ * Publish every `do` statement's form, in the one place the shapes and their bindings are both known.
+ *
+ * The walk is the statement list's structure, not lowering's: each statement's expression is
+ * classified by {@see ioStatementForm()} with the `let`-bound actions in scope at that point, and a
+ * statement expression outside the four shapes this boundary knows refuses by class and line. Bodies
+ * nested inside a statement (a `case` arm, a nested `do`) are walked with a *copy* of the deferred
+ * set, because lowering copies its store into a nested body and does not take its writes back.
+ *
+ * @param array<int, true> $deferred the `let`-bound action binders this sequence inherits
+ */
+function annotateIoBodies(Ast\AstNode $expr, array $deferred = []): void
 {
-    $body = $fn->body;
-    $hasNonFoldAction = false;
-    $hasIoParam = functionHasIoParam($fn->type);
-
-    if ($body instanceof Ast\IoSequence) {
-        annotateIoSequence($body->stmts, $hasNonFoldAction);
-    }
-
-    if ($backendImpl || $fn->foreign || isForeignIoBody($body)) {
-        $fn->ioBodyKind = IoBodyKind::StraightLine;
+    if ($expr instanceof Ast\GuardsExpr) {
+        foreach ($expr->clauses as $clause) {
+            annotateIoBodies($clause->body, $deferred);
+        }
 
         return;
     }
 
-    if (returnsMonadicValue($fn->type)) {
-        $fn->ioBodyKind = IoBodyKind::ActionReturn;
+    if (! $expr instanceof Ast\IoStatementExpression) {
+        throw new \RuntimeException(
+            'the IO body at line ' . $expr->line . ' is a `' . $expr::class
+            . '`, which this compiler does not classify as a statement expression',
+        );
+    }
+
+    $expr->ioForm = ioStatementForm($expr, $deferred);
+
+    if ($expr instanceof Ast\IoSequence) {
+        annotateIoSequence($expr->stmts, $deferred);
 
         return;
     }
 
-    if ($fn->instanceMethod) {
-        $fn->ioBodyKind = IoBodyKind::ActionReturn;
+    if ($expr instanceof Ast\IoCase) {
+        foreach ($expr->alts as $alt) {
+            annotateIoBodies($alt->body, $deferred);
+        }
 
         return;
     }
 
-    if (isActionReturnBody($body, $fn->type)) {
-        $fn->ioBodyKind = IoBodyKind::ActionReturn;
-    } elseif ($hasIoParam || $hasNonFoldAction) {
-        $fn->ioBodyKind = IoBodyKind::Mixed;
-    } else {
-        $fn->ioBodyKind = IoBodyKind::StraightLine;
+    if ($expr instanceof Ast\IoAction && $expr->expr instanceof Ast\IoSequence) {
+        annotateIoBodies($expr->expr, $deferred);
     }
-}
-
-/** @param list<Ast\AstNode> $stmts */
-function annotateIoSequence(array &$stmts, bool &$hasNonFoldAction): void
-{
-    foreach ($stmts as $i => $stmt) {
-        if (! $stmt instanceof Ast\IoLetAction) {
-            continue;
-        }
-
-        $name = actionBindingName($stmt->pattern);
-        if ($name === null) {
-            $stmt->ioFoldHint = false;
-            $hasNonFoldAction = true;
-
-            continue;
-        }
-
-        $uses = collectActionUses($name, $stmts, $i + 1);
-        $foldHint = $uses['run'] === 1 && $uses['escape'] === 0;
-        $stmt->ioFoldHint = $foldHint;
-
-        if (! $foldHint) {
-            $hasNonFoldAction = true;
-        }
-    }
-}
-
-function actionBindingName(Ast\AstNode $pattern): ?string
-{
-    return $pattern instanceof Ast\PatVar ? $pattern->name : null;
 }
 
 /**
  * @param list<Ast\AstNode> $stmts
- * @return array{run: int, escape: int}
+ * @param array<int, true> $deferred
  */
-function collectActionUses(string $name, array $stmts, int $start): array
+function annotateIoSequence(array $stmts, array $deferred): void
 {
-    $run = 0;
-    $escape = 0;
+    foreach ($stmts as $stmt) {
+        $stmt->ioKind = match (true) {
+            $stmt instanceof Ast\IoLet => IoStatementKind::Let,
+            $stmt instanceof Ast\IoLetAction => IoStatementKind::LetAction,
+            $stmt instanceof Ast\IoBind => IoStatementKind::Bind,
+            $stmt instanceof Ast\IoExpr => IoStatementKind::Expr,
+            default => throw new \RuntimeException(
+                'the `do` statement at line ' . $stmt->line . ' is a `' . $stmt::class
+                . '`, which has no published disposition',
+            ),
+        };
 
-    for ($i = $start, $n = \count($stmts); $i < $n; ++$i) {
-        $stmt = $stmts[$i];
-        if ($stmt instanceof Ast\IoBind) {
-            if (exprIsVariableRef($stmt->expr, $name)) {
-                ++$run;
-
-                continue;
-            }
-
-            if (exprMentionsVariable($stmt->expr, $name)) {
-                ++$escape;
-            }
-
+        if ($stmt instanceof Ast\IoLet) {
             continue;
         }
 
-        if ($stmt instanceof Ast\IoExpr) {
-            $expr = $stmt->expr;
-            if (exprIsVariableRef($expr, $name)) {
-                ++$run;
+        if (! isIoStatementExpression($stmt->expr)) {
+            throw new \RuntimeException(
+                'the `do` statement at line ' . $stmt->line . ' is a `' . $stmt->expr::class
+                . '`, which this compiler does not classify as a statement expression',
+            );
+        }
 
-                continue;
-            }
+        $stmt->expr->ioForm = ioStatementForm($stmt->expr, $deferred);
 
-            if (exprMentionsVariable($expr, $name)) {
-                ++$escape;
-            }
+        if ($stmt->expr instanceof Ast\IoSequence || $stmt->expr instanceof Ast\IoCase) {
+            annotateIoBodies($stmt->expr, $deferred);
+        } elseif ($stmt->expr instanceof Ast\IoAction
+            && ($stmt->expr->expr instanceof Ast\IoSequence || $stmt->expr->expr instanceof Ast\IoCase)) {
+            annotateIoBodies($stmt->expr->expr, $deferred);
+        }
+
+        if ($stmt instanceof Ast\IoLetAction && $stmt->pattern instanceof Ast\PatVar && $stmt->pattern->binderId !== null) {
+            $deferred[$stmt->pattern->binderId] = true;
         }
     }
-
-    return ['run' => $run, 'escape' => $escape];
 }
 
-function exprIsVariableRef(Ast\AstNode $expr, string $name): bool
+/**
+ * The one producer of a declaration's result convention.
+ *
+ * A foreign import is the FFI worker: it performs the host call and answers with the value. Every
+ * other declaration whose result is `IO a` — or a monadic variable application, which is an action
+ * at any instantiation — answers with the action value instead.
+ *
+ * Nothing here looks at the body's shape, the module's name or the declaration's instance status.
+ */
+function annotateFunction(Ast\FunctionDecl $fn): void
 {
-    if ($expr instanceof Ast\IoAction) {
-        $expr = $expr->expr;
-    }
+    $fn->actionConvention = ($fn->foreign || isForeignIoBody($fn->body))
+        ? ActionConvention::Executes
+        : ActionConvention::ReturnsAction;
 
-    return $expr instanceof Ast\Variable && $expr->name === $name;
-}
-
-function exprMentionsVariable(Ast\AstNode $expr, string $name): bool
-{
-    if ($expr instanceof Ast\Variable) {
-        return $expr->name === $name;
-    }
-
-    foreach (\get_object_vars($expr) as $key => $value) {
-        if ($key === 'inferredType' || $key === 'pendingConstraints') {
-            continue;
-        }
-
-        if ($value instanceof Ast\AstNode && exprMentionsVariable($value, $name)) {
-            return true;
-        }
-
-        if (\is_array($value)) {
-            foreach ($value as $child) {
-                if ($child instanceof Ast\AstNode && exprMentionsVariable($child, $name)) {
-                    return true;
-                }
-            }
-        }
-    }
-
-    return false;
 }
 
 function isForeignIoBody(Ast\AstNode $body): bool
@@ -201,29 +155,6 @@ function isForeignIoBody(Ast\AstNode $body): bool
     }
 
     return $body instanceof Ast\IoAction && $body->expr instanceof Ast\ForeignCall;
-}
-
-function isActionReturnBody(Ast\AstNode $body, ?Ast\AstNode $type): bool
-{
-    if (! $body instanceof Ast\IoAction) {
-        return false;
-    }
-
-    return ! functionReturnsIoUnit($type);
-}
-
-function functionReturnsIoUnit(?Ast\AstNode $type): bool
-{
-    if ($type === null) {
-        return false;
-    }
-
-    $result = stripConstraints($type);
-    while ($result instanceof Ast\TypeArrow) {
-        $result = $result->to;
-    }
-
-    return isIoType($result) && isIoUnitType($result);
 }
 
 /**
@@ -249,19 +180,3 @@ function returnsMonadicValue(?Ast\AstNode $type): bool
     return $result instanceof Ast\TypeApp && $result->con instanceof Ast\TypeVar;
 }
 
-function functionHasIoParam(?Ast\AstNode $type): bool
-{
-    if ($type === null) {
-        return false;
-    }
-
-    $cursor = stripConstraints($type);
-    while ($cursor instanceof Ast\TypeArrow) {
-        if (isIoType($cursor->from)) {
-            return true;
-        }
-        $cursor = $cursor->to;
-    }
-
-    return false;
-}

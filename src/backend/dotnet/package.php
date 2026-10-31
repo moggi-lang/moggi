@@ -360,7 +360,14 @@ function packageDotNetOutput(string $outputRoot, array $options = []): void
     <EnableDefaultItems>false</EnableDefaultItems>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="**/*.il" Exclude="obj/**;bin/**" />
+    <!-- The header carries `.assembly`/`.module` and the `.assembly extern` declarations every
+         other fragment references, so ilasm must see it first: a fragment that names
+         `[System.Runtime]System.Object` before the extern exists makes the assembler warn
+         "Reference to undeclared extern assembly … Attempting autodetect" and rely on the
+         autodetection. A glob alone orders it after `Moggi/`, `examples/`, `libraries/` and `rt/`
+         ("_" sorts after an uppercase letter), so it is listed first and excluded from the glob. -->
+    <Compile Include="_header.il" />
+    <Compile Include="**/*.il" Exclude="_header.il;obj/**;bin/**" />
   </ItemGroup>
 </Project>
 XML;

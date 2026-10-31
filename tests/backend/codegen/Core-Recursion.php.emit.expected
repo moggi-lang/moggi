@@ -2,7 +2,7 @@
 
 namespace Main;
 
-const __MOGGI_MAP = [[], ['Main\\sign' => ['Main.sign', 'tests/backend/codegen/Core-Recursion.mog', 2, 10], 'Main\\fact' => ['Main.fact', 'tests/backend/codegen/Core-Recursion.mog', 7, 14], 'Main\\countdown' => ['Main.countdown', 'tests/backend/codegen/Core-Recursion.mog', 12, 15]]];
+const __MOGGI_MAP = [[], ['Main\\sign' => 0, 'Main\\fact' => 1, 'Main\\countdown' => 2], [], [], [[0, 0, 2, 10], [1, 0, 7, 14], [2, 0, 12, 15]], ['Main.sign', 'Main.fact', 'Main.countdown'], ['tests/backend/codegen/Core-Recursion.mog']];
 
 function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
 function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }

@@ -2,7 +2,11 @@
 
 namespace Moggi\Semantics\TypeExpr;
 
+require_once __DIR__ . '/types/type_laws.php';
+
 use Moggi\Syntax\Ast\PendingConstraint;
+
+use function Moggi\Semantics\Types\typeChildren;
 
 /**
  * Marker interface for the compiler's internal type representation.
@@ -263,6 +267,11 @@ function schemeFreeTypeVars(Type $type, array $bound, array $constraints): array
 /**
  * Structural type-variable collector mirroring Types\typeVars.
  *
+ * The children come from the same law module `typeVars` uses, so a promoted or
+ * variable-headed application frees its arguments here too: a scheme built from
+ * `'Pair a` used to report no free variable at all, which made it unsound to
+ * generalise.
+ *
  * @param array<string, true> $acc
  * @return array<string, true>
  */
@@ -274,35 +283,14 @@ function collectTypeVars(Type $type, array $acc): array
         return $acc;
     }
 
-    if ($type instanceof TCon) {
-        foreach ($type->args as $arg) {
-            $acc = collectTypeVars($arg, $acc);
-        }
-
-        return $acc;
+    if ($type instanceof TVarApp) {
+        $acc[$type->name] = true;
     }
 
-    if ($type instanceof TArrow) {
-        return collectTypeVars($type->to, collectTypeVars($type->from, $acc));
+    foreach (typeChildren($type) as $child) {
+        $acc = collectTypeVars($child, $acc);
     }
 
     return $acc;
 }
 
-function schemeRuntimeArity(Scheme $scheme): int
-{
-    return schemeTypeArity($scheme) + $scheme->runtimeConstraintCount;
-}
-
-function schemeTypeArity(Scheme $scheme): int
-{
-    $type = $scheme->type;
-    $arity = 0;
-
-    while ($type instanceof TArrow) {
-        ++$arity;
-        $type = $type->to;
-    }
-
-    return $arity;
-}

@@ -4,13 +4,12 @@ namespace Moggi\LSP\TextDocument;
 
 use Moggi\LSP\Analysis\AnalysisResult;
 use Moggi\LSP\Analysis\AnalysisService;
+use Moggi\Syntax\Ast;
 
+use function Moggi\LSP\Analysis\sourceChildren;
 use function Moggi\LSP\Protocol\splitLines;
-
 use function Moggi\Semantics\Kernel\boolFalseCtor;
 use function Moggi\Semantics\Kernel\boolTypeName;
-
-use Moggi\Syntax\Ast;
 
 function svcCodeActions(AnalysisService $svc, string $uri, array $range, array $context): array
 {
@@ -369,16 +368,8 @@ function findCaseNearLine(object $node, int $line): ?Ast\CaseExpr
                 $best = $n;
             }
         }
-        foreach (\get_object_vars($n) as $prop) {
-            if (\is_object($prop)) {
-                $walk($prop);
-            } elseif (\is_array($prop)) {
-                foreach ($prop as $el) {
-                    if (\is_object($el)) {
-                        $walk($el);
-                    }
-                }
-            }
+        foreach (sourceChildren($n) as $child) {
+            $walk($child);
         }
     };
     $walk($node);

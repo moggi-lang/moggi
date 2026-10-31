@@ -39,7 +39,6 @@ foreach (fuzzFrontendCorpus($seed, $count) as $source) {
             $spanless[] = ['index' => $index, 'message' => $outcome['message'], 'source' => $source];
         }
     } else {
-        // Minimised, so the report carries the smallest input that still reproduces it.
         $crashClass = (string) $outcome['class'];
         $unexpected[] = [
             'index' => $index,

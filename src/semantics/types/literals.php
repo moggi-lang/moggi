@@ -2,16 +2,15 @@
 
 namespace Moggi\Semantics\Types;
 
-use function Moggi\Semantics\Kernel\literalRole;
-use function Moggi\Semantics\Kinds\canonicalTypeConName;
-
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TDouble;
 use Moggi\Semantics\TypeExpr\TInt;
 use Moggi\Semantics\TypeExpr\TVar;
-
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
+
+use function Moggi\Semantics\Kernel\literalRole;
+use function Moggi\Semantics\Kinds\canonicalTypeConName;
 
 /**
  * An integer literal denotes the value `fromInteger` returns for the integer it
@@ -33,7 +32,7 @@ function inferIntegerLit(TypeCheckState $state, Ast\IntegerLit $expr): Type
     }
 
     $type = freshType($state);
-    $expr->pendingConstraints = [new Ast\PendingConstraint($literalClass, [$type])];
+    setPendingObligations($state, $expr, [new Ast\PendingConstraint($literalClass, [$type])]);
 
     return $type;
 }
@@ -82,9 +81,15 @@ function numericDefaultClasses(): array
  *
  * @param array<string, true> $bound variables the enclosing declaration
  *        quantifies over
+ * @param ?Ast\FunctionDecl $owner the declaration this body belongs to, so the
+ *        decision can be published with the declaration it settled
  */
-function defaultAmbiguousNumericVars(TypeCheckState $state, Ast\AstNode $body, array $bound): void
-{
+function defaultAmbiguousNumericVars(
+    TypeCheckState $state,
+    Ast\AstNode $body,
+    array $bound,
+    ?Ast\FunctionDecl $owner = null,
+): void {
     if (classWithRole($state, literalRole()) === null) {
         return;
     }
@@ -125,6 +130,15 @@ function defaultAmbiguousNumericVars(TypeCheckState $state, Ast\AstNode $body, a
 
         foreach (numericDefaultTypes() as $candidate) {
             if (constraintsHoldAtType($state, $defaultable, $name, $candidate)) {
+                $state->defaultingLog[] = [
+                    'decl' => $owner === null ? null : \spl_object_id($owner),
+                    'wanted' => \implode(' & ', \array_map(
+                        static fn (Ast\PendingConstraint $c): string => $c->class . '(' . $name . ')',
+                        $defaultable,
+                    )),
+                    'decision' => typeToString($candidate),
+                    'provenance' => 'numeric defaulting: the first candidate type whose instances hold',
+                ];
                 unify($state, new TVar($name), $candidate);
 
                 break;
@@ -401,15 +415,15 @@ function elaborateNumericLiterals(TypeCheckState $state, Ast\AstNode $expr): Ast
 
 function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): Ast\AstNode
 {
-    if ($expr->pendingConstraints === []) {
+    if (pendingConstraintsOf($state, $expr) === []) {
         return $expr;
     }
 
-    $constraints = refreshConstraintArgs($state, $expr->pendingConstraints);
+    $constraints = refreshConstraintArgs($state, pendingConstraintsOf($state, $expr));
     $type = canonicalPrimitiveType(prune($state, $constraints[0]->args[0] ?? freshType($state)));
 
     if ($type instanceof TInt) {
-        $expr->pendingConstraints = [];
+        setPendingObligations($state, $expr, []);
 
         return $expr;
     }
@@ -435,10 +449,10 @@ function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): A
             $expr->endCol,
         );
     $integerValue->intrinsicId = $expr->digits === null ? 'intToInteger#' : 'integerFromDigits#';
-    $integerValue->inferredType = $expr->inferredType;
+    copyInferredType($integerValue, $expr);
 
     if ($type instanceof TCon && $type->name === canonicalTypeConName('Integer#') && $type->args === []) {
-        $expr->pendingConstraints = [];
+        setPendingObligations($state, $expr, []);
 
         return $integerValue;
     }
@@ -456,9 +470,9 @@ function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): A
         new Ast\Variable($literalMethod, $expr->line, $expr->col, $expr->endCol),
         $evidence,
     );
-    $expr->pendingConstraints = [];
+    setPendingObligations($state, $expr, []);
     $converted = new Ast\Apply($method, $integerValue, $expr->line, $expr->col, $expr->endCol);
-    $converted->inferredType = $expr->inferredType;
+    copyInferredType($converted, $expr);
 
     return $converted;
 }

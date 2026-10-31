@@ -3,14 +3,12 @@
 namespace Moggi\Syntax\Parser;
 
 use Moggi\Syntax\Ast;
+use Moggi\Syntax\Lexer\TokenKind;
 
 use function Moggi\Syntax\isConstructorOperator;
-
 use function Moggi\Syntax\Lexer\isIdCont;
 use function Moggi\Syntax\Lexer\isLetter;
 use function Moggi\Syntax\Lexer\isSymbol;
-
-use Moggi\Syntax\Lexer\TokenKind;
 
 /**
  * Top-level declaration, or null if the next tokens are an expression/statement.

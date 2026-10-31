@@ -1,0 +1,17 @@
+import System.IO
+
+-- Two shapes the IO spine classifies rather than recovers from:
+--   * a nested `do` in action position (`x <- (do …)`), which only the deleted
+--     `try`/`catch` used to lower and which is now its own arm;
+--   * a `let`-bound action whose spelling is reused in a nested scope, which the
+--     action store resolves by binder identity rather than by name.
+main :: IO ()
+main = do
+  let run = putStrLn "outer"
+  x <- (do
+          let run = putStrLn "inner"
+          _ <- run
+          pure ())
+  _ <- run
+  putStrLn (case x of
+    () -> "done")

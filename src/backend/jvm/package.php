@@ -17,6 +17,52 @@ use function Moggi\Debug\sourceMapFrames;
  */
 
 /**
+ * Whether an unpacked tree cannot hold this class on the given host. Windows reserves `CON`,
+ * `PRN`, `AUX`, `NUL`, `COM1`–`COM9` and `LPT1`–`LPT9` as device names, extension included:
+ * `moggi/rt/Con.class` opens the console rather than a file, and a module named `Con` collides the
+ * same way. `$family` defaults to this host and is explicit so the rule can be checked off Windows.
+ */
+function unrepresentableClassName(string $internal, ?string $family = null): bool
+{
+    if (($family ?? \PHP_OS_FAMILY) !== 'Windows') {
+        return false;
+    }
+
+    return \in_array(
+        \strtoupper(\explode('.', \basename($internal))[0]),
+        ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7',
+            'COM8', 'COM9', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'],
+        true,
+    );
+}
+
+/**
+ * Split a class map for an unpacked tree: `tree` is what the filesystem can name, `jar` is what it
+ * cannot, which is written to `moggi-classes.jar` beside the tree so the classpath can still reach
+ * it.
+ *
+ * @param array<string, string> $classes
+ * @return array{tree: array<string, string>, jar: array<string, string>}
+ */
+function splitUnpackedClasses(array $classes, ?string $family = null): array
+{
+    $tree = [];
+    $jar = [];
+    foreach ($classes as $internal => $bytes) {
+        if (! \is_string($bytes) || $bytes === '') {
+            continue;
+        }
+        if (unrepresentableClassName($internal, $family)) {
+            $jar[$internal] = $bytes;
+        } else {
+            $tree[$internal] = $bytes;
+        }
+    }
+
+    return ['tree' => $tree, 'jar' => $jar];
+}
+
+/**
  * @param array<string, mixed> $options unpacked?, jarName?, entryModule?
  */
 function packageJvmOutput(string $outputRoot, array $options = []): void
@@ -70,10 +116,11 @@ function packageJvmOutput(string $outputRoot, array $options = []): void
     mergeDemandClasspathJars($classes, $resources);
 
     if (! empty($options['unpacked'])) {
-        foreach ($classes as $internal => $bytes) {
-            if (! \is_string($bytes) || $bytes === '') {
-                continue;
-            }
+        $split = splitUnpackedClasses($classes);
+        if ($split['jar'] !== []) {
+            writeJar($outputRoot . DIRECTORY_SEPARATOR . 'moggi-classes.jar', $split['jar']);
+        }
+        foreach ($split['tree'] as $internal => $bytes) {
             $dst = $outputRoot . DIRECTORY_SEPARATOR
                 . \str_replace('/', DIRECTORY_SEPARATOR, $internal) . '.class';
             $dstDir = \dirname($dst);

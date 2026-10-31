@@ -2,11 +2,11 @@
 
 namespace Moggi\Syntax\Parser;
 
-use function Moggi\Semantics\Kernel\boolFalseCtor;
-use function Moggi\Semantics\Kernel\boolTrueCtor;
-
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Lexer\TokenKind;
+
+use function Moggi\Semantics\Kernel\boolFalseCtor;
+use function Moggi\Semantics\Kernel\boolTrueCtor;
 
 /**
  * An integer literal, keeping the digits when they do not fit the host `int`:
@@ -599,6 +599,10 @@ function reachedDoExprBoundary(ParserState $state): bool
     }
 
     if (peek($state)->line <= $state->doExprStartLine) {
+        return false;
+    }
+
+    if ($state->doBlockCol !== null && peek($state)->col > $state->doBlockCol) {
         return false;
     }
 

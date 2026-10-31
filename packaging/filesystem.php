@@ -312,10 +312,6 @@ function assertChildCwd(string $cwd): void
 
 function cpuCount(): int
 {
-    $override = \getenv('MOGGI_DIST_JOBS');
-    if (\is_string($override) && $override !== '' && \ctype_digit($override)) {
-        return (int) $override;
-    }
     if (\PHP_OS_FAMILY === 'Windows') {
         $count = \getenv('NUMBER_OF_PROCESSORS');
 

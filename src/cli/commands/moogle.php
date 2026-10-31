@@ -2,16 +2,13 @@
 
 namespace Moggi\CLI\Commands;
 
-use Moggi\Backend;
 use Moggi\Cache;
+use Moggi\Docs;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
 
 use function Moggi\CLI\defaultDocsInput;
 use function Moggi\CLI\printUsage;
-
-use Moggi\Docs;
-
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
 
 /**
  * `moggi moogle` — search the API by name or type.
@@ -75,13 +72,13 @@ function runMoogle(array $argv): int
     }
 
     try {
-        Backend\setCompileBackend('php');
         if ($options['noCache']) {
             Cache\setCacheEnabled(false);
         }
         $index = Docs\loadOrBuildIndex(
             $options['root'] ?? defaultDocsInput(),
             $options['lib'],
+            Docs\docsContext('php', $options['lib']),
             $options['rebuild'],
         );
 

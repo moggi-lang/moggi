@@ -1,12 +1,14 @@
 <?php declare(strict_types=1);
 
-// `schnorr` is resolved from a fixed set of locations and never from `PATH`, so a
-// source checkout can verify signed registries with no configuration. These
-// checks cover that the locations include a checkout's own build output
-// (`schnorr/schnorr`, what `make` writes) and not a `build/` directory that never
-// holds it, that an explicit `MOGGI_SCHNORR` override wins and a missing one does
-// not fall through to a bundled copy, and that the failure note names where it
-// looked and how to fix it.
+/**
+ * Resolve `schnorr` from fixed locations, never `PATH`, so source checkouts
+ * can verify signed registries without configuration.
+ *
+ * Cover the checkout's `schnorr/schnorr` build output, not the unused
+ * `build/` directory; that no variable, no `PATH` entry and no path a caller
+ * names can move the lookup; and an actionable failure message listing the
+ * searched locations and how to fix it.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/registry/schnorr.php') && \dirname($root) !== $root) {
@@ -62,41 +64,38 @@ $remove = static function (string $path) use (&$remove): void {
 };
 
 try {
-    // A set-but-missing override is a refusal, never a fall-through to a bundled
-    // copy: the caller asked for a specific binary, and silently using another
-    // one would hide the misconfiguration.
-    \putenv('MOGGI_SCHNORR=' . $work . '/no-such-schnorr');
-    $assert(schnorrBinary() === null, 'a missing MOGGI_SCHNORR must not fall back to a bundled copy');
-
     if (\PHP_OS_FAMILY !== 'Windows') {
-        $named = $work . '/schnorr';
-        \file_put_contents($named, "#!/bin/sh\necho valid\n");
-        \chmod($named, 0755);
-        \putenv('MOGGI_SCHNORR=' . $named);
-        $assert(schnorrBinary() === $named, 'an executable MOGGI_SCHNORR must be used');
+        // The lookup is fixed: an executable the caller names or drops in the working
+        // directory is never a candidate, whatever it is called and however it is
+        // reachable.
+        $elsewhere = $work . '/elsewhere/' . $name;
+        \mkdir($work . '/elsewhere', 0777, true);
+        \file_put_contents($elsewhere, "#!/bin/sh\necho forged\n");
+        \chmod($elsewhere, 0755);
+        $assert(
+            ! \in_array($elsewhere, schnorrCandidatePaths(), true),
+            'a binary outside the installation is never a candidate',
+        );
 
-        // A distribution puts the binary at `<root>/bin/schnorr`, which is what
-        // `MOGGI_ROOT` names when it is set outside the checkout.
-        $bundled = $work . '/bin/' . $name;
-        \file_put_contents($bundled, "#!/bin/sh\necho valid\n");
-        \chmod($bundled, 0755);
-        \putenv('MOGGI_SCHNORR');
-        $savedRoot = \getenv('MOGGI_ROOT');
-        \putenv('MOGGI_ROOT=' . $work);
-        $assert(schnorrBinary() === $bundled, 'a binary under MOGGI_ROOT/bin must be found');
-        \putenv($savedRoot === false ? 'MOGGI_ROOT' : 'MOGGI_ROOT=' . $savedRoot);
+        // A `schnorr` on `PATH` is not the verifier either.
+        $savedPath = (string) \getenv('PATH');
+        \putenv('PATH=' . $work . '/elsewhere');
+        $found = schnorrBinary();
+        \putenv('PATH=' . $savedPath);
+        $assert(
+            $found !== $elsewhere,
+            'a `schnorr` on PATH must not be used: ' . \var_export($found, true),
+        );
     }
 
     // --- the failure note names where it looked and how to fix it -------------
-    \putenv('MOGGI_SCHNORR=' . $work . '/no-such-schnorr');
     $note = schnorrMissingNote();
     $assert(\str_contains($note, 'no bundled'), 'the note says no bundled binary was found: ' . $note);
-    $assert(\str_contains($note, 'MOGGI_SCHNORR'), 'the note names the override to set');
     $assert(\str_contains($note, $expected), 'the note lists the checkout location it tried: ' . $note);
     $assert(\str_contains($note, 'make -C schnorr'), 'the note says how to build it in a checkout');
+    $assert(! \str_contains($note, 'MOGGI_'), 'the note names no environment variable: ' . $note);
 
     echo "schnorr discovery tests passed ({$checks} checks)\n";
 } finally {
-    \putenv('MOGGI_SCHNORR');
     $remove($work);
 }

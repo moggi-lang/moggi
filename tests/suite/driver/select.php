@@ -44,8 +44,6 @@ function selectCases(array $cases, array $pathFilters, array $groupFilters, stri
         if ($pathFilters !== [] && ! matchesAnyPathFilter($case, $pathFilters)) {
             continue;
         }
-        // A case about another backend is selected anyway, so it is reported `n/a` rather than
-        // vanishing from this backend's run.
         $selected[] = $case;
     }
 
@@ -79,8 +77,6 @@ function matchesAnyPathFilter(TestCase $case, array $pathFilters): bool
             return true;
         }
     }
-
-    // Logical-name selectors (`parser/Backend-Map`, `lsp/handlers`).
     foreach ($pathFilters as $filter) {
         if ($filter['path'] === '') {
             return true;
@@ -139,7 +135,6 @@ function resolveTestSelectors(array $selectors, array $cases): array
 
             continue;
         } catch (\InvalidArgumentException) {
-            // Not a path on disk; it may name a test instead.
         }
 
         $trimmed = \trim($selector, '/');

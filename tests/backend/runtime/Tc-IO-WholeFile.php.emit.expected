@@ -2,14 +2,9 @@
 
 namespace Tc\IO\WholeFile;
 
-const __MOGGI_MAP = [[23 => ['Tc.IO.WholeFile.main', 'tests/backend/runtime/Tc-IO-WholeFile.mog', 13, 3], 24 => ['Tc.IO.WholeFile.main', 'tests/backend/runtime/Tc-IO-WholeFile.mog', 14, 3], 25 => ['Tc.IO.WholeFile.main', 'tests/backend/runtime/Tc-IO-WholeFile.mog', 15, 3], 26 => ['Tc.IO.WholeFile.main', 'tests/backend/runtime/Tc-IO-WholeFile.mog', 15, 27], 27 => ['Tc.IO.WholeFile.main', 'tests/backend/runtime/Tc-IO-WholeFile.mog', 16, 3], 28 => ['Tc.IO.WholeFile.main', 'tests/backend/runtime/Tc-IO-WholeFile.mog', 17, 11], 29 => ['Tc.IO.WholeFile.main', 'tests/backend/runtime/Tc-IO-WholeFile.mog', 19, 3]], ['Tc\\IO\\WholeFile\\bindPath' => ['Tc.IO.WholeFile.bindPath', 'tests/backend/runtime/Tc-IO-WholeFile.mog', 6, 12], 'Tc\\IO\\WholeFile\\letPath' => ['Tc.IO.WholeFile.letPath', 'tests/backend/runtime/Tc-IO-WholeFile.mog', 9, 11], 'Tc\\IO\\WholeFile\\main' => ['Tc.IO.WholeFile.main', 'tests/backend/runtime/Tc-IO-WholeFile.mog', 12, 8]]];
+const __MOGGI_MAP = [[18 => 2, 26 => 3, 27 => 4, 28 => 5, 29 => 6, 30 => 7, 31 => 8, 32 => 9], ['Tc\\IO\\WholeFile\\bindPath' => 0, 'Tc\\IO\\WholeFile\\letPath' => 1, 'Tc\\IO\\WholeFile\\main' => 2, 'Tc\\IO\\WholeFile\\__w_main' => 2], ['Tc\\IO\\WholeFile\\main'], ['Tc\\IO\\WholeFile\\__w_main'], [[0, 0, 6, 12], [1, 0, 9, 11], [2, 0, 12, 8], [2, 0, 13, 3], [2, 0, 14, 3], [2, 0, 15, 3], [2, 0, 15, 27], [2, 0, 16, 3], [2, 0, 17, 11], [2, 0, 19, 3]], ['Tc.IO.WholeFile.bindPath', 'Tc.IO.WholeFile.letPath', 'Tc.IO.WholeFile.main'], ['tests/backend/runtime/Tc-IO-WholeFile.mog']];
 
 require_once __DIR__ . '/../../../libraries/base/src/System/IO.php';
-require_once __DIR__ . '/../../../libraries/base/src/System/IO/PHP.php';
-
-use function System\IO\PHP\putStrLn;
-use function System\IO\readFile;
-use function System\IO\writeFile;
 
 function bindPath() {
     return "/tmp/moggi-tc-io-whole-bind.txt";
@@ -20,12 +15,20 @@ function letPath() {
 }
 
 function main() {
-    putStrLn("bind");
-    writeFile(bindPath(), "bind-linear");
-    $__t0 = readFile(bindPath());
-    putStrLn($__t0);
-    putStrLn("let");
-    $__t1 = readFile(letPath());
-    putStrLn($__t1);
+    $__t8 = ['__io', static function(): mixed {
+        $__t7 = __w_main();
+        return $__t7;
+    }];
+    return $__t8;
+}
+
+function __w_main() {
+    $__t0 = \System\IO\__w_putStrLn("bind");
+    $__t1 = \System\IO\__w_writeFile(bindPath(), "bind-linear");
+    $__t2 = \System\IO\__w_readFile(bindPath());
+    $__t3 = \System\IO\__w_putStrLn($__t2);
+    $__t4 = \System\IO\__w_putStrLn("let");
+    $__t5 = \System\IO\__w_readFile(letPath());
+    $__t6 = \System\IO\__w_putStrLn($__t5);
     return null;
 }

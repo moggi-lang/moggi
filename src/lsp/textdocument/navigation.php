@@ -3,15 +3,14 @@
 namespace Moggi\LSP\TextDocument;
 
 use Moggi\LSP\Analysis\AnalysisService;
+use Moggi\LSP\Index\DeclInfo;
+use Moggi\Syntax\Ast;
 
 use function Moggi\LSP\Analysis\findNodeAt;
 use function Moggi\LSP\Analysis\findNodeChainAt;
-
+use function Moggi\LSP\Analysis\sourceChildren;
 use function Moggi\LSP\checkCancelledPoint;
 use function Moggi\LSP\Index\binderResolved;
-
-use Moggi\LSP\Index\DeclInfo;
-
 use function Moggi\LSP\Index\isBinderResolved;
 use function Moggi\LSP\Protocol\codepointColToUtf16;
 use function Moggi\LSP\Protocol\compilerPosToLsp;
@@ -22,8 +21,6 @@ use function Moggi\LSP\Protocol\splitLines;
 use function Moggi\LSP\Protocol\utf16Length;
 use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Modules\resolvedSymbol;
-
-use Moggi\Syntax\Ast;
 
 function svcDefinition(AnalysisService $svc, string $uri, array $pos): mixed
 {
@@ -305,21 +302,10 @@ function findEvidenceMethodForNode(object $root, Ast\AstNode $needle): ?Ast\Evid
     if ($root instanceof Ast\TypeNode) {
         return null;
     }
-    foreach (\get_object_vars($root) as $prop) {
-        if (\is_object($prop)) {
-            $hit = findEvidenceMethodForNode($prop, $needle);
-            if ($hit !== null) {
-                return $hit;
-            }
-        } elseif (\is_array($prop)) {
-            foreach ($prop as $el) {
-                if (\is_object($el)) {
-                    $hit = findEvidenceMethodForNode($el, $needle);
-                    if ($hit !== null) {
-                        return $hit;
-                    }
-                }
-            }
+    foreach (sourceChildren($root) as $child) {
+        $hit = findEvidenceMethodForNode($child, $needle);
+        if ($hit !== null) {
+            return $hit;
         }
     }
 
@@ -542,7 +528,7 @@ function resolveNavTarget(AnalysisService $svc, string $uri, array $pos): ?array
         return null;
     }
     if ($resolved === null && $analysis->program instanceof Ast\Program) {
-        $resolved = $analysis->program->externalFns[$name] ?? null;
+        $resolved = $analysis->program->interface?->externalFns[$name] ?? null;
         if ($resolved === null && isset($analysis->declarations[$name])) {
             $resolved = resolvedSymbol($analysis->program->module ?? 'Main', $name);
         }

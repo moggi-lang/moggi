@@ -2,14 +2,9 @@
 
 namespace Moggi\Semantics\Types;
 
-use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
-use function Moggi\Semantics\IntrinsicRegistry\isStIntrinsic;
-
+use Moggi\Modules;
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
-
-use function Moggi\Semantics\TypeExpr\scheme;
-
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TChar;
 use Moggi\Semantics\TypeExpr\TCon;
@@ -30,9 +25,13 @@ use Moggi\Semantics\TypeExpr\TWord32;
 use Moggi\Semantics\TypeExpr\TWord64;
 use Moggi\Semantics\TypeExpr\TWord8;
 use Moggi\Semantics\TypeExpr\Type;
-
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\TypeNode;
+
+use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
+use function Moggi\Semantics\IntrinsicRegistry\isStIntrinsic;
+use function Moggi\Semantics\TypeExpr\collectTypeVars;
+use function Moggi\Semantics\TypeExpr\scheme;
 
 require_once __DIR__ . '/type_core.php';
 require_once __DIR__ . '/constraints.php';
@@ -332,6 +331,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
     $registration = instanceMethodSchemes($state, $decl);
     $headType = $registration['headType'];
     $mapping = $registration['mapping'];
+    $state->varKinds = [...$state->varKinds, ...Kinds\typeKindRequirements($state, $headType)['vars']];
     validateInstance($state, $decl, $headType, $mapping);
 
     $className = $decl->class;
@@ -391,6 +391,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
             $method->body,
             peelDictArrows($freshened['type'], \count($freshened['constraints'])),
         );
+        $defaulted = isset($defaultedMethods[$method->name]);
         $fn = new Ast\FunctionDecl(
             $method->name,
             null,
@@ -401,8 +402,48 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
         if ($method->doc !== null) {
             $fn->doc = $method->doc;
         }
-        $defaulted = isset($defaultedMethods[$method->name]);
+        $defaultModule = (string) ($classInfo['module'] ?? '');
+        $defaultLine = (int) ($methodInfo['line'] ?? 0);
+        if ($defaulted && $defaultLine > 0) {
+            $written = $methodInfo['defaultBody'] ?? null;
+            $siteModule = $defaultModule !== '' ? $defaultModule : (string) $state->currentModule;
+            $siteFile = $written?->sourceFile
+                ?? ($state->classModuleScopes[$defaultModule]['path'] ?? null);
+            $siteLine = $defaultLine;
+            $siteCol = (int) ($methodInfo['col'] ?? 0);
+        } else {
+            $written = $method->line > 0 ? $method : $decl;
+            $siteModule = (string) $state->currentModule;
+            $siteFile = $written->sourceFile;
+            $siteLine = $written->line;
+            $siteCol = $written->col;
+        }
+        $site = Modules\sourceSite($siteModule, $siteFile ?? $state->filename, $siteLine, $siteCol);
+        if ($site !== null) {
+            $fn->sourceOrigin = $site;
+        }
         $scope = $defaulted ? defaultBodyScope($state, $classInfo) : [];
+        $defaultOrigins = [];
+        if ($defaulted) {
+            $classScope = $defaultModule === $state->currentModule
+                ? null
+                : ($state->classModuleScopes[$defaultModule] ?? null);
+            $classFns = \is_array($classScope['fns'] ?? null) ? $classScope['fns'] : [];
+            foreach ($scope as $name => $scheme) {
+                if (! $scheme instanceof Scheme || $scheme->classMethod || isset($constraintEnv[$name])) {
+                    continue;
+                }
+                $origin = $classFns[$name]['origin'] ?? null;
+                if (\is_array($origin)) {
+                    $defaultOrigins[$name] = $origin['module'] . '::' . $origin['phpName'];
+                } elseif ($defaultModule === $state->currentModule) {
+                    $defaultOrigins[$name] = $state->externalFns[$name]
+                        ?? $defaultModule . '::' . $name;
+                }
+            }
+        }
+        $savedDefaultOrigins = $state->defaultBodyOrigins;
+        $state->defaultBodyOrigins = $defaultOrigins;
         $installedTypes = $defaulted
             ? installDefaultBodyTypes($state, defaultBodyVisibleTypes($state, $classInfo))
             : ['names' => [], 'kinds' => [], 'synonyms' => [], 'wrappers' => [], 'env' => [], 'data' => [], 'promoted' => []];
@@ -418,8 +459,11 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
                 $contextConstraints,
                 $className,
                 $headType,
+                $methodInfo['kinds'] ?? [],
+                $freshened['mapping'] ?? [],
             );
         } finally {
+            $state->defaultBodyOrigins = $savedDefaultOrigins;
             removeDefaultBodyTypes($state, $installedTypes);
         }
         $state->instanceMethodNames[$fn->name] = true;
@@ -1238,40 +1282,24 @@ function freshenStableTypeKeyRec(Type $type, array &$rename, int &$n): string
         return $rename[$type->name];
     }
 
-    if ($type instanceof TCon) {
-        if ($type->args === []) {
-            return $type->name;
-        }
-        $args = [];
-        foreach ($type->args as $arg) {
-            $args[] = freshenStableTypeKeyRec($arg, $rename, $n);
-        }
-
-        return $type->name . '(' . \implode(',', $args) . ')';
-    }
-
-    if ($type instanceof TArrow) {
-        return '(' . freshenStableTypeKeyRec($type->from, $rename, $n)
-            . ')->(' . freshenStableTypeKeyRec($type->to, $rename, $n) . ')';
-    }
-
     if ($type instanceof TUnit) {
         return '()';
     }
 
-    if ($type instanceof TPromoted) {
-        if ($type->args === []) {
-            return "'" . $type->name;
-        }
-        $args = [];
-        foreach ($type->args as $arg) {
-            $args[] = freshenStableTypeKeyRec($arg, $rename, $n);
-        }
-
-        return "'" . $type->name . '(' . \implode(',', $args) . ')';
+    if (! $type instanceof TArrow && ! $type instanceof TCon && ! $type instanceof TPromoted) {
+        return typeToString($type);
     }
 
-    return typeToString($type);
+    $keys = [];
+    foreach (typeChildren($type) as $child) {
+        $keys[] = freshenStableTypeKeyRec($child, $rename, $n);
+    }
+
+    return match ($type::class) {
+        TArrow::class => '(' . $keys[0] . ')->(' . $keys[1] . ')',
+        TCon::class => $keys === [] ? $type->name : $type->name . '(' . \implode(',', $keys) . ')',
+        default => "'" . $type->name . ($keys === [] ? '' : '(' . \implode(',', $keys) . ')'),
+    };
 }
 
 /**
@@ -1745,6 +1773,8 @@ function checkInstanceMethod(
     array $instanceConstraints = [],
     string $className = '',
     ?Type $headType = null,
+    array $declaredKinds = [],
+    array $freshening = [],
 ): Ast\FunctionDecl {
     $state->subst = [];
     $savedInstanceHead = $state->instanceHeadInScope;
@@ -1791,6 +1821,7 @@ function checkInstanceMethod(
     }
     $bodyExpected = $expected;
 
+    $state->pushBinderScope();
     foreach ($fn->params as $i => $param) {
         [, $env] = bindPattern($state, $param, $paramTypes[$i], $env, generalize: false);
     }
@@ -1921,7 +1952,7 @@ function checkInstanceMethod(
     $state->constraintMethods = $savedConstraintMethods;
     $state->constraintMethodAmbiguities = $savedConstraintMethodAmbiguities;
     unify($state, $bodyType, $bodyExpected, $fn);
-    defaultAmbiguousNumericVars($state, $fn->body, quantifiedVars($state, $peeledType));
+    defaultAmbiguousNumericVars($state, $fn->body, quantifiedVars($state, $peeledType), $fn);
     resolveDeferredInfixPrimops($state, $fn->body);
     $fn->body = resolvePendingEvidenceInExpr($state, $fn->body);
     $fn->body = tryResolveValueEvidence($state, $fn->body);
@@ -1936,14 +1967,61 @@ function checkInstanceMethod(
 
     $wrapper = trivialIntrinsicWrapper($fn);
     resolveInstanceIntrinsicMethods($state, $fn->body);
-    $fn->body = rewriteIntrinsicApplies($fn->body);
+    $fn->body = rewriteIntrinsicApplies($state, $fn->body);
     if ($wrapper !== null) {
         $fn->intrinsicWrapper = $wrapper;
     }
 
     $fn->type = internalTypeToAst(prune($state, $fnType), $state->subst);
+
+    $settledType = prune($state, $fnType);
+    $userType = peelDictArrows($settledType, \count($constraints));
+    $userObligations = refreshConstraintArgs($state, [...$instanceConstraints, ...$methodUserConstraints]);
+    $settledConstraintList = refreshConstraintArgs($state, $constraints);
+    $fn->constraints = $settledConstraintList;
+    $dictArgs = [];
+    foreach ($settledConstraintList as $dict) {
+        foreach ($dict->args as $arg) {
+            $dictArgs[] = $arg;
+        }
+    }
+    $bound = \array_keys(collectTypeVars($settledType, []));
+    foreach ($userObligations as $obligation) {
+        foreach ($obligation->args as $arg) {
+            foreach (\array_keys(collectTypeVars(prune($state, $arg), [])) as $var) {
+                if (! \in_array($var, $bound, true)) {
+                    $bound[] = $var;
+                }
+            }
+        }
+    }
+    $carriedKinds = [];
+    foreach ($declaredKinds as $source => $kind) {
+        $fresh = $freshening[$source] ?? null;
+        if (! $fresh instanceof TVar) {
+            continue;
+        }
+        $settled = prune($state, $fresh);
+        if ($settled instanceof TVar) {
+            $carriedKinds[$settled->name] = $kind;
+        }
+    }
+    $state->checkedParameterKinds[\spl_object_id($fn)] = $carriedKinds + Kinds\declarationParameterKinds(
+        $state,
+        $userType,
+        $dictArgs,
+    );
+    $state->checkedSchemes[\spl_object_id($fn)] = scheme(
+        $userType,
+        $bound,
+        $userObligations,
+        \count($settledConstraintList),
+        $settledConstraintList,
+    );
+
     $state->instanceHeadInScope = $savedInstanceHead;
     $state->instanceOwnMethods = $savedInstanceOwnMethods;
+    $state->popBinderScope();
 
     return $fn;
 }

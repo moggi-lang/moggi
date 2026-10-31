@@ -1,0 +1,55 @@
+import Control.Exception
+import Control.Monad
+import System.IO
+import Text.Show
+
+-- ---- An IO value in argument position ----
+-- The value of an IO-typed argument is the action, not the effect: the callee
+-- decides when it runs, and `twice` runs its argument twice. A `do` block, a
+-- `case` whose arms are actions, an `if` whose branches are actions, a lambda
+-- that answers one, and a `let`-bound action all travel the same way, and each
+-- must print its line as many times as the callee runs it — once for the
+-- single-run shapes, twice for `twice`.
+--
+-- These are the shapes whose lowering used to be an open question (R7): an
+-- argument is an operand, and an operand is not a statement. The answer the
+-- compiler gives is that the action *is* the value (a `do` block there desugars
+-- to the action-building primops, an `Intrinsic` operand), so nothing has to be
+-- refused and nothing has to be run early.
+
+twice :: IO () -> IO ()
+twice action = do
+  action
+  action
+
+handler :: IOError -> IO ()
+handler _ = putStrLn "handler"
+
+boom :: IO ()
+boom = throwIO (userError "boom")
+
+withHandler :: (IOError -> IO ()) -> IO ()
+withHandler h = catch boom h
+
+main :: IO ()
+main = do
+  twice (do putStrLn "do-block")
+  twice (case True of
+    True -> putStrLn "case-arm"
+    False -> putStrLn "other-arm")
+  twice (if True then putStrLn "then-arm" else putStrLn "else-arm")
+  twice (let bound = do putStrLn "bound-action" in bound)
+  putStrLn "single-run:"
+  case (1 :: Int) of
+    1 -> putStrLn "case-statement"
+    _ -> putStrLn "other-statement"
+  when True (do putStrLn "when-argument")
+  catch (do
+      putStrLn "catch-body"
+      throwIO (userError "boom")
+    ) handler
+  finally (do putStrLn "finally-work") (do putStrLn "finally-cleanup")
+  withHandler (\_ -> do putStrLn "lambda-handler")
+  (do putStrLn "bind-left") >>= \_ -> putStrLn "bind-right"
+  putStrLn =<< (do pure "reverse-bind")
+  mapM_ (\x -> do putStrLn (show x)) [1, 2]

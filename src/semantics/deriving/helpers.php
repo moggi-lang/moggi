@@ -4,13 +4,16 @@ namespace Moggi\Semantics\Deriving;
 
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
+use Moggi\Semantics\TypeExpr\TPromoted;
 use Moggi\Semantics\TypeExpr\TVar;
+use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
 
+use function Moggi\Semantics\Types\typeChildren;
 use function Moggi\Semantics\Types\typeFail;
 
-use Moggi\Syntax\Ast;
 
 /**
  * Shared AST helpers for stock / newtype deriving backends.
@@ -180,48 +183,11 @@ function applyOp(string $op, Ast\AstNode $left, Ast\AstNode $right): Ast\AstNode
     );
 }
 
-function strAppend(Ast\AstNode $left, Ast\AstNode $right): Ast\AstNode
-{
-    return applyOp('<>', $left, $right);
-}
-
-function showCall(Ast\AstNode $value): Ast\AstNode
-{
-    return new Ast\Apply(new Ast\Variable('show'), $value);
-}
-
 function compareCall(Ast\AstNode $left, Ast\AstNode $right): Ast\AstNode
 {
     return new Ast\Apply(
         new Ast\Apply(new Ast\Variable('compare'), $left),
         $right,
-    );
-}
-
-function mapCall(Ast\AstNode $f, Ast\AstNode $value): Ast\AstNode
-{
-    return new Ast\Apply(
-        new Ast\Apply(new Ast\Variable('map'), $f),
-        $value,
-    );
-}
-
-function foldrCall(Ast\AstNode $f, Ast\AstNode $z, Ast\AstNode $value): Ast\AstNode
-{
-    return new Ast\Apply(
-        new Ast\Apply(
-            new Ast\Apply(new Ast\Variable('foldr'), $f),
-            $z,
-        ),
-        $value,
-    );
-}
-
-function traverseCall(Ast\AstNode $f, Ast\AstNode $value): Ast\AstNode
-{
-    return new Ast\Apply(
-        new Ast\Apply(new Ast\Variable('traverse'), $f),
-        $value,
     );
 }
 
@@ -253,15 +219,10 @@ function typeMentionsParam(Ast\TypeNode $type, string $param): bool
  */
 function typeHasNestedClassParam(Type $type, string $param): bool
 {
-    if ($type instanceof TCon) {
-        foreach ($type->args as $arg) {
-            if (internalTypeMentionsParam($arg, $param)) {
-                return true;
-            }
-        }
-
-        return false;
+    if ($type instanceof TCon || $type instanceof TVarApp || $type instanceof TPromoted) {
+        return internalTypeMentionsParam($type, $param);
     }
+    
     if ($type instanceof TArrow) {
         return typeHasNestedClassParam($type->from, $param)
             || typeHasNestedClassParam($type->to, $param);
@@ -276,18 +237,11 @@ function internalTypeMentionsParam(Type $type, string $param): bool
     if ($type instanceof TVar) {
         return $type->name === $param;
     }
-    if ($type instanceof TCon) {
-        foreach ($type->args as $arg) {
-            if (internalTypeMentionsParam($arg, $param)) {
-                return true;
-            }
-        }
 
-        return false;
-    }
-    if ($type instanceof TArrow) {
-        return internalTypeMentionsParam($type->from, $param)
-            || internalTypeMentionsParam($type->to, $param);
+    foreach (typeChildren($type) as $child) {
+        if (internalTypeMentionsParam($child, $param)) {
+            return true;
+        }
     }
 
     return false;

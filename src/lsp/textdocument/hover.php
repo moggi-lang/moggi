@@ -2,9 +2,11 @@
 
 namespace Moggi\LSP\TextDocument;
 
+use Moggi\LSP\Analysis\AnalysisService;
+use Moggi\Syntax\Ast;
+
 use function Moggi\Docs\classDeclHeader;
 use function Moggi\Docs\constructorTypeSignature;
-
 use function Moggi\Docs\dataDeclSignature;
 use function Moggi\Docs\docForEntityName;
 use function Moggi\Docs\dumpAstTypeForDocs;
@@ -13,11 +15,9 @@ use function Moggi\Docs\friendlyAstTypeVarNames;
 use function Moggi\Docs\nameTypeSignature;
 use function Moggi\Docs\schemeToString;
 use function Moggi\Docs\surfaceTypeSignature;
-
-use Moggi\LSP\Analysis\AnalysisService;
-
 use function Moggi\LSP\Analysis\findNodeAt;
 use function Moggi\LSP\Analysis\findNodeChainAt;
+use function Moggi\LSP\Analysis\sourceChildren;
 use function Moggi\LSP\Index\binderResolved;
 use function Moggi\LSP\Index\isBinderResolved;
 use function Moggi\LSP\Protocol\compilerPosToLsp;
@@ -25,8 +25,6 @@ use function Moggi\LSP\Protocol\lspPosToCompiler;
 use function Moggi\LSP\Protocol\nodeToLspRange;
 use function Moggi\LSP\Protocol\splitLines;
 use function Moggi\Modules\resolvedSymbol;
-
-use Moggi\Syntax\Ast;
 
 function findCtorDecl(AnalysisService $svc, string $module, string $name): ?array
 {
@@ -153,17 +151,9 @@ function astTreeContains(object $root, Ast\AstNode $needle): bool
     if ($root instanceof Ast\TypeNode) {
         return false;
     }
-    foreach (\get_object_vars($root) as $prop) {
-        if (\is_object($prop)) {
-            if (astTreeContains($prop, $needle)) {
-                return true;
-            }
-        } elseif (\is_array($prop)) {
-            foreach ($prop as $elem) {
-                if (\is_object($elem) && astTreeContains($elem, $needle)) {
-                    return true;
-                }
-            }
+    foreach (sourceChildren($root) as $child) {
+        if (astTreeContains($child, $needle)) {
+            return true;
         }
     }
 
@@ -426,34 +416,12 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
         $pushType($typeSig);
     }
 
-    if ($node !== null && $node->pendingConstraints !== []) {
-        $cs = [];
-        foreach ($node->pendingConstraints as $c) {
-            if (\is_object($c) && isset($c->class)) {
-                $arg = '';
-                if (isset($c->args) && \is_array($c->args)) {
-                    $argParts = [];
-                    foreach ($c->args as $a) {
-                        if ($a instanceof Ast\TypeNode) {
-                            $argParts[] = dumpTypeForDocs($a);
-                        }
-                    }
-                    $arg = $argParts !== [] ? ' ' . \implode(' ', $argParts) : '';
-                }
-                $cs[] = $c->class . $arg;
-            }
-        }
-        if ($cs !== []) {
-            $push('**constraints:** `' . \implode('`, `', \array_unique($cs)) . '`');
-        }
-    }
-
     if ($node !== null && $node->doc) {
         $push($node->doc);
     }
 
     if ($name !== null) {
-        $resolved ??= $analysis->program->externalFns[$name]
+        $resolved ??= $analysis->program->interface?->externalFns[$name]
             ?? (isset($analysis->declarations[$name])
                 ? resolvedSymbol($module, $name)
                 : null);

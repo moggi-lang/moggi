@@ -164,6 +164,14 @@ function httpSend(string $url, string $method, array $headers, string $body = ''
 }
 
 /**
+ * Whether this filesystem reports POSIX permission bits at all
+ */
+function reportsPosixModeBits(): bool
+{
+    return \PHP_OS_FAMILY !== 'Windows';
+}
+
+/**
  * The nsec to sign with, from `--nsec-file`, `MOGGI_NSEC_FILE`, or a no-echo
  * prompt on a terminal.
  *
@@ -193,7 +201,7 @@ function readNsecKey(?string $file): string
     if ($mode === false) {
         throw new \RuntimeException("cannot read the permissions of {$path} — refusing a key whose mode is unknown");
     }
-    if (($mode & 0o077) !== 0) {
+    if (reportsPosixModeBits() && ($mode & 0o077) !== 0) {
         throw new \RuntimeException(
             \sprintf('%s is mode %04o — a secret key file must not be readable by group or other (chmod 600)', $path, $mode & 0o777),
         );

@@ -81,8 +81,6 @@ function renderWorkerBanner(int $jobs, int $requested): string
             ? \sprintf("using %d workers (--jobs %d)\n", $jobs, $requested)
             : \sprintf("using %d workers (auto; --jobs 1 to serialise)\n", $jobs);
     }
-
-    // One worker, which is either what was asked for or all the selection could be split into.
     if ($requested > 1) {
         return \sprintf("using 1 worker (--jobs %d: only one shard to give)\n", $requested);
     }
@@ -97,6 +95,35 @@ function formatDuration(float $ms): string
     }
 
     return \sprintf('%.1fs', $ms / 1000);
+}
+
+/** The library cache under discussion, named by backend only when the run has several. */
+function libCacheName(string $backend, bool $multiBackend): string
+{
+    return 'shared library cache' . ($multiBackend ? ' for ' . $backend : '');
+}
+
+/**
+ * Printed before the warm-up builds, so the reader knows why the run is quiet: the tree every test
+ * links against is compiled once here instead of once per worker.
+ */
+function renderLibWarmupStart(string $backend, bool $multiBackend): string
+{
+    return \sprintf(
+        "preparing the %s...\n",
+        libCacheName($backend, $multiBackend),
+    );
+}
+
+/** The same sentence finished: what the wait produced and how long it took. */
+function renderLibWarmupDone(string $backend, bool $built, float $seconds, bool $multiBackend): string
+{
+    $name = libCacheName($backend, $multiBackend);
+    $detail = formatDuration($seconds * 1000.0);
+
+    return $built
+        ? \sprintf("%s built in %s\n", $name, $detail)
+        : \sprintf("%s loaded from cache (%s)\n", $name, $detail);
 }
 
 /**
@@ -245,8 +272,6 @@ function renderRecap(ResultSet $set): string
             $out .= "\n";
         }
     }
-
-    // One block per dying worker, whose message carries the worker's own last words.
     if ($lost !== []) {
         $out .= \sprintf("LOST CASES (%d)\n", \count($lost));
         foreach ($lost as $result) {
@@ -325,7 +350,6 @@ function renderSummary(array $counts, string $label, float $durationMs): string
 {
     $parts = [];
     foreach (SUMMARY_ORDER as $status) {
-        // Cases that were never candidates here are not worth reporting.
         if ($status === 'not-applicable') {
             continue;
         }

@@ -7,19 +7,12 @@ Everything the compiler, the generated runtimes and the test harness read from t
 
 Moggi reads three groups: **its own variables** (below), the **host toolchain
 variables** it honors when locating `java`, `dotnet` and friends, and a few
-variables the **test harness** sets. Nothing else is consulted — there is no
-configuration file, and no per-project settings beyond the compile cache.
-
-> Two `MOGGI_*` names in the source are **not** environment variables:
-> `MOGGI_PROJECT_ROOT` is a PHP constant the test harness defines, and
-> `MOGGI_TRACE_FRAME_LIMIT` is the frame cap emitted into the generated
-> runtimes. Setting either in the environment has no effect.
+variables the **test harness** sets.
 
 ## Moggi's own variables
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `MOGGI_ROOT` | the installation or checkout | Locate the standard library: `<MOGGI_ROOT>/lib`. |
 | `MOGGI_MICRO_SFX` | unset | The micro PHP runtime a `--native` build on the `php` backend appends the PHAR to. |
 | `MOGGI_CACHE_DIR` | `./.moggi` | Root of the per-project cache: compile entries, fetched metadata, unpacked packages, `moggi mogdoc serve` output. |
 | `MOGGI_NO_CACHE` | unset (cache on) | Disable the compile cache. |
@@ -27,17 +20,8 @@ configuration file, and no per-project settings beyond the compile cache.
 | `MOGGI_REGISTRY` | the canonical registry | The registry a *read* command uses when `--registry` is not given. |
 | `MOGGI_REGISTRY_WRITE` | the registry's write origin | The registry a *write* command — `publish`, `bad`, `unmaintained`, `takeover` — uses when `--registry` is not given; falls back to `MOGGI_REGISTRY`. |
 | `MOGGI_REGISTRY_NPUB` | unset (trust on first use) | Pin the registry's signing key. |
+| `MOGGI_NSEC_FILE` | unset (prompt) | Path to the secret key `publish` signs with when `--nsec-file` is not given. |
 | `MOGGI_USER_CACHE` | `$XDG_CACHE_HOME/moggi`, else `$HOME/.cache/moggi` | The user-level cache: downloaded archives, plus the remembered key and accepted root version of each registry. |
-| `MOGGI_ALLOW_STALE_REGISTRY` | unset | Accept a signed root that has expired, or that is older than one this machine has already accepted. |
-| `MOGGI_SCHNORR` | the `schnorr` beside the installation | Path to the verifier/signer binary. A test and CI override; the search still never uses `PATH`. |
-
-### `MOGGI_ROOT`
-
-Overrides where the standard library is looked for. `<MOGGI_ROOT>/lib` is tried
-*first*, and is only accepted if it actually contains `base.moggi`. Without it
-the compiler looks for `libraries/` beside its own installation — for a distribution
-that is `<installation>/libraries`, next to `bin/` — and then next to its own sources
-in a checkout. Set it when the compiler has been relocated away from its `libraries/`.
 
 ### `MOGGI_MICRO_SFX`
 
@@ -72,19 +56,12 @@ difference is refused; without a pin the first key seen for a base is remembered
 and every later change is refused, so a key that changes after first contact is
 always an error rather than a silent trust refresh.
 
-### `MOGGI_ALLOW_STALE_REGISTRY`
-
 A signed root carries `version` and `expires` (RFC 3339), and the client refuses
 a root that is past its expiry or below the highest version it has already
 accepted for that base. That is what makes a **frozen** or **replayed** root
 visible: a signature over an old root verifies exactly as well as one over the
 current root, so freshness has to be signed and checked rather than assumed.
-
-Set this variable to a truthy value (`1`, `true`, `yes`, `on`) to waive both
-checks — for a development registry whose clock or counters are not maintained,
-or to accept a deliberate downgrade. The highest version seen is still recorded
-while the waiver is on, so a later run without it compares against the real
-high-water mark.
+There is no waiver: a stale or replayed root is always refused.
 
 ### `MOGGI_CACHE_DIR`
 
@@ -176,13 +153,6 @@ default.
 |----------|---------|--------|
 | `MOGGI_CACHE_DIR` | pinned to `<repo>/.moggi` | Where the compile cache lives. Pinned *only* when it is unset, so a test run never writes into your working directory's cache and an explicit choice wins. |
 | `MOGGI_NO_CACHE` | unset (cache on) | Inherited: bypasses the cache for the compiler the cases invoke. |
-| `MOGGI_FUZZ_DIR` | `<cache>/fuzz-failures` | Where the frontend fuzzer keeps generated inputs and minimised reproducers. |
-| `MOGGI_TEST_STANDALONE_TIMEOUT` | `300` | Watchdog seconds for one script case before it is killed and reported as `timeout`. |
-| `MOGGI_TEST_CPU_COUNT` | probed | Pin the machine's CPU count instead of probing it, for a run that asserts a worker count. |
-| `MOGGI_TEST_FORCE_TTY` | unset | `1` makes stderr count as a terminal, so the live progress block is on without a pty. |
-| `MOGGI_TEST_COLUMNS` | `COLUMNS`, the terminal, 80 | Progress-block width. |
-| `MOGGI_TEST_LINES` | `LINES`, the terminal, 24 | Progress-block height; a taller block folds its earliest rows. |
-| `NUMBER_OF_PROCESSORS` | probed | Windows' CPU count, used only to size an automatic `--jobs`. |
 | `JAVA_HOME` | probed | Locating `java` and `native-image` for jvm cases. |
 | `MOGGI_MICRO_SFX` | unset | The micro PHP runtime the `--native` smoke on php builds with. Without one the verdict is a skip, never a pass. |
 

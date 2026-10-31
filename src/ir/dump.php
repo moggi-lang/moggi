@@ -34,8 +34,6 @@ function dump(IR\IrNode $node, int $indent = 0): string
             $node->items,
         )),
         IR\Ret::class => $pad . 'ret ' . dumpExpr($node->value) . "\n",
-        IR\Binop::class => $pad . 't' . $node->dest . ' = ' . dumpOperand($node->left)
-            . ' ' . $node->op . ' ' . dumpOperand($node->right) . "\n",
         IR\Call::class => $pad . 't' . $node->dest . ' = call ' . $node->callee
             . '(' . \implode(', ', \array_map(dumpOperand(...), $node->args)) . ")\n",
         IR\CallValue::class => $pad . 't' . $node->dest . ' = call_value ' . dumpOperand($node->callee)
@@ -145,13 +143,6 @@ function dumpExpr(IR\Operand $node): string
     return match ($node::class) {
         IR\ConstInt::class, IR\ConstDouble::class, IR\ConstStr::class, IR\ConstChar::class, IR\Local::class, IR\Temp::class, IR\Unit::class,
         IR\FnRef::class, IR\Partial::class, IR\Intrinsic::class, IR\ForeignCall::class, IR\ListLit::class, IR\DictMethod::class => dumpOperand($node),
-        IR\ExprBinop::class => dumpExpr($node->left) . ' ' . $node->op . ' ' . dumpExpr($node->right),
-        IR\ExprCall::class => 'call ' . $node->callee
-            . '(' . \implode(', ', \array_map(dumpExpr(...), $node->args)) . ')',
-        IR\ExprCallValue::class => 'call_value ' . dumpOperand($node->callee)
-            . '(' . \implode(', ', \array_map(dumpExpr(...), $node->args)) . ')',
-        IR\ExprPartial::class => 'partial ' . $node->fn
-            . '(' . \implode(', ', \array_map(dumpExpr(...), $node->args)) . ')',
         default => throw new \InvalidArgumentException('unknown expr: ' . $node::class),
     };
 }
@@ -173,6 +164,32 @@ function dumpPatternInline(IR\Pattern $pattern): string
         IR\PatCons::class => dumpPatternInline($pattern->head) . ' : ' . dumpPatternInline($pattern->tail),
         default => throw new \InvalidArgumentException('unknown pattern: ' . $pattern::class),
     };
+}
+
+/**
+ * One line per callable, carrying the identity facts rather than the emitted
+ * spelling: module + declared name, its kind, and — for a clone — the callable
+ * it was declared from.
+ *
+ * Sorted, so two builds of the same module compare byte for byte and a target
+ * switch cannot reorder them.
+ *
+ * @return list<string>
+ */
+function identityLines(IR\Module $module): array
+{
+    $moduleName = $module->moduleName !== '' ? $module->moduleName : '<module>';
+    $lines = [];
+    foreach ($module->functions as $function) {
+        $line = $moduleName . '::' . $function->name . ' kind=' . $function->shape->kind->value;
+        if ($function->shape->origin !== null) {
+            $line .= ' origin=' . $function->shape->origin;
+        }
+        $lines[] = $line;
+    }
+    \sort($lines);
+
+    return $lines;
 }
 
 function dumpDoubleLiteral(float $value): string

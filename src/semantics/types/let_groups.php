@@ -2,11 +2,10 @@
 
 namespace Moggi\Semantics\Types;
 
-use function Moggi\Patterns\Walk\patternBoundNames;
-
-use function Moggi\Patterns\Walk\patternVariableNames;
-
 use Moggi\Syntax\Ast;
+
+use function Moggi\Patterns\Walk\patternBoundNames;
+use function Moggi\Patterns\Walk\patternVariableNames;
 
 /**
  * Strongly connected components of a let/where binding group.

@@ -2,17 +2,14 @@
 
 namespace Moggi\Optimize\Support;
 
-use function Moggi\Backend\Meta\lambdaMetaFromCaptures;
 
 use Moggi\IR;
 
-use function Moggi\IR\Visit\freeLocalsInBlock;
 use function Moggi\IR\Visit\mapOperandChildren;
 use function Moggi\IR\Visit\operandChildren;
 use function Moggi\IR\Visit\stmtDirectOperands;
 use function Moggi\IR\Visit\stmtNestedBlocks;
 use function Moggi\IR\Visit\walkBlock;
-use function Moggi\Semantics\Kernel\isBoolCtor;
 
 function operandEqual(IR\Operand $left, IR\Operand $right): bool
 {
@@ -25,15 +22,6 @@ function operandEqual(IR\Operand $left, IR\Operand $right): bool
         IR\Local::class => $left->name === $right->name,
         IR\Temp::class => $left->id === $right->id,
         IR\FnRef::class => $left->name === $right->name,
-        IR\ExprBinop::class => $left->op === $right->op
-            && operandEqual($left->left, $right->left)
-            && operandEqual($left->right, $right->right),
-        IR\ExprCall::class => $left->callee === $right->callee
-            && \count($left->args) === \count($right->args)
-            && \array_all(
-                $left->args,
-                static fn (IR\Operand $arg, int $i): bool => operandEqual($arg, $right->args[$i]),
-            ),
         IR\Intrinsic::class => $left->name === $right->name
             && \count($left->args) === \count($right->args)
             && \array_all(
@@ -49,32 +37,43 @@ function operandEqual(IR\Operand $left, IR\Operand $right): bool
     };
 }
 
-function operandKey(IR\Operand $operand): string
+/**
+ * Structural identity of an operand: one tagged node per step, so two operands share a key only when
+ * they are the same value. A textual key would let a string that reads like a number collide with the
+ * number.
+ *
+ * @return array<int, mixed>
+ */
+function operandKey(IR\Operand $operand): array
 {
     return match ($operand::class) {
-        IR\ConstInt::class, IR\ConstDouble::class, IR\ConstStr::class, IR\ConstChar::class => 'c' . $operand->value,
-        IR\Local::class => 'l' . $operand->name,
-        IR\Temp::class => 't' . $operand->id,
-        IR\FnRef::class => 'f' . $operand->name,
-        IR\Unit::class => 'unit',
-        IR\ListLit::class => 'list:' . \implode(',', \array_map(operandKey(...), $operand->elements)),
-        IR\ExprBinop::class => 'binop:' . $operand->op . ':' . operandKey($operand->left) . ':' . operandKey($operand->right),
-        IR\ExprCall::class => 'call:' . $operand->callee . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
-        IR\ExprCallValue::class => 'callv:' . operandKey($operand->callee) . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
-        IR\Intrinsic::class => 'intr:' . $operand->name . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
-        IR\Partial::class => 'part:' . $operand->fn . '/' . $operand->arity . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
-        IR\ExprPartial::class => 'epart:' . $operand->fn . '/' . $operand->arity . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
-        IR\DictMethod::class => 'dictm:' . operandKey($operand->evidence) . '.' . $operand->method,
-        IR\ForeignCall::class => 'foreign:' . $operand->backend . ':' . $operand->kind . ':' . $operand->path
-            . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
-        default => $operand::class,
+        IR\ConstInt::class => ['int', $operand->value],
+        IR\ConstDouble::class => ['double', $operand->value],
+        IR\ConstStr::class => ['string', $operand->value],
+        IR\ConstChar::class => ['char', $operand->value],
+        IR\Local::class => ['local', $operand->name],
+        IR\Temp::class => ['temp', $operand->id],
+        IR\FnRef::class => ['fn', $operand->name],
+        IR\Unit::class => ['unit'],
+        IR\ListLit::class => ['list', \array_map(operandKey(...), $operand->elements)],
+        IR\Intrinsic::class => ['intrinsic', $operand->name, \array_map(operandKey(...), $operand->args)],
+        IR\Partial::class => ['partial', $operand->fn, $operand->arity, \array_map(operandKey(...), $operand->args)],
+        IR\DictMethod::class => ['dict-method', operandKey($operand->evidence), $operand->method],
+        IR\ForeignCall::class => [
+            'foreign',
+            $operand->backend,
+            $operand->kind,
+            $operand->path,
+            \array_map(operandKey(...), $operand->args),
+        ],
+        default => ['unknown', $operand::class],
     };
 }
 
 function stmtDest(IR\Stmt $stmt): ?int
 {
     return match ($stmt::class) {
-        IR\Assign::class, IR\Binop::class, IR\Call::class, IR\CallValue::class, IR\MatchStmt::class => $stmt->dest,
+        IR\Assign::class, IR\Call::class, IR\CallValue::class, IR\MatchStmt::class => $stmt->dest,
         default => null,
     };
 }
@@ -104,7 +103,6 @@ function isPropagatableExpr(IR\Operand $expr): bool
 {
     return match ($expr::class) {
         IR\ConstInt::class, IR\ConstDouble::class, IR\ConstStr::class, IR\ConstChar::class, IR\Local::class, IR\Temp::class, IR\FnRef::class, IR\Partial::class => true,
-        IR\ExprBinop::class => isPropagatableExpr($expr->left) && isPropagatableExpr($expr->right),
         IR\Intrinsic::class => \array_reduce(
             $expr->args,
             static fn (bool $ok, IR\Operand $arg): bool => $ok && isPropagatableExpr($arg),
@@ -131,132 +129,38 @@ function isSimpleOperand(IR\Operand $operand): bool
         || $operand instanceof IR\Partial;
 }
 
-function operandToExpr(IR\Operand $operand): IR\Operand
+/**
+ * The operand a defining statement stands for, or null when it must stay a statement.
+ *
+ * Only an `Assign` states a value. A call is a computation: folding one into its reader would put
+ * a computation where the schema allows only values, so it stays a statement and its reader takes
+ * the temp it defines.
+ */
+function exprFromDefiningStmt(IR\Stmt $stmt, int $dest): ?IR\Operand
 {
-    return match ($operand::class) {
-        IR\ExprBinop::class, IR\ExprCall::class, IR\ExprCallValue::class, IR\ExprPartial::class => $operand,
-        IR\Partial::class => new IR\ExprPartial($operand->fn, $operand->arity, $operand->args),
-        default => $operand,
-    };
-}
-
-function combineOperandsToExpr(string $op, IR\Operand $left, IR\Operand $right): IR\Operand
-{
-    return foldExpr(new IR\ExprBinop($op, operandToExpr($left), operandToExpr($right)));
-}
-
-function foldExpr(IR\Operand $expr): IR\Operand
-{
-    $expr = match ($expr::class) {
-        IR\ExprBinop::class => new IR\ExprBinop(
-            $expr->op,
-            foldExpr($expr->left),
-            foldExpr($expr->right),
-        ),
-        IR\ExprCall::class => new IR\ExprCall(
-            $expr->callee,
-            \array_map(foldExpr(...), $expr->args),
-            $expr->srcLoc,
-        ),
-        IR\ExprCallValue::class => new IR\ExprCallValue(
-            foldExpr($expr->callee),
-            \array_map(foldExpr(...), $expr->args),
-            $expr->srcLoc,
-        ),
-        default => $expr,
-    };
-
-    if (! $expr instanceof IR\ExprBinop) {
-        return $expr;
-    }
-
-    $left = $expr->left;
-    $right = $expr->right;
-
-    if ($left instanceof IR\ConstInt && $right instanceof IR\ConstInt) {
-        $folded = tryFoldBinopInt($expr->op, $left->value, $right->value);
-        if ($folded !== null) {
-            return new IR\ConstInt($folded);
-        }
-    }
-
-    $identity = foldBinopPeephole($expr->op, $left, $right);
-    if ($identity !== null) {
-        return foldExpr($identity);
-    }
-
-    return $expr;
+    return $stmt instanceof IR\Assign && $stmt->dest === $dest ? $stmt->value : null;
 }
 
 /**
- * Fold compile-time Int arithmetic binops; comparisons stay runtime (Bool case
- * patterns). An overflowing fold is left alone: PHP promotes the host op to a
- * float, while Int arithmetic wraps at 64 bits, so the constant would disagree
- * with the code every backend emits for the same expression.
+ * Emit a call of a known callee as a statement and hand back the temp it defines.
+ *
+ * A rewrite that already knows which call it wants says so here, rather than building an operand
+ * that some later walk has to take apart.
+ *
+ * `$dest` is the destination the caller already owns — the `dest` of the statement it is rewriting.
+ * A caller that owns one passes it and the call writes it directly, so the value never needs a copy;
+ * a caller that does not gets a fresh temp.
+ *
+ * @param list<IR\Operand> $args
+ * @param list<IR\Stmt> $out appended to, in evaluation order
+ * @return array{IR\Temp, int} the temp the call defines, and the cursor after it
  */
-function tryFoldBinopInt(string $op, int $left, int $right): ?int
+function scheduleCall(string $callee, array $args, array &$out, int $nextTemp, ?IR\SrcLoc $srcLoc = null, ?int $dest = null): array
 {
-    $folded = match ($op) {
-        '+' => $left + $right,
-        '-' => $left - $right,
-        '*' => $left * $right,
-        default => null,
-    };
+    $dest ??= $nextTemp++;
+    $out[] = new IR\Call($callee, $args, $dest, $srcLoc);
 
-    return \is_int($folded) ? $folded : null;
-}
-
-function foldBinopPeephole(string $op, IR\Operand $left, IR\Operand $right): ?IR\Operand
-{
-    if ($op === '-' && operandEqual($left, $right)) {
-        return new IR\ConstInt(0);
-    }
-
-    if ($op === '+' && operandEqual($left, $right)) {
-        return new IR\ExprBinop('*', $left, new IR\ConstInt(2));
-    }
-
-    return foldBinopIdentity($op, $left, $right);
-}
-
-function foldBinopIdentity(string $op, IR\Operand $left, IR\Operand $right): ?IR\Operand
-{
-    return match ($op) {
-        '+' => match (true) {
-            $left instanceof IR\ConstInt && $left->value === 0 => $right,
-            $right instanceof IR\ConstInt && $right->value === 0 => $left,
-            default => null,
-        },
-        '-' => match (true) {
-            $right instanceof IR\ConstInt && $right->value === 0 => $left,
-            default => null,
-        },
-        '*' => match (true) {
-            $left instanceof IR\ConstInt && $left->value === 1 => $right,
-            $right instanceof IR\ConstInt && $right->value === 1 => $left,
-            $left instanceof IR\ConstInt && $left->value === 0 => new IR\ConstInt(0),
-            $right instanceof IR\ConstInt && $right->value === 0 => new IR\ConstInt(0),
-            default => null,
-        },
-        default => null,
-    };
-}
-
-function exprFromDefiningStmt(IR\Stmt $stmt, int $dest): ?IR\Operand
-{
-    return match ($stmt::class) {
-        IR\Assign::class => $stmt->dest === $dest ? $stmt->value : null,
-        IR\Binop::class => $stmt->dest === $dest
-            ? new IR\ExprBinop($stmt->op, $stmt->left, $stmt->right)
-            : null,
-        IR\Call::class => $stmt->dest === $dest
-            ? new IR\ExprCall($stmt->callee, $stmt->args, $stmt->srcLoc)
-            : null,
-        IR\CallValue::class => $stmt->dest === $dest
-            ? new IR\ExprCallValue($stmt->callee, $stmt->args, $stmt->srcLoc)
-            : null,
-        default => null,
-    };
+    return [new IR\Temp($dest), $nextTemp];
 }
 
 /**
@@ -297,22 +201,8 @@ function tempUseCountInRewritableExpr(IR\Operand $expr, int $id): int
 {
     return match ($expr::class) {
         IR\Temp::class => $expr->id === $id ? 1 : 0,
-        IR\ExprBinop::class => tempUseCountInRewritableExpr($expr->left, $id) + tempUseCountInRewritableExpr($expr->right, $id),
-        IR\ExprCall::class => tempUseCountInRewritableOperands($expr->args, $id),
-        IR\ExprCallValue::class => tempUseCountInRewritableExpr($expr->callee, $id) + tempUseCountInRewritableOperands($expr->args, $id),
         default => 0,
     };
-}
-
-/** @param list<IR\Operand> $operands */
-function tempUseCountInRewritableOperands(array $operands, int $id): int
-{
-    $count = 0;
-    foreach ($operands as $operand) {
-        $count += tempUseCountInRewritableExpr($operand, $id);
-    }
-
-    return $count;
 }
 
 /** @param list<IR\Stmt> $items */
@@ -357,38 +247,6 @@ function substituteTempInExpr(IR\Operand $expr, int $id, IR\Operand $replacement
     );
 }
 
-function isLambdaName(string $name): bool
-{
-    return \str_starts_with($name, 'λ');
-}
-
-/** The top-level function a recursive local `let`/`where` group is lifted to. */
-function isLetrecName(string $name): bool
-{
-    return \str_starts_with($name, '__letrec');
-}
-
-/**
- * A constructor of the host-boolean type. The library declares it
- * (`Data.Bool`: `data Bool = False | True`), the backends lower it to the host boolean, so its
- * constructors are bare in IR — never qualified to `Data.Bool::True` the way a user data
- * constructor is — and their identity is asked of the kernel key rather than spelled here.
- */
-function isWiredInBoolCtor(string $name): bool
-{
-    return isBoolCtor($name);
-}
-
-/**
- * A lifted function that is called at its free locals followed by its declared
- * parameters: an anonymous lambda, or the `__letrecN` function a recursive
- * `let`/`where` group is lowered to.
- */
-function isCapturedFnName(string $name): bool
-{
-    return isLambdaName($name) || isLetrecName($name);
-}
-
 function preserveMatchArm(IR\MatchArm $arm, IR\Block $body): IR\MatchArm
 {
     return $arm->withBody($body);
@@ -421,21 +279,70 @@ function mapStmtNestedBlocks(IR\Stmt $stmt, callable $mapBlock): IR\Stmt
 }
 
 /**
- * The captures of every lifted function in `$byName` (see
- * {@see indexCapturedFunctions}).
+ * Whether reading a call's arguments runs nothing: a temp, a local, a literal or a function
+ * reference is already a value, so a call built only from them can be dropped or repeated
+ * without an observable effect.
  *
- * @param array<string, IR\FunctionDecl> $byName
- * @return array<string, array{captures: list<string>, params: list<string>}>
+ * @param list<IR\Operand> $args
  */
-function buildLambdaMeta(array $byName): array
+function callArgsAreLeaves(array $args): bool
 {
-    return lambdaMetaFromCaptures(
-        $byName,
-        static fn (IR\FunctionDecl $function): array => freeLocalsInBlock(
-            $function->body,
-            \array_fill_keys($function->params, true),
-        ),
+    foreach ($args as $arg) {
+        if (! ($arg instanceof IR\Temp
+            || $arg instanceof IR\Local
+            || $arg instanceof IR\FnRef
+            || $arg instanceof IR\ConstInt
+            || $arg instanceof IR\ConstStr
+            || $arg instanceof IR\ConstChar
+            || $arg instanceof IR\ConstDouble
+            || $arg instanceof IR\Unit)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Drop the calls named in `$droppable` whose dest temp nothing else in the block reads.
+ *
+ * `$droppable` is the set of dests the caller has already established to be pure allocations
+ * (a dictionary built from leaves, say). The set is decided from what the call *is* — its
+ * indexed identity and its arguments — never from the callee's spelling, so an ordinary
+ * declaration can never be mistaken for a factory. A call whose dest is not named is kept.
+ *
+ * @param list<IR\Stmt> $items
+ * @param array<int, true> $droppable
+ * @return list<IR\Stmt>
+ */
+function dropUnreadTemps(array $items, array $droppable): array
+{
+    if ($droppable === []) {
+        return $items;
+    }
+
+    $used = [];
+    walkBlock(
+        new IR\Block($items),
+        static function (IR\Stmt $stmt): void {
+        },
+        static function (IR\Operand $operand) use (&$used): void {
+            if ($operand instanceof IR\Temp) {
+                $used[$operand->id] = true;
+            }
+        },
     );
+
+    $out = [];
+    foreach ($items as $item) {
+        if ($item instanceof IR\Call && isset($droppable[$item->dest]) && ! isset($used[$item->dest])) {
+            continue;
+        }
+
+        $out[] = $item;
+    }
+
+    return $out;
 }
 
 /** The lifted functions of a module, the ones that take captures. @param list<IR\FunctionDecl> $functions */
@@ -443,7 +350,7 @@ function indexCapturedFunctions(array $functions): array
 {
     $index = [];
     foreach ($functions as $function) {
-        if (isCapturedFnName($function->name)) {
+        if ($function->shape->kind->takesCaptures()) {
             $index[$function->name] = $function;
         }
     }

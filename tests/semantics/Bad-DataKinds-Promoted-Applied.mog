@@ -1,0 +1,5 @@
+data Color = Red | Blue
+
+-- 'Red is a promoted nullary constructor of kind Color, so applying an argument
+-- to it must be rejected by the kind checker.
+type T = 'Red Int

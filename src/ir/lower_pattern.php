@@ -12,6 +12,9 @@ function bindPattern(Pattern $pattern, Operand $value, LowerCtx $ctx): void
             $pattern->name = $irName;
             $ctx->items[] = new Let($irName, $value);
             $ctx->env[$occ] = new Local($irName);
+            if ($pattern->binderId !== null) {
+                $ctx->binders[$pattern->binderId] = new Local($irName);
+            }
         })(),
         PatLit::class => null,
         PatChar::class => null,

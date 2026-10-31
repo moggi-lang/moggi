@@ -2,14 +2,12 @@
 
 namespace Moggi\Docs;
 
-use function Moggi\Modules\classMethodsForExport;
+use Moggi\Syntax\Ast;
 
+use function Moggi\Modules\classMethodsForExport;
 use function Moggi\Modules\collectExports;
 use function Moggi\Modules\constructorsForExport;
 use function Moggi\Modules\exportItemChildNames;
-use function Moggi\Modules\isModuleActiveForCompileBackend;
-
-use Moggi\Syntax\Ast;
 
 /** Resolved export list for documentation (local declarations only). */
 final class DocExportFilter
@@ -176,9 +174,6 @@ function collectExportsForDocs(
     array $checkedModules,
 ): ?array {
     if (! isset($checkedModules[$moduleName])) {
-        return null;
-    }
-    if (! isModuleActiveForCompileBackend($units, $moduleName)) {
         return null;
     }
 

@@ -17,7 +17,6 @@ function progressEnabled(): bool
     global $testArgs;
 
     if (($GLOBALS['moggi_test_worker'] ?? false) === true) {
-        // Workers print the protocol stream the parent merges; keep them silent.
         return $enabled = false;
     }
 
@@ -29,13 +28,8 @@ function progressEnabled(): bool
     return $enabled = progressStderrIsTerminal();
 }
 
-/** `MOGGI_TEST_FORCE_TTY` pins the terminal default without the test having to allocate a pty. */
 function progressStderrIsTerminal(): bool
 {
-    if (\getenv('MOGGI_TEST_FORCE_TTY') === '1') {
-        return true;
-    }
-
     return \function_exists('stream_isatty') && @\stream_isatty(\STDERR);
 }
 
@@ -124,7 +118,6 @@ function progressStart(string $group, int $total, ?string $backend = null): stri
     } else {
         $state['rows'][$key]['startedAt'] ??= \microtime(true);
         if ($total > $state['rows'][$key]['total']) {
-            // Another shard saw more cases in this group; widen the row, keeping what it reported.
             $state['rows'][$key]['total'] = $total;
             if ($total > $state['rows'][$key]['done']) {
                 $state['rows'][$key]['endedAt'] = null;
@@ -322,8 +315,6 @@ function progressSuspend(): void
     if ($painted === 0) {
         return;
     }
-
-    // Walk up to the first row, clear every line, then come back up to where the block started.
     $out = "\r" . progressCursorUp($painted - 1);
     for ($i = 0; $i < $painted; ++$i) {
         $out .= PROGRESS_ERASE_LINE;

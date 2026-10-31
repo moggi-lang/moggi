@@ -11,7 +11,7 @@
 
   "runtimes": {
     "php": {
-      "version": "8.5.7",
+      "version": "8.5.12",
       "upstream": "php.net",
       "license": {
         "name": "PHP License 3.01",
@@ -172,7 +172,9 @@
       "build": {
         "tool": "spc",
         "php": "8.5",
-        "sapi": "micro"
+        "sapi": "micro",
+        "extensions": ["bcmath", "intl", "mbstring", "phar"],
+        "note": "The native compiler runs itself from the archive appended to its binary, so the micro runtime needs the phar wrapper on top of the extensions compiled programs require."
       }
     },
 

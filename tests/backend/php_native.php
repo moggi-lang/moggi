@@ -1,33 +1,33 @@
 <?php declare(strict_types=1);
 
+
+/**
+ * `--native` appends the packaged PHAR to a micro PHP runtime
+ * (`src/backend/php/native.php`). Two contracts are consumed by the foreign
+ * SAPI and cannot be verified by the compiler:
+ *
+ *   - The `[micro.sfx][INI object][payload]` file format.
+ *   - The PHAR stub's canonical `__HALT_COMPILER();` closing, required for
+ *     micro SAPI to register an appended PHAR.
+ *
+ * Assert both directly: the runtime is opaque bytes and `packagePhar` writes
+ * the stub. End-to-end execution with a real runtime and program is covered
+ * by the `--native` example and assembler variant smokes.
+ */
+
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 
-// `--native` on the PHP backend appends the packaged PHAR to a micro PHP runtime
-// (see `src/backend/php/native.php`). Two of its contracts are read by a foreign
-// SAPI rather than by this compiler, so no run of the compiler can verify them:
-//
-//   - the file format `[micro.sfx][INI object][payload]`
-//   - the app PHAR's stub closing with the canonical `__HALT_COMPILER();`, which
-//     is what makes a micro SAPI register an appended PHAR at all (a PHP CLI
-//     accepts any spelling of the token; a micro SAPI does not)
-//
-// A real runtime is not needed for either: the runtime is opaque bytes here, and
-// a PHAR's stub is written by `packagePhar`, so both are asserted directly. The
-// end-to-end path — a real runtime, a real program, its stdout — is the
-// `--native` example smoke in the suite and the assembler's variant smoke.
-
 require_once $root . '/src/compiler.php';
-
-use function Moggi\Backend\Php\buildPharStub;
-use function Moggi\Backend\Php\buildPhpNativeExecutable;
-use function Moggi\Backend\Php\combineMicroPhar;
 
 use const Moggi\Backend\Php\MICRO_INI_MAGIC;
 use const Moggi\Backend\Php\MICRO_SFX_ENV;
 
+use function Moggi\Backend\Php\buildPharStub;
+use function Moggi\Backend\Php\buildPhpNativeExecutable;
+use function Moggi\Backend\Php\combineMicroPhar;
 use function Moggi\Backend\Php\microIniObject;
 use function Moggi\Backend\Php\microSfxAt;
 use function Moggi\Backend\Php\packagePhar;
@@ -63,13 +63,8 @@ $scratch = \sys_get_temp_dir() . '/moggi-native-' . \getmypid() . '-' . \bin2hex
 \mkdir($scratch, 0777, true);
 
 $previousSfx = \getenv(MICRO_SFX_ENV);
-$previousRoot = \getenv('MOGGI_ROOT');
 
 try {
-    // 1. The INI injection object: the SAPI reads its configuration from between
-    //    the runtime and the program, which is the only place a directive that
-    //    cannot change once a process runs (`phar.readonly`) can come from.
-
     $assertSame('', microIniObject([]), 'no directives must produce no object');
 
     $directive = 'phar.readonly=0';
@@ -93,8 +88,6 @@ try {
         'directives must be newline-separated, in insertion order',
     );
     $assertSame(\strlen("a=1\nb=\"x\""), \unpack('N', \substr($two, 4, 4))[1], 'the length must count the text, not the object');
-
-    // 2. The concatenation, which is the whole native build.
 
     $sfx = $scratch . '/micro.sfx';
     $payload = $scratch . '/app.phar';
@@ -125,9 +118,6 @@ try {
         }
     }
     $assertTrue(! \is_file($scratch . '/never'), 'a refused build must write nothing');
-
-    // 3. Resolving the runtime: a file, or a directory holding `micro.sfx`.
-
     $assertSamePath($sfx, microSfxAt($sfx), 'a file is the runtime');
     $assertSamePath($sfx, microSfxAt($scratch), 'a directory resolves to the micro.sfx inside it');
     $assertSamePath($sfx, microSfxAt($scratch . '/'), 'a trailing separator must not matter');
@@ -142,10 +132,7 @@ try {
     \putenv(MICRO_SFX_ENV . '=' . $payload);
     $assertSamePath($payload, resolveMicroSfx(), 'the environment may name a file');
     \putenv(MICRO_SFX_ENV . '=');
-    \putenv('MOGGI_ROOT=');
     $assertSame(null, resolveMicroSfx(), 'a checkout with nothing bundled and nothing named has no runtime');
-
-    // 4. The build step: the archive beside the package, the executable beside it.
 
     $outputRoot = $scratch . '/build';
     \mkdir($outputRoot, 0777, true);
@@ -175,11 +162,6 @@ try {
         'a missing runtime must fail',
     );
     $assertTrue(! \is_file($outputRoot . '/moggi-app-2'), 'a failed native build must write nothing');
-
-    // 5. The stub marker. `packagePhar` runs for real (in a second process when
-    //    this one may not write archives), so this is the shipped artifact's
-    //    bytes, not a template.
-
     $assertTrue(
         \str_contains(buildPharStub(), '__HALT_COMPILER();'),
         'the stub template must close with the canonical token',
@@ -212,7 +194,6 @@ try {
     unset($packaged);
 } finally {
     \putenv(MICRO_SFX_ENV . '=' . ($previousSfx === false ? '' : $previousSfx));
-    \putenv('MOGGI_ROOT=' . ($previousRoot === false ? '' : $previousRoot));
     if (\is_dir($scratch)) {
         $remove = static function (string $dir) use (&$remove): void {
             foreach (\scandir($dir) ?: [] as $entry) {

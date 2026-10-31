@@ -3,7 +3,8 @@
 namespace Moggi\Registry;
 
 use function Moggi\Cache\ensureDir;
-use function Moggi\Install\installationRoot;
+use function Moggi\Modules\installationCandidates;
+use function Moggi\Modules\installationCandidatesKey;
 use function Moggi\Paths\globPaths;
 
 /**
@@ -35,39 +36,30 @@ use function Moggi\Paths\globPaths;
 
 /**
  * The `libraries/` tree this compiler ships: `<root>/libraries`, where the
- * root is found the way the bundled stdlib is — `MOGGI_ROOT`, the installed
- * distribution, then the checkout — or null when none holds one.
+ * root is found the way the bundled stdlib is — the installed distribution, or
+ * the checkout — or null when none holds one.
  */
 function bundledLibrariesDir(): ?string
 {
-    static $cached = null;
-    static $done = false;
-    if ($done) {
-        return $cached;
+    static $memoKey = null;
+    static $memoDir = null;
+    $key = installationCandidatesKey();
+    if ($memoKey === $key) {
+        return $memoDir;
     }
-    $done = true;
+    $memoKey = $key;
+    $memoDir = null;
 
-    $candidates = [];
-    $envRoot = \getenv('MOGGI_ROOT');
-    if (\is_string($envRoot) && $envRoot !== '') {
-        $candidates[] = \rtrim($envRoot, '/\\');
-    }
-    $installRoot = installationRoot();
-    if ($installRoot !== null) {
-        $candidates[] = $installRoot;
-    }
-    $candidates[] = \dirname(__DIR__, 2);
-
-    foreach ($candidates as $root) {
+    foreach (installationCandidates() as $root) {
         $libraries = \rtrim($root, '/\\') . \DIRECTORY_SEPARATOR . 'libraries';
         if (\is_dir($libraries)) {
-            $cached = $libraries;
+            $memoDir = $libraries;
 
-            return $cached;
+            return $memoDir;
         }
     }
 
-    return $cached;
+    return $memoDir;
 }
 
 /**

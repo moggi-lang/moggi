@@ -1,0 +1,111 @@
+.class public abstract auto ansi sealed beforefieldinit Moggi.Main
+       extends [System.Runtime]System.Object
+{
+.method public hidebysig static object 'main'() cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1)
+  .line 7, 7 : 8, 8 'tests/backend/runtime/Exec-Do-LetAction-Run.mog'
+  .line 7, 7 : 8, 8 'tests/backend/runtime/Exec-Do-LetAction-Run.mog'
+  ldc.i4.0
+  newobj instance void Moggi.Fn.Moggi_Main____ioThunk0__0::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  stloc.0
+  ldloc.0
+  newobj instance void Moggi.Rt.IO::.ctor(object)
+  stloc.1
+  ldloc.1
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object '__w_main'() cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1, object V2, object V3, object V4)
+  .line 7, 7 : 8, 8 'tests/backend/runtime/Exec-Do-LetAction-Run.mog'
+  .line 8, 8 : 15, 15 'tests/backend/runtime/Exec-Do-LetAction-Run.mog'
+  ldstr "one"
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.0
+  ldnull
+  stloc.1
+  ldloc.1
+  stloc.2
+  ldstr "two"
+  stloc.3
+  br match_end_V2
+match_fail_V2_0:
+  ldstr "non-exhaustive match"
+  newobj instance void [System.Runtime]System.Exception::.ctor(string)
+  throw
+match_end_V2:
+  .line 10, 10 : 3, 3 'tests/backend/runtime/Exec-Do-LetAction-Run.mog'
+  ldloc.3
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 4
+  ldnull
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static void Main(string[]) cil managed
+{
+  .entrypoint
+  .maxstack 64
+  .locals init (class [System.Runtime]System.Exception V0, object V1)
+  .try
+  {
+  ldarg.0
+  call void Moggi.Rt.Platform::SetArgs(string[])
+  call object Moggi.Main::'main'()
+  call object Moggi.Rt.RT::IoRun(object)
+  pop
+  leave MAIN_END
+  }
+  catch [System.Runtime]System.Exception
+  {
+  stloc.0
+  ldloc.0
+  call void Moggi.Rt.RT::ReportUncaught(class [System.Runtime]System.Exception)
+  leave MAIN_END
+  }
+MAIN_END:
+  ret
+}
+
+.method public hidebysig static object __ioThunk0() cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  call object Moggi.Main::'__w_main'()
+  stloc.0
+  ldloc.0
+  ret
+}
+
+}
+
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main____ioThunk0__0
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    call object Moggi.Main::'__ioThunk0'()
+    ret
+  }
+}

@@ -72,25 +72,17 @@ function microSfxAt(string $path): ?string
 }
 
 /**
- * The installations a bundled micro runtime can sit in: an explicit
- * `$MOGGI_ROOT`, then the installation this archive lives in
- * (`<installation>/bin/moggi.phar` → `<installation>/runtime/php-native`).
+ * The installations a bundled micro runtime can sit in: the one this archive
+ * lives in (`<installation>/bin/moggi.phar` → `<installation>/runtime/php-native`),
+ * and nothing else — a checkout bundles no runtime, so the list is empty there.
  *
  * @return list<string>
  */
 function microSfxInstallationRoots(): array
 {
-    $roots = [];
-    $envRoot = \getenv('MOGGI_ROOT');
-    if (\is_string($envRoot) && $envRoot !== '') {
-        $roots[] = \rtrim($envRoot, '/\\');
-    }
     $installRoot = installationRoot();
-    if ($installRoot !== null) {
-        $roots[] = $installRoot;
-    }
 
-    return $roots;
+    return $installRoot === null ? [] : [$installRoot];
 }
 
 /**

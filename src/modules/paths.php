@@ -2,14 +2,13 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Backend\currentBackend;
-use function Moggi\Paths\canonicalSeparators;
-
 /**
  * Output-tree layout for module compilation: where a module's artifact sits under the output root.
  * Spelling and relative-path math live in Moggi\Paths; semantic import/export resolution and
  * stdlib discovery are not here.
  */
+
+use function Moggi\Paths\canonicalSeparators;
 
 function moduleFilenameWarning(string $path, string $moduleName): ?string
 {
@@ -26,10 +25,15 @@ function moduleFilenameWarning(string $path, string $moduleName): ?string
         . "(expected last segment `{$lastPart}` or flat name `{$flatBase}`) in {$path}";
 }
 
-function mogPathToOutputRelative(string $mogPath, string $rootPrefix, ?string $extension = null): string
+/**
+ * A source path as it appears in the output tree, with the target's extension.
+ *
+ * The extension is required: the artifact name belongs to the target this
+ * compilation is for, and there is no process-global target to ask instead.
+ */
+function mogPathToOutputRelative(string $mogPath, string $rootPrefix, string $extension): string
 {
     $relative = outputRelativePath($mogPath, $rootPrefix);
-    $extension ??= currentBackend()->extension();
 
     return \preg_replace('/\.mog$/', $extension, $relative) ?? $relative;
 }

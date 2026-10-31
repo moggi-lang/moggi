@@ -1,21 +1,19 @@
 <?php declare(strict_types=1);
 
-// Regression tests for the apply-collapsing rewrites.
-//
-//   * `normalizeKnownApplies` — an application whose callee arity is statically
-//     known becomes a direct `expr_call` (`expr_partial` when under-applied),
-//     and a curried call on a parameter whose declared type fixes its arity
-//     flattens into one `expr_call_value`. Both stop the backends from
-//     reaching for the runtime `__apply`.
-//   * `foldPartialApply` — `t = partial f(a)` followed by `t(b)` fuses into
-//     `f(a, b)`, including when the intermediate spelling is `expr_partial`
-//     (the shape a preceding fusion in the same pass produces).
-//
-// The passes are driven directly rather than through `optimize()`, so each
-// assertion says exactly what that rewrite is responsible for; the whole-
-// pipeline result is pinned by
-// `tests/backend/codegen/Core-Apply-Collapse.mog` and
-// `tests/optimize/Opt-Apply-Collapse.ir.php`.
+/**
+ * Regression tests for apply-collapsing rewrites.
+ *
+ * - `normalizeKnownApplies` converts statically known applications into
+ *   direct `call` statements / `partial` values and flattens known curried
+ *   calls into one `call_value` statement, avoiding runtime `__apply`.
+ * - `foldPartialApply` fuses `partial f(a)` followed by `t(b)` into
+ *   `f(a, b)` — a direct call *statement* whose temp the reader takes, because a
+ *   computation is never an operand.
+ *
+ * Drive each pass directly to isolate its responsibility. Whole-pipeline
+ * behavior is covered by `Core-Apply-Collapse.mog` and
+ * `Opt-Apply-Collapse.ir.php`.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -51,14 +49,14 @@ $funcType = static function (array $args, Ast\TypeNode $rest): Ast\TypeNode {
 
 $decl = static fn (string $name, array $params, ?Ast\TypeNode $type, array $items): IR\FunctionDecl => new IR\FunctionDecl($name, $params, $type, new IR\Block($items));
 
-/** @return array{stmts: list<class-string>, operands: list<IR\Operand>} */
+/** @return array{stmts: list<IR\Stmt>, operands: list<IR\Operand>} */
 $shape = static function (IR\FunctionDecl $function): array {
     $stmts = [];
     $operands = [];
     walkModule(
         new IR\Module([$function], [], [], null),
         static function (IR\Stmt $stmt) use (&$stmts): void {
-            $stmts[] = $stmt::class;
+            $stmts[] = $stmt;
         },
         static function (IR\Operand $operand) use (&$operands): void {
             $operands[] = $operand;
@@ -75,7 +73,7 @@ $countOf = static function (array $nodes, string $class): int {
     ));
 };
 
-$findOf = static function (array $operands, string $class): ?IR\Operand {
+$findOf = static function (array $operands, string $class): ?object {
     foreach ($operands as $operand) {
         if ($operand::class === $class) {
             return $operand;
@@ -84,12 +82,8 @@ $findOf = static function (array $operands, string $class): ?IR\Operand {
 
     return null;
 };
-
-// The passes only need the callees' parameter counts.
 $add4 = $decl('add4', ['a', 'b', 'c', 'd'], null, [new IR\Ret(new IR\ConstInt(0))]);
 $add2 = $decl('add2', ['a', 'b'], null, [new IR\Ret(new IR\ConstInt(0))]);
-
-// 1. `foldPartialApply` fuses a partial with the application that saturates it
 $fn = $decl('fusePartial', ['n'], null, [
     new IR\Assign(0, new IR\Partial('add2', 2, [new IR\ConstInt(1)])),
     new IR\CallValue(new IR\Temp(0), [new IR\Local('n')], 1),
@@ -99,27 +93,14 @@ $out = foldPartialApply(normalizeKnownApplies([$add2, $fn], 'Main'), 'Main')[1];
 $s = $shape($out);
 $assert($countOf($s['stmts'], IR\CallValue::class) === 0, 'partial + application must not stay a call_value');
 $assert($countOf($s['operands'], IR\Partial::class) === 0, 'the fused partial must be gone');
-$call = $findOf($s['operands'], IR\ExprCall::class);
-$assert($call instanceof IR\ExprCall, 'partial + application must fuse into an expr_call');
-$assert($call->callee === 'add2', 'fused expr_call must target the partial callee');
-$assert(\count($call->args) === 2, 'fused expr_call must carry the partial args plus the new argument');
-
-// 2. The same fusion must accept an `expr_partial` produced by an earlier
-//    fusion. Requiring `IR\Partial` here left the chain as `__partial` cells
-//    plus runtime `__apply` on every backend.
-$fn = $decl('fuseExprPartial', ['n'], null, [
-    new IR\Assign(0, new IR\ExprPartial('add2', 2, [new IR\ConstInt(1)])),
-    new IR\CallValue(new IR\Temp(0), [new IR\Local('n')], 1),
-    new IR\Ret(new IR\Temp(1)),
-]);
-$out = foldPartialApply(normalizeKnownApplies([$add2, $fn], 'Main'), 'Main')[1];
-$s = $shape($out);
-$assert($countOf($s['stmts'], IR\CallValue::class) === 0, 'expr_partial + application must not stay a call_value');
-$assert($countOf($s['operands'], IR\ExprPartial::class) === 0, 'the fused expr_partial must be gone');
-$call = $findOf($s['operands'], IR\ExprCall::class);
-$assert($call instanceof IR\ExprCall && \count($call->args) === 2, 'expr_partial + application must fuse into one expr_call');
-
-// 3. An exactly-saturating known apply becomes a direct call
+$call = $findOf($s['stmts'], IR\Call::class);
+$assert($call instanceof IR\Call && $call->callee === 'add2', 'partial + application must fuse into a direct call of the partial callee');
+$assert(\count($call->args) === 2, 'the fused call must carry the partial args plus the new argument');
+$ret = $findOf($s['stmts'], IR\Ret::class);
+$assert(
+    $ret instanceof IR\Ret && $ret->value instanceof IR\Temp && $ret->value->id === $call->dest,
+    'the reader must take the temp the fused call defines'
+);
 $fn = $decl('exact', [], null, [
     new IR\CallValue(new IR\FnRef('add4'), [
         new IR\ConstInt(1), new IR\ConstInt(2), new IR\ConstInt(3), new IR\ConstInt(4),
@@ -129,10 +110,11 @@ $fn = $decl('exact', [], null, [
 $out = normalizeKnownApplies([$add4, $fn], 'Main')[1];
 $s = $shape($out);
 $assert($countOf($s['stmts'], IR\CallValue::class) === 0, 'exactly-saturating known apply must not stay a call_value');
-$call = $findOf($s['operands'], IR\ExprCall::class);
-$assert($call instanceof IR\ExprCall && $call->callee === 'add4', 'exactly-saturating known apply must become a direct expr_call');
-
-// 4. Guards: over-application and an indirect callee are left alone
+$call = $findOf($s['stmts'], IR\Call::class);
+$assert(
+    $call instanceof IR\Call && $call->callee === 'add4' && \count($call->args) === 4,
+    'exactly-saturating known apply must become a direct call statement'
+);
 $fn = $decl('over', ['n'], null, [
     new IR\CallValue(new IR\FnRef('add4'), [
         new IR\ConstInt(1), new IR\ConstInt(2), new IR\ConstInt(3), new IR\ConstInt(4), new IR\Local('n'),
@@ -142,7 +124,6 @@ $fn = $decl('over', ['n'], null, [
 $out = normalizeKnownApplies([$add4, $fn], 'Main')[1];
 $s = $shape($out);
 $assert($countOf($s['stmts'], IR\CallValue::class) === 1, 'an over-application must stay a call_value');
-$assert($countOf($s['operands'], IR\ExprCall::class) === 0, 'an over-application must not become an expr_call');
 $assert($findOf($s['operands'], IR\FnRef::class) instanceof IR\FnRef, 'the over-applied callee must be untouched');
 
 $fn = $decl('indirect', ['f', 'n'], null, [
@@ -152,49 +133,201 @@ $fn = $decl('indirect', ['f', 'n'], null, [
 $out = normalizeKnownApplies([$fn], 'Main')[0];
 $s = $shape($out);
 $assert($countOf($s['stmts'], IR\CallValue::class) === 1, 'an untyped indirect callee must stay a call_value');
-$assert($countOf($s['operands'], IR\ExprCall::class) === 0, 'an untyped indirect callee must not become an expr_call');
-
-// 5. Curried application through a parameter with a known function type
-//    flattens to a single apply: `f x y` -> one `expr_call_value`, not two.
 $intToInt = $funcType([$int()], $int());
-$intToIntToInt = $funcType([$int(), $int()], $int());
 
 $flattenBody = [
-    new IR\Ret(new IR\ExprCallValue(
-        new IR\ExprCallValue(new IR\Local('f'), [new IR\Local('x')]),
-        [new IR\Local('y')],
-    )),
+    new IR\CallValue(new IR\Local('f'), [new IR\Local('x')], 0),
+    new IR\CallValue(new IR\Temp(0), [new IR\Local('y')], 1),
+    new IR\Ret(new IR\Temp(1)),
 ];
 
-$fn = $decl('typedCurried', ['f', 'x', 'y'], $funcType([$intToIntToInt, $int(), $int()], $int()), $flattenBody);
-$out = normalizeKnownApplies([$fn], 'Main')[0];
-$value = $out->body->items[0]->value;
-$assert($value instanceof IR\ExprCallValue, 'a typed curried call must stay an expr_call_value');
-$assert($value->callee instanceof IR\Local, 'the flattened apply must be the one on the parameter');
-$assert(\count($value->args) === 2, 'the flattened apply must carry both arguments');
+/** A curried call is two apply statements, each reading the temp the one before it defined. */
+$assertStaysTwoCalls = static function (IR\FunctionDecl $function, string $message) use ($assert): void {
+    $items = $function->body->items;
+    $assert(\count($items) === 3, $message);
+    $assert(
+        $items[0] instanceof IR\CallValue && \count($items[0]->args) === 1,
+        $message . ': the inner apply is a statement of its own'
+    );
+    $assert(
+        $items[1] instanceof IR\CallValue && $items[1]->callee instanceof IR\Temp
+            && $items[1]->callee->id === $items[0]->dest,
+        $message . ": the outer apply reads the inner call's temp"
+    );
+    $assert(
+        $items[2] instanceof IR\Ret && $items[2]->value instanceof IR\Temp && $items[2]->value->id === $items[1]->dest,
+        $message . ": the reader takes the outer call's temp"
+    );
+};
 
-// Arity cap: the parameter takes one argument, so `f x y` cannot merge — it
-// would turn an exact application into an over-application.
 $fn = $decl('typedOver', ['g', 'x', 'y'], $funcType([$intToInt, $int(), $int()], $int()), [
-    new IR\Ret(new IR\ExprCallValue(
-        new IR\ExprCallValue(new IR\Local('g'), [new IR\Local('x')]),
-        [new IR\Local('y')],
-    )),
+    new IR\CallValue(new IR\Local('g'), [new IR\Local('x')], 0),
+    new IR\CallValue(new IR\Temp(0), [new IR\Local('y')], 1),
+    new IR\Ret(new IR\Temp(1)),
+]);
+$assertStaysTwoCalls(
+    normalizeKnownApplies([$fn], 'Main')[0],
+    'a parameter applied past its declared arity stays two calls'
+);
+
+$fn = $decl('untypedCurried', ['f', 'x', 'y'], null, $flattenBody);
+$assertStaysTwoCalls(
+    normalizeKnownApplies([$fn], 'Main')[0],
+    'a curried application stays two calls'
+);
+
+/** One application of a value whose arity the parameter's type declares. */
+$intToIntToInt = $funcType([$int(), $int()], $int());
+$intToIntToIntToInt = $funcType([$int(), $int(), $int()], $int());
+$assertFusedInto = static function (IR\FunctionDecl $function, int $arity, string $message) use ($assert): void {
+    $items = $function->body->items;
+    $assert(\count($items) === 2, $message . ': the chain must become one application and its reader');
+    $assert(
+        $items[0] instanceof IR\CallValue
+            && $items[0]->callee instanceof IR\Local
+            && \count($items[0]->args) === $arity,
+        $message . ": one application carrying every argument in order"
+    );
+    $order = \implode(',', \array_map(
+        static fn (IR\Operand $arg): string => $arg instanceof IR\Local ? $arg->name : '?',
+        $items[0]->args,
+    ));
+    $assert(
+        $order === 'x,y' || $order === 'x,y,z',
+        $message . ": the producer's argument comes first, then the consumer's ({$order})"
+    );
+    $assert(
+        $items[1] instanceof IR\Ret && $items[1]->value instanceof IR\Temp && $items[1]->value->id === $items[0]->dest,
+        $message . ": the reader takes the fused application's temp"
+    );
+};
+
+$fn = $decl('typedCurried', ['f', 'x', 'y'], $funcType([$intToIntToInt, $int(), $int()], $int()), $flattenBody);
+$assertFusedInto(
+    normalizeKnownApplies([$fn], 'Main')[0],
+    2,
+    'a parameter applied to its declared arity is one application'
+);
+
+$threeLinks = [
+    new IR\CallValue(new IR\Local('f'), [new IR\Local('x')], 0),
+    new IR\CallValue(new IR\Temp(0), [new IR\Local('y')], 1),
+    new IR\CallValue(new IR\Temp(1), [new IR\Local('z')], 2),
+    new IR\Ret(new IR\Temp(2)),
+];
+$fn = $decl(
+    'typedCurried3',
+    ['f', 'x', 'y', 'z'],
+    $funcType([$intToIntToIntToInt, $int(), $int(), $int()], $int()),
+    $threeLinks,
+);
+$assertFusedInto(
+    normalizeKnownApplies([$fn], 'Main')[0],
+    3,
+    'three links of one declared-arity value are one application'
+);
+
+// A link that is already saturated runs the function there, so merging it with the next
+// application would move that call past the consumer's argument.
+$fn = $decl('typedSaturated', ['f', 'x', 'y'], $funcType([$intToIntToInt, $int(), $int()], $int()), [
+    new IR\CallValue(new IR\Local('f'), [new IR\Local('x'), new IR\Local('y')], 0),
+    new IR\CallValue(new IR\Temp(0), [new IR\ConstInt(1)], 1),
+    new IR\Ret(new IR\Temp(1)),
 ]);
 $out = normalizeKnownApplies([$fn], 'Main')[0];
-$value = $out->body->items[0]->value;
 $assert(
-    $value instanceof IR\ExprCallValue && $value->callee instanceof IR\ExprCallValue,
-    'a parameter applied past its declared arity must not merge'
+    \count($out->body->items) === 3
+        && $out->body->items[0] instanceof IR\CallValue
+        && \count($out->body->items[0]->args) === 2
+        && $out->body->items[1] instanceof IR\CallValue
+        && $out->body->items[1]->callee instanceof IR\Temp,
+    'a saturated link followed by another application stays two calls'
 );
 
-// No declared function type -> no arity to trust -> leave the shape alone.
-$fn = $decl('untypedCurried', ['f', 'x', 'y'], null, $flattenBody);
+// An intermediate value with a second reader is a value, not a step of one application.
+$fn = $decl('typedShared', ['f', 'x', 'y'], $funcType([$intToIntToInt, $int(), $int()], $int()), [
+    new IR\CallValue(new IR\Local('f'), [new IR\Local('x')], 0),
+    new IR\CallValue(new IR\Temp(0), [new IR\Local('y')], 1),
+    new IR\Assign(2, new IR\Intrinsic('intAdd#', [new IR\Temp(0), new IR\Temp(1)])),
+    new IR\Ret(new IR\Temp(2)),
+]);
 $out = normalizeKnownApplies([$fn], 'Main')[0];
-$value = $out->body->items[0]->value;
 $assert(
-    $value instanceof IR\ExprCallValue && $value->callee instanceof IR\ExprCallValue,
-    'without a declared type the curried call must not be flattened'
+    \count($out->body->items) === 4
+        && $out->body->items[0] instanceof IR\CallValue
+        && $out->body->items[1] instanceof IR\CallValue,
+    'an intermediate apply with a second reader stays a statement of its own'
 );
+
+// A consumer that is not the very next statement would be reordered past whatever sits between.
+$fn = $decl('typedNonAdjacent', ['f', 'x', 'y'], $funcType([$intToIntToInt, $int(), $int()], $int()), [
+    new IR\CallValue(new IR\Local('f'), [new IR\Local('x')], 0),
+    new IR\Let('between', new IR\ConstInt(1)),
+    new IR\CallValue(new IR\Temp(0), [new IR\Local('y')], 1),
+    new IR\Ret(new IR\Temp(1)),
+]);
+$out = normalizeKnownApplies([$fn], 'Main')[0];
+$assert(
+    \count($out->body->items) === 4
+        && $out->body->items[0] instanceof IR\CallValue
+        && \count($out->body->items[0]->args) === 1
+        && $out->body->items[2] instanceof IR\CallValue,
+    'a non-adjacent application stays two calls'
+);
+
+// A collapsed apply belongs to the scope that reads it: nothing may be hoisted out of an arm or out
+// of a guard, because a match tests its guards and runs one arm — a call hoisted in front of the
+// match would run unconditionally.
+$saturatedApply = static fn (): array => [
+    new IR\CallValue(new IR\FnRef('add2'), [new IR\ConstInt(1), new IR\ConstInt(2)], 0),
+    new IR\Ret(new IR\Temp(0)),
+];
+
+$fn = $decl('armScope', ['n'], null, [
+    new IR\MatchReturn(
+        new IR\Local('n'),
+        [new IR\MatchArm(new IR\PatWild(), new IR\Block($saturatedApply()))],
+        true,
+    ),
+]);
+$out = normalizeKnownApplies([$add2, $fn], 'Main')[1];
+$s = $shape($out);
+$assert(\count($out->body->items) === 1, 'an arm\'s apply must not be scheduled in front of the match');
+$arm = $out->body->items[0]->arms[0]->body->items;
+$assert(
+    $arm[0] instanceof IR\Call && $arm[0]->callee === 'add2' && \count($arm[0]->args) === 2,
+    'an arm\'s apply must be a call statement inside the arm'
+);
+$assert(
+    $arm[1] instanceof IR\Ret && $arm[1]->value instanceof IR\Temp && $arm[1]->value->id === $arm[0]->dest,
+    'an arm\'s call must define the temp the arm returns'
+);
+
+$fn = $decl('guardedScope', ['n'], null, [
+    new IR\MatchReturn(
+        new IR\Local('n'),
+        [
+            new IR\MatchArm(
+                new IR\PatWild(),
+                new IR\Block([new IR\Ret(new IR\ConstInt(0))]),
+                [new IR\Guard(
+                    new IR\Block([new IR\CallValue(new IR\FnRef('add2'), [new IR\ConstInt(1), new IR\ConstInt(2)], 0)]),
+                    new IR\Temp(0),
+                )],
+            ),
+        ],
+        true,
+    ),
+]);
+$out = normalizeKnownApplies([$add2, $fn], 'Main')[1];
+$assert(\count($out->body->items) === 1, 'a guard\'s apply must not be scheduled in front of the match');
+$arm = $out->body->items[0]->arms[0];
+$prep = $arm->guards[0]->prep->items;
+$assert(\count($prep) === 1 && $prep[0] instanceof IR\Call, 'a guard\'s apply must be scheduled in the guard\'s own preparation');
+$assert(
+    $arm->guards[0]->cond instanceof IR\Temp && $arm->guards[0]->cond->id === $prep[0]->dest,
+    'a guard must read the temp its own preparation defined'
+);
+$assert($arm->body->items[0] instanceof IR\Ret, 'a guard\'s apply must not be scheduled into the arm body');
 
 echo "apply collapse: all assertions passed\n";

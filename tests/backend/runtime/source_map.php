@@ -1,9 +1,10 @@
 <?php declare(strict_types=1);
 
-// A compiled module carries its own map as `__MOGGI_MAP`, keyed off the namespace of the
-// generated function a host frame names. These checks pin that contract: a frame from a
-// module without a map, an unmapped line, or a malformed map must never resolve, and must
-// never crash reporting.
+/**
+ * Each compiled module carries its own `__MOGGI_MAP`, keyed by the namespace
+ * of its generated functions. Frames from modules without a map, unmapped
+ * lines, or malformed maps must never resolve or crash reporting.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -21,8 +22,6 @@ $assert = static function (bool $condition, string $message): void {
     }
 };
 
-// Two module shapes: pre-resolved rows (generated line => [symbol, path, line, col]) and the
-// declaration-site fallback table, keyed by generated function name.
 \define('MapProbeA\__MOGGI_MAP', [
     [12 => ['Main.boom', 'App.mog', 3, 9], 40 => ['Main.late', 'App.mog', 7, 5]],
     ['MapProbeA\boom' => ['Main.boom', 'App.mog', 3, 9], 'MapProbeA\late' => ['Main.late', 'App.mog', 7, 5]],
@@ -56,8 +55,6 @@ $assert(lookupGeneratedFrame(12, 'MapProbeB\boom') === null, 'frames: an empty m
 $assert(lookupGeneratedFrame(12, 'MapProbeC\boom') === null, 'frames: a malformed map must not resolve');
 $assert(lookupGeneratedFrame(12, 'MapProbeD\boom') === null, 'frames: an unrelated module must not bind another module\'s line');
 
-// A throw site is self-describing: its stamped fields are the location, so a frame lookup
-// and the report agree even when no module map is loaded at all.
 $site = \Moggi\throwSite(7, 'Main.boom', 'App.mog', 3, 9);
 $exception = new \Moggi\MoggiException(
     \Moggi\exceptionWrap(\Moggi\EX_TAG_ERROR_CALL, 'boom', ['ErrorCall', 'boom']),

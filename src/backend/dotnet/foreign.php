@@ -8,6 +8,7 @@ use function Moggi\Backend\DotNet\Naming\bclAssemblyFor;
 use function Moggi\Backend\DotNet\Verify\dotNetConstNeedsGetterCall;
 use function Moggi\Backend\DotNet\Verify\sameClrTypeIgnoringScope;
 use function Moggi\Backend\DotNet\Verify\splitClrSignature;
+use function Moggi\Backend\backendById;
 use function Moggi\Foreign\splitForeignPathMember;
 use function Moggi\Semantics\IoBoundary\isIoTypeConName;
 use function Moggi\Semantics\Kernel\boolTypeName;
@@ -16,16 +17,47 @@ use function Moggi\Semantics\Kernel\boundaryHandleTypeName;
 use function Moggi\Semantics\Kernel\boundaryMaybeTypeName;
 use function Moggi\Semantics\Types\primitiveTypeIdOf;
 
+use Moggi\Foreign\ForeignTypeTable;
 use Moggi\Syntax\Ast;
 
-function registerDotNetForeignType(string $moggiName, string $hostType): void
+/**
+ * The dotnet host types checked modules declare — one table, owned by the target.
+ *
+ * A `foreign dotnet type Path "…"` is one module's statement about one of its own names, and the
+ * module is half the key ({@see ForeignTypeTable}): two modules declare `Path` against different
+ * host types, and a bare-name map would let whichever was checked last answer for both.
+ */
+function registerDotNetForeignType(string $module, string $moggiName, string $hostType): void
 {
-    $GLOBALS['moggi_dotnet_foreign_types'][$moggiName] = $hostType;
+    dotNetForeignTypes()->register($module, $moggiName, $hostType);
 }
 
-function lookupDotNetForeignType(string $name): ?string
+/** Every module that declares `$name`, with the host type it declares. */
+function dotNetForeignTypeDeclarations(string $name): array
 {
-    return $GLOBALS['moggi_dotnet_foreign_types'][$name] ?? null;
+    return dotNetForeignTypes()->declarationsOf($name);
+}
+
+/**
+ * The host type `$name` stands for, read from the module that declared it.
+ *
+ * With a module, that module's declaration and nothing else; without one, every declaring module
+ * must agree, and a real disagreement is refused rather than answered by whichever ran last.
+ */
+function lookupDotNetForeignType(string $name, ?string $module = null): ?string
+{
+    return dotNetForeignTypes()->lookup($name, $module, 'dotnet');
+}
+
+/** Every host type any module declares, for set membership. */
+function dotNetDeclaredForeignHostTypes(): array
+{
+    return dotNetForeignTypes()->hostTypes();
+}
+
+function dotNetForeignTypes(): ForeignTypeTable
+{
+    return backendById('dotnet')->foreignTypes();
 }
 
 /**
@@ -83,7 +115,7 @@ function resolveDotNetForeignPath(string $path): array
  *
  * @param 'static'|'instance'|'constructor'|'intrinsic' $dispatch
  * @param 'function'|'const' $kind
- * @param ?array{params: list<string>, declared: list<string>, optionalTail: int, flat: bool} $sidecar
+ * @param ?array{params: list<string>, declared: list<string>, optionalTail: int} $sidecar
  */
 function clrSigFromMoggiType(
     Ast\TypeNode $type,
@@ -93,13 +125,14 @@ function clrSigFromMoggiType(
     ?string $member = null,
     ?array $sidecar = null,
     string $name = '',
+    ?string $module = null,
 ): string {
     if ($kind === 'const') {
-        return clrFieldTypeName(clrForeignIoInnerType($type), $classPath, $member);
+        return clrFieldTypeName(clrForeignIoInnerType($type), $classPath, $member, $module);
     }
 
     if ($dispatch === 'intrinsic') {
-        return clrIntrinsicSig($type, $classPath, $member);
+        return clrIntrinsicSig($type, $classPath, $member, $module);
     }
 
     $argTypes = [];
@@ -119,7 +152,7 @@ function clrSigFromMoggiType(
 
     $params = [];
     foreach ($argTypes as $arg) {
-        $params[] = clrTypeName($arg, $classPath, $member, false, $dispatch);
+        $params[] = clrTypeName($arg, $classPath, $member, false, $dispatch, $module);
     }
 
     if ($sidecar !== null) {
@@ -132,7 +165,7 @@ function clrSigFromMoggiType(
 
     $ret = $result instanceof Ast\TypeUnit
         ? 'void'
-        : clrTypeName($result, $classPath, $member, true, $dispatch);
+        : clrTypeName($result, $classPath, $member, true, $dispatch, $module);
 
     return '(' . \implode(',', $params) . ')' . $ret;
 }
@@ -145,11 +178,10 @@ function clrSigFromMoggiType(
  * list over the shared prefix (they differ only where the entry blesses an interface with
  * `from`), and every sidecar parameter past the declaration must sit inside `optionalTail`.
  * Anything else is a compile error naming both sides — the sidecar cannot invent arguments, drop
- * them, or retype them. A flat entry names no optional tail, so any extra beyond the declaration
- * is refused with a pointer at the object form.
+ * them, or retype them.
  *
  * @param list<string> $declaredParams IL types inferred from the Moggi declaration
- * @param array{params: list<string>, declared: list<string>, optionalTail: int, flat: bool} $sidecar
+ * @param array{params: list<string>, declared: list<string>, optionalTail: int} $sidecar
  * @return list<string> the emit parameter list (the sidecar's full `params`)
  */
 function applyDotNetSidecarParams(
@@ -170,7 +202,7 @@ function applyDotNetSidecarParams(
 
 /**
  * @param list<string> $declaredParams
- * @param array{params: list<string>, declared: list<string>, optionalTail: int, flat: bool} $sidecar
+ * @param array{params: list<string>, declared: list<string>, optionalTail: int} $sidecar
  */
 function dotNetSidecarMismatch(
     string $name,
@@ -186,12 +218,6 @@ function dotNetSidecarMismatch(
     }
     $nExtra = $nSidecar - $nDeclared;
     if ($nExtra > $sidecar['optionalTail']) {
-        if ($sidecar['flat']) {
-            return "foreign dotnet `{$name}` ({$path}) passes {$nDeclared} argument(s)"
-                . " but its sidecar entry lists {$nSidecar}: a flat entry cannot bless extras,"
-                . ' spell it as {"params": [...], "optionalTail": N}';
-        }
-
         return "foreign dotnet `{$name}` ({$path}) passes {$nDeclared} argument(s)"
             . " but its sidecar entry lists {$nSidecar} with optionalTail {$sidecar['optionalTail']}"
             . ' — the entry cannot invent required arguments';
@@ -210,12 +236,12 @@ function dotNetSidecarMismatch(
 /**
  * Signatures for emit-only intrinsics (__cast / __default / __null).
  */
-function clrIntrinsicSig(Ast\TypeNode $type, ?string $classPath, ?string $member): string
+function clrIntrinsicSig(Ast\TypeNode $type, ?string $classPath, ?string $member, ?string $module = null): string
 {
     $result = clrForeignIoInnerType($type);
     $ret = $result instanceof Ast\TypeUnit
         ? 'void'
-        : clrTypeName($result, $classPath, $member, true, 'intrinsic');
+        : clrTypeName($result, $classPath, $member, true, 'intrinsic', $module);
 
     $argTypes = [];
     $cursor = $type;
@@ -228,7 +254,7 @@ function clrIntrinsicSig(Ast\TypeNode $type, ?string $classPath, ?string $member
         if (\count($argTypes) !== 1) {
             throw new \RuntimeException('dotnet __cast requires exactly one argument');
         }
-        $param = clrTypeName($argTypes[0], $classPath, $member, false, 'intrinsic');
+        $param = clrTypeName($argTypes[0], $classPath, $member, false, 'intrinsic', $module);
 
         return '(' . $param . ')' . $ret;
     }
@@ -248,7 +274,12 @@ function clrIntrinsicSig(Ast\TypeNode $type, ?string $classPath, ?string $member
  * Static-field / property descriptors whose real CLR type differs from the
  * generic Moggi-type mapping (e.g. `System.Console:Out` is a TextWriter).
  */
-function clrFieldTypeName(Ast\TypeNode $type, ?string $classPath, ?string $member): string
+function clrFieldTypeName(
+    Ast\TypeNode $type,
+    ?string $classPath,
+    ?string $member,
+    ?string $module = null,
+): string
 {
     $key = ($classPath ?? '') . ':' . ($member ?? '');
     static $known = null;
@@ -265,7 +296,7 @@ function clrFieldTypeName(Ast\TypeNode $type, ?string $classPath, ?string $membe
         return $known[$key];
     }
 
-    return clrTypeName($type, $classPath, $member, true, 'static');
+    return clrTypeName($type, $classPath, $member, true, 'static', $module);
 }
 
 /**
@@ -298,6 +329,7 @@ function clrTypeName(
     ?string $member,
     bool $isReturn,
     string $dispatch = 'static',
+    ?string $module = null,
 ): string {
     if ($type instanceof Ast\TypeUnit) {
         return 'void';
@@ -308,13 +340,13 @@ function clrTypeName(
         if ($container === boundaryMaybeTypeName()) {
             $inner = $type->args[0] ?? null;
             if ($inner instanceof Ast\AstNode) {
-                return clrTypeName($inner, $classPath, $member, $isReturn, $dispatch);
+                return clrTypeName($inner, $classPath, $member, $isReturn, $dispatch, $module);
             }
         }
         if ($container === boundaryEitherTypeName()) {
             $inner = $type->args[1] ?? $type->args[0] ?? null;
             if ($inner instanceof Ast\AstNode) {
-                return clrTypeName($inner, $classPath, $member, $isReturn, $dispatch);
+                return clrTypeName($inner, $classPath, $member, $isReturn, $dispatch, $module);
             }
         }
     }
@@ -342,7 +374,7 @@ function clrTypeName(
         boolTypeName() => 'bool',
         boundaryHandleTypeName() => clrOpaqueObjectMapping($classPath, $isReturn, $dispatch),
         'List' => 'class Moggi.Rt.MList',
-        default => clrForeignLeafToIl((string) $con),
+        default => clrForeignLeafToIl((string) $con, $module),
     };
 }
 
@@ -372,9 +404,9 @@ function clrKernelTypeName(?string $kernelId): ?string
  * Map a foreign nominal leaf to its IL type descriptor. Fail closed — never
  * silently fall back to `object` for an unresolved foreign type.
  */
-function clrForeignLeafToIl(string $con): string
+function clrForeignLeafToIl(string $con, ?string $module = null): string
 {
-    $host = lookupDotNetForeignType($con);
+    $host = lookupDotNetForeignType($con, $module);
     if ($host === null) {
         throw new \RuntimeException(
             "dotnet foreign type `{$con}` is not registered (no hostType); refusing object fallback",
@@ -460,7 +492,7 @@ function dotNetHostIsValueType(string $classPath): bool
         return $declared;
     }
 
-    foreach ($GLOBALS['moggi_dotnet_foreign_types'] ?? [] as $host) {
+    foreach (dotNetDeclaredForeignHostTypes() as $host) {
         $host = \trim((string) $host);
         if (! \str_starts_with($host, 'valuetype ')) {
             continue;

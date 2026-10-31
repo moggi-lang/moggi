@@ -2,12 +2,10 @@
 
 namespace Moggi\CLI\Commands;
 
-use function Moggi\Registry\badPackageMarker;
-
 use Moggi\Registry\Catalog;
-
 use Moggi\Registry\FetchLog;
 
+use function Moggi\Registry\badPackageMarker;
 use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\lockPath;
 use function Moggi\Registry\lockRegistryProblem;

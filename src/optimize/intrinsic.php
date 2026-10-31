@@ -61,11 +61,11 @@ function eliminateIntrinsicWrappers(IR\Module $module): IR\Module
  */
 function intrinsicWrapperSpec(IR\FunctionDecl $function): ?array
 {
-    if (! ($function->instanceMethod)) {
+    if (! ($function->shape->instanceMethod)) {
         return null;
     }
 
-    if ($function->export) {
+    if ($function->shape->export) {
         return null;
     }
 
@@ -114,7 +114,6 @@ function rewriteIntrinsicWrapperStmt(IR\Stmt $stmt, array $wrappers): IR\Stmt
             $stmt->name,
             rewriteIntrinsicWrapperOperand($stmt->value, $wrappers),
         ),
-        IR\Binop::class => new IR\Binop($stmt->op, rewriteIntrinsicWrapperOperand($stmt->left, $wrappers), rewriteIntrinsicWrapperOperand($stmt->right, $wrappers), $stmt->dest),
         IR\Call::class => rewriteIntrinsicWrapperCall($stmt, $wrappers),
         IR\CallValue::class => new IR\CallValue(rewriteIntrinsicWrapperOperand($stmt->callee, $wrappers), \array_map(
             static fn (IR\Operand $operand): IR\Operand => rewriteIntrinsicWrapperOperand($operand, $wrappers),
@@ -183,27 +182,7 @@ function intrinsicOperand(string $name, array $args, ?IR\SrcLoc $srcLoc = null):
  */
 function rewriteIntrinsicWrapperOperand(IR\Operand $operand, array $wrappers): IR\Operand
 {
-    if ($operand instanceof IR\ExprCall && isset($wrappers[$operand->callee])) {
-        $spec = $wrappers[$operand->callee];
-        if (\count($operand->args) === $spec['arity']) {
-            return intrinsicOperand($spec['intrinsic'], $operand->args, $spec['srcLoc']);
-        }
-    }
-
     return match ($operand::class) {
-        IR\ExprBinop::class => new IR\ExprBinop($operand->op, rewriteIntrinsicWrapperOperand($operand->left, $wrappers), rewriteIntrinsicWrapperOperand($operand->right, $wrappers)),
-        IR\ExprCall::class => new IR\ExprCall($operand->callee, \array_map(
-            static fn (IR\Operand $arg): IR\Operand => rewriteIntrinsicWrapperOperand($arg, $wrappers),
-            $operand->args,
-        ), $operand->srcLoc),
-        IR\ExprCallValue::class => new IR\ExprCallValue(rewriteIntrinsicWrapperOperand($operand->callee, $wrappers), \array_map(
-            static fn (IR\Operand $arg): IR\Operand => rewriteIntrinsicWrapperOperand($arg, $wrappers),
-            $operand->args,
-        ), $operand->srcLoc),
-        IR\ExprPartial::class => new IR\ExprPartial($operand->fn, $operand->arity, \array_map(
-            static fn (IR\Operand $arg): IR\Operand => rewriteIntrinsicWrapperOperand($arg, $wrappers),
-            $operand->args,
-        )),
         IR\Partial::class => new IR\Partial($operand->fn, $operand->arity, \array_map(
             static fn (IR\Operand $arg): IR\Operand => rewriteIntrinsicWrapperOperand($arg, $wrappers),
             $operand->args,
@@ -238,10 +217,6 @@ function collectReferencedFunctionsStmt(IR\Stmt $stmt, array &$refs): void
         IR\Call::class => addReferencedFunction($stmt->callee, $refs),
         IR\CallValue::class => collectReferencedFunctionsOperand($stmt->callee, $refs),
         IR\Assign::class, IR\Let::class, IR\Ret::class => collectReferencedFunctionsOperand($stmt->value, $refs),
-        IR\Binop::class => (static function () use ($stmt, &$refs): void {
-            collectReferencedFunctionsOperand($stmt->left, $refs);
-            collectReferencedFunctionsOperand($stmt->right, $refs);
-        })(),
         IR\MatchStmt::class, IR\MatchReturn::class => (static function () use ($stmt, &$refs): void {
             collectReferencedFunctionsOperand($stmt->scrutinee, $refs);
             foreach ($stmt->arms as $arm) {
@@ -259,27 +234,11 @@ function collectReferencedFunctionsOperand(IR\Operand $operand, array &$refs): v
 {
     match ($operand::class) {
         IR\FnRef::class => addReferencedFunction($operand->name, $refs),
-        IR\Partial::class, IR\ExprPartial::class => (static function () use ($operand, &$refs): void {
+        IR\Partial::class => (static function () use ($operand, &$refs): void {
             addReferencedFunction($operand->fn, $refs);
             foreach ($operand->args as $arg) {
                 collectReferencedFunctionsOperand($arg, $refs);
             }
-        })(),
-        IR\ExprCall::class => (static function () use ($operand, &$refs): void {
-            addReferencedFunction($operand->callee, $refs);
-            foreach ($operand->args as $arg) {
-                collectReferencedFunctionsOperand($arg, $refs);
-            }
-        })(),
-        IR\ExprCallValue::class => (static function () use ($operand, &$refs): void {
-            collectReferencedFunctionsOperand($operand->callee, $refs);
-            foreach ($operand->args as $arg) {
-                collectReferencedFunctionsOperand($arg, $refs);
-            }
-        })(),
-        IR\ExprBinop::class => (static function () use ($operand, &$refs): void {
-            collectReferencedFunctionsOperand($operand->left, $refs);
-            collectReferencedFunctionsOperand($operand->right, $refs);
         })(),
         IR\Intrinsic::class => (static function () use ($operand, &$refs): void {
             foreach ($operand->args as $arg) {

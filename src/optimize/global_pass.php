@@ -3,14 +3,17 @@
 namespace Moggi\Optimize\GlobalPass;
 
 use Moggi\IR;
+use Moggi\Optimize\Effects\Model;
+use Moggi\Optimize\Facts\Facts;
 
+use function Moggi\IR\Projection\index as projectionIndex;
 use function Moggi\IR\Visit\boundLocalsInBlock;
 use function Moggi\IR\Visit\freeLocalsInBlock;
 use function Moggi\IR\Visit\mapOperandChildren;
+use function Moggi\IR\Visit\walkOperand;
+use function Moggi\IR\Visit\walkStmt;
 use function Moggi\Optimize\Interproc\countLocalUsesInItems;
 use function Moggi\Optimize\Interproc\operandIsNonDuplicable;
-use function Moggi\Optimize\Support\combineOperandsToExpr;
-use function Moggi\Optimize\Support\isCapturedFnName;
 use function Moggi\Optimize\Support\isPropagatableExpr;
 use function Moggi\Optimize\Support\isSimpleOperand;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
@@ -20,20 +23,20 @@ use function Moggi\Optimize\Support\preserveMatchArm;
 use function Moggi\Optimize\Support\stmtDest;
 use function Moggi\Optimize\Support\tempUseCountsInItems;
 
-function cseBlock(IR\Block $block): IR\Block
+function cseBlock(IR\Block $block, Model $effects): IR\Block
 {
-    return new IR\Block(cseItems($block->items));
+    return new IR\Block(cseItems($block->items, $effects));
 }
 
 /** @param list<IR\Stmt> $items @return list<IR\Stmt> */
-function cseItems(array $items): array
+function cseItems(array $items, Model $effects): array
 {
     $seen = [];
     $out = [];
 
     foreach ($items as $item) {
-        $item = cseStmt($item);
-        $key = cseKey($item);
+        $item = cseStmt($item, $effects);
+        $key = cseKey($item, $effects);
         if ($key !== null && isset($seen[$key])) {
             $dest = stmtDest($item);
             if ($dest !== null) {
@@ -56,33 +59,36 @@ function cseItems(array $items): array
     return $out;
 }
 
-function cseStmt(IR\Stmt $stmt): IR\Stmt
+function cseStmt(IR\Stmt $stmt, Model $effects): IR\Stmt
 {
-    return mapStmtNestedBlocks($stmt, cseBlock(...));
+    return mapStmtNestedBlocks($stmt, static fn (IR\Block $block): IR\Block => cseBlock($block, $effects));
 }
 
-function cseKey(IR\Stmt $stmt): ?string
+/**
+ * Structural identity of a repeated call: the callee and each argument's typed key, so two arguments
+ * that only look alike in text never collapse into one.
+ */
+function cseKey(IR\Stmt $stmt, Model $effects): ?string
 {
-    return match ($stmt::class) {
-        IR\Binop::class => 'binop:' . $stmt->op . ':' . operandKey($stmt->left) . ':' . operandKey($stmt->right),
-        IR\Call::class => isHostEffectCallee($stmt->callee)
-            ? null
-            : 'call:' . $stmt->callee . ':' . \implode(',', \array_map(operandKey(...), $stmt->args)),
-        default => null,
-    };
+    if (! $stmt instanceof IR\Call
+        || $effects->ofCall($stmt->callee)->union($effects->evaluationsOf($stmt->args))->discardIsObservable()) {
+        return null;
+    }
+
+    return \serialize(['call', $stmt->callee, \array_map(operandKey(...), $stmt->args)]);
 }
 
-function dceBlock(IR\Block $block, ?int $matchDest = null): IR\Block
+function dceBlock(IR\Block $block, Model $effects, ?int $matchDest = null): IR\Block
 {
-    return new IR\Block(dceItems($block->items, $matchDest));
+    return new IR\Block(dceItems($block->items, $effects, $matchDest));
 }
 
 /** @param list<IR\Stmt> $items @return list<IR\Stmt> */
-function dceItems(array $items, ?int $matchDest = null): array
+function dceItems(array $items, Model $effects, ?int $matchDest = null): array
 {
-    $items = \array_map(dceStmt(...), $items);
+    $items = \array_map(static fn (IR\Stmt $stmt): IR\Stmt => dceStmt($stmt, $effects), $items);
     for ($round = 0; $round < 16; ++$round) {
-        $used = usedInItems($items);
+        $used = usedInItems($items, $effects->facts);
         if ($matchDest !== null) {
             $used['temps'][$matchDest] = true;
         }
@@ -90,7 +96,7 @@ function dceItems(array $items, ?int $matchDest = null): array
         $changed = false;
 
         foreach ($items as $item) {
-            if (isDeadStmt($item, $used, $matchDest)) {
+            if (isDeadStmt($item, $used, $effects, $matchDest)) {
                 $changed = true;
 
                 continue;
@@ -108,13 +114,13 @@ function dceItems(array $items, ?int $matchDest = null): array
     return $items;
 }
 
-function dceStmt(IR\Stmt $stmt): IR\Stmt
+function dceStmt(IR\Stmt $stmt, Model $effects): IR\Stmt
 {
     return match ($stmt::class) {
         IR\MatchStmt::class => new IR\MatchStmt($stmt->scrutinee, \array_map(
             static fn (IR\MatchArm $arm): IR\MatchArm => preserveMatchArm(
                 $arm,
-                dceBlock($arm->body, $stmt->dest),
+                dceBlock($arm->body, $effects, $stmt->dest),
             ),
             $stmt->arms,
         ), $stmt->dest, $stmt->exhaustive),
@@ -123,7 +129,7 @@ function dceStmt(IR\Stmt $stmt): IR\Stmt
             \array_map(
                 static fn (IR\MatchArm $arm): IR\MatchArm => preserveMatchArm(
                     $arm,
-                    dceBlock($arm->body),
+                    dceBlock($arm->body, $effects),
                 ),
                 $stmt->arms,
             ),
@@ -134,14 +140,13 @@ function dceStmt(IR\Stmt $stmt): IR\Stmt
             \array_map(
                 static fn (IR\MatchArm $arm): IR\MatchArm => preserveMatchArm(
                     $arm,
-                    dceBlock($arm->body),
+                    dceBlock($arm->body, $effects),
                 ),
                 $stmt->arms,
             ),
-            $stmt->dest,
             $stmt->exhaustive,
         ),
-        default => mapStmtNestedBlocks($stmt, static fn (IR\Block $block): IR\Block => dceBlock($block)),
+        default => mapStmtNestedBlocks($stmt, static fn (IR\Block $block): IR\Block => dceBlock($block, $effects)),
     };
 }
 
@@ -153,13 +158,13 @@ function dceStmt(IR\Stmt $stmt): IR\Stmt
  *
  * @param list<IR\Stmt> $items @return array{temps: array<int, true>, locals: array<string, true>}
  */
-function usedInItems(array $items): array
+function usedInItems(array $items, Facts $facts): array
 {
     $used = ['temps' => [], 'locals' => []];
     foreach ($items as $item) {
         collectUsedStmt($item, $used);
     }
-    markLambdaCaptureLocalsUsed($items, $used);
+    markLambdaCaptureLocalsUsed($items, $used, $facts);
 
     return $used;
 }
@@ -171,20 +176,14 @@ function usedInItems(array $items): array
  * @param list<IR\Stmt> $items
  * @param array{temps: array<int, true>, locals: array<string, true>} $used
  */
-function markLambdaCaptureLocalsUsed(array $items, array &$used): void
+function markLambdaCaptureLocalsUsed(array $items, array &$used, Facts $facts): void
 {
-    global $propagateCopiesLambdaBodies;
-
-    /** @var array<string, array<string, true>> $memo */
-    $memo = [];
+    $needs = liftedCaptureNeeds($facts);
+    $isLifted = static fn (string $name): bool => isset($needs[$name]);
 
     foreach ($items as $item) {
-        foreach (lambdaNamesReferencedInStmt($item) as $lambdaName) {
-            if (! isset($propagateCopiesLambdaBodies[$lambdaName])) {
-                continue;
-            }
-
-            foreach (lambdaCapturedLocals($lambdaName, $memo) as $localName => $_) {
+        foreach (lambdaNamesReferencedInStmt($item, $isLifted) as $lambdaName) {
+            foreach ($needs[$lambdaName] as $localName) {
                 $used['locals'][$localName] = true;
             }
         }
@@ -192,72 +191,17 @@ function markLambdaCaptureLocalsUsed(array $items, array &$used): void
 }
 
 /**
- * Locals a lifted lambda captures, following the lifted lambdas its body
- * refers to.
- *
- * A body that only mentions another lifted lambda still needs that lambda's
- * captures: the callee is reached from this body's scope, so those locals have
- * to stay live in the enclosing block. `lambdaMetaFromCaptures` folds the same
- * transitivity into the capture set the emitters pass, so leaving it out here
- * makes the two disagree. For `f -> λ2 -> λ3 -> x`, where `λ2`'s body is only
- * `ret @λ3`, DCE then deleted the `let x = ...` the emitted call site still
- * passes and the generated code read an undefined variable. What the lambda
- * binds itself -- parameters, `let`s, match binders -- is not a capture of it,
- * even when a nested lambda reaches it. The lambdas of one `let`/`where` group
- * refer to each other, so `$memo` is seeded before the walk recurses and a name
- * already in flight ends it.
- *
- * @param array<string, array<string, true>> $memo
- * @return array<string, true>
- */
-function lambdaCapturedLocals(string $lambdaName, array &$memo): array
-{
-    global $propagateCopiesLambdaBodies, $propagateCopiesLambdaParams;
-
-    $body = $propagateCopiesLambdaBodies[$lambdaName] ?? null;
-    if ($body === null) {
-        return [];
-    }
-
-    if (isset($memo[$lambdaName])) {
-        return $memo[$lambdaName];
-    }
-
-    $memo[$lambdaName] = [];
-
-    $params = \array_fill_keys($propagateCopiesLambdaParams[$lambdaName] ?? [], true);
-    $captures = \array_fill_keys(freeLocalsInBlock($body, $params), true);
-    $owned = boundLocalsInBlock($body) + $params;
-
-    foreach (lambdaNamesReferencedInBlock($body) as $referenced) {
-        if ($referenced === $lambdaName) {
-            continue;
-        }
-
-        foreach (lambdaCapturedLocals($referenced, $memo) as $localName => $_) {
-            if (! isset($owned[$localName])) {
-                $captures[$localName] = true;
-            }
-        }
-    }
-
-    $memo[$lambdaName] = $captures;
-
-    return $captures;
-}
-
-/**
  * Lifted lambdas a whole block refers to, at any nesting depth.
  *
  * @return list<string>
  */
-function lambdaNamesReferencedInBlock(IR\Block $block): array
+function lambdaNamesReferencedInBlock(IR\Block $block, callable $isLifted): array
 {
     $names = [];
     IR\Visit\walkBlock(
         $block,
-        static function (IR\Stmt $stmt) use (&$names): void {
-            foreach (lambdaNamesReferencedInStmt($stmt) as $name) {
+        static function (IR\Stmt $stmt) use (&$names, $isLifted): void {
+            foreach (lambdaNamesReferencedInStmt($stmt, $isLifted) as $name) {
                 $names[] = $name;
             }
         },
@@ -268,159 +212,46 @@ function lambdaNamesReferencedInBlock(IR\Block $block): array
     return \array_values(\array_unique($names));
 }
 
-/** @param array{temps: array<int, true>, locals: array<string, true>} $used */
+/**
+ * Collect all Temp and Local reads in a statement, including nested bodies.
+ *
+ * Uses exhaustive shared walkers so new statement kinds cannot hide reads
+ * from DCE. IoCall callees count as local uses.
+ *
+ * @param array{temps: array<int, true>, locals: array<string, true>} $used
+ */
 function collectUsedStmt(IR\Stmt $stmt, array &$used): void
 {
-    switch ($stmt::class) {
-        case IR\Ret::class:
-        case IR\Assign::class:
-        case IR\Let::class:
-            collectUsedExpr($stmt->value, $used);
-
-            return;
-        case IR\Binop::class:
-            collectUsedExpr($stmt->left, $used);
-            collectUsedExpr($stmt->right, $used);
-
-            return;
-        case IR\Call::class:
-            collectUsedOperands($stmt->args, $used);
-
-            return;
-        case IR\IoCall::class:
-            collectUsedOperands($stmt->args, $used);
-            $callee = $stmt->callee ?? null;
-            if (\is_string($callee) && $callee !== '') {
-                $used['locals'][$callee] = true;
-            }
-
-            return;
-        case IR\IoRun::class:
-            collectUsedOperand($stmt->action, $used);
-
-            return;
-        case IR\IoThrow::class:
-            collectUsedOperand($stmt->exception, $used);
-
-            return;
-        case IR\IoCatch::class:
-            collectUsedOperand($stmt->action, $used);
-            collectUsedOperand($stmt->handler, $used);
-
-            return;
-        case IR\IoFinally::class:
-            collectUsedOperand($stmt->action, $used);
-            collectUsedOperand($stmt->cleanup, $used);
-
-            return;
-        case IR\CallValue::class:
-            collectUsedExpr($stmt->callee, $used);
-            collectUsedOperands($stmt->args, $used);
-
-            return;
-        case IR\DictCall::class:
-            collectUsedOperand($stmt->evidence, $used);
-            collectUsedOperands($stmt->args, $used);
-
-            return;
-        case IR\TailRecall::class:
-            collectUsedOperands($stmt->args, $used);
-
-            return;
-        case IR\MatchStmt::class:
-        case IR\MatchReturn::class:
-        case IR\IoMatch::class:
-            collectUsedExpr($stmt->scrutinee, $used);
-            foreach ($stmt->arms as $arm) {
-                foreach ($arm->body->items as $armItem) {
-                    collectUsedStmt($armItem, $used);
-                }
-                foreach ($arm->guards as $guard) {
-                    collectUsedOperand($guard->cond, $used);
-                    foreach ($guard->prep->items as $prepItem) {
-                        collectUsedStmt($prepItem, $used);
-                    }
+    walkStmt(
+        $stmt,
+        static function (IR\Stmt $inner) use (&$used): void {
+            if ($inner instanceof IR\IoCall) {
+                $callee = $inner->callee;
+                if (\is_string($callee) && $callee !== '') {
+                    $used['locals'][$callee] = true;
                 }
             }
-
-            return;
-        case IR\Loop::class:
-            foreach ($stmt->body->items as $loopItem) {
-                collectUsedStmt($loopItem, $used);
+        },
+        static function (IR\Operand $operand) use (&$used): void {
+            if ($operand instanceof IR\Temp) {
+                $used['temps'][$operand->id] = true;
+            } elseif ($operand instanceof IR\Local) {
+                $used['locals'][$operand->name] = true;
             }
-
-            return;
-        default:
-            return;
-    }
-}
-
-/** @param list<IR\Operand> $operands @param array{temps: array<int, true>, locals: array<string, true>} $used */
-function collectUsedOperands(array $operands, array &$used): void
-{
-    foreach ($operands as $operand) {
-        collectUsedOperand($operand, $used);
-    }
+        },
+    );
 }
 
 /** @param array{temps: array<int, true>, locals: array<string, true>} $used */
 function collectUsedOperand(IR\Operand $operand, array &$used): void
 {
-    if ($operand instanceof IR\ListLit) {
-        collectUsedOperands($operand->elements, $used);
-
-        return;
-    }
-
-    collectUsedExpr($operand, $used);
-}
-
-/** @param array{temps: array<int, true>, locals: array<string, true>} $used */
-function collectUsedExpr(IR\Operand $expr, array &$used): void
-{
-    switch ($expr::class) {
-        case IR\Temp::class:
-            $used['temps'][$expr->id] = true;
-
-            return;
-        case IR\Local::class:
-            $used['locals'][$expr->name] = true;
-
-            return;
-        case IR\ExprBinop::class:
-            collectUsedExpr($expr->left, $used);
-            collectUsedExpr($expr->right, $used);
-
-            return;
-        case IR\ExprCall::class:
-            collectUsedOperands($expr->args, $used);
-
-            return;
-        case IR\ExprCallValue::class:
-            collectUsedExpr($expr->callee, $used);
-            collectUsedOperands($expr->args, $used);
-
-            return;
-        case IR\Intrinsic::class:
-            collectUsedOperands($expr->args, $used);
-
-            return;
-        case IR\ListLit::class:
-            collectUsedOperands($expr->elements, $used);
-
-            return;
-        case IR\Partial::class:
-        case IR\ExprPartial::class:
-            collectUsedOperands($expr->args, $used);
-
-            return;
-        case IR\DictMethod::class:
-            collectUsedOperand($expr->evidence, $used);
-
-            return;
-        default:
-            return;
-    }
+    walkOperand($operand, static function (IR\Operand $inner) use (&$used): void {
+        if ($inner instanceof IR\Temp) {
+            $used['temps'][$inner->id] = true;
+        } elseif ($inner instanceof IR\Local) {
+            $used['locals'][$inner->name] = true;
+        }
+    });
 }
 
 /** @param IR\Operand $operand @return array{temps: array<int, true>, locals: array<string, true>} */
@@ -432,31 +263,13 @@ function usedInOperand(IR\Operand $operand): array
     return $used;
 }
 
-/** @param array{temps: array<int, true>, locals: array<string, true>} $used @param int|null $matchDest */
 /**
- * Callee names with host (foreign) effects — consulted by {@see isDeadStmt}.
+ * Whether a statement whose result nobody reads may be dropped: its effect must be unobservable, which
+ * only a construction is (see {@see Model}).
  *
- * @var array<string, true>
+ * @param array{temps: array<int, true>, locals: array<string, true>} $used
  */
-$GLOBALS['moggi_host_effect_fns'] = [];
-
-/** @param array<string, true> $names */
-function setHostEffectFunctions(array $names): void
-{
-    $GLOBALS['moggi_host_effect_fns'] = $names;
-}
-
-function clearHostEffectFunctions(): void
-{
-    $GLOBALS['moggi_host_effect_fns'] = [];
-}
-
-function isHostEffectCallee(string $name): bool
-{
-    return isset($GLOBALS['moggi_host_effect_fns'][$name]);
-}
-
-function isDeadStmt(IR\Stmt $stmt, array $used, ?int $matchDest = null): bool
+function isDeadStmt(IR\Stmt $stmt, array $used, Model $effects, ?int $matchDest = null): bool
 {
     $unusedTemp = static function (int $dest) use ($used, $matchDest): bool {
         return ! isset($used['temps'][$dest])
@@ -464,39 +277,15 @@ function isDeadStmt(IR\Stmt $stmt, array $used, ?int $matchDest = null): bool
     };
 
     return match ($stmt::class) {
-        IR\Assign::class => $unusedTemp($stmt->dest) && ! operandHasHostEffect($stmt->value),
-        IR\Binop::class => $unusedTemp($stmt->dest),
-        IR\Call::class => $unusedTemp($stmt->dest) && ! isHostEffectCallee($stmt->callee),
-        IR\CallValue::class => $unusedTemp($stmt->dest) && ! operandHasHostEffect($stmt->callee),
-        IR\Let::class => ! isset($used['locals'][$stmt->name]) && ! operandHasHostEffect($stmt->value),
+        IR\Assign::class => $unusedTemp($stmt->dest) && ! $effects->ofOperand($stmt->value)->discardIsObservable(),
+        IR\Call::class => $unusedTemp($stmt->dest)
+            && ! $effects->ofCall($stmt->callee)->union($effects->evaluationsOf($stmt->args))->discardIsObservable(),
+        IR\CallValue::class => $unusedTemp($stmt->dest)
+            && ! $effects->ofOperand($stmt->callee)->union($effects->ofOperands($stmt->args))->discardIsObservable(),
+        IR\Let::class => ! isset($used['locals'][$stmt->name])
+            && ! $effects->ofOperand($stmt->value)->discardIsObservable(),
         default => false,
     };
-}
-
-function operandHasHostEffect(IR\Operand $operand): bool
-{
-    return match ($operand::class) {
-        IR\ForeignCall::class => true,
-        IR\ExprCall::class => isHostEffectCallee($operand->callee) || operandsHaveHostEffect($operand->args),
-        IR\ExprCallValue::class => operandHasHostEffect($operand->callee) || operandsHaveHostEffect($operand->args),
-        IR\FnRef::class => isHostEffectCallee($operand->name),
-        IR\Partial::class => isHostEffectCallee($operand->fn) || operandsHaveHostEffect($operand->args),
-        IR\ListLit::class => operandsHaveHostEffect($operand->elements),
-        IR\ExprBinop::class => operandHasHostEffect($operand->left) || operandHasHostEffect($operand->right),
-        default => false,
-    };
-}
-
-/** @param list<IR\Operand> $operands */
-function operandsHaveHostEffect(array $operands): bool
-{
-    foreach ($operands as $operand) {
-        if (operandHasHostEffect($operand)) {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 /**
@@ -512,7 +301,6 @@ function cleanupConstructorArm(IR\MatchArm $arm, IR\Operand $scrutinee): IR\Matc
 
     $cleanup = cleanupFieldExtractLets($arm->body->items, $pattern, $scrutinee);
     $items = rewriteSkippedFieldTempsToLocals($cleanup['items'], $cleanup['temps']);
-    $items = rewriteFieldExprUses($items, $pattern, $scrutinee);
 
     return new IR\MatchArm($pattern, new IR\Block($items), $arm->guards);
 }
@@ -562,12 +350,6 @@ function rewriteStmtOperands(IR\Stmt $stmt, callable $rewriteOp): IR\Stmt
         IR\Ret::class => new IR\Ret($rewriteOp($stmt->value)),
         IR\Assign::class => new IR\Assign($stmt->dest, $rewriteOp($stmt->value)),
         IR\Let::class => new IR\Let($stmt->name, $rewriteOp($stmt->value)),
-        IR\Binop::class => new IR\Binop(
-            $stmt->op,
-            $rewriteOp($stmt->left),
-            $rewriteOp($stmt->right),
-            $stmt->dest,
-        ),
         IR\Call::class => new IR\Call(
             $stmt->callee,
             \array_map($rewriteOp, $stmt->args),
@@ -586,6 +368,7 @@ function rewriteStmtOperands(IR\Stmt $stmt, callable $rewriteOp): IR\Stmt
             \array_map($rewriteOp, $stmt->args),
             $stmt->dest,
             $stmt->srcLoc,
+            $stmt->localEvidence,
         ),
         IR\MatchStmt::class => new IR\MatchStmt(
             $rewriteOp($stmt->scrutinee),
@@ -604,9 +387,7 @@ function rewriteStmtOperands(IR\Stmt $stmt, callable $rewriteOp): IR\Stmt
             $stmt->callee,
             \array_map($rewriteOp, $stmt->args),
             $stmt->dest,
-            $stmt->intrinsic,
-            $stmt->runtime,
-            $stmt->foreign,
+            $stmt->op,
             $stmt->srcLoc,
         ),
         IR\IoRun::class => new IR\IoRun($rewriteOp($stmt->action), $stmt->dest, $stmt->srcLoc),
@@ -630,7 +411,6 @@ function rewriteStmtOperands(IR\Stmt $stmt, callable $rewriteOp): IR\Stmt
         IR\IoMatch::class => new IR\IoMatch(
             $rewriteOp($stmt->scrutinee),
             rewriteMatchArms($stmt->arms, $rewriteOp),
-            $stmt->dest,
             $stmt->exhaustive,
         ),
         default => $stmt,
@@ -694,8 +474,8 @@ function cleanupFieldExtractLets(array $items, IR\Pattern $pattern, IR\Operand $
 
     foreach ($items as $item) {
         if ($item instanceof IR\Call && isFieldExtractCall($item, $scrutinee)) {
-            $index = fieldExtractIndex($item->callee);
-            $var = $fieldVars[$index] ?? null;
+            $index = projectionIndex($item->callee);
+            $var = $index === null ? null : ($fieldVars[$index] ?? null);
             if ($var !== null) {
                 $skipTemps[$item->dest] = $var;
 
@@ -730,191 +510,11 @@ function constructorFieldVars(IR\Pattern $pattern): array
 }
 
 /** @param IR\Stmt $call @param IR\Operand $scrutinee */
-function isFieldExtractCall(IR\Call|IR\ExprCall $call, IR\Operand $scrutinee): bool
+function isFieldExtractCall(IR\Call $call, IR\Operand $scrutinee): bool
 {
-    return \str_starts_with($call->callee, '__field')
+    return projectionIndex($call->callee) !== null
         && \count($call->args) === 1
         && operandEqual($call->args[0], $scrutinee);
-}
-
-function fieldExtractIndex(string $callee): int
-{
-    $leaf = $callee;
-    if (\str_contains($callee, '::')) {
-        $leaf = \substr($callee, \strrpos($callee, '::') + 2);
-    } elseif (\str_contains($callee, '\\')) {
-        $leaf = \substr($callee, \strrpos($callee, '\\') + 1);
-    }
-    if (\str_starts_with($leaf, '__tuple_field')) {
-        return (int) \substr($leaf, \strlen('__tuple_field'));
-    }
-    if (\str_starts_with($leaf, '__field')) {
-        return (int) \substr($leaf, \strlen('__field'));
-    }
-
-    return (int) \substr($callee, \strlen('__field'));
-}
-
-/**
- * @param list<IR\Stmt> $items
- * @param IR\Pattern $pattern
- * @param IR\Operand $scrutinee
- * @return list<IR\Stmt>
- */
-function rewriteFieldExprUses(array $items, IR\Pattern $pattern, IR\Operand $scrutinee): array
-{
-    $fieldVars = constructorFieldVars($pattern);
-
-    return \array_map(
-        static fn (IR\Stmt $item): IR\Stmt => rewriteFieldTempsInStmt($item, $fieldVars, $scrutinee),
-        $items,
-    );
-}
-
-/**
- * @param array<int, string> $fieldVars
- * @param IR\Operand $scrutinee
- */
-function rewriteFieldTempsInStmt(IR\Stmt $stmt, array $fieldVars, IR\Operand $scrutinee): IR\Stmt
-{
-    return match ($stmt::class) {
-        IR\Ret::class => new IR\Ret(rewriteFieldExpr($stmt->value, $fieldVars, $scrutinee)),
-        IR\Binop::class => new IR\Binop($stmt->op, rewriteFieldOperand($stmt->left, $fieldVars, $scrutinee), rewriteFieldOperand($stmt->right, $fieldVars, $scrutinee), $stmt->dest),
-        IR\Call::class => new IR\Call($stmt->callee, \array_map(
-            static fn (IR\Operand $arg): IR\Operand => rewriteFieldOperand($arg, $fieldVars, $scrutinee),
-            $stmt->args,
-        ), $stmt->dest, $stmt->srcLoc),
-        IR\CallValue::class => new IR\CallValue(rewriteFieldOperand($stmt->callee, $fieldVars, $scrutinee), \array_map(
-            static fn (IR\Operand $arg): IR\Operand => rewriteFieldOperand($arg, $fieldVars, $scrutinee),
-            $stmt->args,
-        ), $stmt->dest, $stmt->srcLoc),
-        IR\DictCall::class => new IR\DictCall(
-            rewriteFieldOperand($stmt->evidence, $fieldVars, $scrutinee),
-            $stmt->method,
-            \array_map(
-                static fn (IR\Operand $arg): IR\Operand => rewriteFieldOperand($arg, $fieldVars, $scrutinee),
-                $stmt->args,
-            ),
-            $stmt->dest,
-            $stmt->srcLoc,
-        ),
-        IR\Assign::class => new IR\Assign($stmt->dest, rewriteFieldOperand($stmt->value, $fieldVars, $scrutinee)),
-        IR\Let::class => new IR\Let($stmt->name, rewriteFieldOperand($stmt->value, $fieldVars, $scrutinee)),
-        IR\MatchStmt::class => new IR\MatchStmt(
-            rewriteFieldOperand($stmt->scrutinee, $fieldVars, $scrutinee),
-            \array_map(
-                static fn (IR\MatchArm $arm): IR\MatchArm => new IR\MatchArm(
-                    $arm->pattern,
-                    new IR\Block(\array_map(
-                        static fn (IR\Stmt $s): IR\Stmt => rewriteFieldTempsInStmt($s, $fieldVars, $scrutinee),
-                        denseItems($arm->body->items),
-                    )),
-                    IR\Visit\mapGuards(
-                        $arm->guards,
-                        static fn (IR\Operand $g): IR\Operand => rewriteFieldOperand($g, $fieldVars, $scrutinee),
-                        static fn (IR\Stmt $s): IR\Stmt => rewriteFieldTempsInStmt($s, $fieldVars, $scrutinee),
-                    ),
-                ),
-                $stmt->arms,
-            ),
-            $stmt->dest,
-            $stmt->exhaustive,
-        ),
-        IR\MatchReturn::class => new IR\MatchReturn(
-            rewriteFieldOperand($stmt->scrutinee, $fieldVars, $scrutinee),
-            \array_map(
-                static fn (IR\MatchArm $arm): IR\MatchArm => new IR\MatchArm(
-                    $arm->pattern,
-                    new IR\Block(\array_map(
-                        static fn (IR\Stmt $s): IR\Stmt => rewriteFieldTempsInStmt($s, $fieldVars, $scrutinee),
-                        denseItems($arm->body->items),
-                    )),
-                    IR\Visit\mapGuards(
-                        $arm->guards,
-                        static fn (IR\Operand $g): IR\Operand => rewriteFieldOperand($g, $fieldVars, $scrutinee),
-                        static fn (IR\Stmt $s): IR\Stmt => rewriteFieldTempsInStmt($s, $fieldVars, $scrutinee),
-                    ),
-                ),
-                $stmt->arms,
-            ),
-            $stmt->exhaustive,
-        ),
-        IR\TailRecall::class => new IR\TailRecall(\array_map(
-            static fn (IR\Operand $arg): IR\Operand => rewriteFieldOperand($arg, $fieldVars, $scrutinee),
-            $stmt->args,
-        )),
-        IR\Loop::class => new IR\Loop(new IR\Block(\array_map(
-            static fn (IR\Stmt $s): IR\Stmt => rewriteFieldTempsInStmt($s, $fieldVars, $scrutinee),
-            denseItems($stmt->body->items),
-        ))),
-        default => $stmt,
-    };
-}
-
-/**
- * @param array<int, string> $fieldVars
- * @param IR\Operand $scrutinee
- */
-function rewriteFieldOperand(IR\Operand $operand, array $fieldVars, IR\Operand $scrutinee): IR\Operand
-{
-    if ($operand instanceof IR\ExprBinop) {
-        return rewriteFieldExpr($operand, $fieldVars, $scrutinee);
-    }
-
-    if ($operand instanceof IR\ExprCall || $operand instanceof IR\ExprCallValue) {
-        return rewriteFieldExpr($operand, $fieldVars, $scrutinee);
-    }
-
-    return $operand;
-}
-
-/**
- * @param array<int, string> $fieldVars
- * @param IR\Operand $scrutinee
- */
-function rewriteFieldExpr(IR\Operand $expr, array $fieldVars, IR\Operand $scrutinee): IR\Operand
-{
-    if ($expr instanceof IR\ExprCall
-        && isFieldExtractCall($expr, $scrutinee)
-    ) {
-        $index = fieldExtractIndex($expr->callee);
-        $var = $fieldVars[$index] ?? null;
-        if ($var !== null) {
-            return new IR\Local($var);
-        }
-    }
-
-    if ($expr instanceof IR\ExprBinop) {
-        return new IR\ExprBinop(
-            $expr->op,
-            rewriteFieldExpr($expr->left, $fieldVars, $scrutinee),
-            rewriteFieldExpr($expr->right, $fieldVars, $scrutinee),
-        );
-    }
-
-    if ($expr instanceof IR\ExprCall) {
-        return new IR\ExprCall(
-            $expr->callee,
-            \array_map(
-                static fn (IR\Operand $arg): IR\Operand => rewriteFieldExpr($arg, $fieldVars, $scrutinee),
-                $expr->args,
-            ),
-            $expr->srcLoc,
-        );
-    }
-
-    if ($expr instanceof IR\ExprCallValue) {
-        return new IR\ExprCallValue(
-            rewriteFieldExpr($expr->callee, $fieldVars, $scrutinee),
-            \array_map(
-                static fn (IR\Operand $arg): IR\Operand => rewriteFieldExpr($arg, $fieldVars, $scrutinee),
-                $expr->args,
-            ),
-            $expr->srcLoc,
-        );
-    }
-
-    return $expr;
 }
 
 /**
@@ -925,20 +525,20 @@ function rewriteFieldExpr(IR\Operand $expr, array $fieldVars, IR\Operand $scruti
  *        their uses live in the *parent* block, so arm-local use counts look
  *        like zero and would otherwise drop the binding (empty match arms).
  */
-function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals = [], ?int $matchDest = null): IR\Block
+function propagateCopiesBlock(IR\Block $block, Facts $facts, array $temps = [], array $locals = [], ?int $matchDest = null): IR\Block
 {
     $items = [];
     $useCounts = null;
     $captureIndex = null;
 
     foreach ($block->items as $itemIndex => $item) {
-        $item = mapCopyStmt($item, $temps, $locals);
+        $item = mapCopyStmt($item, $facts, $temps, $locals);
 
         if ($item instanceof IR\Assign && isPropagatableExpr($item->value)) {
             if ($matchDest !== null && $item->dest === $matchDest) {
                 $items[] = $item;
                 if (isSimpleOperand($item->value)
-                    && ! operandIsNonDuplicable($item->value)
+                    && ! operandIsNonDuplicable($item->value, $facts)
                 ) {
                     $temps[$item->dest] = $item->value;
                 }
@@ -946,7 +546,7 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
                 continue;
             }
 
-            if (operandIsNonDuplicable($item->value)) {
+            if (operandIsNonDuplicable($item->value, $facts)) {
                 $useCounts ??= tempUseCountsInItems($block->items);
                 if (($useCounts[$item->dest] ?? 0) > 1) {
                     $items[] = $item;
@@ -980,14 +580,14 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
         }
 
         if ($item instanceof IR\Let && isPropagatableExpr($item->value)) {
-            $captureIndex ??= lambdaCaptureIndex($block->items);
+            $captureIndex ??= lambdaCaptureIndex($block->items, $facts);
             if (($captureIndex[$item->name] ?? -1) > $itemIndex) {
                 $items[] = $item;
 
                 continue;
             }
 
-            if (operandIsNonDuplicable($item->value)) {
+            if (operandIsNonDuplicable($item->value, $facts)) {
                 $localUses = countLocalUsesInItems($block->items, $item->name);
                 if ($localUses > 1) {
                     $items[] = $item;
@@ -1001,49 +601,10 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
             continue;
         }
 
-        if ($item instanceof IR\Binop) {
-            if ($matchDest !== null && $item->dest === $matchDest) {
-                $items[] = $item;
-
-                continue;
-            }
-
-            $expr = combineOperandsToExpr($item->op, $item->left, $item->right);
-            if (isPropagatableExpr($expr)) {
-                if (isSimpleOperand($expr)) {
-                    $temps[$item->dest] = $expr;
-
-                    continue;
-                }
-
-                $useCounts ??= tempUseCountsInItems($block->items);
-                if (($useCounts[$item->dest] ?? 0) <= 1) {
-                    $temps[$item->dest] = $expr;
-
-                    continue;
-                }
-
-                unset($temps[$item->dest]);
-                $items[] = new IR\Assign($item->dest, $expr);
-
-                continue;
-            }
-
-            if (isSimpleOperand($item->left) && isSimpleOperand($item->right)) {
-                unset($temps[$item->dest]);
-                $items[] = $item;
-            } else {
-                unset($temps[$item->dest]);
-                $items[] = new IR\Assign($item->dest, $expr);
-            }
-
-            continue;
-        }
-
         if ($item instanceof IR\Call || $item instanceof IR\CallValue || $item instanceof IR\DictCall) {
             unset($temps[$item->dest]);
         }
-        if ($item instanceof IR\MatchStmt || $item instanceof IR\IoMatch) {
+        if ($item instanceof IR\MatchStmt) {
             unset($temps[$item->dest]);
         }
 
@@ -1054,32 +615,31 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
 }
 
 /** @param array<int, IR\Operand> $temps @param array<string, IR\Operand> $locals */
-function mapCopyStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
+function mapCopyStmt(IR\Stmt $stmt, Facts $facts, array &$temps, array &$locals): IR\Stmt
 {
-    $mapArm = static function (IR\MatchArm $arm, ?int $armMatchDest = null) use (&$temps, &$locals): IR\MatchArm {
+    $mapArm = static function (IR\MatchArm $arm, ?int $armMatchDest = null) use ($facts, &$temps, &$locals): IR\MatchArm {
         $guardTemps = $temps;
         $guardLocals = $locals;
 
         return new IR\MatchArm(
             $arm->pattern,
-            propagateCopiesBlock($arm->body, $temps, $locals, $armMatchDest),
+            propagateCopiesBlock($arm->body, $facts, $temps, $locals, $armMatchDest),
             IR\Visit\mapGuards(
                 $arm->guards,
                 static fn (IR\Operand $guard): IR\Operand => mapCopyOperand($guard, $guardTemps, $guardLocals),
-                static fn (IR\Stmt $s): IR\Stmt => mapCopyStmt($s, $guardTemps, $guardLocals),
+                static fn (IR\Stmt $s): IR\Stmt => mapCopyStmt($s, $facts, $guardTemps, $guardLocals),
             ),
         );
     };
 
     return match ($stmt::class) {
         IR\Ret::class => new IR\Ret(mapCopyOperand($stmt->value, $temps, $locals)),
-        IR\Binop::class => new IR\Binop($stmt->op, mapCopyOperand($stmt->left, $temps, $locals), mapCopyOperand($stmt->right, $temps, $locals), $stmt->dest),
         IR\Call::class => new IR\Call($stmt->callee, \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->srcLoc),
         IR\CallValue::class => new IR\CallValue(mapCopyOperand($stmt->callee, $temps, $locals), \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->srcLoc),
-        IR\DictCall::class => new IR\DictCall(mapCopyOperand($stmt->evidence, $temps, $locals), $stmt->method, \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->srcLoc),
+        IR\DictCall::class => new IR\DictCall(mapCopyOperand($stmt->evidence, $temps, $locals), $stmt->method, \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->srcLoc, $stmt->localEvidence),
         IR\Assign::class => new IR\Assign($stmt->dest, mapCopyOperand($stmt->value, $temps, $locals)),
         IR\Let::class => new IR\Let($stmt->name, mapCopyOperand($stmt->value, $temps, $locals)),
-        IR\IoCall::class => new IR\IoCall($stmt->callee, \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->intrinsic ?? null, $stmt->runtime ?? null, $stmt->foreign ?? null, $stmt->srcLoc),
+        IR\IoCall::class => new IR\IoCall($stmt->callee, \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->op, $stmt->srcLoc),
         IR\IoRun::class => new IR\IoRun(mapCopyOperand($stmt->action, $temps, $locals), $stmt->dest, $stmt->srcLoc),
         IR\IoThrow::class => new IR\IoThrow(mapCopyOperand($stmt->exception, $temps, $locals), $stmt->dest, $stmt->srcLoc),
         IR\IoCatch::class => new IR\IoCatch(
@@ -1113,16 +673,15 @@ function mapCopyStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
         IR\IoMatch::class => new IR\IoMatch(
             mapCopyOperand($stmt->scrutinee, $temps, $locals),
             \array_map(
-                static fn (IR\MatchArm $arm): IR\MatchArm => $mapArm($arm, $stmt->dest),
+                static fn (IR\MatchArm $arm): IR\MatchArm => $mapArm($arm, null),
                 $stmt->arms,
             ),
-            $stmt->dest,
             $stmt->exhaustive,
         ),
-        IR\Loop::class => new IR\Loop(propagateCopiesBlock($stmt->body, $temps, $locals)),
+        IR\Loop::class => new IR\Loop(propagateCopiesBlock($stmt->body, $facts, $temps, $locals)),
         IR\IoAssignAction::class => new IR\IoAssignAction(
             $stmt->dest,
-            propagateCopiesBlock($stmt->body, $temps, $locals),
+            propagateCopiesBlock($stmt->body, $facts, $temps, $locals),
             mapCopyOperand($stmt->result, $temps, $locals),
             $stmt->srcLoc,
         ),
@@ -1147,24 +706,71 @@ function mapCopyOperand(IR\Operand $operand, array $temps, array $locals): IR\Op
     );
 }
 
-/** @var array<string, IR\Block> */
-$propagateCopiesLambdaBodies = [];
-
-/** @var array<string, list<string>> */
-$propagateCopiesLambdaParams = [];
-
-/** @param list<IR\FunctionDecl> $functions */
-function setPropagateCopiesLambdaBodies(array $functions): void
+/**
+ * The locals a reference to each lifted callable must keep alive, computed once from the function list
+ * being optimized and published on the run's facts.
+ *
+ * This is not the capture vector `IR\Callables` publishes. That vector is what the binder prepends at a
+ * value reference, so its closure follows `FnRef` operands; DCE and copy propagation ask which enclosing
+ * locals a call, a partial or a value reference reads once that prefix is bound, so this closure follows
+ * every reference kind — a call and a `Partial` carry the callee as a name, not as an operand.
+ *
+ * @param list<IR\FunctionDecl> $functions
+ */
+function publishLiftedCaptureNeeds(array $functions, Facts $facts): void
 {
-    global $propagateCopiesLambdaBodies, $propagateCopiesLambdaParams;
-    $propagateCopiesLambdaBodies = [];
-    $propagateCopiesLambdaParams = [];
+    $bodies = [];
+    $params = [];
     foreach ($functions as $function) {
-        if (isCapturedFnName($function->name)) {
-            $propagateCopiesLambdaBodies[$function->name] = $function->body;
-            $propagateCopiesLambdaParams[$function->name] = $function->params;
+        if (! $function->shape->kind->takesCaptures()) {
+            continue;
+        }
+        $bodies[$function->name] = $function->body;
+        $params[$function->name] = $function->params;
+    }
+
+    $isLifted = static fn (string $name): bool => isset($bodies[$name]);
+    $needs = [];
+    $owned = [];
+    foreach ($bodies as $name => $body) {
+        $needs[$name] = freeLocalsInBlock($body, \array_fill_keys($params[$name], true));
+        $owned[$name] = boundLocalsInBlock($body) + \array_fill_keys($params[$name], true);
+    }
+
+    $changed = true;
+    while ($changed) {
+        $changed = false;
+        foreach ($bodies as $name => $body) {
+            foreach (lambdaNamesReferencedInBlock($body, $isLifted) as $referenced) {
+                foreach ($needs[$referenced] as $local) {
+                    if (isset($owned[$name][$local]) || \in_array($local, $needs[$name], true)) {
+                        continue;
+                    }
+
+                    $needs[$name][] = $local;
+                    $changed = true;
+                }
+            }
         }
     }
+
+    foreach ($needs as &$locals) {
+        \sort($locals);
+    }
+    unset($locals);
+
+    $facts->publishLiftedCaptureNeeds($needs);
+}
+
+/**
+ * The published liveness set of the lifted callables, keyed by the name their declarations carry.
+ *
+ * @return array<string, list<string>>
+ */
+function liftedCaptureNeeds(Facts $facts): array
+{
+    return $facts->liftedCaptureNeeds
+        ?? throw new \RuntimeException('global-pass: capture needs read before they were published');
 }
 
 /**
@@ -1173,29 +779,21 @@ function setPropagateCopiesLambdaBodies(array $functions): void
  * propagated (rather than kept materialized) iff no lambda referenced *after*
  * i captures `x`, i.e. `captureIndex[x] <= i`.
  *
- * Built in one pass with per-lambda free-local sets memoized, replacing the old
- * per-let `\array_slice` + repeated full lambda-body walks (which were quadratic
- * to cubic in blocks with many lets and closures).
+ * One pass over the block against the published liveness sets, so a block with many
+ * lets and closures costs no more than its statements.
  *
  * @param list<IR\Stmt> $items
  * @return array<string, int>
  */
-function lambdaCaptureIndex(array $items): array
+function lambdaCaptureIndex(array $items, Facts $facts): array
 {
-    global $propagateCopiesLambdaBodies;
+    $needs = liftedCaptureNeeds($facts);
+    $isLifted = static fn (string $name): bool => isset($needs[$name]);
 
-    /** @var array<string, array<string, true>> $memo */
-    $memo = [];
-    $lambdaLocals = [];
     $lastIndex = [];
     foreach ($items as $index => $item) {
-        foreach (lambdaNamesReferencedInStmt($item) as $lambdaName) {
-            if (! isset($propagateCopiesLambdaBodies[$lambdaName])) {
-                continue;
-            }
-
-            $locals = $lambdaLocals[$lambdaName] ??= lambdaCapturedLocals($lambdaName, $memo);
-            foreach ($locals as $localName => $_) {
+        foreach (lambdaNamesReferencedInStmt($item, $isLifted) as $lambdaName) {
+            foreach ($needs[$lambdaName] as $localName) {
                 $lastIndex[$localName] = $index;
             }
         }
@@ -1209,7 +807,7 @@ function lambdaCaptureIndex(array $items): array
  *
  * A recursive `let`/`where` group is reached by name, not through an operand:
  * `call __letrecN(…)` carries its callee as a string, so it is read off the
- * statement and off `ExprCall` operands rather than the operand tree.
+ * statement rather than the operand tree.
  *
  * Nested blocks (match arms, loop bodies, `io` blocks) are descended into:
  * a lambda referenced only inside a nested match still captures the
@@ -1219,32 +817,25 @@ function lambdaCaptureIndex(array $items): array
  *
  * @return array<int, string>
  */
-function lambdaNamesReferencedInStmt(IR\Stmt $stmt): array
+function lambdaNamesReferencedInStmt(IR\Stmt $stmt, callable $captured): array
 {
     $names = [];
 
-    $visitStmt = static function (IR\Stmt $s) use (&$names): void {
-        if ($s instanceof IR\Call && isCapturedFnName($s->callee)) {
+    $visitStmt = static function (IR\Stmt $s) use (&$names, $captured): void {
+        if ($s instanceof IR\Call && $captured($s->callee)) {
             $names[] = $s->callee;
         }
     };
 
-    $visit = static function (IR\Operand $operand) use (&$names): void {
-        if ($operand instanceof IR\FnRef && isCapturedFnName($operand->name)) {
+    $visit = static function (IR\Operand $operand) use (&$names, $captured): void {
+        if ($operand instanceof IR\FnRef && $captured($operand->name)) {
             $names[] = $operand->name;
         }
 
-        if ($operand instanceof IR\Partial && isCapturedFnName($operand->fn)) {
+        if ($operand instanceof IR\Partial && $captured($operand->fn)) {
             $names[] = $operand->fn;
         }
 
-        if ($operand instanceof IR\ExprPartial && isCapturedFnName($operand->fn)) {
-            $names[] = $operand->fn;
-        }
-
-        if ($operand instanceof IR\ExprCall && isCapturedFnName($operand->callee)) {
-            $names[] = $operand->callee;
-        }
     };
 
     IR\Visit\walkStmt($stmt, $visitStmt, $visit);

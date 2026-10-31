@@ -1,0 +1,26 @@
+-- The inline pass asks the published capture vector two questions: may a body
+-- that references a captured lifted lambda be copied elsewhere, and may a call
+-- hand a captured closure to an inlineable callee. Both answers must come from
+-- the published vector, not from the spelling the call happens to use.
+import Text.Show
+import System.IO
+
+use :: Int -> Int
+use k = (\x -> x + k) 3
+
+apply1 :: (Int -> Int) -> Int
+apply1 f = f 1
+
+pick :: Int -> Int
+pick k = apply1 (\x -> x + k)
+
+pureUse :: Int
+pureUse = use 10
+
+picked :: Int
+picked = pick 7
+
+main :: IO ()
+main = do
+  putStrLn (show pureUse)
+  putStrLn (show picked)

@@ -232,14 +232,3 @@ function evidenceRefOperand(string $className, Ast\TypeNode $head): IR\FnRef
         typeAstToArray($head),
     );
 }
-
-function evidenceIs(IR\FnRef $evidence, string $className, string $typeName): bool
-{
-    $head = $evidence->evidenceHead;
-
-    return $evidence->evidenceClass === $className
-        && \is_array($head)
-        && ($head['tag'] ?? null) === 'type_con'
-        && ($head['name'] ?? null) === $typeName
-        && ($head['args'] ?? []) === [];
-}

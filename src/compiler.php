@@ -2,6 +2,39 @@
 
 namespace Moggi\Compiler;
 
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
+use Moggi\Pipeline\PipelineRequest;
+use Moggi\Pipeline\PipelineStage;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast\Program;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
+
+use function Moggi\IR\Dump\dump as dumpIr;
+use function Moggi\Modules\compileModuleFile;
+use function Moggi\Modules\compileModuleFileOutputs;
+use function Moggi\Modules\isModuleSourceProgram;
+use function Moggi\Modules\moduleCompileContext;
+use function Moggi\Pipeline\printModeNames;
+use function Moggi\Pipeline\run as pipelineRun;
+use function Moggi\Syntax\Ast\dump as dumpAst;
+use function Moggi\Syntax\Lexer\dump as dumpTokens;
+use function Moggi\Syntax\Lexer\lex;
+use function Moggi\Syntax\Parser\parse;
+
+/**
+ * The oldest PHP this compiler runs on.
+ */
+const MINIMUM_PHP = '8.5.12';
+
+if (\version_compare(\PHP_VERSION, MINIMUM_PHP, '<')) {
+    throw new \RuntimeException(
+        'moggi needs PHP ' . MINIMUM_PHP . ' or newer, and this is ' . \PHP_VERSION
+        . '; older releases carry a security issue',
+    );
+}
+
 (static function (): void {
     $current = \trim((string) \ini_get('memory_limit'));
     if ($current === '-1') {
@@ -21,8 +54,8 @@ namespace Moggi\Compiler;
             default => $n,
         };
     })($current);
-    if ($bytes > 0 && $bytes < 1024 * 1024 * 1024) {
-        \ini_set('memory_limit', '1024M');
+    if ($bytes > 0 && $bytes < 1536 * 1024 * 1024) {
+        \ini_set('memory_limit', '1536M');
     }
 })();
 
@@ -33,6 +66,7 @@ if (\PHP_INT_SIZE < 8) {
 }
 
 require __DIR__ . '/errors.php';
+require __DIR__ . '/memory.php';
 require __DIR__ . '/semantics/kernel.php';
 require __DIR__ . '/cache/cache.php';
 require __DIR__ . '/version.php';
@@ -57,15 +91,20 @@ require __DIR__ . '/semantics/io_boundary.php';
 require_once __DIR__ . '/semantics/st_boundary.php';
 require __DIR__ . '/semantics/strict_io_normalize.php';
 require __DIR__ . '/semantics/io_escape.php';
+require __DIR__ . '/foreign/registry.php';
 require __DIR__ . '/foreign/path.php';
 require __DIR__ . '/semantics/foreign.php';
 require __DIR__ . '/semantics/effects.php';
 require __DIR__ . '/ir/lower.php';
 require __DIR__ . '/ir/dump.php';
 require __DIR__ . '/ir/visit.php';
+require __DIR__ . '/ir/callables.php';
+require __DIR__ . '/ir/validate.php';
 require __DIR__ . '/debug/sourcemap.php';
 require __DIR__ . '/pipeline/pipeline.php';
+require __DIR__ . '/ir/projection.php';
 require __DIR__ . '/optimize/support.php';
+require __DIR__ . '/optimize/facts.php';
 require __DIR__ . '/optimize/ir_transform.php';
 require __DIR__ . '/optimize/global_pass.php';
 require __DIR__ . '/optimize/local.php';
@@ -80,12 +119,9 @@ require __DIR__ . '/optimize/specialize.php';
 require __DIR__ . '/optimize/fold_intrinsic.php';
 require __DIR__ . '/optimize/io_specialize.php';
 require __DIR__ . '/optimize/tree_shake.php';
+require __DIR__ . '/optimize/pass_checkpoints.php';
 require __DIR__ . '/optimize/optimize.php';
 require __DIR__ . '/backend/ir_meta.php';
-require __DIR__ . '/backend/php/intrinsics.php';
-require __DIR__ . '/backend/php/foreign.php';
-require __DIR__ . '/backend/php/io.php';
-require __DIR__ . '/backend/php/codegen.php';
 require __DIR__ . '/backend/Backend.php';
 require __DIR__ . '/backend/php/verify.php';
 require __DIR__ . '/backend/jvm/verify.php';
@@ -98,12 +134,20 @@ require __DIR__ . '/backend/jvm/JvmBackend.php';
 require __DIR__ . '/backend/dotnet/DotNetBackend.php';
 require __DIR__ . '/backend/codegen.php';
 require __DIR__ . '/modules/types.php';
+require __DIR__ . '/modules/elaboration.php';
+require __DIR__ . '/modules/evidence_plan.php';
+require __DIR__ . '/modules/checked_term.php';
+require __DIR__ . '/modules/checked_core.php';
 require __DIR__ . '/modules/paths.php';
 require __DIR__ . '/modules/library.php';
 require __DIR__ . '/modules/facade.php';
 require __DIR__ . '/modules/exports.php';
 require __DIR__ . '/modules/prim_modules.php';
 require __DIR__ . '/modules/graph.php';
+require __DIR__ . '/modules/import_interface.php';
+require __DIR__ . '/modules/instance_world.php';
+require __DIR__ . '/modules/import_context.php';
+require __DIR__ . '/modules/emit_plan.php';
 require __DIR__ . '/modules/imports.php';
 require __DIR__ . '/modules/typecheck_env.php';
 require __DIR__ . '/modules/prepare.php';
@@ -164,6 +208,7 @@ require __DIR__ . '/lsp/workspace/fileOperations.php';
 require __DIR__ . '/lsp/workspace/configuration.php';
 require __DIR__ . '/lsp/workspace/watchedFiles.php';
 require __DIR__ . '/lsp/capabilities.php';
+require __DIR__ . '/lsp/request_scope.php';
 require __DIR__ . '/lsp/progress.php';
 require __DIR__ . '/lsp/staleness.php';
 require __DIR__ . '/lsp/sync.php';
@@ -195,7 +240,6 @@ require __DIR__ . '/registry/bind/jvm.php';
 require __DIR__ . '/registry/bind/dotnet.php';
 require __DIR__ . '/registry/bind/writer.php';
 require __DIR__ . '/registry/bind/build.php';
-
 require __DIR__ . '/cli/commands/command.php';
 require __DIR__ . '/cli/commands/packaging.php';
 require __DIR__ . '/cli/commands/pack.php';
@@ -226,35 +270,6 @@ require __DIR__ . '/cli/commands/lsp.php';
 require __DIR__ . '/cli/commands/version.php';
 require __DIR__ . '/cli/main.php';
 
-use function Moggi\Backend\setCompileBackend;
-use function Moggi\IR\Dump\dump as dumpIr;
-use function Moggi\Modules\compileModuleFile;
-use function Moggi\Modules\compileModuleFileOutputs;
-use function Moggi\Modules\isModuleSourceProgram;
-use function Moggi\Modules\moduleCompileContext;
-use function Moggi\Pipeline\entryPurpose;
-
-use Moggi\Pipeline\PipelineRequest;
-use Moggi\Pipeline\PipelineStage;
-
-use function Moggi\Pipeline\printModeNames;
-use function Moggi\Pipeline\run as pipelineRun;
-
-use Moggi\Semantics\Types\TypeError;
-
-use function Moggi\Syntax\Ast\dump as dumpAst;
-
-use Moggi\Syntax\Ast\Program;
-
-use function Moggi\Syntax\Lexer\dump as dumpTokens;
-use function Moggi\Syntax\Lexer\lex;
-
-use Moggi\Syntax\Lexer\LexError;
-
-use function Moggi\Syntax\Parser\parse;
-
-use Moggi\Syntax\Parser\ParseError;
-
 /**
  * The mode the compiler entry points accept: `php` and `emit` are the same run, the artifact, and
  * {@see printModeNames()} is every dump a caller can ask for.
@@ -282,7 +297,7 @@ function isIntrospectionMode(string $mode): bool
  * The CLI flags and the suite's `tokens`/`ast`/`typed-ast` goldens both come through here, so what a
  * flag prints and what a golden pins cannot drift apart.
  */
-function dumpSourceStage(string $source, string $filename, string $stage): string
+function dumpSourceStage(string $source, string $filename, string $stage, CompilationContext $context): string
 {
     $tokens = lex($source, $filename);
     if ($stage === 'tokens') {
@@ -294,16 +309,9 @@ function dumpSourceStage(string $source, string $filename, string $stage): strin
         return dumpAst($program);
     }
 
-    $typed = moduleCompileContext($filename, $program)['typedProgram'];
+    $typed = moduleCompileContext($filename, $context, $program)['typedProgram'];
 
     return dumpAst($typed);
-}
-
-function applyCompileBackend(?string $backend): void
-{
-    if ($backend !== null) {
-        setCompileBackend($backend);
-    }
 }
 
 /**
@@ -312,16 +320,23 @@ function applyCompileBackend(?string $backend): void
  * `tokens`, `ast` and `typed-ast` are answered from the source before the pipeline runs
  * ({@see dumpSourceStage}), so the stages named here are the ones it reaches itself.
  */
-function compile(string $source, string $filename, string $mode = 'php', bool $optimize = true, ?Program $program = null, ?string $backend = null): string|array
+function compile(string $source, string $filename, string $mode = 'php', bool $optimize = true, ?Program $program = null, ?string $backend = null, ?CompilationContext $context = null): string|array
 {
-    applyCompileBackend($backend);
     $mode = normalizeOutputMode($mode);
-    if (isIntrospectionMode($mode)) {
-        return dumpSourceStage($source, $filename, $mode);
-    }
-
     if ($program === null) {
         $program = parse(lex($source, $filename), $source, $filename);
+    }
+
+    $context ??= CompilationContext::for(
+        $backend ?? 'php',
+        CompilePurpose::Executable,
+        entryModules: ['Main'],
+        roots: [],
+        sources: [$filename],
+    );
+
+    if (isIntrospectionMode($mode)) {
+        return dumpSourceStage($source, $filename, $mode, $context);
     }
 
     $stopAt = match ($mode) {
@@ -331,12 +346,11 @@ function compile(string $source, string $filename, string $mode = 'php', bool $o
     };
 
     $artifacts = pipelineRun(new PipelineRequest(
-        purpose: entryPurpose($program->module),
         source: $source,
         filename: $filename,
         program: $program,
         optimize: $optimize,
-        backend: $backend,
+        context: $context,
     ), $stopAt);
 
     return match ($mode) {
@@ -347,33 +361,40 @@ function compile(string $source, string $filename, string $mode = 'php', bool $o
 }
 
 /** @throws LexError|ParseError|TypeError|\RuntimeException @return string|array<string, string> */
-function compileFile(string $path, string $mode = 'php', bool $optimize = true, ?string $outputFile = null, ?string $backend = null): string|array
+function compileFile(string $path, string $mode = 'php', bool $optimize = true, ?string $outputFile = null, ?string $backend = null, ?CompilationContext $context = null): string|array
 {
-    applyCompileBackend($backend);
     $source = \file_get_contents($path);
     if ($source === false) {
         throw new \RuntimeException("cannot read {$path}");
     }
 
     $mode = normalizeOutputMode($mode);
+    $context ??= CompilationContext::for(
+        $backend ?? 'php',
+        CompilePurpose::Executable,
+        entryModules: ['Main'],
+        roots: [],
+        sources: [$path],
+    );
+
     if (isIntrospectionMode($mode)) {
-        return dumpSourceStage($source, $path, $mode);
+        return dumpSourceStage($source, $path, $mode, $context);
     }
 
     $tokens = lex($source, $path);
     $program = parse($tokens, $source, $path);
     if (isModuleSourceProgram($program)) {
-        return compileModuleFile($path, $mode, $optimize, $outputFile, $program);
+        return compileModuleFile($path, $context, $mode, $optimize, $outputFile, $program);
     }
 
-    return compile($source, $path, $mode, $optimize, $program);
+    return compile($source, $path, $mode, $optimize, $program, context: $context);
 }
 
 /** @return array{output: string, exitCode: 0}|array{output: string, exitCode: 1} */
-function compileFileCapturingErrors(string $path, string $mode = 'php', bool $optimize = true, ?string $backend = null): array
+function compileFileCapturingErrors(string $path, string $mode = 'php', bool $optimize = true, ?string $backend = null, ?CompilationContext $context = null): array
 {
     try {
-        $output = compileFile($path, $mode, $optimize, null, $backend);
+        $output = compileFile($path, $mode, $optimize, null, $backend, $context);
         if (\is_array($output)) {
             $php = '';
             foreach ($output as $rel => $bytes) {
@@ -410,19 +431,26 @@ function compileFileCapturingErrors(string $path, string $mode = 'php', bool $op
  *   opt-ir: array{output: string, exitCode: 0}|array{output: string, exitCode: 1}
  * }
  */
-function compileFileCapturingErrorsBoth(string $path, bool $optimize = true, ?string $backend = null): array
+function compileFileCapturingErrorsBoth(string $path, bool $optimize = true, ?string $backend = null, ?CompilationContext $context = null): array
 {
     try {
-        applyCompileBackend($backend);
         $source = \file_get_contents($path);
         if ($source === false) {
             throw new \RuntimeException("cannot read {$path}");
         }
 
+        $context ??= CompilationContext::for(
+            $backend ?? 'php',
+            CompilePurpose::Executable,
+            entryModules: ['Main'],
+            roots: [],
+            sources: [$path],
+        );
+
         $tokens = lex($source, $path);
         $program = parse($tokens, $source, $path);
         if (isModuleSourceProgram($program)) {
-            $outputs = compileModuleFileOutputs($path, $optimize, null, $program);
+            $outputs = compileModuleFileOutputs($path, $context, $optimize, null, $program);
 
             return [
                 'emit' => ['output' => $outputs['emit'], 'exitCode' => 0],
@@ -430,18 +458,16 @@ function compileFileCapturingErrorsBoth(string $path, bool $optimize = true, ?st
             ];
         }
 
-        $purpose = entryPurpose($program->module);
         $artifacts = pipelineRun(new PipelineRequest(
-            purpose: $purpose,
             source: $source,
             filename: $path,
             program: $program,
             optimize: $optimize,
-            backend: $backend,
+            context: $context,
         ), PipelineStage::Emit);
 
         return [
-            'emit' => ['output' => $artifacts->emit ?? '', 'exitCode' => 0],
+            'emit' => ['output' => $artifacts->emit ?? [], 'exitCode' => 0],
             'opt-ir' => ['output' => dumpIr($artifacts->irOpt ?? throw new \RuntimeException('missing optimized IR')), 'exitCode' => 0],
         ];
     } catch (LexError|ParseError|TypeError $e) {

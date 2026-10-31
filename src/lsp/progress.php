@@ -96,10 +96,6 @@ final class CancellationRegistry
         unset($this->cancelled[$id]);
     }
 
-    public function clearAll(): void
-    {
-        $this->cancelled = [];
-    }
 }
 
 /**
@@ -125,19 +121,6 @@ function beginRequestProgress(bool $clientSupportsProgress, int|string|null $tok
     ]);
 
     return $token;
-}
-
-/** Report progress for an active token (no-op when null). */
-function reportRequestProgress(int|string|null $token, string $message, ?int $percentage = null): void
-{
-    if ($token === null) {
-        return;
-    }
-    $value = ['kind' => 'report', 'message' => $message];
-    if ($percentage !== null) {
-        $value['percentage'] = \max(0, \min(100, $percentage));
-    }
-    sendNotification('$/progress', ['token' => $token, 'value' => $value]);
 }
 
 /** End a progress sequence, flagging cancellation when aborted (no-op when null). */

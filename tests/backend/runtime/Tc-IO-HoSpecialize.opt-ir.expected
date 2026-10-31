@@ -1,11 +1,22 @@
 module
   function runTwice(act)
+      t1 = io_assign_action
+          t0 = call __w_runTwice(act)
+        result t0
+      ret t1
+  function __w_runTwice(act)
       io_run act
       io_run act
       ret ()
   function main()
-      t0 = io_assign_action
-          io_call putStrLn("x")
+      t6 = io_assign_action
+          t5 = call __w_main()
+        result t5
+      ret t6
+  function __w_main()
+      t3 = io_assign_action
+          t2 = call System.IO::__w_putStrLn("x")
         result ()
-      io_call runTwice(t0)
+      io_run t3
+      io_run t3
       ret ()

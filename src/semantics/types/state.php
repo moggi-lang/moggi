@@ -2,6 +2,7 @@
 
 namespace Moggi\Semantics\Types;
 
+use Moggi\Modules\InstanceWorld;
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\Type;
@@ -23,6 +24,29 @@ final class TypeCheckState
 
     /** @var array<string, Type> */
     public array $subst = [];
+
+    /**
+     * The backend this module is being checked for. A foreign import or type
+     * names one backend; it is active only when that is this one.
+     */
+    public string $compileBackend = 'php';
+
+    /**
+     * The module being checked, as its program declares it.
+     *
+     * A declaration's facts belong to the module that wrote them — two modules may each
+     * declare a foreign type named `Path` against different host types — so anything that
+     * registers or reads such a fact keys it by this name. A program with no module header
+     * keeps the empty name, which is one module for that purpose.
+     */
+    public string $module = '';
+
+    /**
+     * Entry modules of the compilation this check belongs to.
+     *
+     * @var array<string, true>
+     */
+    public array $entryModules = [];
 
     /** @var array<string, Scheme> */
     public array $env = [];
@@ -81,6 +105,19 @@ final class TypeCheckState
      * @var array<string, array<string, Scheme>>
      */
     public array $classModuleScopes = [];
+
+    /**
+     * Module whose default body is being checked, and the names that body must
+     * resolve there.
+     *
+     * A default body is copied into the instance's AST, but its references
+     * belong to the declaring module. Recording that here lets name resolution
+     * write the declaring module into `Variable::$resolvedOrigin`, which lowering
+     * follows instead of the instance module's same-named binding.
+     *
+     * @var array<string, string> name => declaring module
+     */
+    public array $defaultBodyOrigins = [];
 
     /** @var array<string, string> */
     public array $constructorRenames = [];
@@ -243,6 +280,14 @@ final class TypeCheckState
     /** @var list<array<string, Type>> */
     public array $substStack = [];
 
+    /**
+     * The dictionaries of the declaration currently being checked: one owner for
+     * what it takes and what its body resolves against. `checkFunction` installs
+     * it before the body is inferred and clears it afterwards, so a nested
+     * declaration cannot inherit another's vocabulary.
+     */
+    public ?DeclarationAllocation $allocation = null;
+
     /** @var list<Ast\PendingConstraint> */
     public array $ambientConstraints = [];
 
@@ -256,6 +301,16 @@ final class TypeCheckState
 
     /** @var array<string, true> */
     public array $declaredTypeNames = [];
+
+    /**
+     * The instance world this module is checked against — the prepared
+     * project's, or the module's own at the single-module boundary.
+     *
+     * Installed by `applyImportContext` from the context's named world, and the
+     * one producer of the two indexes below. The checked program publishes its
+     * identity; nothing downstream re-derives it.
+     */
+    public ?InstanceWorld $instanceWorld = null;
 
     /** @var array<string, list<array<string, mixed>>> */
     public array $projectInstancesByClass = [];
@@ -342,6 +397,46 @@ final class TypeCheckState
     /** @var array<string, Type> how a use site solved a restricted variable */
     public array $restrictedSolutions = [];
 
+    /**
+     * Steps that settled an obligation without unification, in the order they
+     * ran: the checked core publishes them as residuals with their provenance.
+     *
+     * `decl` is the owning declaration's object id, the same key
+     * {@see $checkedSchemes} uses, or null when the pass ran with no owner. A
+     * span would be the wrong key: declarations the checker synthesized share
+     * `0:0`, and two nodes can share one span.
+     *
+     * @var list<array{decl: ?int, wanted: string, decision: string, provenance: string}>
+     */
+    public array $defaultingLog = [];
+
+    /**
+     * The scheme this check settled, per checked declaration (`spl_object_id`
+     * of the `FunctionDecl`), for the duration of one check.
+     *
+     * `env` is keyed by name and a later writer can take the name over — a
+     * module that declares a value a class method already has (`Data.Map.null`
+     * beside `Foldable.null`) and then checks an instance of that class finds
+     * the instance method's scheme under `null` at the end. A product that
+     * publishes a declaration's checked answer reads this map, not `env`.
+     *
+     * @var array<int, Scheme>
+     */
+    public array $checkedSchemes = [];
+
+    /**
+     * The kinds this check fixed for each checked declaration's own type parameters, per
+     * `spl_object_id` of the `FunctionDecl`.
+     *
+     * Captured while the declaration's kind scope is live: `Kinds\pushKindScope()` restores it once
+     * the signature is done, so by the end of the check the scope no longer says whose kinds these
+     * were. The checked core publishes the map; nothing else reads it.
+     *
+     * @var array<int, array<string, string>>
+     */
+    public array $checkedParameterKinds = [];
+
+
     /** @var list<array<string, mixed>> restricted declarations waiting for the module end */
     public array $deferredRestricted = [];
 
@@ -356,16 +451,86 @@ final class TypeCheckState
     public int $nextBinderId = 0;
 
     /**
+     * The lexical scope, innermost frame last: each frame maps a spelling to the binder identity
+     * that spelling means *in it*.
+     *
+     * A local binder is stored in the environment under its identity, never under its spelling, so a
+     * lookup that finds a name here is answered by that frame's identity and by nothing else. Two
+     * binders of one spelling are therefore two environment entries, not one entry overwritten — the
+     * old shape could only answer the innermost by name, and answered a stale one when an
+     * environment copy outlived its binding.
+     *
+     * @var list<array<string, int>>
+     */
+    public array $binderScopes = [];
+
+    /** Open a frame; every binding made until the matching pop belongs to it. */
+    public function pushBinderScope(): void
+    {
+        $this->binderScopes[] = [];
+    }
+
+    /** Close the innermost frame. */
+    public function popBinderScope(): void
+    {
+        \array_pop($this->binderScopes);
+    }
+
+    /** Record that, in the current frame, this spelling means this binder. */
+    public function registerBinder(string $name, int $id): void
+    {
+        if ($this->binderScopes === []) {
+            throw new \LogicException(
+                "the checker bound `{$name}` with no scope open; a binding must belong to a frame",
+            );
+        }
+
+        $this->binderScopes[\count($this->binderScopes) - 1][$name] = $id;
+    }
+
+    /** The identity this spelling means here, or null when no local binder of that spelling is in scope. */
+    public function resolveBinder(string $name): ?int
+    {
+        for ($i = \count($this->binderScopes) - 1; $i >= 0; --$i) {
+            if (isset($this->binderScopes[$i][$name])) {
+                return $this->binderScopes[$i][$name];
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Fresh counter for synthesized dictionary-parameter names on local
      * bindings. Must be unique across the whole compilation unit: two in-scope
      * evidence parameters sharing a name would shadow each other's dictionary.
      */
     public int $nextEvidenceParam = 0;
 
+    /**
+     * Pending dictionary obligations, and the solved dictionaries that belong with them, keyed by
+     * the node that carries them.
+     *
+     * These were two public arrays on `Ast\AstNode`. That made "this elaboration is settled" a
+     * convention the checker asserted rather than a property of the product: a published tree had a
+     * field in which an unresolved obligation could survive into the cache and into a later
+     * compilation. They live here instead, in the run that produced them, so a published AST has
+     * nowhere to put one, and a node a rewrite copies starts with none because the copy is a new
+     * key. A settled site is detached, so the table holds only the sites still outstanding.
+     *
+     * @var \SplObjectStorage<Ast\AstNode, array{0: list<Ast\PendingConstraint>, 1: list<Ast\PendingConstraint>}>
+     */
+    public \SplObjectStorage $obligations;
+
     public function __construct(
         public string $source,
         public string $filename = '',
         public int $fresh = 0,
+        string $compileBackend = 'php',
+        array $entryModules = [],
     ) {
+        $this->compileBackend = $compileBackend;
+        $this->entryModules = $entryModules;
+        $this->obligations = new \SplObjectStorage();
     }
 }

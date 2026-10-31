@@ -1,9 +1,11 @@
 <?php declare(strict_types=1);
 
-// Step 2 (audit WS1): coordinates are validated before a tool sees them, and
-// the manifests are quote-safe even for input that gets that far. A hostile
-// coordinate is refused with its own diagnostic; a hostile *string* handed
-// straight to a manifest writer still parses back to itself.
+/**
+ * Coordinates are validated before reaching a tool, while manifest writers
+ * remain quote-safe even for hostile input that bypasses coordinate
+ * validation. Invalid coordinates produce their own diagnostic; a hostile
+ * string passed directly to a manifest writer must round-trip unchanged.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

@@ -2,11 +2,10 @@
 
 namespace Moggi\Syntax\Parser;
 
-use function Moggi\Errors\appendDidYouMean;
-
 use Moggi\Syntax\Ast;
-
 use Moggi\Syntax\Lexer\TokenKind;
+
+use function Moggi\Errors\appendDidYouMean;
 
 /**
  * Parse the body of a `{-# BACKEND … #-}` pragma into backend => implementation module.

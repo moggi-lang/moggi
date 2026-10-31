@@ -2,55 +2,90 @@
 
 namespace Tc\IO\CaseIO;
 
-const __MOGGI_MAP = [[16 => ['Tc.IO.CaseIO.emitWhen', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 7, 11], 20 => ['Tc.IO.CaseIO.emitWhen', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 8, 12], 27 => ['Tc.IO.CaseIO.pick', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 12, 11], 31 => ['Tc.IO.CaseIO.pick', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 13, 12], 38 => ['Tc.IO.CaseIO.pickOrError', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 17, 11], 42 => ['Tc.IO.CaseIO.pickOrError', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 18, 12], 48 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 22, 3], 49 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 23, 3], 50 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 24, 3], 51 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 26, 3], 52 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 25, 13], 53 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 28, 3], 54 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 29, 3]], ['Tc\\IO\\CaseIO\\emitWhen' => ['Tc.IO.CaseIO.emitWhen', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 6, 14], 'Tc\\IO\\CaseIO\\pick' => ['Tc.IO.CaseIO.pick', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 11, 10], 'Tc\\IO\\CaseIO\\pickOrError' => ['Tc.IO.CaseIO.pickOrError', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 16, 17], 'Tc\\IO\\CaseIO\\main' => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 21, 8]]];
+const __MOGGI_MAP = [[14 => 0, 23 => 4, 27 => 5, 34 => 1, 43 => 6, 47 => 7, 54 => 2, 63 => 8, 67 => 9, 68 => 9, 75 => 3, 83 => 10, 84 => 11, 85 => 12, 86 => 13, 87 => 14, 88 => 15, 89 => 16], ['Tc\\IO\\CaseIO\\emitWhen' => 0, 'Tc\\IO\\CaseIO\\__w_emitWhen' => 0, 'Tc\\IO\\CaseIO\\pick' => 1, 'Tc\\IO\\CaseIO\\__w_pick' => 1, 'Tc\\IO\\CaseIO\\pickOrError' => 2, 'Tc\\IO\\CaseIO\\__w_pickOrError' => 2, 'Tc\\IO\\CaseIO\\main' => 3, 'Tc\\IO\\CaseIO\\__w_main' => 3], ['Tc\\IO\\CaseIO\\emitWhen', 'Tc\\IO\\CaseIO\\pick', 'Tc\\IO\\CaseIO\\pickOrError', 'Tc\\IO\\CaseIO\\main'], ['Tc\\IO\\CaseIO\\__w_emitWhen', 'Tc\\IO\\CaseIO\\__w_pick', 'Tc\\IO\\CaseIO\\__w_pickOrError', 'Tc\\IO\\CaseIO\\__w_main'], [[0, 0, 6, 14], [1, 0, 11, 10], [2, 0, 16, 17], [3, 0, 21, 8], [0, 0, 7, 11], [0, 0, 8, 12], [1, 0, 12, 11], [1, 0, 13, 12], [2, 0, 17, 11], [2, 0, 18, 12], [3, 0, 22, 3], [3, 0, 23, 3], [3, 0, 24, 3], [3, 0, 26, 3], [3, 0, 25, 13], [3, 0, 28, 3], [3, 0, 29, 3]], ['Tc.IO.CaseIO.emitWhen', 'Tc.IO.CaseIO.pick', 'Tc.IO.CaseIO.pickOrError', 'Tc.IO.CaseIO.main'], ['tests/backend/runtime/Tc-IO-CaseIO.mog']];
 
 require_once __DIR__ . '/../../../libraries/base/src/Data/Bool.php';
 require_once __DIR__ . '/../../../libraries/base/src/Moggi/Err.php';
-require_once __DIR__ . '/../../../libraries/base/src/System/IO/PHP.php';
+require_once __DIR__ . '/../../../libraries/base/src/System/IO.php';
 
 use function Moggi\Err\error;
-use function System\IO\PHP\putStrLn;
 
 function emitWhen($b) {
+    $__t3 = ['__io', static function() use (&$b): mixed {
+        $__t2 = __w_emitWhen($b);
+        return $__t2;
+    }];
+    return $__t3;
+}
+
+function __w_emitWhen($b) {
     if ($b === true) {
-        putStrLn("y");
+        $__t0 = \System\IO\__w_putStrLn("y");
         return null;
     }
     elseif ($b === false) {
-        putStrLn("n");
+        $__t1 = \System\IO\__w_putStrLn("n");
         return null;
     }
+    return null;
 }
 
 function pick($b) {
+    $__t7 = ['__io', static function() use (&$b): mixed {
+        $__t6 = __w_pick($b);
+        return $__t6;
+    }];
+    return $__t7;
+}
+
+function __w_pick($b) {
     if ($b === true) {
-        putStrLn("yes");
+        $__t4 = \System\IO\__w_putStrLn("yes");
         return null;
     }
     elseif ($b === false) {
-        putStrLn("no");
+        $__t5 = \System\IO\__w_putStrLn("no");
         return null;
     }
+    return null;
 }
 
 function pickOrError($b) {
+    $__t11 = ['__io', static function() use (&$b): mixed {
+        $__t10 = __w_pickOrError($b);
+        return $__t10;
+    }];
+    return $__t11;
+}
+
+function __w_pickOrError($b) {
     if ($b === true) {
-        putStrLn("yes");
+        $__t8 = \System\IO\__w_putStrLn("yes");
         return null;
     }
     elseif ($b === false) {
-        error("no");
+        $__t9 = error("no");
+        ($__t9[1])();
         return null;
     }
+    return null;
 }
 
 function main() {
-    putStrLn("linear");
-    emitWhen(true);
-    putStrLn("deferred");
-    putStrLn("before");
-    pick(true);
-    putStrLn("error-branch");
-    pickOrError(true);
+    $__t20 = ['__io', static function(): mixed {
+        $__t19 = __w_main();
+        return $__t19;
+    }];
+    return $__t20;
+}
+
+function __w_main() {
+    $__t12 = \System\IO\__w_putStrLn("linear");
+    $__t13 = __w_emitWhen(true);
+    $__t14 = \System\IO\__w_putStrLn("deferred");
+    $__t15 = \System\IO\__w_putStrLn("before");
+    $__t16 = __w_pick(true);
+    $__t17 = \System\IO\__w_putStrLn("error-branch");
+    $__t18 = __w_pickOrError(true);
     return null;
 }

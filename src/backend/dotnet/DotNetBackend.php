@@ -3,6 +3,7 @@
 namespace Moggi\Backend\DotNet;
 
 use Moggi\Backend\Backend;
+use Moggi\Foreign\ForeignTypeTable;
 
 use function Moggi\Backend\DotNet\Codegen\emitModule;
 use function Moggi\Backend\DotNet\Dependencies\dotNetSignatureEntry;
@@ -39,6 +40,16 @@ require_once __DIR__ . '/codegen.php';
  */
 final class DotNetBackend implements Backend
 {
+    public function id(): string
+    {
+        return 'dotnet';
+    }
+
+    public function emitPlan(string $outputRelative, array $options = []): \Moggi\Modules\EmitPlan
+    {
+        return \Moggi\Modules\EmitPlan::forTarget($this->id(), $outputRelative);
+    }
+
     public function extension(): string
     {
         return '.il';
@@ -79,7 +90,7 @@ final class DotNetBackend implements Backend
      * @param array<string, mixed> $options
      * @return array<string, string>
      */
-    public function emit(Module $ir, string $sourcePath, array $options = []): string|array
+    public function emit(Module $ir, string $sourcePath, array $options = []): array
     {
         $types = emitModule($ir, $sourcePath, $options);
         $out = [];
@@ -131,7 +142,7 @@ final class DotNetBackend implements Backend
         return $emit;
     }
 
-    public function describeEmit(string|array $emit, array $focusNames = []): string
+    public function describeEmit(array $emit, array $focusNames = []): string
     {
         return describeDotNetEmit($emit, $focusNames);
     }
@@ -147,6 +158,7 @@ final class DotNetBackend implements Backend
         string $kind,
         array $pathInfo,
         string $name,
+        ?string $module = null,
     ): ?string {
         $sidecar = ($kind === 'function' && ($pathInfo['dispatch'] ?? '') !== 'intrinsic')
             ? dotNetSignatureEntry($name, $pathInfo['declaringRoot'] ?? null)
@@ -157,7 +169,7 @@ final class DotNetBackend implements Backend
             && ($pathInfo['dispatch'] ?? '') !== 'intrinsic'
             && ($pathInfo['classPath'] ?? '') !== ''
         ) {
-            $resolved = $this->resolveInspectorOverload($type, $pathInfo, $name);
+            $resolved = $this->resolveInspectorOverload($type, $pathInfo, $name, $module);
             if ($resolved !== null) {
                 return $resolved;
             }
@@ -171,6 +183,7 @@ final class DotNetBackend implements Backend
             $pathInfo['hostMember'],
             $sidecar,
             $name,
+            $module,
         );
     }
 
@@ -184,6 +197,7 @@ final class DotNetBackend implements Backend
         TypeNode $type,
         array $pathInfo,
         string $name,
+        ?string $module,
     ): ?string {
         $classPath = (string) $pathInfo['classPath'];
         $member = (string) ($pathInfo['hostMember'] ?? '');
@@ -210,6 +224,7 @@ final class DotNetBackend implements Backend
             $pathInfo['hostMember'],
             null,
             $name,
+            $module,
         );
         $resolution = resolveDotNetForeignOverload(
             $table['methods'][$member] ?? [],
@@ -271,5 +286,16 @@ final class DotNetBackend implements Backend
         string $name,
     ): ?string {
         return verifyDotNetForeignImport($kind, $pathInfo, $type, $nativeSig, $name);
+    }
+
+    /**
+     * The host types this target's checked modules declare. One table per backend object, which is
+     * the object the checker's `backendById()` and the emitter both reach.
+     */
+    private ?ForeignTypeTable $foreignTypes = null;
+
+    public function foreignTypes(): ForeignTypeTable
+    {
+        return $this->foreignTypes ??= new ForeignTypeTable();
     }
 }

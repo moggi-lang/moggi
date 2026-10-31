@@ -2,42 +2,20 @@
 
 namespace Moggi\Semantics\StBoundary;
 
+use Moggi\Semantics\TypeExpr\TCon;
+use Moggi\Semantics\TypeExpr\TVar;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+
 use function Moggi\Semantics\IntrinsicRegistry\isStIntrinsic;
 use function Moggi\Semantics\IntrinsicRegistry\primopArity;
 use function Moggi\Semantics\IntrinsicRegistry\stPrimopRole;
 use function Moggi\Semantics\IoBoundary\stripConstraints;
 use function Moggi\Semantics\IoBoundary\typeMentionsIo;
 use function Moggi\Semantics\Kinds\canonicalTypeConName;
+use function Moggi\Semantics\TypeExpr\collectTypeVars;
 
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-
-/**
- * Validate ST surface constraints on a typed program.
- *
- * ST actions are re-executable descriptions (a thunk wrapper on every
- * backend), so unlike IO they need no straight-line normalization: building a
- * description is pure, sharing one shares no state, and each *use* runs it,
- * which is what keeps allocation and read/write order. What the compiler must
- * still enforce is confinement and escape:
- *
- * - `ST`, `STRef` and `RealWorld` are forbidden in data fields, synonyms,
- *   foreign signatures and any function *result* outside `ST` (so a cell
- *   can never hide in a pure value, while the eliminators `runST` and
- *   `stToIO` may still consume a thread);
- * - an `ST`-returning function type must not mention `IO` (there is no
- *   `IO`-in-`ST` embedding; the other direction is `stToIO#`);
- * - `ST (ST a)` nesting is rejected, like nested `IO`;
- * - every `runST#` application is escape-checked: the thread variable must
- *   not occur free in the result type, so a cell cannot leave its thread.
- *
- * Inward mixing from `IO` scope (a `RealWorld` cell observed inside `runST#`)
- * is rejected outright: the inner thread would run at a pure evaluation
- * point while the cell is also touched in `IO` order, which no pure label
- * can describe. Inward mixing across nested `runST#` threads unifies two
- * thread variables and stays operationally safe — execution still follows
- * the binds — so only concrete threads and outward escape are rejected.
- */
+/** Validate ST surface constraints on a typed program. */
 function validate(Ast\Program $program, string $source = '', string $filename = ''): void
 {
     foreach ($program->items as $item) {
@@ -178,21 +156,6 @@ function validateTypeNoSt(Ast\TypeNode $type, Ast\AstNode $at, string $source, s
     }
 }
 
-/** Whether a declared type returns an ST action. */
-function functionReturnsSt(?Ast\TypeNode $type): bool
-{
-    if ($type === null) {
-        return false;
-    }
-
-    $result = stripConstraints($type);
-    while ($result instanceof Ast\TypeArrow) {
-        $result = $result->to;
-    }
-
-    return isStType($result);
-}
-
 /** The ST type constructor: the kernel id `ST#`, or the name the library publishes it under. */
 function isStTypeConName(string $name): bool
 {
@@ -319,23 +282,21 @@ function checkRunStEscape(Ast\IntrinsicCall $expr, string $source, string $filen
         return;
     }
 
-    $argType = $arg->inferredType;
-    if (! $argType instanceof Ast\TypeApp
-        || ! $argType->con instanceof Ast\TypeCon
-        || ! isStTypeConName($argType->con->name)
-        || ! isset($argType->args[0], $argType->args[1])
+    $argType = $arg->inferredInternalType;
+    if (! $argType instanceof TCon
+        || ! isStTypeConName($argType->name)
+        || \count($argType->args) < 2
     ) {
         fail('runST# argument must have type ST s a', $arg, $source, $filename);
     }
 
     $thread = $argType->args[0];
     $result = $argType->args[1];
-    if (! $thread instanceof Ast\TypeVar) {
+    if (! $thread instanceof TVar) {
         fail('runST# cannot run the shared RealWorld thread', $expr, $source, $filename);
     }
 
-    $free = freeTypeVars($result);
-    if (isset($free[$thread->name])) {
+    if (isset(collectTypeVars($result, [])[$thread->name])) {
         fail(
             'runST# would let the state thread escape (thread variable occurs in the result type)',
             $expr,
@@ -345,47 +306,12 @@ function checkRunStEscape(Ast\IntrinsicCall $expr, string $source, string $filen
     }
 }
 
-/** @return array<string, true> */
-function freeTypeVars(Ast\AstNode $node): array
-{
-    $free = [];
-    collectFreeTypeVars($node, $free);
-
-    return $free;
-}
-
-/** @param array<string, true> $free */
-function collectFreeTypeVars(Ast\AstNode $node, array &$free): void
-{
-    if ($node instanceof Ast\TypeVar) {
-        $free[$node->name] = true;
-
-        return;
-    }
-
-    foreach (\get_object_vars($node) as $key => $value) {
-        if ($key === 'inferredType' || $key === 'pendingConstraints') {
-            continue;
-        }
-
-        if ($value instanceof Ast\AstNode) {
-            collectFreeTypeVars($value, $free);
-        } elseif (\is_array($value)) {
-            foreach ($value as $child) {
-                if ($child instanceof Ast\AstNode) {
-                    collectFreeTypeVars($child, $free);
-                }
-            }
-        }
-    }
-}
-
 /** @return list<Ast\AstNode> */
 function childExpressions(Ast\AstNode $expr): array
 {
     $children = [];
     foreach (\get_object_vars($expr) as $key => $value) {
-        if ($key === 'inferredType' || $key === 'pendingConstraints') {
+        if ($key === 'inferredType' || $key === 'inferredInternalType') {
             continue;
         }
 

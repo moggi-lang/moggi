@@ -1,16 +1,11 @@
 <?php declare(strict_types=1);
 
 /**
- * Watchdog for one standalone test: 300s, and `MOGGI_TEST_STANDALONE_TIMEOUT` (seconds) lets the
- * suite assert the kill-and-report path in a second instead of five minutes.
+ * Watchdog for one standalone test: 300s. A case that needs to assert the kill-and-report path
+ * spawns its own short-lived process instead of shortening this.
  */
 function standaloneTimeoutSeconds(): int
 {
-    $override = \getenv('MOGGI_TEST_STANDALONE_TIMEOUT');
-    if (\is_string($override) && \ctype_digit($override) && (int) $override > 0) {
-        return (int) $override;
-    }
-
     return 300;
 }
 
@@ -18,7 +13,10 @@ function standaloneTimeoutSeconds(): int
  * Standalone tests: an independent PHP program beside the code it tests, named `snake_case.php`, run in
  * its own process so a `die()` or fatal cannot take the suite down. Exit 0 is success.
  *
- * @return array{passed: bool, message: string}
+ * Exit 2 is "this machine cannot exercise the case" — a missing toolchain, reported as a `skip` with the
+ * stderr text as its reason, so coverage a case did not exercise cannot read as coverage it did.
+ *
+ * @return array{passed: bool, message: string, skip?: string}
  */
 function runStandaloneTest(string $path): array
 {
@@ -29,6 +27,11 @@ function runStandaloneTest(string $path): array
     $result = runCompiledProcess([PHP_BINARY, $path], standaloneTimeoutSeconds(), null, projectRootPath());
     if (($result['timedOut'] ?? false) === true) {
         return ['passed' => false, 'message' => 'standalone test timed out', 'timeout' => true];
+    }
+    if (($result['exitCode'] ?? 1) === 2) {
+        $reason = \trim((string) ($result['stderr'] ?? ''));
+
+        return ['passed' => true, 'message' => '', 'skip' => $reason === '' ? 'the case reported it cannot run here' : $reason];
     }
     if (($result['exitCode'] ?? 1) !== 0) {
         $output = \trim(($result['stdout'] ?? '') . "\n" . ($result['stderr'] ?? ''));

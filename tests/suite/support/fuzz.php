@@ -200,8 +200,6 @@ function fuzzShrink(string $source, callable $drop, callable $fails): string
     $changed = true;
     while ($changed) {
         $changed = false;
-        // `$drop` decides where the units end: null *or* an unchanged string means there is no unit
-        // left at that index (a substring past the end returns the input untouched).
         for ($i = 0; ; ++$i) {
             $candidate = $drop($source, $i);
             if ($candidate === null || $candidate === $source) {
@@ -311,8 +309,6 @@ function fuzzFrontendSmoke(string $projectRoot, int $seed, int $count): array
  */
 function fuzzFailure(string $workDir, int $seed, int $count, ?int $index, string $message, string $minimized = ''): string
 {
-    // The child writes each input before running it, so the highest-numbered one is the input it
-    // died on — including when it died without printing a report at all.
     $index ??= fuzzLastInputIndex($workDir);
     $source = $minimized !== '' ? $minimized : fuzzInputSource($workDir, $index);
     $saved = fuzzSaveReproducer($seed, $index, $source);
@@ -378,18 +374,11 @@ function fuzzSaveReproducer(int $seed, ?int $index, string $source): ?string
 }
 
 /**
- * Where fuzz reproducers are kept: beside the case logs, under the cache directory.
- *
- * `MOGGI_FUZZ_DIR` overrides it, which is how the unit test asserts a reproducer was saved without
- * writing into the working copy's cache.
+ * Where fuzz reproducers are kept: beside the case logs, under the cache directory — the same
+ * root the rest of the harness's scratch lives under, so `MOGGI_CACHE_DIR` already moves it.
  */
 function fuzzReproducerDir(): string
 {
-    $override = \getenv('MOGGI_FUZZ_DIR');
-    if (\is_string($override) && $override !== '') {
-        return \rtrim($override, '/');
-    }
-
     $base = \function_exists('Moggi\\Cache\\cacheScratchDir')
         ? \Moggi\Cache\cacheScratchDir()
         : \dirname(__DIR__, 2) . '/.moggi';

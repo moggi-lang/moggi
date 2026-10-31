@@ -2,16 +2,14 @@
 
 namespace Moggi\LSP\TextDocument;
 
-use function Moggi\Docs\surfaceTypeSignature;
-
 use Moggi\LSP\Analysis\AnalysisService;
+use Moggi\Syntax\Ast;
 
+use function Moggi\Docs\surfaceTypeSignature;
 use function Moggi\LSP\Analysis\findNodeChainAt;
 use function Moggi\LSP\checkCancelledPoint;
 use function Moggi\LSP\Protocol\lspPosToCompiler;
 use function Moggi\LSP\Protocol\splitLines;
-
-use Moggi\Syntax\Ast;
 
 function svcSignatureHelp(AnalysisService $svc, string $uri, array $pos): ?array
 {
@@ -138,7 +136,7 @@ function signatureForFunction(AnalysisService $svc, object $analysis, string $na
     }
 
     if ($params === [] && $label === null && $analysis->program instanceof Ast\Program) {
-        $ext = $analysis->program->externalFns[$name] ?? null;
+        $ext = $analysis->program->interface?->externalFns[$name] ?? null;
         if ($ext !== null) {
             $d = $svc->modules->declForResolved($ext);
             if ($d !== null) {

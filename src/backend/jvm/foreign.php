@@ -2,6 +2,7 @@
 
 namespace Moggi\Backend\Jvm\Foreign;
 
+use function Moggi\Backend\backendById;
 use function Moggi\Foreign\splitForeignPathMember;
 
 /**
@@ -25,16 +26,47 @@ use function Moggi\Semantics\Kernel\boundaryHandleTypeName;
 use function Moggi\Semantics\Kernel\boundaryMaybeTypeName;
 use function Moggi\Semantics\Types\primitiveTypeIdOf;
 
+use Moggi\Foreign\ForeignTypeTable;
 use Moggi\Syntax\Ast;
 
-function registerJvmForeignType(string $moggiName, string $hostType): void
+/**
+ * The jvm host types checked modules declare — one table, owned by the target.
+ *
+ * A `foreign jvm type Path "…"` is one module's statement about one of its own names, and the
+ * module is half the key ({@see ForeignTypeTable}): two modules declare `Path` against different
+ * host types, and a bare-name map would let whichever was checked last answer for both.
+ */
+function registerJvmForeignType(string $module, string $moggiName, string $hostType): void
 {
-    $GLOBALS['moggi_jvm_foreign_types'][$moggiName] = $hostType;
+    jvmForeignTypes()->register($module, $moggiName, $hostType);
 }
 
-function lookupJvmForeignType(string $name): ?string
+/** Every module that declares `$name`, with the host type it declares. */
+function jvmForeignTypeDeclarations(string $name): array
 {
-    return $GLOBALS['moggi_jvm_foreign_types'][$name] ?? null;
+    return jvmForeignTypes()->declarationsOf($name);
+}
+
+/**
+ * The host type `$name` stands for, read from the module that declared it.
+ *
+ * With a module, that module's declaration and nothing else; without one, every declaring module
+ * must agree, and a real disagreement is refused rather than answered by whichever ran last.
+ */
+function lookupJvmForeignType(string $name, ?string $module = null): ?string
+{
+    return jvmForeignTypes()->lookup($name, $module, 'jvm');
+}
+
+/** Every host type any module declares, for set membership. */
+function jvmDeclaredForeignHostTypes(): array
+{
+    return jvmForeignTypes()->hostTypes();
+}
+
+function jvmForeignTypes(): ForeignTypeTable
+{
+    return backendById('jvm')->foreignTypes();
 }
 
 /**
@@ -100,6 +132,37 @@ function dottedToInternal(string $dotted): string
 }
 
 /**
+ * The interface owners a compilation's `foreign jvm type` declarations name, by internal name.
+ *
+ * The kind is a fact of the declaration (`interface java.io.Closeable`), so it is read from the
+ * parsed programs the compilation is made of — not from {@see registerJvmForeignType}'s registry,
+ * which only a *typecheck* fills. A project compile emits modules it did not re-check in this
+ * process (shallow library units, cached products), and those are exactly the modules that carry
+ * the declarations; reading the source facts keeps the answer attached to the compilation instead
+ * of to which modules happened to run through the checker first.
+ *
+ * @param iterable<Ast\Program> $programs
+ * @return array<string, true>
+ */
+function jvmInterfaceNamesFromPrograms(iterable $programs): array
+{
+    $names = [];
+    foreach ($programs as $program) {
+        foreach ($program->items as $item) {
+            if (! $item instanceof Ast\ForeignTypeDecl || $item->backend !== 'jvm') {
+                continue;
+            }
+            [$dotted, $isInterface] = jvmParseForeignHostType($item->hostType);
+            if ($isInterface) {
+                $names[dottedToInternal($dotted)] = true;
+            }
+        }
+    }
+
+    return $names;
+}
+
+/**
  * Moggi interface types that require InterfaceMethodref + invokeinterface.
  * (checkcast to an interface is fine; invokevirtual is not.)
  *
@@ -108,10 +171,15 @@ function dottedToInternal(string $dotted): string
  * binder emits the prefix for every interface `javap` reports. An interface
  * reached with no such declaration is a missing declaration, not a missing
  * table entry.
+ *
+ * This reads the process registry, which only a check fills. An emitter should
+ * consult the set its compilation published instead
+ * ({@see jvmInterfaceNamesFromPrograms}); this remains for callers that have no
+ * compilation to ask.
  */
 function jvmIsInterface(string $internalName): bool
 {
-    foreach ($GLOBALS['moggi_jvm_foreign_types'] ?? [] as $hostType) {
+    foreach (jvmDeclaredForeignHostTypes() as $hostType) {
         [$dotted, $isIface] = jvmParseForeignHostType((string) $hostType);
         if ($isIface && dottedToInternal($dotted) === $internalName) {
             return true;
@@ -134,9 +202,10 @@ function jvmDescriptorFromMoggiType(
     string $kind,
     ?string $classPath,
     ?string $member = null,
+    ?string $module = null,
 ): string {
     if ($kind === 'const') {
-        return jvmFieldDescriptorFromMoggiType(jvmForeignIoInnerType($type), $classPath, $member);
+        return jvmFieldDescriptorFromMoggiType(jvmForeignIoInnerType($type), $classPath, $member, $module);
     }
 
     $argTypes = [];
@@ -157,7 +226,7 @@ function jvmDescriptorFromMoggiType(
     $params = '';
     $argIndex = 0;
     foreach ($argTypes as $arg) {
-        $params .= jvmTypeDescriptorFromMoggiType($arg, $classPath, false, $member, $dispatch, $argIndex++);
+        $params .= jvmTypeDescriptorFromMoggiType($arg, $classPath, false, $member, $dispatch, $argIndex++, $module);
     }
 
     if ($dispatch === 'constructor') {
@@ -168,10 +237,15 @@ function jvmDescriptorFromMoggiType(
         return '(' . $params . ')V';
     }
 
-    return '(' . $params . ')' . jvmTypeDescriptorFromMoggiType($result, $classPath, true, $member, $dispatch);
+    return '(' . $params . ')' . jvmTypeDescriptorFromMoggiType($result, $classPath, true, $member, $dispatch, 0, $module);
 }
 
-function jvmFieldDescriptorFromMoggiType(Ast\TypeNode $type, ?string $classPath, ?string $member): string
+function jvmFieldDescriptorFromMoggiType(
+    Ast\TypeNode $type,
+    ?string $classPath,
+    ?string $member,
+    ?string $module = null,
+): string
 {
     $key = ($classPath ?? '') . ':' . ($member ?? '');
     $known = [
@@ -185,7 +259,7 @@ function jvmFieldDescriptorFromMoggiType(Ast\TypeNode $type, ?string $classPath,
         return $known[$key];
     }
 
-    return jvmTypeDescriptorFromMoggiType($type, $classPath, true, $member, 'static');
+    return jvmTypeDescriptorFromMoggiType($type, $classPath, true, $member, 'static', 0, $module);
 }
 
 function jvmTypeDescriptorFromMoggiType(
@@ -195,6 +269,7 @@ function jvmTypeDescriptorFromMoggiType(
     ?string $member = null,
     string $dispatch = 'static',
     int $argIndex = 0,
+    ?string $module = null,
 ): string {
     if ($type instanceof Ast\TypeUnit) {
         return 'V';
@@ -212,6 +287,7 @@ function jvmTypeDescriptorFromMoggiType(
                     $member,
                     $dispatch,
                     $argIndex,
+                    $module,
                 );
             }
         }
@@ -225,6 +301,7 @@ function jvmTypeDescriptorFromMoggiType(
                     $member,
                     $dispatch,
                     $argIndex,
+                    $module,
                 );
             }
         }
@@ -266,7 +343,7 @@ function jvmTypeDescriptorFromMoggiType(
         boolTypeName() => 'Z',
         boundaryHandleTypeName() => jvmOpaqueObjectDescriptor($classPath, $isReturn, $dispatch),
         'List' => jvmListDescriptor($classPath, $member),
-        default => jvmForeignTypeDescriptorOrFail($con),
+        default => jvmForeignTypeDescriptorOrFail($con, $module),
     };
 }
 
@@ -295,7 +372,7 @@ function jvmKernelDescriptor(?string $kernelId): ?string
  * Fail closed: declared foreign types lower to their hostType; unknown Moggi
  * constructors are not silently mapped to Ljava/lang/Object;.
  */
-function jvmForeignTypeDescriptorOrFail(?string $con): string
+function jvmForeignTypeDescriptorOrFail(?string $con, ?string $module = null): string
 {
     if ($con === null || $con === '') {
         throw new \RuntimeException(
@@ -303,7 +380,7 @@ function jvmForeignTypeDescriptorOrFail(?string $con): string
         );
     }
 
-    $host = lookupJvmForeignType($con);
+    $host = lookupJvmForeignType($con, $module);
     if ($host === null) {
         throw new \RuntimeException(
             "unknown type `{$con}` in JVM foreign signature; declare"

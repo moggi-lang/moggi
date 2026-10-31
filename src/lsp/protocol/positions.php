@@ -2,16 +2,6 @@
 
 namespace Moggi\LSP\Protocol;
 
-function lspToCompiler(string $source, array $pos): array
-{
-    $lines = splitLines($source);
-    $line0 = \max(0, (int) ($pos['line'] ?? 0));
-    $text = $lines[$line0] ?? '';
-    $col = utf16ToCodepointCol($text, (int) ($pos['character'] ?? 0));
-
-    return ['line' => $line0 + 1, 'col' => $col];
-}
-
 /**
  * Convert a compiler line/col to an LSP position (0-based).
  *

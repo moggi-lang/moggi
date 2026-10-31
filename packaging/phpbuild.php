@@ -25,7 +25,7 @@ use function Moggi\Compiler\findExecutable;
  */
 
 /**
- * The PHP version a micro SAPI runtime is, e.g. `8.5.7`.
+ * The PHP version a micro SAPI runtime is, e.g. `8.5.12`.
  *
  * It has no command line — anything appended to it is the program, and its own
  * banner is what a bare run prints — so its identity comes from that banner

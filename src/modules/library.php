@@ -5,14 +5,12 @@ namespace Moggi\Modules;
 require_once __DIR__ . '/../paths.php';
 
 use Moggi\Cache;
+use Moggi\Semantics\Types\TypeError;
 
 use function Moggi\Install\installationRoot;
-
 use function Moggi\Paths\canonicalPath;
 use function Moggi\Paths\canonicalSeparators;
 use function Moggi\Paths\globPaths;
-
-use Moggi\Semantics\Types\TypeError;
 
 /** Whether `$path` names a stream (`phar://…`) rather than a real filesystem path. */
 function isStreamPath(string $path): bool
@@ -38,10 +36,10 @@ function resolvePath(string $path): string
  * Standard-library / library-root discovery and pinning.
  *
  * This layer owns everything about *where the library lives*: the pinned
- * `--lib` source root, the pinned `--lib-php` compiled-output root, discovery
- * of an unpinned stdlib by walking up from a source file, and the memoized
- * module-name index built over a library root. It has no opinion on module
- * graphs, exports, or codegen.
+ * `--lib` source roots, the `--lib-composer` / `--lib-maven` / `--lib-nuget`
+ * host trees, discovery of an unpinned stdlib by walking up from a source file,
+ * and the memoized module-name index built over a library root. It has no
+ * opinion on module graphs, exports, or codegen.
  */
 
 /** The file that marks a package root, named after the package: `base.moggi`. */
@@ -77,43 +75,6 @@ function libraryRootMarker(string $dir): ?string
 function isLibraryRoot(string $dir): bool
 {
     return libraryRootMarker($dir) !== null;
-}
-
-/**
- * The library package holding `$path`, as a project-relative dir: the nearest
- * enclosing library root, unwrapped — a packaged `src/` root answers its
- * package dir (`libraries/base` for anything under `libraries/base/src`), a
- * flat root answers itself. Null when `$path` is not inside a library package.
- *
- * The single-file require rewriting uses this to read the package-collapsed
- * form: a fixture in `libraries/base` requiring `src/Data/Bool.php` means
- * `libraries/base/src/Data/Bool.php`, which the checkout-relative require
- * prefixes alone cannot see.
- */
-function enclosingLibraryPackageDir(string $path, string $projectRoot): ?string
-{
-    $root = \rtrim(canonicalSeparators(resolvePath($projectRoot)), '/');
-    $dir = canonicalSeparators(resolvePath(\dirname($path)));
-    while (true) {
-        if ($dir === $root || ! \str_starts_with($dir . '/', $root . '/')) {
-            return null;
-        }
-        if (\basename($dir) === 'src' && libraryRootMarker($dir) !== null) {
-            $relative = \substr(\dirname($dir), \strlen($root) + 1);
-
-            return $relative !== '' ? $relative : null;
-        }
-        if (isLibraryRoot($dir)) {
-            $relative = \substr($dir, \strlen($root) + 1);
-
-            return $relative !== '' ? $relative : null;
-        }
-        $parent = \dirname($dir);
-        if ($parent === $dir) {
-            return null;
-        }
-        $dir = $parent;
-    }
 }
 
 /**
@@ -225,6 +186,40 @@ function configuredStdlibLibPath(): ?string
 }
 
 /**
+ * Pin the library roots a session searches, so the module resolver and every
+ * backend dependency scanner see the same set.
+ *
+ * The first root that carries a package descriptor becomes the primary standard
+ * library; every other root is registered as an extra. The split matters beyond
+ * module lookup: a package's vendored jars, CLR metadata and PHP helpers live
+ * under whichever root it was installed into, and only a root registered here is
+ * scanned for them.
+ *
+ * @param list<string> $libDirs
+ */
+function registerLibraryRoots(array $libDirs): void
+{
+    $primary = null;
+    foreach ($libDirs as $dir) {
+        if (isLibraryRoot($dir)) {
+            $primary = $dir;
+
+            break;
+        }
+    }
+
+    if ($primary !== null) {
+        setStdlibLibPath($primary);
+    }
+
+    foreach ($libDirs as $dir) {
+        if ($dir !== $primary && \is_dir($dir)) {
+            addLibraryRoot($dir);
+        }
+    }
+}
+
+/**
  * Every configured library root: the standard library first, then the extras.
  *
  * @return list<string>
@@ -279,48 +274,76 @@ function configuredExtraPaths(): array
 /**
  * Bundled packages that join every compilation alongside the standard
  * library: `<root>/libraries/{time,filepath,directory}/src`, where `<root>`
- * is found the way the bundled stdlib is — `MOGGI_ROOT`, the installed
- * distribution, then the checkout. Empty when the distribution ships no such
- * package.
+ * is found the way the bundled stdlib is — the installed distribution, or the
+ * checkout. Empty when the distribution ships no such package.
  *
  * @return list<string>
  */
 function bundledExtraLibPaths(): array
 {
-    static $cached = false;
-    static $paths = [];
-    if ($cached) {
-        return $paths;
+    static $memoKey = null;
+    static $memoPaths = [];
+    $key = installationCandidatesKey();
+    if ($memoKey === $key) {
+        return $memoPaths;
     }
-    $cached = true;
-
-    $candidates = [];
-    $envRoot = \getenv('MOGGI_ROOT');
-    if (\is_string($envRoot) && $envRoot !== '') {
-        $candidates[] = \rtrim($envRoot, '/\\');
-    }
-    $installRoot = installationRoot();
-    if ($installRoot !== null) {
-        $candidates[] = $installRoot;
-    }
-    $candidates[] = \dirname(__DIR__, 2);
+    $memoKey = $key;
+    $memoPaths = [];
 
     $packages = ['time', 'filepath', 'directory'];
-    foreach ($candidates as $root) {
+    foreach (installationCandidates() as $root) {
         foreach ($packages as $package) {
             $dir = \rtrim($root, '/\\') . DIRECTORY_SEPARATOR . 'libraries'
                 . DIRECTORY_SEPARATOR . $package . DIRECTORY_SEPARATOR . 'src';
             $real = resolvePath($dir);
             if (isLibraryRoot($real)) {
-                $paths[] = $real;
+                $memoPaths[] = $real;
             }
         }
-        if ($paths !== []) {
-            return $paths;
+        if ($memoPaths !== []) {
+            return $memoPaths;
         }
     }
 
-    return $paths;
+    return $memoPaths;
+}
+
+/**
+ * The roots a bundled `libraries/` tree is looked for under, most
+ * authoritative first: the installation this process runs from, then the
+ * checkout it was started from.
+ *
+ * Both are facts of the process, not settings: the installation is the one the
+ * executable was started from (`MOGGI_INSTALL_ROOT`, or the archive's own
+ * location) and the checkout is this tree. There is nothing to point elsewhere.
+ *
+ * @return list<string>
+ */
+function installationCandidates(): array
+{
+    $candidates = [];
+    $installRoot = installationRoot();
+    if ($installRoot !== null) {
+        $candidates[] = $installRoot;
+    }
+    $checkout = \dirname(__DIR__, 2);
+    if (! \in_array($checkout, $candidates, true)) {
+        $candidates[] = $checkout;
+    }
+
+    return $candidates;
+}
+
+/**
+ * The candidate list as a memo key.
+ *
+ * A lookup memoized on the installation must notice the root changing — a test
+ * defines `MOGGI_INSTALL_ROOT` before its first lookup, and the memos must not
+ * answer for the tree that was consulted before it.
+ */
+function installationCandidatesKey(): string
+{
+    return \implode("\0", installationCandidates());
 }
 
 /**
@@ -351,39 +374,33 @@ function libraryScanRoots(): array
 
 /**
  * Standard library shipped next to the compiler: `<root>/libraries/base/src`
- * where `<root>` is an explicit `$MOGGI_ROOT`, the installation an archive
- * lives in (`<installation>/bin/moggi.phar` → `<installation>/libraries/...`),
- * or the checkout.
+ * where `<root>` is the installation an archive lives in
+ * (`<installation>/bin/moggi.phar` → `<installation>/libraries/...`), the
+ * checkout, or a root a test configured.
  */
 function bundledStdlibLibPath(): ?string
 {
-    static $cached = false;
-    static $path = null;
-    if ($cached) {
-        return $path;
+    static $memoKey = null;
+    static $memoPath = null;
+    $key = installationCandidatesKey();
+    if ($memoKey === $key) {
+        return $memoPath;
     }
-    $cached = true;
+    $memoKey = $key;
+    $memoPath = null;
 
     $candidates = [];
-    $envRoot = \getenv('MOGGI_ROOT');
-    if (\is_string($envRoot) && $envRoot !== '') {
-        $candidates[] = \rtrim($envRoot, '/\\') . DIRECTORY_SEPARATOR . 'libraries'
+    foreach (installationCandidates() as $root) {
+        $candidates[] = $root . DIRECTORY_SEPARATOR . 'libraries'
             . DIRECTORY_SEPARATOR . 'base' . DIRECTORY_SEPARATOR . 'src';
     }
-    $installRoot = installationRoot();
-    if ($installRoot !== null) {
-        $candidates[] = $installRoot . DIRECTORY_SEPARATOR . 'libraries'
-            . DIRECTORY_SEPARATOR . 'base' . DIRECTORY_SEPARATOR . 'src';
-    }
-    $candidates[] = \dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'libraries'
-        . DIRECTORY_SEPARATOR . 'base' . DIRECTORY_SEPARATOR . 'src';
 
     foreach ($candidates as $candidate) {
         $real = resolvePath($candidate);
         if (isLibraryRoot($real)) {
-            $path = $real;
+            $memoPath = $real;
 
-            return $path;
+            return $memoPath;
         }
     }
 
@@ -620,101 +637,185 @@ function stdlibModuleIndex(string $stdlibRoot): array
 }
 
 /**
- * Compiled library PHP tree pinned with `--lib-php` (typically a prebuilt stdlib
- * output such as `build/lib`). Used only for single-file compiles so generated
- * `require`s can point at that tree instead of source-tree `*.php` paths.
+ * Host library roots registered with `--lib-composer`, `--lib-maven` or `--lib-nuget`.
+ *
+ * A host root is the resolved closure one package manager produced for this build: a Composer
+ * project (or its `vendor/`), a directory of jars, a directory of DLLs. The backends' dependency
+ * scanners look in these for third-party code; nothing here is searched for `.mog` modules, so a
+ * vendor tree can never shadow a Moggi module, and a host root is not a Moggi library root.
+ *
+ * One compilation owns the set: `clearHostLibraryRoots()` empties it and
+ * `registerHostLibraryRoots()` replaces it, so a second compile in one process cannot inherit the
+ * first one's trees.
  */
-final class ConfiguredStdlibPhp
+final class ConfiguredHostLibraries
 {
-    private static ?string $path = null;
+    /** @var list<string> */
+    private static array $roots = [];
 
-    public static function set(?string $path): void
+    /** The identity of {@see $roots}, or null until it is computed for this set. */
+    private static ?string $material = null;
+
+    /** @param list<string> $roots */
+    public static function set(array $roots): void
     {
-        self::$path = $path;
+        self::$roots = $roots;
+        self::$material = null;
     }
 
-    public static function get(): ?string
+    /** @return list<string> */
+    public static function get(): array
     {
-        return self::$path;
+        return self::$roots;
+    }
+
+    public static function material(): ?string
+    {
+        return self::$material;
+    }
+
+    public static function rememberMaterial(string $material): void
+    {
+        self::$material = $material;
     }
 }
 
-function setStdlibPhpPath(?string $path): void
+/** Forget the host roots a previous compilation in this process registered. */
+function clearHostLibraryRoots(): void
 {
-    if ($path === null) {
-        ConfiguredStdlibPhp::set(null);
-
-        return;
-    }
-
-    $real = \realpath($path);
-    if ($real === false || ! \is_dir($real)) {
-        throw new TypeError("invalid stdlib PHP path `{$path}`");
-    }
-
-    $marker = $real . DIRECTORY_SEPARATOR . 'Data' . DIRECTORY_SEPARATOR . 'Eq.php';
-    if (! \is_file($marker)) {
-        throw new TypeError(
-            "stdlib PHP path `{$path}` is missing `Data/Eq.php`; compile the stdlib first (e.g. `moggi compile lib -o out/lib`)",
-        );
-    }
-
-    ConfiguredStdlibPhp::set($real);
-}
-
-function detectStdlibPhpPath(?string $outputFile): ?string
-{
-    $configured = ConfiguredStdlibPhp::get();
-    if ($configured !== null) {
-        return $configured;
-    }
-
-    if ($outputFile === null) {
-        return null;
-    }
-
-    $dir = \dirname(\realpath($outputFile) ?: $outputFile);
-    if (\is_file($dir . DIRECTORY_SEPARATOR . 'Data' . DIRECTORY_SEPARATOR . 'Eq.php')) {
-        return $dir;
-    }
-
-    $sibling = $dir . DIRECTORY_SEPARATOR . 'lib';
-    if (\is_file($sibling . DIRECTORY_SEPARATOR . 'Data' . DIRECTORY_SEPARATOR . 'Eq.php')) {
-        return $sibling;
-    }
-
-    return null;
+    ConfiguredHostLibraries::set([]);
 }
 
 /**
- * @param array<string, string> $moduleOutputPaths
- * @param array<string, array<string, mixed>> $units
- * @return array<string, string>
+ * Register the host libraries a compile links against.
+ *
+ * The flag names the package manager (`--lib-composer`, `--lib-maven`, `--lib-nuget`) and so the
+ * target: artifacts have to be shaped for the backend being emitted. Each tree is checked for the
+ * artifact that backend's package manager produces, so a path that resolves to nothing usable is
+ * refused here rather than dropped silently.
+ *
+ * A Composer tree may be named by its `vendor/` directory or by the project that owns it; both
+ * register the project, because the artifact always carries `vendor/autoload.php`.
+ *
+ * @param list<string> $paths
  */
-function remapStdlibModuleOutputPaths(
-    array $moduleOutputPaths,
-    array $units,
-    string $stdlibPhpRoot,
-    string $projectRoot,
-): array {
-    $stdlibLib = configuredStdlibLibPath();
-    if ($stdlibLib === null) {
-        return $moduleOutputPaths;
+function registerHostLibraryRoots(string $backend, array $paths): void
+{
+    $roots = [];
+    foreach ($paths as $path) {
+        $real = \realpath($path);
+        if ($real === false || ! \is_dir($real)) {
+            throw new TypeError("host library path `{$path}` is not a directory");
+        }
+        if ($backend === 'php' && \basename($real) === 'vendor' && \is_file($real . '/autoload.php')) {
+            $real = \dirname($real);
+        }
+        assertHostLibraryShape($backend, $real, $path);
+        if (! \in_array($real, $roots, true)) {
+            $roots[] = $real;
+        }
     }
 
-    $out = $moduleOutputPaths;
-    foreach ($moduleOutputPaths as $moduleName => $path) {
-        if (! isset($units[$moduleName])) {
-            continue;
-        }
+    ConfiguredHostLibraries::set($roots);
+}
 
-        if (! isModuleUnderLibraryRoot($units[$moduleName]['path'])) {
-            continue;
-        }
+/**
+ * What each backend's package manager has to leave in the tree a compile is handed.
+ *
+ * One table, so the refusal at registration and the dependency scanners cannot disagree about what
+ * a usable tree is: the paths, relative to the root, that must exist, and the sentence printed when
+ * one is missing. Only the package manager's own artifact is required — a Composer autoloader, jars,
+ * assemblies — never the `.json` type sidecars a Moggi library may add beside them, because a real
+ * NuGet resolution ships DLLs alone and a program that calls only framework types is served by them.
+ *
+ * @return array{0: list<string>, 1: string}
+ */
+function hostLibraryShape(string $backend): array
+{
+    return match ($backend) {
+        'php' => [['vendor/autoload.php'], 'a Composer project (or its `vendor/`), so it must hold `vendor/autoload.php`'],
+        'jvm' => [['*.jar'], 'the classpath Maven resolved, so it must hold jars'],
+        'dotnet' => [['*.dll'], 'the assemblies NuGet resolved, so it must hold DLLs (a package keeps them under `lib/<tfm>/` — name that directory, which is the set a build stages)'],
+        default => throw new TypeError("no host package manager for backend `{$backend}`"),
+    };
+}
 
-        $relative = mogPathToOutputRelative($units[$moduleName]['path'], $stdlibLib . DIRECTORY_SEPARATOR, '.php');
-        $out[$moduleName] = pathWithinProject($stdlibPhpRoot . DIRECTORY_SEPARATOR . $relative, $projectRoot);
+/** Whether `$root` holds the artifact set `$backend`'s package manager produces. */
+function hostLibraryShapeSatisfied(string $backend, string $root): bool
+{
+    foreach (hostLibraryShape($backend)[0] as $relative) {
+        $path = \rtrim($root, '/') . '/' . $relative;
+        $present = \str_starts_with($relative, '*')
+            ? globPaths($path) !== []
+            : \is_file($path);
+        if (! $present) {
+            return false;
+        }
     }
 
-    return $out;
+    return true;
+}
+
+/** Refuse a host tree that does not hold the artifact its package manager produces. */
+function assertHostLibraryShape(string $backend, string $root, string $shown): void
+{
+    if (! hostLibraryShapeSatisfied($backend, $root)) {
+        throw new TypeError("`{$shown}` is not " . hostLibraryShape($backend)[1]);
+    }
+}
+
+/** @return list<string> */
+function hostLibraryRoots(): array
+{
+    return ConfiguredHostLibraries::get();
+}
+
+/**
+ * The host trees a compilation is linked against, as one cache-key component: each tree's canonical
+ * path plus a content hash of every file under it, so an edit in place is a different identity too.
+ * Empty when no tree is registered. Computed once per set, since keys are evaluated per module.
+ */
+function hostLibraryCacheMaterial(): string
+{
+    $roots = hostLibraryRoots();
+    if ($roots === []) {
+        return '';
+    }
+
+    $remembered = ConfiguredHostLibraries::material();
+    if ($remembered !== null) {
+        return $remembered;
+    }
+
+    \sort($roots, \SORT_STRING);
+    $parts = [];
+    foreach ($roots as $root) {
+        $real = \realpath($root);
+        if ($real === false || ! \is_dir($real)) {
+            $parts[] = 'tree=' . $root . ':missing';
+
+            continue;
+        }
+        $parts[] = 'tree=' . $real;
+        $files = [];
+        $items = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($real, \FilesystemIterator::SKIP_DOTS),
+        );
+        /** @var \SplFileInfo $item */
+        foreach ($items as $item) {
+            if (! $item->isFile()) {
+                continue;
+            }
+            $path = $item->getPathname();
+            $hash = @\hash_file('xxh128', $path);
+            $files[] = \substr($path, \strlen($real) + 1) . ':' . ($hash === false ? 'unreadable' : $hash);
+        }
+        \sort($files, \SORT_STRING);
+        $parts[] = \implode("\n", $files);
+    }
+
+    $material = \hash('xxh128', \implode("\n", $parts));
+    ConfiguredHostLibraries::rememberMaterial($material);
+
+    return $material;
 }

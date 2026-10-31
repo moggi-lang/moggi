@@ -2,12 +2,11 @@
 
 namespace Moggi\LSP\Index;
 
-use function Moggi\LSP\Protocol\nodeToLspRange;
+use Moggi\Syntax\Ast;
 
+use function Moggi\LSP\Protocol\nodeToLspRange;
 use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Modules\resolvedSymbol;
-
-use Moggi\Syntax\Ast;
 
 final class SymbolOccurrence
 {
@@ -337,9 +336,10 @@ function buildOccurrenceIndex(
             return;
         }
         foreach (\get_object_vars($node) as $key => $prop) {
-            if ($key === 'inferredType') {
+            if (in_array($key, ['inferredType', 'inferredInternalType', 'core'], true)) {
                 continue;
             }
+
             if (\is_object($prop)) {
                 if ($prop instanceof Ast\TypeNode) {
                     continue;
@@ -401,15 +401,6 @@ function extractCallHead(object $fn, string $moduleName, array $externalFns): ?a
 
     return null;
 }
-function resolveSymbolParts(?string $resolved): ?array
-{
-    if ($resolved === null || $resolved === '') {
-        return null;
-    }
-
-    return parseResolvedSymbol($resolved);
-}
-
 /** Stable binder key: module-scoped so OccurrenceIndex merges never collide. */
 function binderResolved(string $module, int $binderId): string
 {

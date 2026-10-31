@@ -230,6 +230,16 @@ final class CodeBuilder
         ];
     }
 
+    /**
+     * The finished LineNumberTable: the lines this method's debug info can report.
+     *
+     * @return list<array{pc: int, line: int}>
+     */
+    public function lineTable(): array
+    {
+        return $this->lineNumbers;
+    }
+
     /** Record a LineNumberTable entry at the current PC (Moggi source line). */
     public function noteLine(int $line): void
     {
@@ -334,37 +344,6 @@ final class CodeBuilder
         $this->maxLocals = \max($this->maxLocals, $i + 1);
     }
 
-    public function dload(int $i): void
-    {
-        if ($i <= 3) {
-            $this->opcode(0x26 + $i, 2);
-        } elseif ($i <= 255) {
-            $this->opcode(0x18, 2);
-            $this->code .= \chr($i);
-        } else {
-            $this->emitWideLoadStore(0x18, $i, 2);
-        }
-        $this->maxLocals = \max($this->maxLocals, $i + 2);
-    }
-
-    public function dstore(int $i): void
-    {
-        if ($i <= 3) {
-            $this->opcode(0x47 + $i, -2);
-        } elseif ($i <= 255) {
-            $this->opcode(0x39, -2);
-            $this->code .= \chr($i);
-        } else {
-            $this->emitWideLoadStore(0x39, $i, -2);
-        }
-        $this->maxLocals = \max($this->maxLocals, $i + 2);
-    }
-
-    public function dreturn(): void
-    {
-        $this->opcode(0xaf, -2);
-    }
-
     public function aload(int $i): void
     {
         if ($i <= 3) {
@@ -440,9 +419,13 @@ final class CodeBuilder
         $this->opcode(0x5f, 0);
     }
 
-    public function getstatic(int $fieldRef): void
+    /**
+     * Push a static field. `$slots` is the field's descriptor width: 2 for a `long`/`double`
+     * field, which is what the max-stack computation and the verifier count, not one value.
+     */
+    public function getstatic(int $fieldRef, int $slots = 1): void
     {
-        $this->opcode(0xb2, 1);
+        $this->opcode(0xb2, $slots);
         $this->code .= u2($fieldRef);
     }
 
@@ -648,11 +631,6 @@ final class CodeBuilder
         $this->branch(0xc7, $label, -1);
     }
 
-    public function if_icmpeq(string $label): void
-    {
-        $this->branch(0x9f, $label, -2);
-    }
-
     public function if_icmpne(string $label): void
     {
         $this->branch(0xa0, $label, -2);
@@ -666,11 +644,6 @@ final class CodeBuilder
     public function if_icmpge(string $label): void
     {
         $this->branch(0xa2, $label, -2);
-    }
-
-    public function if_acmpeq(string $label): void
-    {
-        $this->branch(0xa5, $label, -2);
     }
 
     public function if_acmpne(string $label): void
@@ -705,16 +678,6 @@ final class CodeBuilder
         $this->opcode(0x68, -1);
     }
 
-    public function idiv(): void
-    {
-        $this->opcode(0x6c, -1);
-    }
-
-    public function ineg(): void
-    {
-        $this->opcode(0x74, 0);
-    }
-
     public function ladd(): void
     {
         $this->opcode(0x61, -2);
@@ -743,11 +706,6 @@ final class CodeBuilder
     public function lneg(): void
     {
         $this->opcode(0x75, 0);
-    }
-
-    public function lrem(): void
-    {
-        $this->opcode(0x71, -2);
     }
 
     public function lcmp(): void
@@ -783,11 +741,6 @@ final class CodeBuilder
     public function d2l(): void
     {
         $this->opcode(0x8f, 0);
-    }
-
-    public function l2d(): void
-    {
-        $this->opcode(0x8a, 0);
     }
 
     public function lreturn(): void

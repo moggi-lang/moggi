@@ -27,8 +27,6 @@ $assert = static function (bool $condition, string $message): void {
 $tmp = \sys_get_temp_dir() . '/moggi-lsp-rename-' . \bin2hex(\random_bytes(4));
 $assert(\mkdir($tmp), 'create temp dir');
 
-// willRenameFiles: single file rename rewrites importers + module decl
-
 $svc = new AnalysisService();
 $svc->setWorkspaceRoot($tmp);
 
@@ -55,15 +53,10 @@ $assert(\str_contains($importerNew, 'Olde.Sub.thing'), 'submodule reference NOT 
 $assert(\str_contains($importerNew, '"Olde.marker stays a string"'), 'string literals untouched');
 $assert(\str_contains($importerNew, '-- Olde.marker stays a comment'), 'line comments untouched');
 $assert(! \preg_match('/^import .*\bOlde\b/m', $importerNew), 'no import line references the old module');
-
-// The renamed document itself gets its `module` declaration rewritten.
 $moduleEdits = $changes[pathToUri($newPath)] ?? $changes[pathToUri($oldPath)] ?? [];
 $assert($moduleEdits !== [], 'module declaration is rewritten in the renamed file');
 $moduleNew = $moduleEdits[0]['newText'] ?? '';
 $assert(\str_contains($moduleNew, 'module Newe where'), 'module decl renamed: ' . \json_encode($moduleNew));
-
-// willRenameFiles: DIRECTORY rename rewrites the dotted module prefix
-// (3.18 fileOperations.willRename — VS Code sends folder renames too)
 
 $dirSvc = new AnalysisService();
 $dirSvc->setWorkspaceRoot($tmp);
@@ -95,24 +88,16 @@ $assert(\str_contains($userNew, 'import Modern.Alpha (av)'), 'partial-import lis
 $assert(\str_contains($userNew, 'import Modern.Beta'), 'external import of renamed dir rewritten');
 $assert(! \str_contains($userNew, 'Ancient'), 'no stale prefix remains in external importer');
 
-// willRenameFiles: no-op cases return no edits
-
 $sameSvc = new AnalysisService();
 $sameSvc->setWorkspaceRoot($tmp);
 $sameSvc->openDocument(pathToUri($oldPath), $moduleSrc, 1);
 
 $assert(svcWillRenameFiles($sameSvc, []) === [], 'empty file list yields no edits');
-// Missing URIs are skipped, not fatal.
 $assert(svcWillRenameFiles($sameSvc, [['oldUri' => '', 'newUri' => '']]) === [], 'empty URIs are skipped');
-// Renaming to the same module guess yields no edits.
 $sameChanges = svcWillRenameFiles($sameSvc, [
     ['oldUri' => pathToUri($oldPath), 'newUri' => pathToUri($tmp . '/sub/Olde.mog')],
 ]);
-// sub/Olde.mog maps to module `sub.Olde`? No — lowercase dir is skipped by the
-// uppercase rule, so the module guess stays `Olde` → no edits.
 $assert(($sameChanges[pathToUri($oldPath)] ?? []) === [], 'same-module rename is a no-op');
-
-// willDeleteFiles: dangling import cleanup
 
 $delSvc = new AnalysisService();
 $delSvc->setWorkspaceRoot($tmp);
@@ -130,14 +115,10 @@ $user2New = $user2Edits[0]['newText'] ?? '';
 $assert(! \str_contains($user2New, 'import Goner'), 'both Goner imports removed: ' . \json_encode($user2New));
 $assert(\str_contains($user2New, 'import Data.Maybe'), 'unrelated imports preserved');
 $assert(\str_contains($user2New, 'module User2 where'), 'module decl preserved');
-
-// Deleting an unrelated file yields no edits.
 $unrelated = svcWillDeleteFiles($delSvc, [
     ['uri' => pathToUri($tmp . '/Unrelated.mog')],
 ]);
 $assert(($unrelated[$user2Uri] ?? []) === [], 'deleting an unimported file yields no edits');
-
-// Directory delete: dotted-prefix imports are removed too.
 $dirDelSvc = new AnalysisService();
 $dirDelSvc->setWorkspaceRoot($tmp);
 $oldDirUri = pathToUri($tmp . '/Archive');
@@ -154,8 +135,6 @@ $user3New = $user3Edits[0]['newText'] ?? '';
 $assert(! \str_contains($user3New, 'import Archive.A2'), 'dotted-prefix import removed on dir delete');
 $assert(\str_contains($user3New, 'import Data.List'), 'unrelated imports preserved on dir delete');
 
-// onTypeFormatting: trigger variants
-
 $fmtSvc = new AnalysisService();
 $fmtSvc->setWorkspaceRoot($tmp);
 $messyUri = pathToUri($tmp . '/Messy.mog');
@@ -163,8 +142,6 @@ $messySrc = "module Messy where\n\ng :: Int\ng=1\n\nh x = x\n";
 $fmtSvc->openDocument($messyUri, $messySrc, 1);
 $fmtSvc->ensureAnalyzed($messyUri);
 $anywhere = ['line' => 3, 'character' => 4];
-
-// Advertised trigger characters produce a whole-document TextEdit.
 foreach (['{', '}', ';'] as $trigger) {
     $edits = svcOnTypeFormatting($fmtSvc, $messyUri, $anywhere, $trigger, ['tabSize' => 4, 'insertSpaces' => true]);
     $assert(\is_array($edits), "trigger '{$trigger}' returns an array");
@@ -173,21 +150,15 @@ foreach (['{', '}', ';'] as $trigger) {
         $assert(\str_contains($edits[0]['newText'], 'g = 1'), "trigger '{$trigger}' edit fixes spacing: " . \json_encode($edits[0]['newText']));
     }
 }
-
-// Unadvertised trigger characters must be rejected (empty result, no reformat).
 foreach (['=', "\n", '(', 'x'] as $unadvertised) {
     $edits = svcOnTypeFormatting($fmtSvc, $messyUri, $anywhere, $unadvertised, ['tabSize' => 4]);
     $assert($edits === [], "unadvertised trigger '{$unadvertised}' yields no edits: " . \json_encode($edits));
 }
-
-// Already-formatted document → no edits (server must not loop reformatting).
 $tidyUri = pathToUri($tmp . '/Tidy.mog');
 $tidySrc = "module Tidy where\n\ng :: Int\ng = 1\n";
 $fmtSvc->openDocument($tidyUri, $tidySrc, 1);
 $fmtSvc->ensureAnalyzed($tidyUri);
 $assert(svcOnTypeFormatting($fmtSvc, $tidyUri, ['line' => 3, 'character' => 0], '{', []) === [], 'already-formatted document yields no edits');
-
-// Unknown document → no edits, no crash.
 $assert(svcOnTypeFormatting($fmtSvc, pathToUri($tmp . '/Missing.mog'), $anywhere, '{', []) === [], 'unknown document yields no edits');
 
 @\unlink($oldPath);

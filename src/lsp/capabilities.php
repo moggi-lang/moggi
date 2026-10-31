@@ -4,53 +4,6 @@ namespace Moggi\LSP;
 
 use Moggi\LSP\Analysis\AnalysisService;
 
-use function Moggi\LSP\Formatter\svcFormatDocument;
-use function Moggi\LSP\Formatter\svcFormatRange;
-use function Moggi\LSP\TextDocument\documentChangesWorkspaceEdit;
-use function Moggi\LSP\TextDocument\semanticTokensLegend;
-use function Moggi\LSP\TextDocument\svcCallHierarchyIncoming;
-use function Moggi\LSP\TextDocument\svcCallHierarchyOutgoing;
-use function Moggi\LSP\TextDocument\svcCallHierarchyPrepare;
-use function Moggi\LSP\TextDocument\svcCodeActionResolve;
-use function Moggi\LSP\TextDocument\svcCodeActions;
-use function Moggi\LSP\TextDocument\svcCodeLens;
-use function Moggi\LSP\TextDocument\svcColorPresentations;
-use function Moggi\LSP\TextDocument\svcCompletion;
-use function Moggi\LSP\TextDocument\svcCompletionResolve;
-use function Moggi\LSP\TextDocument\svcDeclaration;
-use function Moggi\LSP\TextDocument\svcDefinition;
-use function Moggi\LSP\TextDocument\svcDiagnostic;
-use function Moggi\LSP\TextDocument\svcDocumentColors;
-use function Moggi\LSP\TextDocument\svcDocumentHighlight;
-use function Moggi\LSP\TextDocument\svcDocumentLinkResolve;
-use function Moggi\LSP\TextDocument\svcDocumentLinks;
-use function Moggi\LSP\TextDocument\svcDocumentSymbols;
-use function Moggi\LSP\TextDocument\svcFoldingRanges;
-use function Moggi\LSP\TextDocument\svcHover;
-use function Moggi\LSP\TextDocument\svcImplementation;
-use function Moggi\LSP\TextDocument\svcInlayHintResolve;
-use function Moggi\LSP\TextDocument\svcInlayHints;
-use function Moggi\LSP\TextDocument\svcInlineValues;
-use function Moggi\LSP\TextDocument\svcLinkedEditing;
-use function Moggi\LSP\TextDocument\svcMoniker;
-use function Moggi\LSP\TextDocument\svcOnTypeFormatting;
-use function Moggi\LSP\TextDocument\svcPrepareRename;
-use function Moggi\LSP\TextDocument\svcReferences;
-use function Moggi\LSP\TextDocument\svcRename;
-use function Moggi\LSP\TextDocument\svcSelectionRange;
-use function Moggi\LSP\TextDocument\svcSemanticTokens;
-use function Moggi\LSP\TextDocument\svcSemanticTokensFullDelta;
-use function Moggi\LSP\TextDocument\svcSemanticTokensRange;
-use function Moggi\LSP\TextDocument\svcSignatureHelp;
-use function Moggi\LSP\TextDocument\svcTypeDefinition;
-use function Moggi\LSP\TextDocument\svcTypeHierarchyPrepare;
-use function Moggi\LSP\TextDocument\svcTypeHierarchySubtypes;
-use function Moggi\LSP\TextDocument\svcTypeHierarchySupertypes;
-use function Moggi\LSP\TextDocument\svcWorkspaceDiagnostic;
-use function Moggi\LSP\TextDocument\svcWorkspaceSymbol;
-use function Moggi\LSP\Workspace\svcWillDeleteFiles;
-use function Moggi\LSP\Workspace\svcWillRenameFiles;
-
 const FEATURE_CAPABILITIES = [
     'textDocument/hover' => 'hoverProvider',
     'textDocument/definition' => 'definitionProvider',
@@ -141,7 +94,7 @@ function serverCapabilities(): array
         'documentSymbolProvider' => ['hierarchicalDocumentSymbolSupport' => true, 'dynamicRegistration' => true],
         'workspaceSymbolProvider' => ['dynamicRegistration' => true],
         'semanticTokensProvider' => [
-            'legend' => semanticTokensLegend(),
+            'legend' => TextDocument\semanticTokensLegend(),
             'full' => ['delta' => true],
             'range' => ['delta' => true],
             'dynamicRegistration' => true,
@@ -217,70 +170,70 @@ function dispatchPos(array $params): array
 function lspMethodHandlers(): array
 {
     return [
-        'textDocument/hover' => static fn (AnalysisService $svc, array $params): mixed => svcHover($svc, dispatchUri($params), dispatchPos($params)),
-        'textDocument/definition' => static fn (AnalysisService $svc, array $params): mixed => svcDefinition($svc, dispatchUri($params), dispatchPos($params)),
-        'textDocument/typeDefinition' => static fn (AnalysisService $svc, array $params): mixed => svcTypeDefinition($svc, dispatchUri($params), dispatchPos($params)),
-        'textDocument/implementation' => static fn (AnalysisService $svc, array $params): mixed => svcImplementation($svc, dispatchUri($params), dispatchPos($params)),
-        'textDocument/references' => static fn (AnalysisService $svc, array $params): mixed => svcReferences(
+        'textDocument/hover' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcHover($svc, dispatchUri($params), dispatchPos($params)),
+        'textDocument/definition' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcDefinition($svc, dispatchUri($params), dispatchPos($params)),
+        'textDocument/typeDefinition' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcTypeDefinition($svc, dispatchUri($params), dispatchPos($params)),
+        'textDocument/implementation' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcImplementation($svc, dispatchUri($params), dispatchPos($params)),
+        'textDocument/references' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcReferences(
             $svc,
             dispatchUri($params),
             dispatchPos($params),
             (bool) ($params['context']['includeDeclaration'] ?? true),
         ),
-        'textDocument/documentHighlight' => static fn (AnalysisService $svc, array $params): mixed => svcDocumentHighlight($svc, dispatchUri($params), dispatchPos($params)),
-        'textDocument/completion' => static fn (AnalysisService $svc, array $params): mixed => svcCompletion($svc, dispatchUri($params), dispatchPos($params)),
-        'completionItem/resolve' => static fn (AnalysisService $svc, array $params): mixed => svcCompletionResolve($svc, $params),
-        'textDocument/signatureHelp' => static fn (AnalysisService $svc, array $params): mixed => svcSignatureHelp($svc, dispatchUri($params), dispatchPos($params)),
-        'textDocument/documentSymbol' => static fn (AnalysisService $svc, array $params): mixed => svcDocumentSymbols($svc, dispatchUri($params)),
-        'textDocument/semanticTokens/full' => static fn (AnalysisService $svc, array $params): mixed => svcSemanticTokens($svc, dispatchUri($params)),
+        'textDocument/documentHighlight' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcDocumentHighlight($svc, dispatchUri($params), dispatchPos($params)),
+        'textDocument/completion' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcCompletion($svc, dispatchUri($params), dispatchPos($params)),
+        'completionItem/resolve' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcCompletionResolve($svc, $params),
+        'textDocument/signatureHelp' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcSignatureHelp($svc, dispatchUri($params), dispatchPos($params)),
+        'textDocument/documentSymbol' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcDocumentSymbols($svc, dispatchUri($params)),
+        'textDocument/semanticTokens/full' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcSemanticTokens($svc, dispatchUri($params)),
         'textDocument/semanticTokens/full/delta' => static fn (AnalysisService $svc, array $params): mixed => isset($params['previousResultId'])
-            ? svcSemanticTokensFullDelta($svc, dispatchUri($params), $params)
-            : svcSemanticTokens($svc, dispatchUri($params)),
-        'textDocument/semanticTokens/range' => static fn (AnalysisService $svc, array $params): mixed => svcSemanticTokensRange($svc, dispatchUri($params), $params['range'] ?? []),
-        'textDocument/prepareRename' => static fn (AnalysisService $svc, array $params): mixed => svcPrepareRename($svc, dispatchUri($params), dispatchPos($params)),
-        'textDocument/rename' => static fn (AnalysisService $svc, array $params): mixed => svcRename($svc, dispatchUri($params), dispatchPos($params), (string) ($params['newName'] ?? '')),
-        'textDocument/codeAction' => static fn (AnalysisService $svc, array $params): mixed => svcCodeActions(
+            ? TextDocument\svcSemanticTokensFullDelta($svc, dispatchUri($params), $params)
+            : TextDocument\svcSemanticTokens($svc, dispatchUri($params)),
+        'textDocument/semanticTokens/range' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcSemanticTokensRange($svc, dispatchUri($params), $params['range'] ?? []),
+        'textDocument/prepareRename' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcPrepareRename($svc, dispatchUri($params), dispatchPos($params)),
+        'textDocument/rename' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcRename($svc, dispatchUri($params), dispatchPos($params), (string) ($params['newName'] ?? '')),
+        'textDocument/codeAction' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcCodeActions(
             $svc,
             dispatchUri($params),
             $params['range'] ?? ['start' => dispatchPos($params), 'end' => dispatchPos($params)],
             $params['context'] ?? [],
         ),
-        'textDocument/codeLens' => static fn (AnalysisService $svc, array $params): mixed => svcCodeLens($svc, dispatchUri($params)),
-        'textDocument/foldingRange' => static fn (AnalysisService $svc, array $params): mixed => svcFoldingRanges($svc, dispatchUri($params)),
-        'textDocument/selectionRange' => static fn (AnalysisService $svc, array $params): mixed => svcSelectionRange($svc, dispatchUri($params), $params['positions'] ?? [dispatchPos($params)]),
-        'textDocument/formatting' => static fn (AnalysisService $svc, array $params): mixed => svcFormatDocument($svc, dispatchUri($params)),
-        'textDocument/rangeFormatting' => static fn (AnalysisService $svc, array $params): mixed => svcFormatRange($svc, dispatchUri($params), $params['range'] ?? []),
-        'textDocument/inlayHint' => static fn (AnalysisService $svc, array $params): mixed => svcInlayHints($svc, dispatchUri($params), $params['range'] ?? []),
-        'textDocument/linkedEditingRange' => static fn (AnalysisService $svc, array $params): mixed => svcLinkedEditing($svc, dispatchUri($params), dispatchPos($params)),
-        'textDocument/declaration' => static fn (AnalysisService $svc, array $params): mixed => svcDeclaration($svc, dispatchUri($params), dispatchPos($params)),
-        'textDocument/documentLink' => static fn (AnalysisService $svc, array $params): mixed => svcDocumentLinks($svc, dispatchUri($params)),
-        'documentLink/resolve' => static fn (AnalysisService $svc, array $params): mixed => svcDocumentLinkResolve($svc, $params),
-        'textDocument/inlineValue' => static fn (AnalysisService $svc, array $params): mixed => svcInlineValues($svc, dispatchUri($params), $params['range'] ?? []),
-        'inlayHint/resolve' => static fn (AnalysisService $svc, array $params): mixed => svcInlayHintResolve($svc, $params),
-        'codeAction/resolve' => static fn (AnalysisService $svc, array $params): mixed => svcCodeActionResolve($svc, $params),
-        'textDocument/documentColor' => static fn (AnalysisService $svc, array $params): mixed => svcDocumentColors($svc, dispatchUri($params)),
-        'textDocument/colorPresentation' => static fn (AnalysisService $svc, array $params): mixed => svcColorPresentations($svc, dispatchUri($params), $params['color'] ?? [], $params['range'] ?? [], $params['context'] ?? []),
-        'textDocument/onTypeFormatting' => static fn (AnalysisService $svc, array $params): mixed => svcOnTypeFormatting($svc, dispatchUri($params), $params['position'] ?? dispatchPos($params), $params['ch'] ?? '', $params['options'] ?? []),
-        'textDocument/moniker' => static fn (AnalysisService $svc, array $params): mixed => svcMoniker($svc, dispatchUri($params), dispatchPos($params)),
-        'textDocument/diagnostic' => static fn (AnalysisService $svc, array $params): mixed => svcDiagnostic($svc, dispatchUri($params), $params),
+        'textDocument/codeLens' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcCodeLens($svc, dispatchUri($params)),
+        'textDocument/foldingRange' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcFoldingRanges($svc, dispatchUri($params)),
+        'textDocument/selectionRange' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcSelectionRange($svc, dispatchUri($params), $params['positions'] ?? [dispatchPos($params)]),
+        'textDocument/formatting' => static fn (AnalysisService $svc, array $params): mixed => Formatter\svcFormatDocument($svc, dispatchUri($params)),
+        'textDocument/rangeFormatting' => static fn (AnalysisService $svc, array $params): mixed => Formatter\svcFormatRange($svc, dispatchUri($params), $params['range'] ?? []),
+        'textDocument/inlayHint' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcInlayHints($svc, dispatchUri($params), $params['range'] ?? []),
+        'textDocument/linkedEditingRange' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcLinkedEditing($svc, dispatchUri($params), dispatchPos($params)),
+        'textDocument/declaration' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcDeclaration($svc, dispatchUri($params), dispatchPos($params)),
+        'textDocument/documentLink' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcDocumentLinks($svc, dispatchUri($params)),
+        'documentLink/resolve' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcDocumentLinkResolve($svc, $params),
+        'textDocument/inlineValue' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcInlineValues($svc, dispatchUri($params), $params['range'] ?? []),
+        'inlayHint/resolve' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcInlayHintResolve($svc, $params),
+        'codeAction/resolve' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcCodeActionResolve($svc, $params),
+        'textDocument/documentColor' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcDocumentColors($svc, dispatchUri($params)),
+        'textDocument/colorPresentation' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcColorPresentations($svc, dispatchUri($params), $params['color'] ?? [], $params['range'] ?? [], $params['context'] ?? []),
+        'textDocument/onTypeFormatting' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcOnTypeFormatting($svc, dispatchUri($params), $params['position'] ?? dispatchPos($params), $params['ch'] ?? '', $params['options'] ?? []),
+        'textDocument/moniker' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcMoniker($svc, dispatchUri($params), dispatchPos($params)),
+        'textDocument/diagnostic' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcDiagnostic($svc, dispatchUri($params), $params),
         'workspace/diagnostic/refresh' => static fn (AnalysisService $svc, array $params): mixed => null,
-        'workspace/diagnostic' => static fn (AnalysisService $svc, array $params): mixed => svcWorkspaceDiagnostic($svc, $params),
-        'workspace/symbol' => static fn (AnalysisService $svc, array $params): mixed => svcWorkspaceSymbol($svc, (string) ($params['query'] ?? '')),
+        'workspace/diagnostic' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcWorkspaceDiagnostic($svc, $params),
+        'workspace/symbol' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcWorkspaceSymbol($svc, (string) ($params['query'] ?? '')),
         'workspaceSymbol/resolve' => static fn (AnalysisService $svc, array $params): mixed => $params,
-        'workspace/willRenameFiles' => static fn (AnalysisService $svc, array $params): mixed => documentChangesWorkspaceEdit(
+        'workspace/willRenameFiles' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\documentChangesWorkspaceEdit(
             $svc,
-            svcWillRenameFiles($svc, $params['files'] ?? []),
+            Workspace\svcWillRenameFiles($svc, $params['files'] ?? []),
         ),
-        'workspace/willDeleteFiles' => static fn (AnalysisService $svc, array $params): mixed => documentChangesWorkspaceEdit(
+        'workspace/willDeleteFiles' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\documentChangesWorkspaceEdit(
             $svc,
-            svcWillDeleteFiles($svc, $params['files'] ?? []),
+            Workspace\svcWillDeleteFiles($svc, $params['files'] ?? []),
         ),
-        'textDocument/prepareCallHierarchy' => static fn (AnalysisService $svc, array $params): mixed => svcCallHierarchyPrepare($svc, dispatchUri($params), dispatchPos($params)),
-        'callHierarchy/incomingCalls' => static fn (AnalysisService $svc, array $params): mixed => svcCallHierarchyIncoming($svc, $params['item'] ?? []),
-        'callHierarchy/outgoingCalls' => static fn (AnalysisService $svc, array $params): mixed => svcCallHierarchyOutgoing($svc, $params['item'] ?? []),
-        'textDocument/prepareTypeHierarchy' => static fn (AnalysisService $svc, array $params): mixed => svcTypeHierarchyPrepare($svc, dispatchUri($params), dispatchPos($params)),
-        'typeHierarchy/supertypes' => static fn (AnalysisService $svc, array $params): mixed => svcTypeHierarchySupertypes($svc, $params['item'] ?? []),
-        'typeHierarchy/subtypes' => static fn (AnalysisService $svc, array $params): mixed => svcTypeHierarchySubtypes($svc, $params['item'] ?? []),
+        'textDocument/prepareCallHierarchy' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcCallHierarchyPrepare($svc, dispatchUri($params), dispatchPos($params)),
+        'callHierarchy/incomingCalls' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcCallHierarchyIncoming($svc, $params['item'] ?? []),
+        'callHierarchy/outgoingCalls' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcCallHierarchyOutgoing($svc, $params['item'] ?? []),
+        'textDocument/prepareTypeHierarchy' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcTypeHierarchyPrepare($svc, dispatchUri($params), dispatchPos($params)),
+        'typeHierarchy/supertypes' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcTypeHierarchySupertypes($svc, $params['item'] ?? []),
+        'typeHierarchy/subtypes' => static fn (AnalysisService $svc, array $params): mixed => TextDocument\svcTypeHierarchySubtypes($svc, $params['item'] ?? []),
         'window/workDoneProgress/create' => static fn (AnalysisService $svc, array $params): mixed => null,
         'workspace/executeCommand' => static fn (AnalysisService $svc, array $params): mixed => null,
     ];

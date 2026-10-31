@@ -81,12 +81,6 @@ function parseDotNetCoordinate(string $coordinate): array
     return ['id' => $parts[0], 'version' => $parts[1] ?? null];
 }
 
-/**
- * The module a bound library lives in: `Acme.Hello` is `Nuget.Acme.Hello`.
- * The ecosystem prefix keeps three backends' bindings apart (R7); id dots
- * become nesting so the module/file law resolves the generated module with no
- * new lookup rule.
- */
 function dotNetBindModuleName(string $id): string
 {
     $segments = ['Nuget'];
@@ -101,6 +95,9 @@ function dotNetBindModuleName(string $id): string
  * Describe the bindable types of a tree: assemblies under a `dotnet`
  * directory whose simple name matches the package id, keeping the types under
  * the id's namespace.
+ *
+ * `$treeRoot` is the resolver's tree, which holds the `dotnet/` directory
+ * {@see \Moggi\Registry\hostToolArtifactRoot()} forwards to `--lib-nuget` — not that root itself.
  *
  * @return array{backend: string, coordinate: string, module: string, assemblies: list<array{file: string, name: string, digest: string}>, types: list<array<string, mixed>>, functions: list<array<string, mixed>>, consts: list<array<string, mixed>>, skipped: list<array{symbol: string, reason: string}>, sidecar: array<string, mixed>}
  */

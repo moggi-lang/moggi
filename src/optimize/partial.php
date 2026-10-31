@@ -2,176 +2,233 @@
 
 namespace Moggi\Optimize\Partial;
 
-use Moggi\Backend\Php\Emit\emitApplyExpr;
 use Moggi\IR;
+use Moggi\Syntax\Ast;
 
+use Moggi\IR\Callables\CallableTable;
+use function Moggi\IR\Callables\table;
 use function Moggi\IR\Visit\mapOperandChildren;
-
 use function Moggi\IR\Visit\stmtDirectOperands;
 use function Moggi\IR\Visit\stmtNestedBlocks;
 use function Moggi\Optimize\GlobalPass\rewriteStmtOperands;
 use function Moggi\Optimize\Interproc\indexFunctions;
 use function Moggi\Optimize\Interproc\isSimpleLambda;
-use function Moggi\Optimize\Support\buildLambdaMeta;
-use function Moggi\Optimize\Support\indexCapturedFunctions;
-use function Moggi\Optimize\Support\isCapturedFnName;
-use function Moggi\Optimize\Support\isLambdaName;
+use function Moggi\Optimize\Interproc\maxTempInItems;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
-use function Moggi\Optimize\Support\operandToExpr;
-
-use Moggi\Syntax\Ast;
-
-/** @param list<IR\FunctionDecl> $functions */
-function bindLambdaCaptures(array $functions): array
-{
-    $meta = buildLambdaMeta(indexCapturedFunctions($functions));
-
-    return \array_map(
-        static fn (IR\FunctionDecl $function): IR\FunctionDecl => $function->withBody(
-            new IR\Block(bindLambdaCapturesItems($function->body->items, $meta)),
-        ),
-        $functions,
-    );
-}
+use function Moggi\Optimize\Support\scheduleCall;
+use function Moggi\Optimize\Support\tempUseCountsInItems;
 
 /**
- * @param list<IR\Stmt> $items
- * @param array<string, array{captures: list<string>, params: list<string>}> $meta
- * @return list<IR\Stmt>
- */
-function bindLambdaCapturesItems(array $items, array $meta): array
-{
-    return \array_map(
-        static fn (IR\Stmt $item): IR\Stmt => bindLambdaCapturesStmt($item, $meta),
-        $items,
-    );
-}
-
-/**
- * @param array<string, array{captures: list<string>, params: list<string>}> $meta
- */
-function bindLambdaCapturesStmt(IR\Stmt $stmt, array $meta): IR\Stmt
-{
-    return match ($stmt::class) {
-        IR\Ret::class => new IR\Ret(bindLambdaCapturesOperand($stmt->value, $meta)),
-        IR\Assign::class => new IR\Assign($stmt->dest, bindLambdaCapturesOperand($stmt->value, $meta)),
-        IR\Let::class => new IR\Let($stmt->name, bindLambdaCapturesOperand($stmt->value, $meta)),
-        IR\Binop::class => new IR\Binop(
-            $stmt->op,
-            bindLambdaCapturesOperand($stmt->left, $meta),
-            bindLambdaCapturesOperand($stmt->right, $meta),
-            $stmt->dest,
-        ),
-        IR\Call::class => new IR\Call(
-            $stmt->callee,
-            captureArgsForCall($stmt->callee, \array_map(
-                static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta),
-                $stmt->args,
-            ), $meta),
-            $stmt->dest,
-            $stmt->srcLoc,
-        ),
-        IR\CallValue::class => new IR\CallValue(
-            bindLambdaCapturesOperand($stmt->callee, $meta),
-            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta), $stmt->args),
-            $stmt->dest,
-            $stmt->srcLoc,
-        ),
-        IR\DictCall::class => new IR\DictCall(
-            bindLambdaCapturesOperand($stmt->evidence, $meta),
-            $stmt->method,
-            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta), $stmt->args),
-            $stmt->dest,
-            $stmt->srcLoc,
-        ),
-        default => mapStmtNestedBlocks(
-            $stmt,
-            static fn (IR\Block $block): IR\Block => new IR\Block(bindLambdaCapturesItems($block->items, $meta)),
-        ),
-    };
-}
-
-/**
- * Captures a direct call has to pass before the arguments the source wrote.
+ * Legalize calls against published callable layouts: prepend hidden evidence
+ * and capture slots, and convert under-supplied calls into explicit IR\Partial.
  *
- * A call by name carries only the declared arguments, so a lifted function's
- * free locals are missing from it: a recursive `let`/`where` group lowers to a
- * plain `__letrecN` call, and an immediately applied lambda is called by name.
- * A specialized call, an `IR\Partial`, and the adapter a constrained local
- * binding lowers to (`λ(dict, p) -> λ3(dict, p)`) already carry them. Such a
- * call runs past the captures into the declared parameters, so it is only
- * left alone when it carries more than the captures -- exactly the declared
- * parameters can still need the prepend (the same evidence serving as the
- * local binding's own dictionaries), where skipping it would bind the
- * trailing arguments to the wrong parameters.
+ * Ensures emitters never need to construct partials or repair call layouts.
  *
- * @param list<IR\Operand> $args
- * @param array<string, array{captures: list<string>, params: list<string>}> $meta
- * @return list<IR\Operand>
+ * Legalization is a fixed point, not a single rewrite, because a rewrite changes the layout it is
+ * legalizing against. Prepending a capture to `call λ2(x)` names a local the enclosing `λ1` does
+ * not otherwise use, so `λ1`'s own capture set grows — and with it the arity of every partial of
+ * `λ1` an outer entry holds. Publishing the old arity beside the new body is the one place a
+ * partial and the table could disagree (the `partial of λ1` / "published runtime arity" failure at
+ * post-legalize), so each round rewrites the input functions against the layout the previous round
+ * produced, and the loop ends only when the tree it returns publishes exactly the layout it was
+ * built with. The arities come from {@see table()} — the same publication the emitters and the
+ * layout check read — rather than from a second count kept here.
+ *
+ * @param list<IR\FunctionDecl> $functions
  */
-function captureArgsForCall(string $name, array $args, array $meta): array
+function legalizeCallables(array $functions): array
 {
-    $info = $meta[$name] ?? null;
-    $captures = $info['captures'] ?? [];
-    if ($captures === [] || \count($args) !== \count($info['params'])) {
-        return $args;
+    $table = table($functions);
+
+    for ($round = 0, $limit = 2 * \count($functions) + 4; $round < $limit; ++$round) {
+        $rewritten = \array_map(
+            static fn (IR\FunctionDecl $function): IR\FunctionDecl => $function->withBody(
+                new IR\Block(bindLambdaCapturesItems($function->body->items, $table)),
+            ),
+            $functions,
+        );
+
+        $next = table($rewritten);
+
+        if ($next->meta() == $table->meta() && $next->byEntry == $table->byEntry) {
+            return $rewritten;
+        }
+
+        $table = $next;
     }
-    if (\count($info['params']) > \count($captures) && callArgsLeadWithCaptures($args, $captures)) {
-        return $args;
+
+    throw new \RuntimeException(
+        'callable legalization did not settle: every round grew a capture set, so the layout a '
+        . 'partial is built against never became the layout the module publishes',
+    );
+}
+
+/**
+ * What the table publishes about the entry a callee names, or null when this module publishes no
+ * such entry.
+ *
+ * A callee is a spelling, and the table is what decides which entry one names: `sig()` is the
+ * publication's own lookup, which matches a qualified `Module::name` for this module as well as the
+ * bare name, and answers null rather than a neighbour for anything else. The capture vector is
+ * taken beside the signature because the signature's `captures` is the hidden slots with their
+ * evidence taken out, while a call passes them in the one order the binder produced
+ * (`CallableTable::meta()`), and prepending a different order would bind the wrong locals.
+ *
+ * @return array{sig: \Moggi\IR\Callables\CallableSig, captures: list<string>}|null
+ */
+function publishedLayout(CallableTable $table, string $callee): ?array
+{
+    $sig = $table->sig($callee);
+    if ($sig === null) {
+        return null;
     }
 
     return [
-        ...\array_map(static fn (string $capture): IR\Operand => new IR\Local($capture), $captures),
-        ...$args,
+        'sig' => $sig,
+        'captures' => $table->meta()[$sig->entryId]['captures'] ?? [],
     ];
 }
 
 /**
- * Whether a call already passes its callee's captures in front of its
- * arguments, in which case they must not be added a second time.
+ * The capture vector the run published for the entry a spelling names.
+ *
+ * The published table is the only answer, so a pass never re-derives a layout from a name or a body;
+ * an entry the module does not publish is reported rather than assumed capture-free.
+ *
+ * @return list<string>
+ */
+function publishedCaptures(CallableTable $table, string $entry): array
+{
+    $layout = publishedLayout($table, $entry);
+    if ($layout === null) {
+        throw new \RuntimeException('no published capture layout for `' . $entry . '`');
+    }
+
+    return $layout['captures'];
+}
+
+/**
+ * A direct call that supplies fewer slots than its entry publishes is a partial: the runtime
+ * holds the supplied prefix and waits for the rest. Making that an `IR\Partial` here keeps the
+ * judgement in one place — the table's own arity — instead of in each emitter.
  *
  * @param list<IR\Operand> $args
- * @param list<string> $captures
+ * @param array{sig: \Moggi\IR\Callables\CallableSig, captures: list<string>}|null $layout
  */
-function callArgsLeadWithCaptures(array $args, array $captures): bool
+function underapplied(IR\Call $call, array $args, ?array $layout): ?IR\Partial
 {
-    if (\count($args) < \count($captures)) {
-        return false;
+    $full = $layout === null ? null : $layout['sig']->runtimeArity();
+    if ($full === null || \count($args) >= $full) {
+        return null;
     }
 
-    foreach ($captures as $i => $capture) {
-        $arg = $args[$i] ?? null;
-        if (! ($arg instanceof IR\Local) || $arg->name !== $capture) {
-            return false;
+    return new IR\Partial($call->callee, $full, $args);
+}
+
+/**
+ * @param list<IR\Stmt> $items
+ * @return list<IR\Stmt>
+ */
+function bindLambdaCapturesItems(array $items, CallableTable $table): array
+{
+    return \array_map(
+        static fn (IR\Stmt $item): IR\Stmt => bindLambdaCapturesStmt($item, $table),
+        $items,
+    );
+}
+
+function bindLambdaCapturesStmt(IR\Stmt $stmt, CallableTable $table): IR\Stmt
+{
+    if ($stmt instanceof IR\Call) {
+        return legalizeCall($stmt, $table);
+    }
+
+    $rewrite = static fn (IR\Operand $operand): IR\Operand => bindLambdaCapturesOperand($operand, $table);
+
+    $rewritten = $stmt instanceof IR\CallValue
+        ? new IR\CallValue(
+            legalizeCallee($rewrite($stmt->callee), \count($stmt->args), $table),
+            \array_map($rewrite, $stmt->args),
+            $stmt->dest,
+            $stmt->srcLoc,
+        )
+        : rewriteStmtOperands($stmt, $rewrite);
+
+    return mapStmtNestedBlocks(
+        $rewritten,
+        static fn (IR\Block $block): IR\Block => new IR\Block(bindLambdaCapturesItems($block->items, $table)),
+    );
+}
+
+/**
+ * A call by name: its arguments, its captures, then either the call or — when the vector is a
+ * proper prefix of what the entry publishes — the partial that holds it.
+ *
+ * A call the lowering built carries exactly the declared value parameters, so arity alone says
+ * whether its captures are missing: `|args| == |V|`. A vector that already carries its captures
+ * is never a `Call` — it is a `Partial` whose published arity is the runtime one — so there is no
+ * second shape to disambiguate.
+ */
+function legalizeCall(IR\Call $call, CallableTable $table): IR\Stmt
+{
+    $args = \array_map(
+        static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $table),
+        $call->args,
+    );
+    $layout = publishedLayout($table, $call->callee);
+    if ($layout !== null && $layout['captures'] !== [] && \count($args) === \count($layout['sig']->params)) {
+        $args = [
+            ...\array_map(static fn (string $capture): IR\Operand => new IR\Local($capture), $layout['captures']),
+            ...$args,
+        ];
+    }
+
+    $partial = underapplied($call, $args, $layout);
+    if ($partial !== null) {
+        return new IR\Assign($call->dest, $partial);
+    }
+
+    return new IR\Call($call->callee, $args, $call->dest, $call->srcLoc);
+}
+
+/**
+ * The callee of an application: a reference to a local entry applied to fewer slots than it
+ * publishes is the partial that holds them, so the emitter never has to decide.
+ */
+function legalizeCallee(IR\Operand $callee, int $supplied, CallableTable $table): IR\Operand
+{
+    if ($callee instanceof IR\FnRef) {
+        $layout = publishedLayout($table, $callee->name);
+        $full = $layout === null ? null : $layout['sig']->runtimeArity();
+        if ($full !== null && $supplied < $full) {
+            return new IR\Partial($callee->name, $full, []);
         }
+
+        return $callee;
     }
 
-    return true;
+    return $callee;
 }
 
 /**
  * A partial of a lifted function counts its captures in `arity` as well, so one
  * built from the declared parameters alone is widened to the full arity.
- *
- * @param array<string, array{captures: list<string>, params: list<string>}> $meta
  */
-function bindCapturedPartial(IR\Partial|IR\ExprPartial $partial, array $meta): IR\Partial|IR\ExprPartial
+function bindCapturedPartial(IR\Partial $partial, CallableTable $table): IR\Partial
 {
     $args = \array_map(
-        static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta),
+        static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $table),
         $partial->args,
     );
-    $info = $meta[$partial->fn] ?? null;
-    $captures = $info['captures'] ?? [];
-    if ($captures === [] || $partial->arity !== \count($info['params'])) {
-        return $partial instanceof IR\Partial
-            ? new IR\Partial($partial->fn, $partial->arity, $args)
-            : new IR\ExprPartial($partial->fn, $partial->arity, $args);
+    $layout = publishedLayout($table, $partial->fn);
+    if ($layout === null) {
+        return new IR\Partial($partial->fn, $partial->arity, $args);
     }
-    if (\count($info['params']) > \count($captures) && callArgsLeadWithCaptures($args, $captures)) {
-        return $partial instanceof IR\Partial
-            ? new IR\Partial($partial->fn, $partial->arity, $args)
-            : new IR\ExprPartial($partial->fn, $partial->arity, $args);
+
+    $params = $layout['sig']->params;
+    $captures = $layout['captures'];
+    if ($captures === [] || $partial->arity !== \count($params)) {
+        return new IR\Partial($partial->fn, $partial->arity, $args);
     }
 
     $arity = $partial->arity + \count($captures);
@@ -180,60 +237,38 @@ function bindCapturedPartial(IR\Partial|IR\ExprPartial $partial, array $meta): I
         ...$args,
     ];
 
-    return $partial instanceof IR\Partial
-        ? new IR\Partial($partial->fn, $arity, $args)
-        : new IR\ExprPartial($partial->fn, $arity, $args);
+    return new IR\Partial($partial->fn, $arity, $args);
 }
 
-/**
- * @param array<string, array{captures: list<string>, params: list<string>}> $meta
- */
-function bindLambdaCapturesOperand(IR\Operand $operand, array $meta): IR\Operand
+function bindLambdaCapturesOperand(IR\Operand $operand, CallableTable $table): IR\Operand
 {
-    if ($operand instanceof IR\FnRef && isCapturedFnName($operand->name)) {
-        $info = $meta[$operand->name] ?? null;
-        if ($info !== null && ($info['captures'] ?? []) !== []) {
+    if ($operand instanceof IR\FnRef) {
+        $layout = publishedLayout($table, $operand->name);
+        if ($layout !== null && $layout['captures'] !== []) {
             $captureArgs = \array_map(
                 static fn (string $name): IR\Operand => new IR\Local($name),
-                $info['captures'],
+                $layout['captures'],
             );
-            $arity = \count($info['captures']) + \count($info['params']);
+            $full = \count($layout['captures']) + \count($layout['sig']->params);
 
-            return new IR\Partial($operand->name, $arity, $captureArgs);
+            return new IR\Partial($operand->name, $full, $captureArgs);
         }
     }
 
     return match ($operand::class) {
-        IR\ExprCall::class => new IR\ExprCall(
-            $operand->callee,
-            captureArgsForCall($operand->callee, \array_map(
-                static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta),
-                $operand->args,
-            ), $meta),
-            $operand->srcLoc,
-        ),
-        IR\ExprCallValue::class => new IR\ExprCallValue(
-            bindLambdaCapturesOperand($operand->callee, $meta),
-            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta), $operand->args),
-            $operand->srcLoc,
-        ),
-        IR\ExprBinop::class => new IR\ExprBinop(
-            $operand->op,
-            bindLambdaCapturesOperand($operand->left, $meta),
-            bindLambdaCapturesOperand($operand->right, $meta),
-        ),
-        IR\ExprPartial::class, IR\Partial::class => bindCapturedPartial($operand, $meta),
+        IR\Partial::class => bindCapturedPartial($operand, $table),
         IR\Intrinsic::class => new IR\Intrinsic(
             $operand->name,
-            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta), $operand->args),
+            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $table), $operand->args),
             $operand->srcLoc,
         ),
         IR\ListLit::class => new IR\ListLit(
-            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta), $operand->elements),
+            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $table), $operand->elements),
         ),
         IR\DictMethod::class => new IR\DictMethod(
-            bindLambdaCapturesOperand($operand->evidence, $meta),
+            bindLambdaCapturesOperand($operand->evidence, $table),
             $operand->method,
+            $operand->localEvidence,
         ),
         default => $operand,
     };
@@ -257,91 +292,164 @@ function foldPartialApply(array $functions, string $moduleName = ''): array
  * @param array<string, IR\FunctionDecl> $index
  * @return list<IR\Stmt>
  */
+/**
+ * How often each temp is read across these items, nested blocks included.
+ *
+ * The fusions below replace the statement that defines a partial with the expression that applies
+ * it. That is only sound when the definition's temp is read exactly once — otherwise the other
+ * readers are left naming a temp nothing defines.
+ *
+ * @param list<IR\Stmt> $items
+ * @return array<int, int>
+ */
+function tempReadCounts(array $items): array
+{
+    $reads = [];
+    foreach ($items as $item) {
+        IR\Visit\walkStmt(
+            $item,
+            static function (): void {
+            },
+            static function (IR\Operand $operand) use (&$reads): void {
+                if ($operand instanceof IR\Temp) {
+                    $reads[$operand->id] = ($reads[$operand->id] ?? 0) + 1;
+                }
+            },
+        );
+    }
+
+    return $reads;
+}
+
 function foldPartialApplyItems(array $items, array $index): array
 {
-    $out = [];
+    $fused = [];
+    $reads = tempReadCounts($items);
+    $nextTemp = maxTempInItems($items) + 1;
 
     for ($i = 0; $i < \count($items); ++$i) {
         $item = $items[$i];
         $next = $items[$i + 1] ?? null;
 
         if ($item instanceof IR\CallValue) {
-            $folded = tryFoldCallValuePartial($item);
+            $folded = tryFoldCallValuePartial($item, $nextTemp);
             if ($folded !== null) {
-                $out[] = $folded;
+                $fused = [...$fused, ...$folded];
 
                 continue;
             }
         }
 
         if ($item instanceof IR\Assign && $next !== null && $next instanceof IR\CallValue) {
-            $fusedAssign = tryFuseAssignPartialCallValue($item, $next);
+            $fusedAssign = ($reads[$item->dest] ?? 0) === 1
+                ? tryFuseAssignPartialCallValue($item, $next, $nextTemp)
+                : null;
             if ($fusedAssign !== null) {
-                $out[] = $fusedAssign;
+                $fused = [...$fused, ...$fusedAssign];
                 ++$i;
 
                 continue;
             }
         }
 
-        if ($item instanceof IR\Call && $next !== null) {
-            $fused = tryFusePartialCall($item, $next, $index);
-            if ($fused !== null) {
-                $out[] = $fused;
-                ++$i;
-
-                continue;
-            }
-
-            if ($next instanceof IR\Ret) {
-                $fusedRet = tryFusePartialRet($item, $next, $index);
-                if ($fusedRet !== null) {
-                    $out[] = $fusedRet;
-                    ++$i;
-
-                    continue;
-                }
-            }
-        }
-
-        if ($item instanceof IR\Let && $next !== null && $next instanceof IR\Ret) {
-            $fusedLet = tryFuseLetPartialRet($item, $next);
-            if ($fusedLet !== null) {
-                $out[] = $fusedLet;
+        if ($item instanceof IR\Call && $next !== null && ($reads[$item->dest] ?? 0) === 1) {
+            $fusedPair = tryFusePartialCall($item, $next, $index, $nextTemp);
+            if ($fusedPair !== null) {
+                $fused = [...$fused, ...$fusedPair];
                 ++$i;
 
                 continue;
             }
         }
 
-        $out[] = foldPartialApplyStmt($item, $index);
+        $fused[] = $item;
     }
+
+    $fused = \array_map(
+        static fn (IR\Stmt $item): IR\Stmt => mapStmtNestedBlocks(
+            $item,
+            static fn (IR\Block $block): IR\Block => new IR\Block(foldPartialApplyItems($block->items, $index)),
+        ),
+        $fused,
+    );
+
+    return $fused;
+}
+
+/**
+ * The value a read of `$expr` applied to `$args` takes, scheduling the computation it stands for.
+ *
+ * A saturated application is a computation, so it becomes a `Call` statement in the block that reads
+ * it — writing `$dest` when the reader owns one, a fresh temp otherwise — and the value returned is
+ * that destination. An application below the partial's arity is already a value and schedules
+ * nothing. A value-shaped call is what the canonical schema forbids, so this never builds one: a
+ * caller gets back a `Temp` or a `Partial`, never a call.
+ *
+ * @param list<IR\Operand> $args applied to the partial
+ * @param list<IR\Stmt> $out appended to, in evaluation order
+ * @return IR\Operand|null the value, or null when `$expr` is not a partial application
+ */
+function appliedPartialValue(IR\Operand $expr, array $args, array &$out, int &$nextTemp, ?int $dest = null): ?IR\Operand
+{
+    if (! $expr instanceof IR\Partial) {
+        return null;
+    }
+
+    $all = [...$expr->args, ...$args];
+    if (\count($all) > $expr->arity) {
+        return null;
+    }
+    if (\count($all) < $expr->arity) {
+        return new IR\Partial($expr->fn, $expr->arity, $all);
+    }
+
+    [$value, $nextTemp] = scheduleCall($expr->fn, $all, $out, $nextTemp, null, $dest);
+
+    return $value;
+}
+
+/**
+ * A partial application folded into the statements a reader needs.
+ *
+ * The reader's own `dest` is written by the scheduled `Call` when the application saturates, so it
+ * needs no statement; a `Ret` takes the temp; an under-applied application is a value and becomes the
+ * reader alone.
+ *
+ * @param list<IR\Operand> $args applied to the partial
+ * @return list<IR\Stmt>|null null when `$expr` is not a partial application
+ */
+function foldedApplicationItems(IR\Operand $expr, array $args, int &$nextTemp, ?int $dest): ?array
+{
+    $out = [];
+    $value = appliedPartialValue($expr, $args, $out, $nextTemp, $dest);
+    if ($value === null) {
+        return null;
+    }
+    if ($dest !== null && $value instanceof IR\Temp && $value->id === $dest) {
+        return $out;
+    }
+    $out[] = $dest === null ? new IR\Ret($value) : new IR\Assign($dest, $value);
 
     return $out;
 }
 
 /**
- * @return IR\Stmt|null
+ * @return list<IR\Stmt>|null
  */
-function tryFoldCallValuePartial(IR\CallValue $callValue): ?IR\Stmt
+function tryFoldCallValuePartial(IR\CallValue $callValue, int &$nextTemp): ?array
 {
     $partial = partialFromOperand($callValue->callee);
     if ($partial === null) {
         return null;
     }
 
-    $expr = saturatePartialExpr(operandToExpr($partial), $callValue->args);
-    if ($expr === null) {
-        return null;
-    }
-
-    return new IR\Assign($callValue->dest, $expr);
+    return foldedApplicationItems($partial, $callValue->args, $nextTemp, $callValue->dest);
 }
 
 /**
- * @return IR\Stmt|null
+ * @return list<IR\Stmt>|null
  */
-function tryFuseAssignPartialCallValue(IR\Assign $assign, IR\CallValue $callValue): ?IR\Stmt
+function tryFuseAssignPartialCallValue(IR\Assign $assign, IR\CallValue $callValue, int &$nextTemp): ?array
 {
     if (! ($callValue->callee instanceof IR\Temp) || $callValue->callee->id !== $assign->dest) {
         return null;
@@ -352,47 +460,17 @@ function tryFuseAssignPartialCallValue(IR\Assign $assign, IR\CallValue $callValu
         return null;
     }
 
-    $expr = saturatePartialExpr(operandToExpr($partial), $callValue->args);
-    if ($expr === null) {
-        return null;
-    }
-
-    return new IR\Assign($callValue->dest, $expr);
-}
-
-/**
- * @return IR\Stmt|null
- */
-function tryFuseLetPartialRet(IR\Let $let, IR\Ret $ret): ?IR\Stmt
-{
-    $value = partialFromOperand($let->value);
-    if ($value === null) {
-        return null;
-    }
-
-    $retValue = $ret->value;
-    if (! ($retValue instanceof IR\ExprCallValue)
-        || ! ($retValue->callee instanceof IR\Local)
-        || $retValue->callee->name !== $let->name) {
-        return null;
-    }
-
-    $expr = saturatePartialExpr(operandToExpr($value), $retValue->args);
-    if ($expr === null) {
-        return null;
-    }
-
-    return new IR\Ret($expr);
+    return foldedApplicationItems($partial, $callValue->args, $nextTemp, $callValue->dest);
 }
 
 /**
  * @param array<string, IR\FunctionDecl> $index
- * @return IR\Stmt|null
+ * @return list<IR\Stmt>|null
  */
-function tryFusePartialCall(IR\Stmt $call, IR\Stmt $next, array $index): ?IR\Stmt
+function tryFusePartialCall(IR\Stmt $call, IR\Stmt $next, array $index, int &$nextTemp): ?array
 {
     if ($next instanceof IR\CallValue) {
-        return tryFusePartialCallValue($call, $next, $index);
+        return tryFusePartialCallValue($call, $next, $index, $nextTemp);
     }
 
     return null;
@@ -400,72 +478,50 @@ function tryFusePartialCall(IR\Stmt $call, IR\Stmt $next, array $index): ?IR\Stm
 
 /**
  * @param array<string, IR\FunctionDecl> $index
- * @return IR\Stmt|null
+ * @return list<IR\Stmt>|null
  */
-function tryFusePartialCallValue(IR\Stmt $call, IR\CallValue $callValue, array $index): ?IR\Stmt
+function tryFusePartialCallValue(IR\Stmt $call, IR\CallValue $callValue, array $index, int &$nextTemp): ?array
 {
     if (! ($callValue->callee instanceof IR\Temp) || $callValue->callee->id !== $call->dest) {
         return null;
     }
 
-    $expr = fuseCallWithPartialCallee($call, $callValue->args, $index);
-    if ($expr === null) {
-        $inner = resolveCallValueCalleeExpr($callValue->callee, $index);
-        if ($inner !== null) {
-            $expr = saturatePartialExpr($inner, $callValue->args);
-        }
+    $application = partialApplicationOfCall($call, $callValue->args, $index);
+    if ($application === null) {
+        $inner = resolveCallValueCalleeExpr($callValue->callee);
+        $application = $inner === null ? null : [$inner, $callValue->args];
     }
-    if ($expr === null) {
+    if ($application === null) {
         return null;
     }
+    [$expr, $args] = $application;
 
-    return new IR\Assign($callValue->dest, $expr);
+    return foldedApplicationItems($expr, $args, $nextTemp, $callValue->dest);
 }
 
 /**
- * @param array<string, IR\FunctionDecl> $index
- * @return IR\Stmt|null
- */
-function tryFusePartialRet(IR\Stmt $call, IR\Ret $ret, array $index): ?IR\Stmt
-{
-    $value = $ret->value;
-    if (! ($value instanceof IR\ExprCallValue)
-        || ! ($value->callee instanceof IR\Temp)
-        || $value->callee->id !== $call->dest) {
-        return null;
-    }
-
-    $expr = fuseCallWithPartialCallee($call, $value->args, $index);
-    if ($expr === null) {
-        $inner = resolveCallValueCalleeExpr($value->callee, $index);
-        if ($inner !== null) {
-            $expr = saturatePartialExpr($inner, $value->args);
-        }
-    }
-    if ($expr === null) {
-        return null;
-    }
-
-    return new IR\Ret($expr);
-}
-
-/**
+ * The partial application a call's callee stands for, with the arguments still to apply.
+ *
+ * The provider either returns a partial — applied to the call's own arguments — or is an identity the
+ * call's single argument completes. Saturation belongs to the reader's block
+ * ({@see appliedPartialValue}), so what this hands back is a partial and its arguments, never a call.
+ *
  * @param list<IR\Operand> $args
  * @param array<string, IR\FunctionDecl> $index
- * @return IR\Operand|null
+ * @return array{0: IR\Operand, 1: list<IR\Operand>}|null
  */
-function fuseCallWithPartialCallee(IR\Stmt $call, array $args, array $index): ?IR\Operand
+function partialApplicationOfCall(IR\Stmt $call, array $args, array $index): ?array
 {
     $provider = $index[$call->callee] ?? null;
     if ($provider !== null) {
         $partial = returnedPartialExpr($provider, $call->args);
         if ($partial !== null) {
-            return saturatePartialExpr($partial, $args);
+            return [$partial, $args];
         }
 
         $identity = returnedIdentityArg($provider, $call->args);
         if ($identity !== null) {
-            return saturatePartialExpr($identity, $args);
+            return [$identity, $args];
         }
     }
 
@@ -481,9 +537,7 @@ function returnedPartialExpr(IR\FunctionDecl $provider, array $providerArgs): ?I
     }
 
     $value = $items[0]->value;
-    if ($value instanceof IR\Partial) {
-        $value = operandToExpr($value);
-    } elseif (! ($value instanceof IR\ExprPartial)) {
+    if (! ($value instanceof IR\Partial)) {
         return null;
     }
 
@@ -509,7 +563,7 @@ function returnedPartialExpr(IR\FunctionDecl $provider, array $providerArgs): ?I
  *
  * @param list<IR\Operand> $providerArgs
  */
-function substituteProviderParams(IR\ExprPartial $expr, IR\FunctionDecl $provider, array $providerArgs): ?IR\Operand
+function substituteProviderParams(IR\Partial $expr, IR\FunctionDecl $provider, array $providerArgs): ?IR\Operand
 {
     if (\count($provider->params) !== \count($providerArgs)) {
         return null;
@@ -557,218 +611,28 @@ function returnedIdentityArg(IR\FunctionDecl $provider, array $providerArgs): ?I
         return null;
     }
 
-    return operandToExpr($providerArgs[0]);
-}
-
-/** @param list<IR\Operand> $args */
-function saturatePartialExpr(IR\Operand $expr, array $args): ?IR\Operand
-{
-    if ($expr instanceof IR\ExprPartial) {
-        $all = [...$expr->args, ...$args];
-        if (\count($all) === $expr->arity) {
-            return new IR\ExprCall($expr->fn, $all);
-        }
-
-        if (\count($all) < $expr->arity) {
-            return new IR\ExprPartial($expr->fn, $expr->arity, $all);
-        }
-
-        return null;
-    }
-
-    if ($expr instanceof IR\Partial) {
-        return saturatePartialExpr(operandToExpr($expr), $args);
-    }
-
-    return null;
-}
-
-/** @param array<string, IR\FunctionDecl> $index */
-function foldPartialApplyStmt(IR\Stmt $stmt, array $index): IR\Stmt
-{
-    $mapped = match ($stmt::class) {
-        IR\Ret::class => new IR\Ret(foldPartialApplyExpr($stmt->value, $index)),
-        IR\Assign::class => new IR\Assign($stmt->dest, foldPartialApplyOperand($stmt->value, $index)),
-        IR\Let::class => new IR\Let($stmt->name, foldPartialApplyOperand($stmt->value, $index)),
-        IR\Binop::class => new IR\Binop($stmt->op, foldPartialApplyOperand($stmt->left, $index), foldPartialApplyOperand($stmt->right, $index), $stmt->dest),
-        IR\Call::class => new IR\Call($stmt->callee, \array_map(static fn (IR\Operand $arg): IR\Operand => foldPartialApplyOperand($arg, $index), $stmt->args), $stmt->dest, $stmt->srcLoc),
-        IR\CallValue::class => new IR\CallValue(foldPartialApplyOperand($stmt->callee, $index), \array_map(static fn (IR\Operand $arg): IR\Operand => foldPartialApplyOperand($arg, $index), $stmt->args), $stmt->dest, $stmt->srcLoc),
-        default => $stmt,
-    };
-
-    return mapStmtNestedBlocks(
-        $mapped,
-        static fn (IR\Block $block): IR\Block => new IR\Block(foldPartialApplyItems($block->items, $index)),
-    );
-}
-
-/** @param array<string, IR\FunctionDecl> $index */
-function foldPartialApplyExpr(IR\Operand $expr, array $index): IR\Operand
-{
-    if ($expr instanceof IR\ExprCallValue) {
-        $fused = fuseDictAdapterApply($expr, $index);
-        if ($fused !== null) {
-            return $fused;
-        }
-
-        $callee = foldPartialApplyOperand($expr->callee, $index);
-        $args = \array_map(static fn (IR\Operand $arg): IR\Operand => foldPartialApplyOperand($arg, $index), $expr->args);
-        $inner = resolveCallValueCalleeExpr($callee, $index);
-        if ($inner !== null) {
-            $saturated = saturatePartialExpr($inner, $args);
-            if ($saturated !== null) {
-                return $saturated;
-            }
-        }
-
-        return new IR\ExprCallValue($callee, $args, $expr->srcLoc);
-    }
-
-    if ($expr instanceof IR\ExprPartial) {
-        return $expr;
-    }
-
-    if ($expr instanceof IR\ExprBinop) {
-        return new IR\ExprBinop(
-            $expr->op,
-            foldPartialApplyOperand($expr->left, $index),
-            foldPartialApplyOperand($expr->right, $index),
-        );
-    }
-
-    if ($expr instanceof IR\ExprCall) {
-        return new IR\ExprCall(
-            $expr->callee,
-            \array_map(static fn (IR\Operand $arg): IR\Operand => foldPartialApplyOperand($arg, $index), $expr->args),
-            $expr->srcLoc,
-        );
-    }
-
-    return $expr;
+    return $providerArgs[0];
 }
 
 /**
- * `adapter(ev)(x)` -> `λ(ev, x)` when `adapter` is the evidence adapter for a
- * locally bound constrained function.
+ * Normalize known-arity applications into canonical Call / CallValue statements.
  *
- * A local `Num a => a -> a` (a `let`/`where` binding) is represented as a
- * lambda that takes the evidence dictionary and returns a partial of the real
- * body, so its call sites lower to an application of an application. Nothing
- * can call that directly, so it would reach the emitter as a runtime `__apply`
- * over a freshly allocated partial thunk. Substituting the adapter's own
- * argument for its parameter and saturating turns it into the direct call the
- * same shape produces for a module-level function.
- *
- * @param array<string, IR\FunctionDecl> $index
- */
-function fuseDictAdapterApply(IR\ExprCallValue $apply, array $index): ?IR\Operand
-{
-    $adapter = $apply->callee;
-    if (! ($adapter instanceof IR\ExprCallValue) || ! ($adapter->callee instanceof IR\FnRef)) {
-        return null;
-    }
-
-    $provider = $index[$adapter->callee->name] ?? null;
-    if ($provider === null) {
-        return null;
-    }
-
-    $partial = returnedPartialExpr($provider, $adapter->args);
-    if ($partial === null) {
-        return null;
-    }
-
-    return saturatePartialExpr($partial, $apply->args);
-}
-
-/** @param array<string, IR\FunctionDecl> $index */
-function foldPartialApplyOperand(IR\Operand $operand, array $index): IR\Operand
-{
-    if ($operand instanceof IR\Partial) {
-        return $operand;
-    }
-
-    if ($operand instanceof IR\ExprBinop) {
-        return foldPartialApplyExpr($operand, $index);
-    }
-
-    if ($operand instanceof IR\ExprCall) {
-        return foldPartialApplyExpr($operand, $index);
-    }
-
-    if ($operand instanceof IR\ExprCallValue) {
-        return foldPartialApplyExpr($operand, $index);
-    }
-
-    if ($operand instanceof IR\ExprPartial) {
-        return $operand;
-    }
-
-    return $operand;
-}
-
-/**
- * Canonicalize applications whose callee arity is statically known.
- *
- * Two shapes reach here from inlining and curried call sites:
- *
- *   t = call_value @f(x)                 -- known function, |x| < its arity
- *   ret call_value call_value g(x)(y)    -- curried call on a parameter
- *
- * The first is the shape {@see lowerNamedApply} already normalizes for a
- * directly named apply; it reappears whenever inlining substitutes a `FnRef`
- * into a function-valued parameter (`apply2 add 1 n` inlines to
- * `call_value @add(1)` followed by `call_value t(n)`). The second appears when
- * the callee is a parameter whose declared type fixes its arity
- * (`apply2 f x y = f x y`).
- *
- * Both are rewritten into the canonical `ExprCall` / `Partial` / `ExprPartial`
- * forms, which lets {@see foldPartialApply} fuse `t = partial f(x)` with
- * `call_value t(y)` into a direct `f(x, y)`, and lets every backend's emitter
- * resolve the application without the runtime `__apply`.
- *
- * Deliberately conservative:
- *  - only module-level function names, never `@λN`: the emitters inline simple
- *    lambdas as arrows, and a capturing lambda's `Partial` arity counts its
- *    captures, so the two would not agree;
- *  - flattening requires the declaration's surface type to account for *every*
- *    parameter, otherwise instance/context evidence slots would shift the
- *    parameter/type correspondence;
- *  - flattening never merges past the declared arity, so this pass cannot turn
- *    an exact application into an over-application (which the backends do not
- *    agree on).
+ * Only module-level functions with complete surface-type parameter coverage;
+ * never flatten beyond declared arity.
  *
  * @param list<IR\FunctionDecl> $functions
  * @return list<IR\FunctionDecl>
  */
 function normalizeKnownApplies(array $functions, string $moduleName = ''): array
 {
-    $arity = knownFunctionArity($functions, $moduleName);
+    $table = table($functions, $moduleName);
 
     return \array_map(
         static fn (IR\FunctionDecl $function): IR\FunctionDecl => $function->withBody(
-            new IR\Block(normalizeApplyItems($function->body->items, $arity, declaredParamArities($function))),
+            new IR\Block(normalizeApplyItems($function->body->items, $table, declaredParamArities($function))),
         ),
         $functions,
     );
-}
-
-/** @param list<IR\FunctionDecl> $functions @return array<string, int> */
-function knownFunctionArity(array $functions, string $moduleName): array
-{
-    $arity = [];
-    foreach ($functions as $function) {
-        if (isCapturedFnName($function->name)) {
-            continue;
-        }
-        $count = \count($function->params);
-        $arity[$function->name] = $count;
-        if ($moduleName !== '') {
-            $arity[$moduleName . '::' . $function->name] ??= $count;
-        }
-    }
-
-    return $arity;
 }
 
 /**
@@ -820,124 +684,138 @@ function functionTypeArity(Ast\TypeNode $type): int
 }
 
 /**
+ * The statement shapes of a block, scope by scope: a known callee applied to fewer slots than it
+ * declares is a `Partial`, and at full arity the application *is* a call statement, in the block
+ * that reads it — a saturated apply becomes a statement of its own and may not be hoisted out of
+ * the scope it was evaluated in.
+ *
  * @param list<IR\Stmt> $items
- * @param array<string, int> $arity
  * @param array<string, int> $paramArities
  * @return list<IR\Stmt>
  */
-function normalizeApplyItems(array $items, array $arity, array $paramArities): array
+function normalizeApplyItems(array $items, CallableTable $table, array $paramArities): array
 {
-    return \array_map(
-        static fn (IR\Stmt $item): IR\Stmt => normalizeApplyStmt($item, $arity, $paramArities),
-        $items,
+    return fuseKnownApplyChains(
+        \array_map(
+            static fn (IR\Stmt $item): IR\Stmt => normalizeApplyStmt($item, $table, $paramArities),
+            $items,
+        ),
+        $paramArities,
     );
 }
 
 /**
- * @param array<string, int> $arity
+ * One application of a known-arity value, not one per argument.
+ *
+ * `apply2 f x y = f x y` with `f :: Int -> Int -> Int` lowers to two statements, the second applying the
+ * temp the first defined. While the first link is *under*-applied the two are the same application: an
+ * under-applied apply builds a partial value and runs no user code, so merging it with the adjacent
+ * application keeps every argument's evaluation in the order it had — the producer's arguments, then the
+ * consumer's — and runs the function at the same point.
+ *
+ * Nothing else is merged, and each refusal is a legality rule rather than a budget: an over-applied link
+ * runs the function between the two argument lists, so merging would move that call past the consumer's
+ * arguments; a temp with another reader is a value in its own right; a callee whose arity the pass does
+ * not have is unknown; and a consumer that is not the very next statement would be reordered past
+ * whatever sits between them.
+ *
+ * @param list<IR\Stmt> $items
+ * @param array<string, int> $paramArities the arity each parameter's declared type gives its value
+ * @return list<IR\Stmt>
+ */
+function fuseKnownApplyChains(array $items, array $paramArities): array
+{
+    $uses = tempUseCountsInItems($items);
+    $out = [];
+    foreach ($items as $item) {
+        $last = \count($out) - 1;
+        $previous = $last >= 0 ? $out[$last] : null;
+        $declared = $previous instanceof IR\CallValue && $previous->callee instanceof IR\Local
+            ? ($paramArities[$previous->callee->name] ?? null)
+            : null;
+        if ($declared !== null
+            && $item instanceof IR\CallValue
+            && $item->callee instanceof IR\Temp
+            && $item->callee->id === $previous->dest
+            && ($uses[$previous->dest] ?? 0) === 1
+            && \count($previous->args) < $declared
+            && \count($previous->args) + \count($item->args) <= $declared
+        ) {
+            $out[$last] = new IR\CallValue(
+                $previous->callee,
+                [...$previous->args, ...$item->args],
+                $item->dest,
+                $item->srcLoc,
+            );
+
+            continue;
+        }
+
+        $out[] = $item;
+    }
+
+    return $out;
+}
+
+/**
+ * The statement shapes: a known callee applied to fewer slots than it declares is a `Partial`, and
+ * at full arity the application *is* a call statement in the scope that reads it.
+ *
  * @param array<string, int> $paramArities
  */
-function normalizeApplyStmt(IR\Stmt $stmt, array $arity, array $paramArities): IR\Stmt
+function normalizeApplyStmt(IR\Stmt $stmt, CallableTable $table, array $paramArities): IR\Stmt
 {
-    $rewriteOp = normalizeApplyOperandMapper($arity, $paramArities);
-
     if ($stmt instanceof IR\CallValue && $stmt->callee instanceof IR\FnRef) {
-        $declared = $arity[$stmt->callee->name] ?? null;
+        $layout = publishedLayout($table, $stmt->callee->name);
+        $declared = $layout !== null && ! $layout['sig']->kind->takesCaptures()
+            ? $layout['sig']->runtimeArity()
+            : null;
         if ($declared !== null && \count($stmt->args) <= $declared) {
-            $args = \array_map($rewriteOp, $stmt->args);
+            if (\count($stmt->args) === $declared) {
+                return new IR\Call($stmt->callee->name, $stmt->args, $stmt->dest, $stmt->srcLoc);
+            }
 
             return new IR\Assign(
                 $stmt->dest,
-                \count($args) === $declared
-                    ? new IR\ExprCall($stmt->callee->name, $args)
-                    : new IR\Partial($stmt->callee->name, $declared, $args),
+                new IR\Partial($stmt->callee->name, $declared, $stmt->args),
             );
         }
     }
 
-    return mapStmtNestedBlocks(
-        rewriteStmtOperands($stmt, $rewriteOp),
-        static fn (IR\Block $block): IR\Block => new IR\Block(
-            normalizeApplyItems($block->items, $arity, $paramArities),
-        ),
+    $mapBlock = static fn (IR\Block $block): IR\Block => new IR\Block(
+        normalizeApplyItems($block->items, $table, $paramArities),
     );
-}
 
-/**
- * @param array<string, int> $arity
- * @param array<string, int> $paramArities
- * @return callable(IR\Operand): IR\Operand
- */
-function normalizeApplyOperandMapper(array $arity, array $paramArities): callable
-{
-    $rewrite = null;
-    $rewrite = static function (IR\Operand $operand) use (&$rewrite, $arity, $paramArities): IR\Operand {
-        $operand = mapOperandChildren($operand, $rewrite);
-
-        $flattened = flattenApplyChain($operand, $paramArities);
-        while ($flattened !== $operand) {
-            $operand = $flattened;
-            $flattened = flattenApplyChain($operand, $paramArities);
-        }
-
-        if ($operand instanceof IR\ExprCallValue && $operand->callee instanceof IR\FnRef) {
-            $declared = $arity[$operand->callee->name] ?? null;
-            if ($declared !== null) {
-                if (\count($operand->args) === $declared) {
-                    return new IR\ExprCall($operand->callee->name, $operand->args);
-                }
-                if (\count($operand->args) < $declared) {
-                    return new IR\ExprPartial($operand->callee->name, $declared, $operand->args);
-                }
+    if ($stmt instanceof IR\MatchStmt || $stmt instanceof IR\MatchReturn) {
+        $arms = [];
+        foreach ($stmt->arms as $arm) {
+            $guards = [];
+            foreach ($arm->guards as $guard) {
+                $guards[] = new IR\Guard($mapBlock($guard->prep), $guard->cond);
             }
+            $arms[] = new IR\MatchArm($arm->pattern, $mapBlock($arm->body), $guards);
         }
 
-        return $operand;
-    };
+        return $stmt instanceof IR\MatchReturn
+            ? new IR\MatchReturn($stmt->scrutinee, $arms, $stmt->exhaustive)
+            : new IR\MatchStmt($stmt->scrutinee, $arms, $stmt->dest, $stmt->exhaustive);
+    }
 
-    return $rewrite;
+    return mapStmtNestedBlocks($stmt, $mapBlock);
 }
 
 /**
- * `(f x) y` -> `f x y` when `f` takes at least `|x| + |y|` arguments.
+ * Absorb a returned partial's missing arguments into the function's declared
+ * parameters, accounting for captures in its effective arity.
  *
- * @param array<string, int> $paramArities
- */
-function flattenApplyChain(IR\Operand $operand, array $paramArities): IR\Operand
-{
-    if (! ($operand instanceof IR\ExprCallValue) || ! ($operand->callee instanceof IR\ExprCallValue)) {
-        return $operand;
-    }
-
-    $inner = $operand->callee;
-    $base = $inner->callee;
-    if (! ($base instanceof IR\Local)) {
-        return $operand;
-    }
-
-    $declared = $paramArities[$base->name] ?? null;
-    if ($declared === null || \count($inner->args) + \count($operand->args) > $declared) {
-        return $operand;
-    }
-
-    return new IR\ExprCallValue($base, [...$inner->args, ...$operand->args], $operand->srcLoc);
-}
-
-/**
- * Absorb the tail of a `partial` a function returns into its own parameters.
- *
- * A lifted function's *effective* arity is its captures plus its declared
- * parameters: `bindLambdaCaptures` prepends the captures at every call site and
- * the emitters emit them as leading parameters, so a caller supplies
- * `count($captures) + count($params)` arguments. Only the declared parameters
- * may be grown here -- the captures are not this function's to add -- so the
- * comparison against the partial's missing arguments has to count them, or the
- * definition ends up one parameter longer than every call site
- * (`__letrec1` called with 3 arguments, declared with 4).
+ * `$table`, when supplied, is the authority on how many slots the returned partial still needs:
+ * the callee's published `runtimeArity()`. A result that is still under-applied stays a `Partial`
+ * at that arity instead of becoming a saturated `Call`, which is what used to hand the legalizer a
+ * completed vector whose length also looked like a source call's.
  *
  * @param list<string> $captures
  */
-function specializePartialReturnFunction(IR\FunctionDecl $function, array $captures = []): IR\FunctionDecl
+function specializePartialReturnFunction(IR\FunctionDecl $function, array $captures = [], ?CallableTable $table = null): IR\FunctionDecl
 {
     $items = $function->body->items;
     if (\count($items) !== 1 || ! ($items[0] instanceof IR\Ret)) {
@@ -949,7 +827,9 @@ function specializePartialReturnFunction(IR\FunctionDecl $function, array $captu
         return $function;
     }
 
-    $missing = $partial->arity - \count($partial->args);
+    $layout = $table === null ? null : publishedLayout($table, $partial->fn);
+    $runtimeArity = $layout === null ? $partial->arity : $layout['sig']->runtimeArity();
+    $missing = $runtimeArity - \count($partial->args);
     if ($missing <= 0) {
         return $function;
     }
@@ -969,30 +849,25 @@ function specializePartialReturnFunction(IR\FunctionDecl $function, array $captu
         ...\array_map(static fn (string $param): IR\Operand => new IR\Local($param), \array_slice($newParams, \count($existing))),
     ];
 
-    return new IR\FunctionDecl(
-        $function->name,
-        $newParams,
-        $function->type,
-        new IR\Block([new IR\Ret(new IR\ExprCall($partial->fn, $callArgs))]),
-        $function->export,
-        $function->instanceMethod,
-        $function->entryKind,
-        $function->ioEffect,
-        $function->ioStraightLine,
-        $function->foreign,
-        $function->ioBodyKind,
-        $function->srcLoc,
-    );
+    $body = [];
+    $nextTemp = maxTempInItems($items) + 1;
+    if (\count($callArgs) < $runtimeArity) {
+        $body[] = new IR\Assign($nextTemp, new IR\Partial($partial->fn, $runtimeArity, $callArgs));
+        $value = new IR\Temp($nextTemp);
+    } else {
+        [$value] = scheduleCall($partial->fn, $callArgs, $body, $nextTemp);
+    }
+    $body[] = new IR\Ret($value);
+
+    return $function->with([
+        'params' => $newParams,
+        'body' => new IR\Block($body),
+    ]);
 }
 
-/** @return (IR\Partial|IR\ExprPartial)|null */
-function partialFromOperand(IR\Operand $value): IR\Partial|IR\ExprPartial|null
+function partialFromOperand(IR\Operand $value): ?IR\Partial
 {
-    if ($value instanceof IR\Partial || $value instanceof IR\ExprPartial) {
-        return $value;
-    }
-
-    return null;
+    return $value instanceof IR\Partial ? $value : null;
 }
 
 /** @param list<string> $existing */
@@ -1062,17 +937,6 @@ function stmtNeedsRuntimeApply(IR\Stmt $stmt, array $lambdaIndex): bool
 function exprNeedsRuntimeApply(IR\Operand $expr, array $lambdaIndex): bool
 {
     return match ($expr::class) {
-        IR\ExprCallValue::class => calleeNeedsRuntimeApply($expr->callee, $lambdaIndex)
-            || \array_any(
-                $expr->args,
-                static fn (IR\Operand $arg): bool => operandExprNeedsRuntimeApply($arg, $lambdaIndex),
-            ),
-        IR\ExprBinop::class => exprNeedsRuntimeApply($expr->left, $lambdaIndex)
-            || exprNeedsRuntimeApply($expr->right, $lambdaIndex),
-        IR\ExprCall::class => \array_any(
-            $expr->args,
-            static fn (IR\Operand $arg): bool => operandExprNeedsRuntimeApply($arg, $lambdaIndex),
-        ),
         IR\Intrinsic::class => \array_any(
             $expr->args,
             static fn (IR\Operand $arg): bool => operandExprNeedsRuntimeApply($arg, $lambdaIndex),
@@ -1081,7 +945,7 @@ function exprNeedsRuntimeApply(IR\Operand $expr, array $lambdaIndex): bool
             $expr->elements,
             static fn (IR\Operand $arg): bool => operandExprNeedsRuntimeApply($arg, $lambdaIndex),
         ),
-        IR\ExprPartial::class => \array_any(
+        IR\Partial::class => \array_any(
             $expr->args,
             static fn (IR\Operand $arg): bool => operandExprNeedsRuntimeApply($arg, $lambdaIndex),
         ),
@@ -1093,8 +957,8 @@ function exprNeedsRuntimeApply(IR\Operand $expr, array $lambdaIndex): bool
 function operandExprNeedsRuntimeApply(IR\Operand $operand, array $lambdaIndex): bool
 {
     return match ($operand::class) {
-        IR\ExprCallValue::class, IR\ExprBinop::class, IR\ExprCall::class, IR\ExprPartial::class,
-        IR\Intrinsic::class, IR\ListLit::class => exprNeedsRuntimeApply($operand, $lambdaIndex),
+        IR\Partial::class, IR\Intrinsic::class, IR\ListLit::class
+            => exprNeedsRuntimeApply($operand, $lambdaIndex),
         default => false,
     };
 }
@@ -1102,52 +966,23 @@ function operandExprNeedsRuntimeApply(IR\Operand $operand, array $lambdaIndex): 
 /**
  * Whether applying this callee has to go through the runtime `__apply`.
  *
- * Mirrors {@see emitApplyExpr}: the emitter resolves
- * partials, inlinable arrows and known-arity `FnRef`s without the runtime and
- * falls through to `__apply` for everything else. Answering `false` here makes
- * codegen omit both the runtime require and `use function Moggi\__apply`, which
- * is a fatal `Undefined function` at run time — so the only safe `false`s are
- * the forms the emitter provably resolves itself.
- *
  * @param array<string, IR\FunctionDecl> $lambdaIndex
  */
 function calleeNeedsRuntimeApply(IR\Operand $callee, array $lambdaIndex): bool
 {
     return match ($callee::class) {
-        IR\Partial::class, IR\ExprPartial::class => false,
-        IR\FnRef::class => ! (isLambdaName($callee->name)
-            && isset($lambdaIndex[$callee->name])
+        IR\Partial::class => false,
+        IR\FnRef::class => ! (isset($lambdaIndex[$callee->name])
             && isSimpleLambda($lambdaIndex[$callee->name])),
         IR\Local::class, IR\Temp::class => true,
         IR\DictMethod::class => true,
-        IR\ExprCall::class => true,
         IR\Intrinsic::class, IR\ForeignCall::class => true,
-        IR\ExprBinop::class, IR\ExprCallValue::class => true,
         default => false,
     };
 }
 
-/**
- * @param array<string, IR\FunctionDecl> $index
- * @return IR\Operand|null
- */
-function resolveCallValueCalleeExpr(IR\Operand $callee, array $index): ?IR\Operand
+/** A callee that is itself a `Partial` is the application's own function value. */
+function resolveCallValueCalleeExpr(IR\Operand $callee): ?IR\Operand
 {
-    if ($callee instanceof IR\Partial || $callee instanceof IR\ExprPartial) {
-        return operandToExpr($callee);
-    }
-
-    if (! ($callee instanceof IR\ExprCall) || \count($callee->args) !== 1) {
-        return null;
-    }
-
-    $provider = $index[$callee->callee] ?? null;
-    if ($provider !== null) {
-        $identity = returnedIdentityArg($provider, $callee->args);
-        if ($identity !== null) {
-            return $identity;
-        }
-    }
-
-    return null;
+    return $callee instanceof IR\Partial ? $callee : null;
 }

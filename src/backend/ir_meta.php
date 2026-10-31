@@ -6,8 +6,8 @@ use Moggi\IR;
 
 use function Moggi\IR\Visit\boundLocalsInBlock;
 use function Moggi\IR\Visit\collectLambdaRefsInBlock;
+use function Moggi\IR\Visit\walkBlock;
 use function Moggi\IR\Visit\walkOperand;
-use function Moggi\Optimize\Support\isCapturedFnName;
 use function Moggi\Semantics\IntrinsicRegistry\reportsSourceLocation;
 use function Moggi\Semantics\Kernel\boolTypeName;
 
@@ -24,6 +24,75 @@ use function Moggi\Semantics\Kernel\boolTypeName;
  * Nothing here emits code or knows a target's naming/packaging rules; the
  * emitters stay in `Moggi\Backend\{Php,Jvm,DotNet}\Codegen`.
  */
+
+/**
+ * How many times each temp is read in a function body, nested scopes included.
+ *
+ * @return array<int, int>
+ */
+function tempReadCounts(IR\Block $body): array
+{
+    $counts = [];
+    walkBlock(
+        $body,
+        static function (IR\Stmt $stmt): void {
+        },
+        static function (IR\Operand $operand) use (&$counts): void {
+            if ($operand instanceof IR\Temp) {
+                $counts[$operand->id] = ($counts[$operand->id] ?? 0) + 1;
+            }
+        },
+    );
+
+    return $counts;
+}
+
+/**
+ * The read counts for the function body being emitted, computed once for it: `$cache` is the
+ * emitter's per-function slot, so a nested block reuses the whole body's counts instead of walking
+ * its own subtree again. A wider map can only refuse a fusion, never allow one.
+ *
+ * @param ?array<int, int> $cache
+ * @return array<int, int>
+ */
+function tempReadsForFunction(?array &$cache, IR\Block $body): array
+{
+    return $cache ??= tempReadCounts($body);
+}
+
+/**
+ * The call to emit as a direct return, when the statement after it returns exactly the temp it
+ * defines and nothing else reads that temp.
+ *
+ * The IR keeps its shape: a call is a statement that defines its destination and `Ret` reads an
+ * operand, so `Call(dest)` + `Ret(Temp(dest))` is the canonical form and the operand twin stays
+ * deleted. What this decides is *rendering* — an emitter returns the call's value instead of
+ * storing it and loading it back, which on the JVM and .NET is a store and a load fewer per
+ * returned call. The call's arguments are evaluated where the call stands, so a fused return
+ * neither reorders nor duplicates them.
+ *
+ * A destination read twice, or read after the return, stays a store: the value is needed again. So
+ * does a call with any statement between it and the return, which is why this takes the statement
+ * that immediately follows rather than searching for a reader.
+ *
+ * @param array<int, int> $tempReads from {@see tempReadCounts}
+ */
+function returnedCall(IR\Stmt $stmt, ?IR\Stmt $next, array $tempReads): ?IR\Stmt
+{
+    if (! ($next instanceof IR\Ret) || ! ($next->value instanceof IR\Temp)) {
+        return null;
+    }
+
+    $dest = match ($stmt::class) {
+        IR\Call::class, IR\CallValue::class => $stmt->dest,
+        default => null,
+    };
+    if ($dest === null || $next->value->id !== $dest || ($tempReads[$dest] ?? 0) !== 1) {
+        return null;
+    }
+
+    return $stmt;
+}
 
 // --- Constructors / data declarations -----------------------------------------
 
@@ -142,78 +211,6 @@ function boolConstructorMapFromRegistry(array $registryData): array
 // --- Lambda captures ----------------------------------------------------------
 
 /**
- * Transitive capture closure.
- *
- * `$capturesOf` supplies each lifted function's direct free locals; this
- * propagates the captures a function needs from the functions it references, to
- * a fixpoint. A target may derive the direct captures itself, so that rule is a
- * parameter rather than a copy of the whole closure. What the function itself
- * binds -- its parameters, its `let`s, its match binders -- is never added: a
- * local a nested lambda reaches there is that body's own, and passing it would
- * put an undefined name in the caller's scope.
- *
- * The returned capture lists are sorted: direct captures miss the locals hidden
- * inside nested lifted-function references (those only become visible as
- * operands once captures are bound), so first-seen order depends on *when* in
- * the pipeline the set is computed. Use sites freeze captures early, definition
- * sites are read late; without a canonical order the two disagree and calls
- * pass arguments to the wrong parameters.
- *
- * @see boundLocalsInBlock
- *
- * @param array<string, IR\FunctionDecl> $byName
- * @param callable(IR\FunctionDecl): list<string> $capturesOf
- * @return array<string, array{captures: list<string>, params: list<string>}>
- */
-function lambdaMetaFromCaptures(array $byName, callable $capturesOf): array
-{
-    $meta = [];
-    $owned = [];
-    foreach ($byName as $name => $function) {
-        $meta[$name] = [
-            'captures' => $capturesOf($function),
-            'params' => $function->params,
-        ];
-        $owned[$name] = boundLocalsInBlock($function->body)
-            + \array_fill_keys($function->params, true);
-    }
-
-    $changed = true;
-    while ($changed) {
-        $changed = false;
-        foreach ($meta as $name => &$info) {
-            $needed = [];
-            foreach (collectLambdaRefsInBlock($byName[$name]->body, isCapturedFnName(...)) as $ref) {
-                $child = $meta[$ref] ?? null;
-                if ($child === null) {
-                    continue;
-                }
-                foreach ($child['captures'] as $capture) {
-                    if (isset($owned[$name][$capture]) || \in_array($capture, $info['captures'], true)) {
-                        continue;
-                    }
-
-                    $needed[] = $capture;
-                }
-            }
-            $needed = \array_values(\array_unique($needed));
-            if ($needed !== []) {
-                $info['captures'] = [...$info['captures'], ...$needed];
-                $changed = true;
-            }
-        }
-        unset($info);
-    }
-
-    foreach ($meta as &$info) {
-        \sort($info['captures']);
-    }
-    unset($info);
-
-    return $meta;
-}
-
-/**
  * Names a block must have in scope in order to *build* the lifted-function
  * values it references.
  *
@@ -223,7 +220,7 @@ function lambdaMetaFromCaptures(array $byName, callable $capturesOf): array
  * set computed from the operands alone misses them (an IO thunk holding
  * `catch io (\e -> …)` needs the lambda's captures, not just its own free
  * locals). Transitivity is already folded into `$lambdaMeta` by
- * {@see lambdaMetaFromCaptures}.
+ * {@see \Moggi\IR\Callables\captureMeta()}.
  *
  * @param array<string, array{captures: list<string>, params: list<string>}> $lambdaMeta
  * @return list<string>
@@ -274,9 +271,6 @@ function operandCallSrcLoc(?IR\Operand $operand): ?IR\SrcLoc
             $found = $op->srcLoc;
 
             return;
-        }
-        if (($op instanceof IR\ExprCall || $op instanceof IR\ExprCallValue) && $op->srcLoc !== null) {
-            $found = $op->srcLoc;
         }
     });
 

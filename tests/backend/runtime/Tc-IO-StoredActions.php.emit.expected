@@ -2,55 +2,94 @@
 
 namespace Tc\IO\StoredActions;
 
-const __MOGGI_MAP = [[18 => ['Tc.IO.StoredActions.idIO', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 7, 12], 23 => ['Tc.IO.StoredActions.scenarioLet', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 12, 3], 24 => ['Tc.IO.StoredActions.scenarioLet', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 11, 13], 30 => ['Tc.IO.StoredActions.scenarioPass', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 17, 13], 33 => ['Tc.IO.StoredActions.scenarioPass', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 18, 3], 38 => ['Tc.IO.StoredActions.scenarioWhen', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 22, 3], 40 => ['Tc.IO.StoredActions.scenarioWhen', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 23, 14], 43 => ['Tc.IO.StoredActions.scenarioWhen', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 23, 3], 44 => ['Tc.IO.StoredActions.scenarioWhen', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 23, 3], 49 => ['Tc.IO.StoredActions.main', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 27, 3], 50 => ['Tc.IO.StoredActions.main', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 28, 3], 51 => ['Tc.IO.StoredActions.main', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 29, 3], 52 => ['Tc.IO.StoredActions.main', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 30, 3], 53 => ['Tc.IO.StoredActions.main', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 31, 3], 54 => ['Tc.IO.StoredActions.main', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 32, 3]], ['Tc\\IO\\StoredActions\\idIO' => ['Tc.IO.StoredActions.idIO', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 7, 12], 'Tc\\IO\\StoredActions\\scenarioLet' => ['Tc.IO.StoredActions.scenarioLet', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 10, 15], 'Tc\\IO\\StoredActions\\scenarioPass' => ['Tc.IO.StoredActions.scenarioPass', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 16, 16], 'Tc\\IO\\StoredActions\\scenarioWhen' => ['Tc.IO.StoredActions.scenarioWhen', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 21, 16], 'Tc\\IO\\StoredActions\\main' => ['Tc.IO.StoredActions.main', 'tests/backend/runtime/Tc-IO-StoredActions.mog', 26, 8]]];
+const __MOGGI_MAP = [[17 => 0, 25 => 0, 30 => 1, 38 => 5, 39 => 6, 44 => 2, 52 => 7, 53 => 8, 56 => 0, 61 => 3, 69 => 9, 70 => 10, 71 => 10, 74 => 11, 75 => 11, 80 => 4, 88 => 12, 89 => 13, 90 => 14, 91 => 15, 92 => 16, 93 => 17], ['Tc\\IO\\StoredActions\\idIO' => 0, 'Tc\\IO\\StoredActions\\__w_idIO' => 0, 'Tc\\IO\\StoredActions\\scenarioLet' => 1, 'Tc\\IO\\StoredActions\\__w_scenarioLet' => 1, 'Tc\\IO\\StoredActions\\scenarioPass' => 2, 'Tc\\IO\\StoredActions\\__w_scenarioPass' => 2, 'Tc\\IO\\StoredActions\\scenarioWhen' => 3, 'Tc\\IO\\StoredActions\\__w_scenarioWhen' => 3, 'Tc\\IO\\StoredActions\\main' => 4, 'Tc\\IO\\StoredActions\\__w_main' => 4], ['Tc\\IO\\StoredActions\\idIO', 'Tc\\IO\\StoredActions\\scenarioLet', 'Tc\\IO\\StoredActions\\scenarioPass', 'Tc\\IO\\StoredActions\\scenarioWhen', 'Tc\\IO\\StoredActions\\main'], ['Tc\\IO\\StoredActions\\__w_idIO', 'Tc\\IO\\StoredActions\\__w_scenarioLet', 'Tc\\IO\\StoredActions\\__w_scenarioPass', 'Tc\\IO\\StoredActions\\__w_scenarioWhen', 'Tc\\IO\\StoredActions\\__w_main'], [[0, 0, 7, 12], [1, 0, 10, 15], [2, 0, 16, 16], [3, 0, 21, 16], [4, 0, 26, 8], [1, 0, 12, 3], [1, 0, 11, 13], [2, 0, 18, 8], [2, 0, 17, 13], [3, 0, 22, 3], [3, 0, 23, 14], [3, 0, 23, 3], [4, 0, 27, 3], [4, 0, 28, 3], [4, 0, 29, 3], [4, 0, 30, 3], [4, 0, 31, 3], [4, 0, 32, 3]], ['Tc.IO.StoredActions.idIO', 'Tc.IO.StoredActions.scenarioLet', 'Tc.IO.StoredActions.scenarioPass', 'Tc.IO.StoredActions.scenarioWhen', 'Tc.IO.StoredActions.main'], ['tests/backend/runtime/Tc-IO-StoredActions.mog']];
 
 require_once __DIR__ . '/../../../libraries/base/src/Control/Monad.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Bool.php';
+require_once __DIR__ . '/../../../libraries/base/src/System/IO.php';
 require_once __DIR__ . '/../../../libraries/base/src/System/IO/Base.php';
-require_once __DIR__ . '/../../../libraries/base/src/System/IO/PHP.php';
 
 use function Control\Monad\when;
 use function System\IO\Base\__ev_Applicative_IO;
 use function System\IO\Base\__ev_Functor_IO;
-use function System\IO\PHP\putStrLn;
 
 function idIO($act) {
-    (\is_array($act) && ($act[0] ?? null) === '__io' ? ($act[1])() : $act);
+    $__t1 = ['__io', static function() use (&$act): mixed {
+        $__t0 = __w_idIO($act);
+        return $__t0;
+    }];
+    return $__t1;
+}
+
+function __w_idIO($act) {
+    ($act[1])();
     return null;
 }
 
 function scenarioLet() {
-    putStrLn("first");
-    putStrLn("later");
+    $__t5 = ['__io', static function(): mixed {
+        $__t4 = __w_scenarioLet();
+        return $__t4;
+    }];
+    return $__t5;
+}
+
+function __w_scenarioLet() {
+    $__t2 = \System\IO\__w_putStrLn("first");
+    $__t3 = \System\IO\__w_putStrLn("later");
     return null;
 }
 
 function scenarioPass() {
-    $__t0 = ['__io', static function(): mixed {
-        putStrLn("x");
+    $__t10 = ['__io', static function(): mixed {
+        $__t9 = __w_scenarioPass();
+        return $__t9;
+    }];
+    return $__t10;
+}
+
+function __w_scenarioPass() {
+    $__t7 = ['__io', static function(): mixed {
+        $__t6 = \System\IO\__w_putStrLn("x");
         return null;
     }];
-    idIO($__t0);
+    ($__t7[1])();
     return null;
 }
 
 function scenarioWhen() {
-    putStrLn("system-io-ok");
-    $__t1 = ['__io', static function(): mixed {
-        putStrLn("when");
+    $__t16 = ['__io', static function(): mixed {
+        $__t15 = __w_scenarioWhen();
+        return $__t15;
+    }];
+    return $__t16;
+}
+
+function __w_scenarioWhen() {
+    $__t11 = \System\IO\__w_putStrLn("system-io-ok");
+    $__t13 = ['__io', static function(): mixed {
+        $__t12 = \System\IO\__w_putStrLn("when");
         return null;
     }];
-    $__t2 = when(__ev_Functor_IO(), __ev_Applicative_IO(), true, $__t1);
-    (\is_array($__t2) && ($__t2[0] ?? null) === '__io' ? ($__t2[1])() : $__t2);
+    $__t14 = when(__ev_Functor_IO(), __ev_Applicative_IO(), true, $__t13);
+    ($__t14[1])();
     return null;
 }
 
 function main() {
-    putStrLn("let");
-    scenarioLet();
-    putStrLn("pass");
-    scenarioPass();
-    putStrLn("when");
-    scenarioWhen();
+    $__t24 = ['__io', static function(): mixed {
+        $__t23 = __w_main();
+        return $__t23;
+    }];
+    return $__t24;
+}
+
+function __w_main() {
+    $__t17 = \System\IO\__w_putStrLn("let");
+    $__t18 = __w_scenarioLet();
+    $__t19 = \System\IO\__w_putStrLn("pass");
+    $__t20 = __w_scenarioPass();
+    $__t21 = \System\IO\__w_putStrLn("when");
+    $__t22 = __w_scenarioWhen();
     return null;
 }

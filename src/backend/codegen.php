@@ -11,10 +11,19 @@ require_once __DIR__ . '/jvm/JvmBackend.php';
 require_once __DIR__ . '/dotnet/DotNetBackend.php';
 
 /**
+ * Emit through an explicitly chosen backend.
+ *
+ * The backend is an argument, never process state: the pipeline passes the one its
+ * `CompilationContext` names. There is no `codegen()` that resolves a target from a global.
+ *
  * @param array<string, mixed> $options
- * @return string|array<string, string>
+ * @return array<string, string>
  */
-function codegen(Module $ir, string $sourcePath, array $options = []): string|array
+function codegenWith(Backend $backend, Module $ir, string $sourcePath, array $options = []): array
 {
-    return currentBackend()->emit($ir, $sourcePath, $options);
+    if (! ($options['plan'] ?? null) instanceof \Moggi\Modules\EmitPlan) {
+        $options['plan'] = $backend->emitPlan((string) ($options['outputRelative'] ?? ''), $options);
+    }
+
+    return $backend->emit($ir, $sourcePath, $options);
 }

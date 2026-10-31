@@ -4,7 +4,6 @@ namespace Moggi\Cache;
 
 require_once __DIR__ . '/../paths.php';
 
-use function Moggi\Backend\compileBackend;
 use function Moggi\Paths\globPaths;
 
 /**
@@ -24,7 +23,8 @@ use function Moggi\Paths\globPaths;
  *
  * Entries mirror the source tree under a per-backend directory so php/jvm/dotnet
  * caches coexist (switching backends must not overwrite each other). The content
- * key is stored inside and checked on read.
+ * key is stored inside and checked on read: a product written under another key
+ * is a different product and is never served.
  *
  * One compiler owns the tree: `fingerprint` holds the hash of its sources, and a
  * compiler whose fingerprint does not match what is written there drops what the
@@ -398,13 +398,36 @@ function decodePayload(string $raw): mixed
 }
 
 /**
+ * The shape of a cached per-module payload.
+ *
+ * The payload is a `serialize()`d graph with no version of its own, so a module's shape is part of
+ * the entry's identity: a payload written by another shape is a different product and is refused
+ * rather than decoded into whatever the current classes mean. Bump this whenever the serialized
+ * graph changes incompatibly; products of an older shape then miss once and are rewritten.
+ */
+const MODULE_PRODUCT_SHAPE = 2;
+
+/**
  * Read a cached per-module artifact.
  *
- * @param string $relPath    source path mirrored under the cache root
- * @param string $kind       artifact kind (e.g. 'checked', 'localtypes', 'exports')
- * @param string $contentKey Merkle content key of the module
+ * `$key` is the module's declared cache key: its content Merkle plus the
+ * compilation inputs the product depends on — target, purpose and module
+ * search roots ({@see \Moggi\Pipeline\CompilationContext::moduleKey}). The
+ * key is the entry's identity, not a probe: an entry written under another key
+ * is an incompatible product and is never served. It is reported as a miss and
+ * dropped, so the next write stores the product this compilation derives
+ * rather than leaving one target's result to be handed to the next.
+ *
+ * The `target` stamp is checked as well as the key. The directory already
+ * names the target, so a mismatch means the file was moved or copied by hand
+ * into the wrong tree, and that is exactly the case a key alone would trust.
+ *
+ * @param string $relPath source path mirrored under the cache root
+ * @param string $kind    artifact kind (e.g. 'checked', 'localtypes', 'exports')
+ * @param string $key     declared module cache key
+ * @param string $target  target backend id (also the directory)
  */
-function moduleGet(string $relPath, string $kind, string $contentKey): mixed
+function moduleGet(string $relPath, string $kind, string $key, string $target): mixed
 {
     if (! cacheEnabled()) {
         return null;
@@ -412,7 +435,7 @@ function moduleGet(string $relPath, string $kind, string $contentKey): mixed
 
     ensureCache();
 
-    $path = modulePath($relPath, $kind);
+    $path = modulePath($relPath, $kind, $target);
     if (! \is_file($path)) {
         return null;
     }
@@ -427,14 +450,26 @@ function moduleGet(string $relPath, string $kind, string $contentKey): mixed
         return null;
     }
 
-    if (($value['key'] ?? null) !== $contentKey) {
+    if (($value['key'] ?? null) !== $key
+        || ($value['target'] ?? null) !== $target
+        || ($value['shape'] ?? null) !== MODULE_PRODUCT_SHAPE
+    ) {
+        @\unlink($path);
+
         return null;
     }
 
     return $value['payload'] ?? null;
 }
 
-function modulePut(string $relPath, string $kind, string $contentKey, mixed $payload): void
+/**
+ * Write a per-module artifact under its declared key.
+ *
+ * Products are immutable by convention and by construction: `atomicWrite`
+ * renames a complete file into place, so a reader sees either the previous
+ * entry or this one, and an entry is never edited in place under a live key.
+ */
+function modulePut(string $relPath, string $kind, string $key, mixed $payload, string $target): void
 {
     if (! cacheEnabled()) {
         return;
@@ -443,18 +478,17 @@ function modulePut(string $relPath, string $kind, string $contentKey, mixed $pay
     ensureCache();
 
     $raw = \serialize([
-        'key' => $contentKey,
+        'key' => $key,
+        'target' => $target,
+        'shape' => MODULE_PRODUCT_SHAPE,
         'payload' => $payload,
     ]);
-    atomicWrite(modulePath($relPath, $kind), $raw);
+    atomicWrite(modulePath($relPath, $kind, $target), $raw);
 }
 
-function modulePath(string $relPath, string $kind): string
+function modulePath(string $relPath, string $kind, string $backendId): string
 {
-    $backend = compileBackend();
-    if (\preg_match('/^[a-z0-9_-]+$/', $backend) !== 1) {
-        $backend = 'unknown';
-    }
+    $backend = \preg_match('/^[a-z0-9_-]+$/', $backendId) === 1 ? $backendId : 'unknown';
 
     return compileDir() . '/' . $backend . '/' . mirrorPath($relPath) . '.' . $kind . '.mogc';
 }
@@ -470,7 +504,13 @@ function artifactFileName(string $key): string
     return $safe === $key ? $key : $safe . '-' . \substr(\hash('xxh3', $key), 0, 12);
 }
 
-/** Whole-project artifact cache (e.g. `moggi compile` outputs). */
+/**
+ * Whole-project artifact cache (e.g. `moggi compile` outputs).
+ *
+ * An entry is keyed by the inputs that produced it, and the tree it sits in belongs to one compiler:
+ * `ensureCache()` drops everything below the fingerprint when the compiler on disk is not the one
+ * that wrote it, so a product is never handed to a build that did not derive it.
+ */
 function artifactGet(string $key): mixed
 {
     if (! cacheEnabled()) {
@@ -490,8 +530,11 @@ function artifactGet(string $key): mixed
     }
 
     $value = decodePayload($raw);
+    if ($value === null || ($value['key'] ?? null) !== $key) {
+        return null;
+    }
 
-    return $value === null ? null : ($value['payload'] ?? null);
+    return $value['payload'] ?? null;
 }
 
 function artifactPut(string $key, mixed $payload): void
@@ -502,7 +545,7 @@ function artifactPut(string $key, mixed $payload): void
 
     ensureCache();
 
-    $raw = \serialize(['payload' => $payload]);
+    $raw = \serialize(['key' => $key, 'payload' => $payload]);
     atomicWrite(compileDir() . '/artifacts/' . artifactFileName($key) . '.blob', $raw);
 }
 

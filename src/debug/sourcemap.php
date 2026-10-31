@@ -24,6 +24,13 @@ final class SourceMapBuilder
     /** @var array<string, true> */
     private array $symbolSeen = [];
 
+    /** @var array<string, true> generated names of box-building entries: they report through the worker */
+    private array $entryFrames = [];
+
+    /** @var array<string, true> generated names of workers: they are scaffolding in a raw host list */
+    private array $workerFrames = [];
+
+
     /** @var list<array<string, mixed>> */
     private array $sites = [];
 
@@ -69,10 +76,10 @@ final class SourceMapBuilder
         $module = $loc->module ?? $this->module;
         $function = $loc->function ?? '';
         $symbolId = symbolId($module, $function);
-        if (isset($this->symbolSeen[$symbolId])) {
+        if (isset($this->symbolSeen[$generated])) {
             return $symbolId;
         }
-        $this->symbolSeen[$symbolId] = true;
+        $this->symbolSeen[$generated] = true;
         $display = normalizeDisplayPath($loc->file ?? '');
         $sourceId = $display !== '' ? $display : $this->module;
         $this->addSource($sourceId, $display !== '' ? $display : $sourceId);
@@ -294,11 +301,25 @@ final class SourceMapBuilder
     }
 
     /** Register all function symbols from IR (even if they never throw). */
-    public function addModuleSymbols(IR\Module $ir, callable $generatedName): void
+    /**
+     * Register a generated name that must not appear as its own Mogg frame.
+     *
+     * An action entry answers with a box and the worker is what runs; a run site — in this module or
+     * across one — therefore adds an entry frame and a worker frame for a single source call. The
+     * entry's frame is scaffolding for the report, while the worker's frame keeps the source sites,
+     * so the two are recorded separately: `entry` is dropped from the call trace, `worker` from the
+     * raw host list.
+     */
+    public function markGeneratedFrame(string $generated, bool $isEntry): void
     {
-        foreach ($ir->functions as $fn) {
-            $gen = (string) $generatedName($fn);
-            $this->ensureSymbol($fn->srcLoc ?? new IR\SrcLoc($this->module, $fn->name, $ir->sourceFile, 0, 0), $gen);
+        if ($generated === '') {
+            return;
+        }
+
+        if ($isEntry) {
+            $this->entryFrames[$generated] = true;
+        } else {
+            $this->workerFrames[$generated] = true;
         }
     }
 
@@ -309,41 +330,68 @@ final class SourceMapBuilder
     }
 
     /**
-     * The module's map as a namespace constant: `[rows, functions]`, where a
-     * row is `generatedLine => [symbol, displayPath, line, col]` (keyed and
-     * pre-resolved, so the runtime resolves a frame with one array access) and
-     * `functions` is `generated function name => [symbol, path, line, col]` for
-     * frames whose generated line carries no mapping of its own.
+     * The module's map as a namespace constant: `[rows, functions, entries, workers, sites, symbols, paths]`.
      *
-     * Null when the module has neither, so a module that can never appear in a
-     * report carries nothing.
+     * A generated line maps to a *site index*, not to a site: one expression's statements share a
+     * source position, so `[symbol, path, line, col]` written per line repeats the same two strings
+     * for every one of them. Sites are deduplicated by value, and their symbol and path are interned
+     * to an index each, so a row costs one integer and the strings appear once per module.
+     *
+     * `functions` is `generated function name => site` for frames whose generated line carries no
+     * mapping of its own, and `entries`/`workers` name the generated frames a report drops.
+     *
+     * Null when the module has nothing to say, so a module that can never appear in a report carries
+     * nothing.
      */
     public function toRuntimeConst(string $name = '__MOGGI_MAP'): ?string
     {
+        $intern = ['sites' => [], 'at' => [], 'symbols' => [], 'symbolAt' => [], 'paths' => [], 'pathAt' => []];
+
+        $site = static function (array $location) use (&$intern): int {
+            [$symbol, $path, $line, $col] = $location;
+            $key = $symbol . "\x1f" . $path . "\x1f" . $line . "\x1f" . $col;
+            if (isset($intern['at'][$key])) {
+                return $intern['at'][$key];
+            }
+            $intern['symbols'][$intern['symbolAt'][$symbol] ??= \count($intern['symbols'])] = $symbol;
+            $intern['paths'][$intern['pathAt'][$path] ??= \count($intern['paths'])] = $path;
+            $intern['sites'][] = [$intern['symbolAt'][$symbol], $intern['pathAt'][$path], $line, $col];
+
+            return $intern['at'][$key] = \count($intern['sites']) - 1;
+        };
+
         $functions = [];
         foreach ($this->runtimeFunctions() as $generated => $fn) {
-            $functions[$generated] = [$fn['symbol'], $fn['path'], $fn['line'], $fn['col']];
+            $functions[$generated] = $site([$fn['symbol'], $fn['path'], $fn['line'], $fn['col']]);
         }
 
         $rows = [];
         foreach ($this->mappings as $generatedLine => $siteId) {
-            $site = $this->siteById($siteId);
-            if ($site === null) {
+            $mapped = $this->siteById($siteId);
+            if ($mapped === null) {
                 continue;
             }
-            $rows[$generatedLine] = [
-                (string) ($site['symbolId'] ?? ''),
-                $this->displayPathFor((string) ($site['sourceId'] ?? '')),
-                (int) ($site['line'] ?? 0),
-                (int) ($site['col'] ?? 0),
-            ];
+            $rows[$generatedLine] = $site([
+                (string) ($mapped['symbolId'] ?? ''),
+                $this->displayPathFor((string) ($mapped['sourceId'] ?? '')),
+                (int) ($mapped['line'] ?? 0),
+                (int) ($mapped['col'] ?? 0),
+            ]);
         }
 
-        if ($rows === [] && $functions === []) {
+        if ($rows === [] && $functions === [] && $this->entryFrames === [] && $this->workerFrames === []) {
             return null;
         }
 
-        return 'const ' . $name . ' = ' . self::phpLiteral([$rows, $functions]) . ';';
+        return 'const ' . $name . ' = ' . self::phpLiteral([
+            $rows,
+            $functions,
+            \array_keys($this->entryFrames),
+            \array_keys($this->workerFrames),
+            $intern['sites'],
+            $intern['symbols'],
+            $intern['paths'],
+        ]) . ';';
     }
 
     /** One-line PHP literal for map data (ints, strings, and arrays of both). */

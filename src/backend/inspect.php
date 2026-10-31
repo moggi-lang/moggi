@@ -26,15 +26,11 @@ require_once __DIR__ . '/../executables.php';
  *
  * `.moggi.map` sidecars (and any other companion) are never display artifacts.
  *
- * @param string|array<string, string> $emit
+ * @param array<string, string> $emit
  * @return array<string, string>
  */
-function selectArtifacts(string|array $emit, string $extension): array
+function selectArtifacts(array $emit, string $extension): array
 {
-    if (! \is_array($emit)) {
-        return [];
-    }
-
     $out = [];
     foreach ($emit as $rel => $bytes) {
         if (! \is_string($rel) || ! \is_string($bytes)) {
@@ -55,14 +51,10 @@ function selectArtifacts(string|array $emit, string $extension): array
  * Last-resort listing when no artifact matches the backend's display shape:
  * names and sizes, never the source map.
  *
- * @param string|array<string, string> $emit
+ * @param array<string, string> $emit
  */
-function describeArtifactList(string|array $emit): string
+function describeArtifactList(array $emit): string
 {
-    if (\is_string($emit)) {
-        return $emit === '' ? '' : $emit . (\str_ends_with($emit, "\n") ? '' : "\n");
-    }
-
     $lines = [];
     foreach ($emit as $rel => $bytes) {
         if (! \is_string($rel) || ! \is_string($bytes) || \str_ends_with($rel, '.moggi.map')) {
@@ -78,15 +70,11 @@ function describeArtifactList(string|array $emit): string
  * PHP emits source text; the primary artifact is the module file itself
  * (host-owned companion `.php` files follow it in the map).
  *
- * @param string|array<string, string> $emit
+ * @param array<string, string> $emit
  * @param list<string> $focusNames
  */
-function describePhpEmit(string|array $emit, array $focusNames = []): string
+function describePhpEmit(array $emit, array $focusNames = []): string
 {
-    if (\is_string($emit)) {
-        return displayPhpEmit($emit, $focusNames);
-    }
-
     $artifacts = selectArtifacts($emit, '.php');
     if ($artifacts === []) {
         return describeArtifactList($emit);
@@ -99,10 +87,10 @@ function describePhpEmit(string|array $emit, array $focusNames = []): string
  * JVM emits `.class` bytes; disassemble them with `javap -c -p`, like the PHP
  * backend shows source.
  *
- * @param string|array<string, string> $emit
+ * @param array<string, string> $emit
  * @param list<string> $focusNames
  */
-function describeJvmEmit(string|array $emit, array $focusNames = []): string
+function describeJvmEmit(array $emit, array $focusNames = []): string
 {
     $classFiles = selectArtifacts($emit, '.class');
     if ($classFiles === []) {
@@ -115,10 +103,10 @@ function describeJvmEmit(string|array $emit, array $focusNames = []): string
 /**
  * .NET emits ILASM text (`.il`), the analogue of the JVM javap dump.
  *
- * @param string|array<string, string> $emit
+ * @param array<string, string> $emit
  * @param list<string> $focusNames
  */
-function describeDotNetEmit(string|array $emit, array $focusNames = []): string
+function describeDotNetEmit(array $emit, array $focusNames = []): string
 {
     $ilFiles = selectArtifacts($emit, '.il');
     if ($ilFiles === []) {
@@ -192,11 +180,78 @@ function formatJavapDump(array $classFiles, array $focusNames = []): string
 
 /**
  * Drop javap's per-class `Compiled from "…"` banner: the disassembly names the
- * class itself, so the source filename is noise in `:emit` output.
+ * class itself, so the source filename is noise in `:emit` output. The block
+ * layout is made host-independent too: {@see canonicalizeJavapCodeBlocks}.
  */
 function stripJavapNoise(string $javapOut): string
 {
-    return \preg_replace('/^Compiled from .*\R/m', '', $javapOut) ?? $javapOut;
+    $text = \preg_replace('/^Compiled from .*\R/m', '', $javapOut) ?? $javapOut;
+
+    return canonicalizeJavapCodeBlocks($text);
+}
+
+/**
+ * Fix javap's block layout so the same classfile dumps identically on every JDK.
+ *
+ * `javap -c` prints a method's bytecode under `Code:` with the instruction
+ * offsets right-aligned in a fixed-width field, and the exception table beneath
+ * them indented to match. JDK 24 widened that field from 8 columns to 10, so the
+ * same `.class` prints two columns wider on a newer JDK. That is the host's
+ * cosmetic layout, not the bytecode — but left alone it makes every
+ * `*.jvm.emit.expected` golden depend on which JDK the suite ran on (CI pins
+ * 21, a developer machine may carry anything newer).
+ *
+ * The canonical form is the 10-column field: a `Code:` block is shifted as a
+ * whole by the difference its first instruction reveals, so the operand columns
+ * inside an instruction, which javap already keeps stable, are untouched.
+ */
+function canonicalizeJavapCodeBlocks(string $text): string
+{
+    $lines = \preg_split('/\R/', $text) ?: [];
+    $out = [];
+    $inCode = false;
+    $shift = null;
+
+    foreach ($lines as $line) {
+        if (\ltrim($line) === 'Code:') {
+            $inCode = true;
+            $shift = null;
+            $out[] = $line;
+
+            continue;
+        }
+
+        // A blank line, the closing brace, or the next member signature ends the block.
+        $endsBlock = \trim($line) === ''
+            || \preg_match('/^\s*}/', $line) === 1
+            || \preg_match('/^  \S/', $line) === 1;
+        if (! $inCode || $endsBlock) {
+            $inCode = false;
+            $out[] = $line;
+
+            continue;
+        }
+
+        if ($shift === null && \preg_match('/^(\s*)(\d+):/', $line, $m) === 1) {
+            $shift = 10 - \strlen($m[1]) - \strlen($m[2]);
+        }
+        if ($shift === null) {
+            $out[] = $line;
+
+            continue;
+        }
+
+        if ($shift >= 0) {
+            $out[] = \str_repeat(' ', $shift) . $line;
+
+            continue;
+        }
+
+        $leading = \strlen($line) - \strlen(\ltrim($line));
+        $out[] = \substr($line, \min($leading, -$shift));
+    }
+
+    return \implode("\n", $out);
 }
 
 /**

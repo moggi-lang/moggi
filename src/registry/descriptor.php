@@ -387,7 +387,11 @@ function descriptorFormatProblems(string $path): array
 
             continue;
         }
-        \preg_match('/^([A-Za-z0-9_.\-:\/]+)\s*=/', $trimmed, $match);
+        if (\preg_match('/^([A-Za-z0-9_.\-:\/]+)\s*=/', $trimmed, $match) !== 1) {
+            $problems[] = "{$where}: not `key = value` and not a section header";
+
+            continue;
+        }
         $key = $match[1];
 
         if ($section === '') {

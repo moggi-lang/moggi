@@ -2,43 +2,48 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Backend\codegen;
-use function Moggi\Backend\compileBackend;
-use function Moggi\Backend\currentBackend;
-
-use Moggi\Cache;
-
-use function Moggi\IR\Dump\dump as dumpIr;
-
-use Moggi\IR\EntryPointKind;
-use Moggi\IR\Module;
-
-use function Moggi\IR\Visit\collectIrCodegenUsage;
-use function Moggi\IR\Visit\freeLocalsInBlock;
-
-use function Moggi\Optimize\Specialize\specializeAcrossModules;
-use function Moggi\Optimize\Support\isCapturedFnName;
-use function Moggi\Optimize\TreeShake\treeShakeModules;
-use function Moggi\Pipeline\entryPurpose;
-
-use Moggi\Pipeline\PipelineRequest;
-use Moggi\Pipeline\PipelineStage;
-
-use function Moggi\Pipeline\run as pipelineRun;
-
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-use Moggi\Syntax\Parser\ParseError;
-
 /**
  * Module compilation entry points: whole-project and single-file compiles,
  * built on top of `prepareProject`/`prepareProjectCached`.
  */
 
+use Moggi\Cache;
+use Moggi\Profile;
+use Moggi\IR\EntryPointKind;
+use Moggi\IR\Module;
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\PipelineRequest;
+use Moggi\Pipeline\PipelineStage;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+use Moggi\Syntax\Parser\ParseError;
+
+use function Moggi\Backend\codegenWith;
+use function Moggi\Semantics\Foreign\programDeclaresForeign;
+use function Moggi\Backend\Jvm\Foreign\jvmInterfaceNamesFromPrograms;
+use function Moggi\IR\Callables\table;
+use function Moggi\IR\Dump\dump as dumpIr;
+use function Moggi\IR\Validate\validateCallableLayouts;
+use function Moggi\IR\Visit\collectIrCodegenUsage;
+use function Moggi\Memory\pause;
+use function Moggi\Memory\resume;
+use function Moggi\Optimize\Specialize\specializeAcrossModules;
+use function Moggi\Optimize\TreeShake\treeShakeModules;
+use function Moggi\Pipeline\run as pipelineRun;
+
+/**
+ * The shape of a cached project product.
+ *
+ * Part of the artifact key, not a field patched on read: a product written by another shape is a
+ * different key, so a reader either gets a record of exactly this shape or prepares the project.
+ * Every field the product promises is present, including the two that may be null.
+ */
+const PROJECT_PRODUCT_SHAPE = 2;
+
 /** @param list<string> $paths @return array<string, string> relative output path => emitted artifact */
-function compileProject(array $paths, string $rootDir, bool $optimize = true, bool $strip = false): array
+function compileProject(array $paths, string $rootDir, CompilationContext $context, bool $optimize = true, bool $strip = false): array
 {
-    return compileProjectBoth($paths, $rootDir, $optimize, $strip)['emit'];
+    return compileProjectBoth($paths, $rootDir, $context, $optimize, $strip)['emit'];
 }
 
 /**
@@ -50,67 +55,82 @@ function compileProject(array $paths, string $rootDir, bool $optimize = true, bo
  *   entryRelative: ?string
  * }
  */
-function compileProjectBoth(array $paths, string $rootDir, bool $optimize = true, bool $strip = false): array
+function compileProjectBoth(array $paths, string $rootDir, CompilationContext $context, bool $optimize = true, bool $strip = false): array
 {
+    $timing = \getenv('MOGGI_PHASE_TIMING') === '1';
+    $phaseStarted = \microtime(true);
     $outputsKey = Cache\hashContent(
-        preparedProjectDiskKey($paths, $rootDir)
+        preparedProjectDiskKey($paths, $rootDir, $context)
             . '|opt=' . ($optimize ? '1' : '0')
             . '|strip=' . ($strip ? '1' : '0')
-            . '|backend=' . compileBackend()
-            . '|emit=' . currentBackend()->emitCacheDiscriminator()
-            . '|out=emit',
+            . '|emit=' . $context->backend->emitCacheDiscriminator()
+            . '|context=' . $context->cacheKey()
+            . '|out=emit'
+            . '|shape=' . PROJECT_PRODUCT_SHAPE,
     );
     $cached = Cache\artifactGet($outputsKey);
-    if (\is_array($cached) && isset($cached['emit'], $cached['opt-ir'])) {
-        $cached['entryModule'] ??= null;
-        $cached['entryRelative'] ??= null;
-
+    if (\is_array($cached)) {
         return $cached;
     }
 
-    $outputs = compilePreparedProject(prepareProjectCached($paths, $rootDir), $optimize, $strip);
+    pause();
+    try {
+        $prepared = prepareProjectCached($paths, $rootDir, $context, releaseChecked: Cache\cacheEnabled());
+    } finally {
+        resume();
+    }
+    if ($timing) {
+        \fwrite(STDERR, \sprintf("phase prepare %.2fs\n", \microtime(true) - $phaseStarted));
+    }
+
+    $outputs = compilePreparedProject($prepared, $context, $optimize, $strip);
+    if ($timing) {
+        \fwrite(STDERR, \sprintf("phase project total %.2fs\n", \microtime(true) - $phaseStarted));
+    }
     Cache\artifactPut($outputsKey, $outputs);
 
     return $outputs;
 }
 
 /**
+ * Compile a prepared project into backend artifacts and optimized IR.
+ *
  * @return array{
  *   emit: array<string, string>,
  *   opt-ir: array<string, string>,
  *   entryModule: ?string,
  *   entryRelative: ?string
  * }
- *
- * Every artifact path is spelled by `outputRelativePath()` — the same function
- * the import contexts were planned with — so the tree a module is written to and
- * the `require`s that count their way back to `_runtime.php` from inside it are
- * one spelling. They are two independent computations of the same thing, and a
- * root prefix that only one of them can subtract (a drive root on Windows) used
- * to leave them disagreeing, which put every generated file at one depth and
- * every require at another.
  */
-function compilePreparedProject(PreparedProject $prepared, bool $optimize = true, bool $strip = false): array
+function compilePreparedProject(PreparedProject $prepared, CompilationContext $context, bool $optimize = true, bool $strip = false): array
 {
+    $timing = \getenv('MOGGI_PHASE_TIMING') === '1';
+    $pipelineSeconds = 0.0;
+    $specializeSeconds = 0.0;
+    $emitSeconds = 0.0;
     $optByModule = [];
     $relativeByModule = [];
     foreach ($prepared->units as $moduleName => $unit) {
         if (($unit['synthetic'] ?? false) === true) {
             continue;
         }
-        if (! isset($prepared->checked[$moduleName], $prepared->importContexts[$moduleName])) {
+        if (! isset($prepared->importContexts[$moduleName]) || ! $prepared->has($moduleName)) {
             continue;
         }
 
         $relative = outputRelativePath($unit['path'], $prepared->rootPrefix);
         $relativeByModule[$moduleName] = $relative;
-        $purpose = entryPurpose($moduleName);
 
+        $program = ($unit['program'] ?? null) instanceof Ast\Program ? $unit['program'] : null;
         $irCacheKey = isset($unit['cacheRelPath'])
-            ? ($unit['contentKey'] ?? '') . '|opt=' . ($optimize ? '1' : '0') . '|' . $purpose->name
+            ? $context->moduleProductKey(
+                $moduleName,
+                ($unit['contentKey'] ?? '') . '|opt=' . ($optimize ? '1' : '0'),
+                $program !== null && programDeclaresForeign($program),
+            )
             : null;
         if ($irCacheKey !== null) {
-            $cachedIr = Cache\moduleGet($unit['cacheRelPath'], 'ir', $irCacheKey);
+            $cachedIr = Cache\moduleGet($unit['cacheRelPath'], 'ir', $irCacheKey, $context->backendId);
             if ($cachedIr instanceof Module) {
                 $optByModule[$moduleName] = $cachedIr;
 
@@ -118,131 +138,215 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
             }
         }
 
+        $pipelineStarted = \microtime(true);
         $artifacts = pipelineRun(new PipelineRequest(
-            purpose: $purpose,
             filename: $unit['path'],
-            typedProgram: $prepared->checked[$moduleName],
+            typedProgram: $prepared->program($moduleName, $context),
             optimize: $optimize,
             importContext: $prepared->importContexts[$moduleName],
+            context: $context,
         ), PipelineStage::IrOpt);
+        $pipelineSeconds += \microtime(true) - $pipelineStarted;
         $optByModule[$moduleName] = $artifacts->irOpt
             ?? throw new \RuntimeException("pipeline produced no IR for module `{$moduleName}`");
         if ($irCacheKey !== null) {
-            Cache\modulePut($unit['cacheRelPath'], 'ir', $irCacheKey, $optByModule[$moduleName]);
+            Cache\modulePut($unit['cacheRelPath'], 'ir', $irCacheKey, $optByModule[$moduleName], $context->backendId);
         }
     }
 
     if ($optimize) {
         $externalFnsByModule = [];
         foreach ($prepared->importContexts as $moduleName => $importContext) {
-            $codegen = $importContext['codegen'] ?? [];
-            $externalFnsByModule[$moduleName] = \is_array($codegen['externalFns'] ?? null)
-                ? $codegen['externalFns']
-                : [];
+            $externalFnsByModule[$moduleName] = $importContext->interface->externalFns();
         }
+        $specializeStarted = \microtime(true);
         $specialized = specializeAcrossModules($optByModule, $externalFnsByModule);
         $optByModule = $specialized['modules'];
+        $specializeSeconds += \microtime(true) - $specializeStarted;
     }
 
     if ($strip) {
         $optByModule = treeShakeModules($optByModule)['modules'];
     }
 
-    $globalEvidenceMaps = [];
     foreach ($optByModule as $moduleName => $optimizedIr) {
-        foreach ($optimizedIr->instanceEvidence as $ev) {
-            $globalEvidenceMaps[$ev->evidenceName] = [
-                'module' => $moduleName,
-                'methods' => $ev->methods,
-            ];
-        }
+        validateCallableLayouts(
+            $optimizedIr,
+            'post-specialize',
+            $prepared->importContexts[$moduleName]->interface->callableArity(),
+        );
     }
 
-    $globalFnArity = [];
+    $foreignInterfaces = $context->backendId === 'jvm'
+        ? jvmInterfaceNamesFromPrograms(\array_filter(\array_map(
+            static fn (array $unit): ?Ast\Program => $unit['program'] ?? null,
+            \array_values($prepared->units),
+        )))
+        : [];
+
+    /*
+     * One published table per module, handed to emit as-is. The backends project arity from
+     * these `CallableSig`s; nothing here (and nothing in a backend) recounts parameters and
+     * captures into a second map.
+     */
+    $callableTables = [];
     foreach ($optByModule as $moduleName => $optimizedIr) {
-        $lambdaMeta = [];
-        foreach ($optimizedIr->functions as $fn) {
-            if (! isCapturedFnName($fn->name)) {
-                continue;
-            }
-            $lambdaMeta[$fn->name] = [
-                'captures' => freeLocalsInBlock($fn->body, \array_fill_keys($fn->params, true)),
-                'params' => $fn->params,
-            ];
-        }
-        foreach ($optimizedIr->functions as $fn) {
-            $arity = \count($fn->params);
-            if (isCapturedFnName($fn->name)) {
-                $arity += \count($lambdaMeta[$fn->name]['captures'] ?? []);
-            }
-            $globalFnArity[resolvedSymbol((string) $moduleName, $fn->name)] = $arity;
-        }
+        $callableTables[(string) $moduleName] = table($optimizedIr->functions, (string) $moduleName);
     }
 
     $emitOutputs = [];
     $optIrOutputs = [];
-    $ext = currentBackend()->extension();
+    $ext = $context->backend->extension();
     $allModuleOutputPaths = [];
     foreach ($relativeByModule as $mn => $rel) {
         $allModuleOutputPaths[$mn] = \preg_replace('/\.mog$/', $ext, $rel) ?? $rel;
     }
-    $entryModule = null;
-    $entryRelative = null;
+
+    $candidateOutputPaths = [];
     foreach ($optByModule as $moduleName => $optimizedIr) {
-        $unit = $prepared->units[$moduleName];
-        $relative = $relativeByModule[$moduleName];
-        $outputRelative = \preg_replace('/\.mog$/', $ext, $relative) ?? $relative;
-        $importContext = $prepared->importContexts[$moduleName];
-        $irUsage = collectIrCodegenUsage($optimizedIr);
-
-        $optIrOutputs[\preg_replace('/\.mog$/', '.opt-ir', $relative) ?? $relative] = dumpIr($optimizedIr);
-
         if ($optimizedIr->entry === null && ! moduleDeclaresCode($optimizedIr)) {
             continue;
         }
+        $candidateOutputPaths[$moduleName] = $allModuleOutputPaths[$moduleName]
+            ?? throw new \LogicException("module `{$moduleName}` has no artifact to write");
+    }
 
-        $codegenForFilter = $importContext['codegen'];
-        $codegenForFilter['moduleOutputPaths'] = \array_merge(
-            $allModuleOutputPaths,
-            $codegenForFilter['moduleOutputPaths'] ?? [],
-        );
+    /** @var array<string, array{unit: array<string, mixed>, outputRelative: string, plan: EmitPlan, ir: Module, irUsage: array{callees: array<string, true>, intrinsics: array<string, true>}}> $plans */
+    $plans = [];
+    $entryModule = null;
+    $entryRelative = null;
+    foreach ($optByModule as $moduleName => $optimizedIr) {
+        $relative = $relativeByModule[$moduleName];
+        $optIrOutputs[\preg_replace('/\.mog$/', '.opt-ir', $relative) ?? $relative] = dumpIr($optimizedIr);
 
-        $codegenImports = filterCodegenImportsForIr(
-            $optimizedIr,
-            $codegenForFilter,
-            null,
-            $irUsage['callees'],
-        );
-        $codegenImports['importedData'] = $importContext['data'];
-
-        $emitted = codegen($optimizedIr, $unit['path'], [
-            'namespace' => $unit['namespace'],
-            'imports' => $codegenImports,
-            'outputRelative' => $outputRelative,
-            'irUsage' => $irUsage,
-            'artifactModuleName' => $moduleName,
-            'externalFns' => $codegenImports['externalFns'] ?? [],
-            'externalFnRuntimeArity' => $importContext['externalFnRuntimeArity'] ?? [],
-            'globalEvidenceMaps' => $globalEvidenceMaps,
-            'globalFnArity' => $globalFnArity,
-        ]);
-
-        if ($optimizedIr->entry !== null && $optimizedIr->entry->kind === EntryPointKind::Main) {
-            $entryModule = $moduleName;
-            $entryRelative = \preg_replace('/\.mog$/', $ext, $relative) ?? $relative;
+        if (! isset($candidateOutputPaths[$moduleName])) {
+            continue;
         }
 
-        if (\is_array($emitted)) {
-            foreach ($emitted as $path => $bytes) {
-                $emitOutputs[$path] = $bytes;
+        $unit = $prepared->units[$moduleName];
+        $outputRelative = $candidateOutputPaths[$moduleName];
+        $importContext = $prepared->importContexts[$moduleName];
+        $irUsage = collectIrCodegenUsage($optimizedIr);
+
+        $plan = $importContext->plan;
+        if ($context->backendId === 'php') {
+            $plan = $plan->withModuleOutputPaths($candidateOutputPaths);
+        }
+
+        $plans[$moduleName] = [
+            'unit' => $unit,
+            'outputRelative' => $outputRelative,
+            'plan' => planEmission(
+                $importContext->interface,
+                $plan,
+                $optimizedIr,
+                $irUsage['callees'],
+                $outputRelative,
+            ),
+            'ir' => $optimizedIr,
+            'irUsage' => $irUsage,
+        ];
+
+        if ($optimizedIr->entry !== null && $optimizedIr->entry->kind === EntryPointKind::Main) {
+            if ($entryModule !== null) {
+                throw new \LogicException(
+                    "this compilation has two entry modules, `{$entryModule}` and `{$moduleName}`; "
+                    . 'a project compiles one `main`',
+                );
             }
-        } else {
-            $emitRelative = \preg_replace('/\.mog$/', $ext, $relative) ?? $relative;
-            $emitOutputs[$emitRelative] = $emitted;
+            $entryModule = $moduleName;
+            $entryRelative = $outputRelative;
         }
     }
 
-    $emitOutputs = currentBackend()->foldProgramEmit($emitOutputs);
+    $written = \array_keys($plans);
+    if ($context->backendId === 'php' && $entryModule !== null) {
+        $written = emittedClosure(
+            \array_map(static fn (array $planned): EmitPlan => $planned['plan'], $plans),
+            $entryModule,
+        );
+    }
+
+    /*
+     * Everything an emitter reads that is *not* the module's own IR: the target and its
+     * discriminator, the optimize/strip modes, the JVM interface set, the program-wide arity
+     * tables and (per module) the rendered plan. An emitted artifact is reused only when all of
+     * it matches, because those facts decide descriptors, arity maps and imported layout just as
+     * the body does; a body-only edit leaves this fingerprint alone, so the untouched modules are
+     * served from cache instead of the whole project being re-emitted.
+     */
+    $emitProgramFingerprint = \hash('xxh128', \serialize([
+        'backend' => $context->backendId,
+        'discriminator' => $context->backend->emitCacheDiscriminator(),
+        'optimize' => $optimize,
+        'strip' => $strip,
+        'foreignInterfaces' => $foreignInterfaces,
+        'callables' => $callableTables,
+    ]));
+
+    foreach ($written as $moduleName) {
+        $planned = $plans[$moduleName];
+        $unit = $planned['unit'];
+        $optimizedIr = $planned['ir'];
+        $irUsage = $planned['irUsage'];
+        $outputRelative = $planned['outputRelative'];
+
+        $cacheRel = $unit['cacheRelPath'] ?? null;
+        $emitCacheKey = null;
+        if (\is_string($cacheRel) && $cacheRel !== '') {
+            $emitCacheKey = $context->moduleProductKey(
+                $moduleName,
+                ($unit['contentKey'] ?? '')
+                    . '|opt=' . ($optimize ? '1' : '0')
+                    . '|strip=' . ($strip ? '1' : '0')
+                    . '|emit-layout=' . $emitProgramFingerprint
+                    . '|plan=' . \hash('xxh128', \serialize($planned['plan']))
+                    . '|path=' . ($unit['path'] ?? ''),
+                (($unit['program'] ?? null) instanceof Ast\Program)
+                    && programDeclaresForeign($unit['program']),
+            );
+            $cachedEmit = Cache\moduleGet($cacheRel, 'emit', $emitCacheKey, $context->backendId);
+            if (\is_array($cachedEmit)) {
+                foreach ($cachedEmit as $path => $bytes) {
+                    if (\is_string($path) && \is_string($bytes)) {
+                        $emitOutputs[$path] = $bytes;
+                    }
+                }
+
+                continue;
+            }
+        }
+
+        $emitStarted = \microtime(true);
+        $emitted = codegenWith($context->backend, $optimizedIr, $unit['path'], [
+            'namespace' => $unit['namespace'],
+            'plan' => $planned['plan'],
+            'outputRelative' => $outputRelative,
+            'irUsage' => $irUsage,
+            'artifactModuleName' => $moduleName,
+            'callableTables' => $callableTables,
+            'foreignInterfaces' => $foreignInterfaces,
+        ]);
+        $emitSeconds += \microtime(true) - $emitStarted;
+
+        foreach ($emitted as $path => $bytes) {
+            $emitOutputs[$path] = $bytes;
+        }
+
+        if ($emitCacheKey !== null && \is_string($cacheRel)) {
+            Cache\modulePut($cacheRel, 'emit', $emitCacheKey, $emitted, $context->backendId);
+        }
+    }
+
+    $emitOutputs = $context->backend->foldProgramEmit($emitOutputs);
+    if ($timing) {
+        \fwrite(STDERR, \sprintf(
+            "phase pipeline %.2fs specialize %.2fs emit %.2fs\n",
+            $pipelineSeconds,
+            $specializeSeconds,
+            $emitSeconds,
+        ));
+    }
 
     return [
         'emit' => $emitOutputs,
@@ -250,6 +354,47 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
         'entryModule' => $entryModule,
         'entryRelative' => $entryRelative,
     ];
+}
+
+/**
+ * The modules a compile writes: the entry and everything its plan's require lines reach.
+ *
+ * This is the one place that decides what the tree holds. An emitted require can only name a
+ * module this returns, and a module it returns is reachable from the entry, so a written tree is
+ * the entry's own closure and no artifact can point at a file the same compile did not write.
+ *
+ * @param array<string, EmitPlan> $planByModule
+ * @return list<string>
+ * @throws \LogicException when a plan requires a module this compile does not emit
+ */
+function emittedClosure(array $planByModule, string $entryModule): array
+{
+    if (! isset($planByModule[$entryModule])) {
+        throw new \LogicException("the entry module `{$entryModule}` has no emission plan");
+    }
+
+    $reachable = [$entryModule => true];
+    $pending = [$entryModule];
+    while ($pending !== []) {
+        $moduleName = \array_pop($pending);
+        foreach (\array_keys($planByModule[$moduleName]->requiredModules) as $dependency) {
+            if (isset($reachable[$dependency])) {
+                continue;
+            }
+            if (! isset($planByModule[$dependency])) {
+                throw new \LogicException(
+                    "module `{$moduleName}` requires `{$dependency}`, which this compilation does not emit",
+                );
+            }
+            $reachable[$dependency] = true;
+            $pending[] = $dependency;
+        }
+    }
+
+    return \array_values(\array_filter(
+        \array_keys($planByModule),
+        static fn (string $moduleName): bool => isset($reachable[$moduleName]),
+    ));
 }
 
 function moduleDeclaresCode(Module $module): bool
@@ -262,26 +407,26 @@ function moduleDeclaresCode(Module $module): bool
 /** @throws ParseError|TypeError|\RuntimeException @return string|array<string, string> */
 function compileModuleFile(
     string $path,
+    CompilationContext $context,
     string $mode = 'php',
     bool $optimize = true,
     ?string $outputFile = null,
     ?Ast\Program $routingProgram = null,
 ): string|array {
     if ($mode === 'ir') {
-        $context = moduleCompileContext($path, $routingProgram);
-        $purpose = entryPurpose($context['typedProgram']->module);
+        $moduleContext = moduleCompileContext($path, $context, $routingProgram);
         $artifacts = pipelineRun(new PipelineRequest(
-            purpose: $purpose,
             filename: $path,
-            typedProgram: $context['typedProgram'],
+            typedProgram: $moduleContext['typedProgram'],
             optimize: false,
-            importContext: $context['importContext'],
+            importContext: $moduleContext['importContext'],
+            context: $context,
         ), PipelineStage::Ir);
 
         return dumpIr($artifacts->ir ?? throw new \RuntimeException('missing IR'));
     }
 
-    $outputs = compileModuleFileOutputs($path, $optimize, $outputFile, $routingProgram);
+    $outputs = compileModuleFileOutputs($path, $context, $optimize, $outputFile, $routingProgram);
 
     return match ($mode) {
         'php', 'emit' => $outputs['emit'],
@@ -291,63 +436,60 @@ function compileModuleFile(
 }
 
 /**
- * @return array{emit: string|array<string, string>, opt-ir: string}
+ * @return array{emit: array<string, string>, opt-ir: string}
  */
 function compileModuleFileOutputs(
     string $path,
+    CompilationContext $context,
     bool $optimize = true,
     ?string $outputFile = null,
     ?Ast\Program $routingProgram = null,
 ): array {
-    $context = moduleCompileContext($path, $routingProgram);
-    $purpose = entryPurpose($context['typedProgram']->module);
+    $moduleContext = moduleCompileContext($path, $context, $routingProgram);
     $artifacts = pipelineRun(new PipelineRequest(
-        purpose: $purpose,
         filename: $path,
-        typedProgram: $context['typedProgram'],
+        typedProgram: $moduleContext['typedProgram'],
         optimize: $optimize,
-        importContext: $context['importContext'],
+        importContext: $moduleContext['importContext'],
+        context: $context,
     ), PipelineStage::IrOpt);
     $phpIr = $artifacts->irOpt
         ?? throw new \RuntimeException('pipeline produced no optimized IR');
     $projectRoot = projectRootFromPath($path);
     $fromOutputRelative = $outputFile !== null
         ? pathWithinProject($outputFile, $projectRoot)
-        : $context['outputRelative'];
-    $codegen = $context['importContext']['codegen'];
-    $stdlibPhpRoot = detectStdlibPhpPath($outputFile);
-    if ($stdlibPhpRoot !== null) {
-        $codegen['moduleOutputPaths'] = remapStdlibModuleOutputPaths(
-            $codegen['moduleOutputPaths'],
-            $context['units'],
-            $stdlibPhpRoot,
-            $projectRoot,
-        );
+        : $moduleContext['outputRelative'];
+    $interface = $moduleContext['importContext']->interface;
+    $plan = $moduleContext['importContext']->plan;
+    if ($context->backendId === 'php') {
+        $plan = $plan->withModuleOutputPaths(moduleOutputPathsForUnits(
+            $moduleContext['units'],
+            $moduleContext['rootPrefix'],
+            $context->backendId,
+        ));
     }
 
     $irUsage = collectIrCodegenUsage($phpIr);
-    $codegenImports = filterCodegenImportsForIr(
+    $plan = planEmission(
+        $interface,
+        $plan,
         $phpIr,
-        $codegen,
-        $fromOutputRelative,
         $irUsage['callees'],
+        $fromOutputRelative,
     );
-    $codegenImports['importedData'] = $context['importContext']['data'];
 
     ProjectCache::releaseProjectCheckedModules();
 
-    $emit = codegen($phpIr, $context['unit']['path'], [
-        'namespace' => $context['unit']['namespace'],
-        'imports' => $codegenImports,
+    $emit = codegenWith($context->backend, $phpIr, $moduleContext['unit']['path'], [
+        'namespace' => $moduleContext['unit']['namespace'],
+        'plan' => $plan,
         'outputRelative' => $fromOutputRelative,
         'irUsage' => $irUsage,
-        'artifactModuleName' => $context['typedProgram']->module,
-        'externalFns' => $codegenImports['externalFns'] ?? [],
-        'externalFnRuntimeArity' => $context['importContext']['externalFnRuntimeArity'] ?? [],
+        'artifactModuleName' => $moduleContext['typedProgram']->module,
     ]);
 
     return [
-        'emit' => \is_array($emit) ? currentBackend()->foldProgramEmit($emit) : $emit,
+        'emit' => $context->backend->foldProgramEmit($emit),
         'opt-ir' => dumpIr($phpIr),
     ];
 }
@@ -356,14 +498,15 @@ function compileModuleFileOutputs(
  * @return array{
  *   unit: array<string, mixed>,
  *   checked: Ast\Program,
- *   importContext: array<string, mixed>,
+ *   importContext: ImportContext,
  *   outputRelative: string,
+ *   rootPrefix: string,
  *   units: array<string, array<string, mixed>>
  * }
  */
-function moduleCompileContext(string $path, ?Ast\Program $routingProgram = null): array
+function moduleCompileContext(string $path, CompilationContext $context, ?Ast\Program $routingProgram = null): array
 {
-    [$files, $root] = moduleFileClosureCached($path);
+    [$files, $root] = moduleFileClosureCached($path, $context->backendId);
     $realPath = resolvePath($path);
     $targetModule = $routingProgram?->module;
 
@@ -371,20 +514,25 @@ function moduleCompileContext(string $path, ?Ast\Program $routingProgram = null)
         $targetModule = cachedModuleHeader($realPath)['module'] ?? null;
     }
 
-    $prepared = prepareProjectCached($files, $root, $targetModule);
+    $prepared = prepareProjectCached($files, $root, $context, $targetModule);
 
     if ($targetModule === null) {
         throw new TypeError("file `{$path}` is not part of module project under `{$root}`");
     }
 
     $unit = $prepared->units[$targetModule];
-    $outputRelative = mogPathToOutputRelative($unit['path'], $prepared->rootPrefix);
+    $outputRelative = mogPathToOutputRelative(
+        $unit['path'],
+        $prepared->rootPrefix,
+        $context->backend->extension(),
+    );
 
     return [
         'unit' => $unit,
         'typedProgram' => $prepared->checked[$targetModule],
         'importContext' => $prepared->importContexts[$targetModule],
         'outputRelative' => $outputRelative,
+        'rootPrefix' => $prepared->rootPrefix,
         'units' => $prepared->units,
     ];
 }

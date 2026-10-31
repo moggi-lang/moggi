@@ -5,35 +5,24 @@ namespace Moggi\Install;
 /**
  * Where an installed compiler lives, and the runtimes it carries.
  *
- * A distribution used to be a C launcher beside `moggi.phar`: the launcher found
- * the archive, put the bundled runtimes in front of `PATH`, and handed the
- * process to PHP. Now the compiler *is* one executable — a micro PHP runtime
- * with the archive appended (see `Moggi\Backend\Php`) — so there is no separate
- * program to do that, and the bytes between the runtime and the archive (the INI
- * object) are the only place a directive can be set.
- *
- * The installation root is therefore found without `Phar::running`, which is
- * empty in a native binary: the archive stub records the directory it was
- * started from as `MOGGI_INSTALL_ROOT`, and that is `<installation>` whether the
- * payload is appended to a runtime or run as `php bin/moggi.phar`.
+ * A compiler's `libraries/` and `runtime/` are the ones beside the executable
+ * that started the process, so a distribution's archive stub records the
+ * directory it was started from as `MOGGI_INSTALL_ROOT` before any code runs.
+ * A source checkout defines nothing and resolves to its own root instead.
  */
-
-/** The constant the archive stub defines: the installation root, or nothing in a checkout. */
-const INSTALL_ROOT_CONSTANT = 'MOGGI_INSTALL_ROOT';
 
 /**
  * The installation this process is running from, or null in a source checkout.
  *
- * The stub's constant is authoritative — it is the directory the executable was
- * started from, so a compiler copied elsewhere finds the `libraries/` and
- * `runtime/` beside *it*, never beside wherever it was built. The `Phar::running` fallback
- * covers an archive run without the stub, which nothing in this tree produces,
- * but which costs one line to keep working.
+ * The archive stub's `MOGGI_INSTALL_ROOT` is authoritative — a compiler copied
+ * elsewhere finds the `libraries/` and `runtime/` beside *it*, never beside
+ * wherever it was built. `Phar::running` answers the same question for an archive
+ * run without a stub.
  */
 function installationRoot(): ?string
 {
-    if (\defined(INSTALL_ROOT_CONSTANT)) {
-        $root = (string) \constant(INSTALL_ROOT_CONSTANT);
+    if (\defined('MOGGI_INSTALL_ROOT')) {
+        $root = (string) \constant('MOGGI_INSTALL_ROOT');
 
         return $root === '' ? null : \rtrim($root, '/\\');
     }

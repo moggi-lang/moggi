@@ -9,7 +9,53 @@
  */
 
 /**
- * The selection split into `--jobs` shards: round-robin, so a heavy group spreads over workers.
+ * The timing ledger the pool learned last run: `<cache>/test/durations.json`, keyed by
+ * `<backend>|<case>`. A run writes it at the end, so the next run can dispatch longest-first
+ * instead of round-robin and stop leaving a 90 s case as the tail.
+ */
+function durationLedgerPath(): string
+{
+    return \Moggi\Cache\cacheScratchDir() . '/durations.json';
+}
+
+/** @return array<string, float> */
+function readDurationLedger(): array
+{
+    static $ledger = null;
+    if ($ledger !== null) {
+        return $ledger;
+    }
+
+    $ledger = [];
+    $raw = @\file_get_contents(durationLedgerPath());
+    if ($raw !== false) {
+        $decoded = \json_decode($raw, true);
+        if (\is_array($decoded)) {
+            foreach ($decoded as $key => $value) {
+                if (\is_numeric($value)) {
+                    $ledger[(string) $key] = (float) $value;
+                }
+            }
+        }
+    }
+
+    return $ledger;
+}
+
+/**
+ * What this case took last run, in milliseconds, or 0 when the ledger has not seen it. A case
+ * that did not run (a cold toolchain, a first run) sorts last, which keeps the first run's order
+ * unchanged and only improves the ones after it.
+ */
+function caseDurationHint(string $backend, TestCase $case): float
+{
+    return readDurationLedger()[$backend . '|' . $case->name] ?? 0.0;
+}
+
+/**
+ * The selection split into `--jobs` shards, longest-first: workers take cases in descending last-run
+ * duration, so the case that would otherwise be the tail starts first. PHP's sort is stable, so an
+ * unknown (first-run) selection keeps its discovery order and round-robin spread.
  *
  * @param list<TestCase> $cases
  * @param list<string> $backends
@@ -21,15 +67,63 @@ function shardUnitMap(array $cases, array $backends, array $pathFilters, int $jo
     global $testArgs;
 
     $shards = \array_fill(0, \max(1, $jobs), []);
-    $unit = 0;
+    $units = [];
     foreach ($backends as $backend) {
         foreach (selectCases($cases, $pathFilters, $testArgs['groups'], $backend) as $index => $case) {
-            $shards[$unit % \count($shards)][] = ['backend' => $backend, 'index' => $index, 'case' => $case];
-            ++$unit;
+            $units[] = [
+                'backend' => $backend,
+                'index' => $index,
+                'case' => $case,
+                'hint' => caseDurationHint($backend, $case),
+            ];
         }
     }
 
+    \usort(
+        $units,
+        static fn (array $a, array $b): int => $b['hint'] <=> $a['hint'],
+    );
+
+    foreach ($units as $unit => $entry) {
+        unset($entry['hint']);
+        $shards[$unit % \count($shards)][] = $entry;
+    }
+
     return $shards;
+}
+
+/**
+ * Remember one case's duration for the next run's longest-first dispatch. The parent and each
+ * worker call this; only the parent writes the ledger.
+ */
+function recordCaseDuration(string $backend, CaseResult $result): void
+{
+    $GLOBALS['moggi_durations'][$backend][$result->name] = $result->durationMs;
+}
+
+/** Merge this run's observations into the ledger, keeping entries the selection did not run. */
+function writeDurationLedger(): void
+{
+    $observed = $GLOBALS['moggi_durations'] ?? [];
+    if ($observed === []) {
+        return;
+    }
+
+    $ledger = [];
+    foreach (readDurationLedger() as $key => $value) {
+        $ledger[$key] = $value;
+    }
+    foreach ($observed as $backend => $byName) {
+        foreach ($byName as $name => $durationMs) {
+            $ledger[$backend . '|' . $name] = \round((float) $durationMs, 1);
+        }
+    }
+
+    $path = durationLedgerPath();
+    if (! \is_dir(\dirname($path))) {
+        @\mkdir(\dirname($path), 0777, true);
+    }
+    @\file_put_contents($path, \json_encode($ledger, JSON_UNESCAPED_SLASHES));
 }
 
 /**
@@ -60,7 +154,6 @@ function runShardMode(array $cases, array $backends, array $pathFilters): int
             continue;
         }
 
-        \Moggi\Backend\setCompileBackend($backend);
         $emit = static function (CaseResult $result) use ($backend): void {
             workerEmitCase($backend, $result);
         };
@@ -113,7 +206,6 @@ function ingestWorkerLine(array &$stream, int $shard, string $line): void
     }
 
     $backend = (string) $event['backend'];
-    // The worker numbers cases from zero within its shard; map that to the selection's position.
     $position = $stream['globalByLocal'][$shard][$backend][(int) ($event['order'] ?? -1)] ?? null;
     if ($position === null) {
         return;
@@ -122,13 +214,12 @@ function ingestWorkerLine(array &$stream, int $shard, string $line): void
     $result = caseResultFromArray($event, $backend);
     $result->order = $position;
     $stream['merged'][$backend][$position] = $result;
+    recordCaseDuration($backend, $result);
 
     $multi = ($stream['multiBackend'] ?? false) === true;
     if (! progressReported() && $result->status !== 'not-applicable') {
         suiteEcho(renderCaseLine($result, $multi ? $backend : null));
     }
-
-    // The parent is the only thing a pool run prints, so the block is fed from the stream here.
     if (! ($stream['announced'][$backend] ?? false)) {
         $stream['announced'][$backend] = true;
         progressPlan($stream['planByBackend'][$backend] ?? [], $multi ? $backend : null);
@@ -274,7 +365,6 @@ final class ShardPool
         };
 
         $results = runProcessesInParallel($commands, $onChunk);
-        // The pool is complete, so the last section's block is the one the run keeps on screen.
         progressFreeze();
 
         /** @var array<string, array<int, CaseResult>> $merged */
@@ -282,15 +372,11 @@ final class ShardPool
         /** @var array<int, string> $stderr shard => its last words */
         $stderr = [];
         foreach ($results as $shard => $result) {
-            // A worker that never said `done` died; its stderr is the only explanation why.
             if (($stream['done'][$shard] ?? false) !== true) {
                 $this->dead[] = (int) $shard;
                 $stderr[(int) $shard] = (string) $result['stderr'];
             }
         }
-
-        // A dead worker still reported every case it finished, so only the rest are lost — reported
-        // once per shard, not once per case.
         foreach ($this->dead as $shard) {
             $this->markLost($merged, $shard, $stderr[$shard] ?? '');
         }

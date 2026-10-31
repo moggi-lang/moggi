@@ -2,14 +2,20 @@
 
 namespace Tc\IO\MonadLaws;
 
-const __MOGGI_MAP = [[12 => ['Tc.IO.MonadLaws.main', 'tests/backend/runtime/Tc-IO-MonadLaws.mog', 7, 16], 13 => ['Tc.IO.MonadLaws.main', 'tests/backend/runtime/Tc-IO-MonadLaws.mog', 8, 3]], ['Tc\\IO\\MonadLaws\\main' => ['Tc.IO.MonadLaws.main', 'tests/backend/runtime/Tc-IO-MonadLaws.mog', 6, 8]]];
+const __MOGGI_MAP = [[10 => 0, 18 => 1, 19 => 2], ['Tc\\IO\\MonadLaws\\main' => 0, 'Tc\\IO\\MonadLaws\\__w_main' => 0], ['Tc\\IO\\MonadLaws\\main'], ['Tc\\IO\\MonadLaws\\__w_main'], [[0, 0, 6, 8], [0, 0, 7, 16], [0, 0, 8, 3]], ['Tc.IO.MonadLaws.main'], ['tests/backend/runtime/Tc-IO-MonadLaws.mog']];
 
-require_once __DIR__ . '/../../../libraries/base/src/System/IO/PHP.php';
-
-use function System\IO\PHP\putStrLn;
+require_once __DIR__ . '/../../../libraries/base/src/System/IO.php';
 
 function main() {
-    putStrLn("a");
-    putStrLn("left-id");
+    $__t3 = ['__io', static function(): mixed {
+        $__t2 = __w_main();
+        return $__t2;
+    }];
+    return $__t3;
+}
+
+function __w_main() {
+    $__t0 = \System\IO\__w_putStrLn("a");
+    $__t1 = \System\IO\__w_putStrLn("left-id");
     return null;
 }

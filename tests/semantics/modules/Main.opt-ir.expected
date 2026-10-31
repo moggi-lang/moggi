@@ -3,4 +3,5 @@ module
       t0 = call getId(user)
       ret intrinsic intAdd#(t0, n)
   function qualifiedMain(u)
-      ret call_value @User::getId(u)
+      t1 = call_value @User::getId(u)
+      ret t1

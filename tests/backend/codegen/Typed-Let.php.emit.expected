@@ -2,7 +2,7 @@
 
 namespace Main;
 
-const __MOGGI_MAP = [[23 => ['Main.useMaybe', 'tests/backend/codegen/Typed-Let.mog', 8, 21]], ['Main\\useInt' => ['Main.useInt', 'tests/backend/codegen/Typed-Let.mog', 1, 1], 'Main\\useDouble' => ['Main.useDouble', 'tests/backend/codegen/Typed-Let.mog', 4, 1], 'Main\\useMaybe' => ['Main.useMaybe', 'tests/backend/codegen/Typed-Let.mog', 7, 1], 'Main\\fromMaybe' => ['Main.fromMaybe', 'tests/backend/codegen/Typed-Let.mog', 11, 17], 'Main\\useFromMaybe' => ['Main.useFromMaybe', 'tests/backend/codegen/Typed-Let.mog', 15, 1], 'Main\\nested' => ['Main.nested', 'tests/backend/codegen/Typed-Let.mog', 18, 1], 'Main\\useString' => ['Main.useString', 'tests/backend/codegen/Typed-Let.mog', 21, 1], 'Main\\ascribedCall' => ['Main.ascribedCall', 'tests/backend/codegen/Typed-Let.mog', 25, 19]]];
+const __MOGGI_MAP = [[23 => 8], ['Main\\useInt' => 0, 'Main\\useDouble' => 1, 'Main\\useMaybe' => 2, 'Main\\fromMaybe' => 3, 'Main\\useFromMaybe' => 4, 'Main\\nested' => 5, 'Main\\useString' => 6, 'Main\\ascribedCall' => 7], [], [], [[0, 0, 1, 1], [1, 0, 4, 1], [2, 0, 7, 1], [3, 0, 11, 17], [4, 0, 15, 1], [5, 0, 18, 1], [6, 0, 21, 1], [7, 0, 25, 19], [2, 0, 8, 21]], ['Main.useInt', 'Main.useDouble', 'Main.useMaybe', 'Main.fromMaybe', 'Main.useFromMaybe', 'Main.nested', 'Main.useString', 'Main.ascribedCall'], ['tests/backend/codegen/Typed-Let.mog']];
 
 require_once __DIR__ . '/../../../libraries/base/src/Data/Maybe.php';
 

@@ -2,7 +2,8 @@
 
 namespace Moggi\CLI\Commands;
 
-use Moggi\Backend;
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
 
 use function Moggi\CLI\parseBackendValue;
 use function Moggi\LSP\runServer;
@@ -54,7 +55,12 @@ function runLsp(array $argv): int
         return commandError($spec, $error);
     }
 
-    Backend\setCompileBackend(parseBackendValue($options['backend']));
+    $backend = parseBackendValue($options['backend']);
+    $context = CompilationContext::for(
+        $backend,
+        CompilePurpose::Library,
+        roots: $options['lib'],
+    );
 
-    return runServer($options['lib']);
+    return runServer($options['lib'], $context);
 }

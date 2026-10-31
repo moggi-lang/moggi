@@ -2,8 +2,9 @@
 
 namespace Moggi\CLI\Commands;
 
-use function Moggi\Registry\badPackageProblem;
+use Moggi\Registry\FetchLog;
 
+use function Moggi\Registry\badPackageProblem;
 use function Moggi\Registry\badPackagesAmong;
 use function Moggi\Registry\badPackagesRefusal;
 use function Moggi\Registry\Bind\bindDeclaredForBuild;
@@ -11,9 +12,6 @@ use function Moggi\Registry\Bind\ffiBindingsForBackend;
 use function Moggi\Registry\checkBundledInstalled;
 use function Moggi\Registry\collectHostToolCoordinates;
 use function Moggi\Registry\declaredBackends;
-
-use Moggi\Registry\FetchLog;
-
 use function Moggi\Registry\fetchVerifiedRelease;
 use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\hostToolCoordinates;
@@ -31,6 +29,7 @@ use function Moggi\Registry\phpExtensionProblems;
 use function Moggi\Registry\providedDependencyProblems;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
+use function Moggi\Registry\hostToolArtifactRoot;
 use function Moggi\Registry\resolveHostTools;
 use function Moggi\Registry\thirdPartyProblems;
 use function Moggi\Registry\unmaintainedPackageNote;
@@ -55,8 +54,11 @@ function buildUsage(): string
       moggi build [<dir|<name>.moggi>] [options] [-- <compile options>]
 
     Build the descriptor's executable: read the entry point, the source
-    directories and the backend from [executable], add the installed
-    dependencies as library roots, and delegate to `moggi compile`.
+    directories and the backend from [executable], resolve its dependencies,
+    and delegate to `moggi compile` with the equivalent flags — `--lib` for
+    every Moggi library root, `--lib-composer` / `--lib-maven` / `--lib-nuget`
+    for the resolved host tree. A build is what its flags say: the same compile
+    can be typed by hand.
 
     Refuses to build when the lock does not match the registry catalog (run
     `moggi update`), when a package the registry has marked bad would be linked,
@@ -286,15 +288,19 @@ function runBuildCommand(array $argv): int
             static fn (string $directory): string => \rtrim($root, '/') . '/' . \trim($directory, '/'),
             \array_merge(\array_slice($executable['sourceDirs'], 1), $descriptor['lib']['sourceDirs']),
         );
-        $toolRoots = $tools['dir'] !== null && $tools['artifacts'] !== []
-            ? [(string) $tools['dir']]
+        $hostRoots = $tools['dir'] !== null && $tools['artifacts'] !== []
+            ? [hostToolArtifactRoot($backend, (string) $tools['dir'])]
             : [];
-        $libraryRoots = \array_merge($localRoots, $roots, $toolRoots, $bindRoots);
+        $libraryRoots = \array_merge($localRoots, $roots, $bindRoots);
 
         $compileArgv = ['moggi', 'compile', $entry];
         foreach ($libraryRoots as $libraryRoot) {
             $compileArgv[] = '--lib';
             $compileArgv[] = $libraryRoot;
+        }
+        foreach ($hostRoots as $hostRoot) {
+            $compileArgv[] = '--' . hostLibraryFlags()[$backend];
+            $compileArgv[] = $hostRoot;
         }
         $compileArgv[] = '--backend';
         $compileArgv[] = (string) $backend;
@@ -310,7 +316,7 @@ function runBuildCommand(array $argv): int
         }
 
         \printf(
-            "build      %s %s -> %s (%s)\nentry      %s\n%slibraries   %d root%s\n",
+            "build      %s %s -> %s (%s)\nentry      %s\n%slibraries   %d Moggi root%s, %d host root%s\n",
             $descriptor['name'],
             $descriptor['version'],
             $executable['main'],
@@ -319,6 +325,8 @@ function runBuildCommand(array $argv): int
             $roots === [] ? '' : 'deps       ' . \count($roots) . " installed root(s)\n",
             \count($libraryRoots),
             \count($libraryRoots) === 1 ? '' : 's',
+            \count($hostRoots),
+            \count($hostRoots) === 1 ? '' : 's',
         );
         if ($coordinates !== []) {
             \printf(

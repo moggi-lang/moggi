@@ -4,9 +4,6 @@ namespace Moggi\Semantics\Types;
 
 use Moggi\Semantics\IntrinsicRegistry;
 use Moggi\Semantics\Kinds;
-
-use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
-
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TBytes;
@@ -31,11 +28,13 @@ use Moggi\Semantics\TypeExpr\TWord32;
 use Moggi\Semantics\TypeExpr\TWord64;
 use Moggi\Semantics\TypeExpr\TWord8;
 use Moggi\Semantics\TypeExpr\Type;
-
 use Moggi\Syntax\Ast;
+
+use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
 
 require_once __DIR__ . '/../type_expr.php';
 require_once __DIR__ . '/state.php';
+require_once __DIR__ . '/type_laws.php';
 
 function substituteInstanceTypeAst(Ast\TypeNode $type, array $mapping): Ast\TypeNode
 {
@@ -269,6 +268,64 @@ function instantiate(TypeCheckState $state, Scheme $scheme): Type
     return instantiateScheme($state, $scheme)['type'];
 }
 
+/**
+ * The scheme a spelling means at this point, resolved by binder identity.
+ *
+ * The scope frame decides *which* binder a name means, once; the environment is keyed by that
+ * identity, so the answer cannot come from a same-spelling neighbour and a shadowed binding is its
+ * own entry. Null means “no local binder of this spelling is in scope”, which is the module/import
+ * case and nothing else — a local binder with no stored scheme is a producer bug and throws rather
+ * than falling back to a name lookup.
+ *
+ * @param array<int|string, Scheme> $env
+ */
+function resolveBinderScheme(TypeCheckState $state, string $name, array $env): ?Scheme
+{
+    $binder = $state->resolveBinder($name);
+    if ($binder === null) {
+        return null;
+    }
+
+    return $env[binderKey($binder)] ?? throw new \LogicException(
+        "the checker resolved `{$name}` to binder {$binder}, which holds nothing in this environment",
+    );
+}
+
+/**
+ * The environment key a local binder's scheme is stored under.
+ *
+ * An environment answers two kinds of question: what a module or imported spelling means, and what a
+ * local binder means. The second is keyed by the identity the checker allocated, never by the
+ * spelling.
+ *
+ * The key is opaque on purpose. A plain integer is silently renumbered by a PHP array spread
+ * (`[...$env, ...$more]`), which moves every binders' entry to a different number and lets a use
+ * resolve to a neighbour's scheme; a key no spelling can be is also a key no name lookup can find.
+ * A key of this shape survives merging, spreading and copying unchanged, so the two kinds of entry
+ * cannot be confused by the container itself.
+ */
+function binderKey(int $binder): string
+{
+    return "\0binder\0" . $binder;
+}
+
+/**
+ * The spellings an environment can answer for by name (module and imported entries).
+ *
+ * Local binders are stored under {@see binderKey()}, so they are not names a diagnostic can suggest;
+ * filtering here is what keeps "did you mean" from proposing a binder.
+ *
+ * @param array<string, Scheme> $env
+ * @return list<string>
+ */
+function visibleEnvNames(array $env): array
+{
+    return \array_values(\array_filter(
+        \array_keys($env),
+        static fn (int|string $key): bool => ! \str_starts_with((string) $key, "\0"),
+    ));
+}
+
 /** @param array<string, Scheme> $env @return array<string, true> */
 
 function envFreeVars(array $env): array
@@ -285,13 +342,16 @@ function envFreeVars(array $env): array
 
 function typeVars(Type $type): array
 {
-    return match ($type::class) {
-        TVar::class => [$type->name => true],
-        TVarApp::class => [$type->name => true] + \array_merge([], ...\array_map(typeVars(...), $type->args)),
-        TCon::class => \array_merge([], ...\array_map(typeVars(...), $type->args)),
-        TArrow::class => [...typeVars($type->from), ...typeVars($type->to)],
-        default => [],
-    };
+    if ($type instanceof TVar) {
+        return [$type->name => true];
+    }
+
+    $vars = $type instanceof TVarApp ? [$type->name => true] : [];
+    foreach (typeChildren($type) as $child) {
+        $vars += typeVars($child);
+    }
+
+    return $vars;
 }
 
 /** @return array<string, true> */
@@ -334,7 +394,7 @@ function freshenTypeVars(TypeCheckState $state, Type $type): Type
  * type variables stay aligned (e.g. `Applicative f` with `a -> f b`).
  *
  * @param list<Ast\PendingConstraint> $constraints
- * @return array{type: Type, constraints: list<Ast\PendingConstraint>}
+ * @return array{type: Type, constraints: list<Ast\PendingConstraint>, mapping: array<string, Type>}
  */
 function freshenTypeWithConstraints(TypeCheckState $state, Type $type, array $constraints): array
 {
@@ -367,6 +427,7 @@ function freshenTypeWithConstraints(TypeCheckState $state, Type $type, array $co
     return [
         'type' => substitute($type, $mapping),
         'constraints' => $freshConstraints,
+        'mapping' => $mapping,
     ];
 }
 
@@ -404,7 +465,7 @@ function substitutePendingConstraints(array $constraints, array $mapping): array
  *
  * @param list<Ast\PendingConstraint> $constraints
  * @param array<string, true> $keep
- * @return array{type: Type, constraints: list<Ast\PendingConstraint>}
+ * @return array{type: Type, constraints: list<Ast\PendingConstraint>, mapping: array<string, Type>}
  */
 function freshenTypeWithConstraintsKeeping(TypeCheckState $state, Type $type, array $constraints, array $keep): array
 {
@@ -440,6 +501,7 @@ function freshenTypeWithConstraintsKeeping(TypeCheckState $state, Type $type, ar
     return [
         'type' => substitute($type, $mapping),
         'constraints' => $freshConstraints,
+        'mapping' => $mapping,
     ];
 }
 
@@ -583,7 +645,10 @@ function substitute(Type $type, array $mapping): Type
             substitute($type->from, $mapping),
             substitute($type->to, $mapping),
         ),
-        default => $type,
+        default => mapTypeChildren(
+            $type,
+            static fn (Type $child): Type => substitute($child, $mapping),
+        ),
     };
 }
 
@@ -616,20 +681,6 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
     $left = prune($state, $left);
     $right = prune($state, $right);
 
-    if ($left instanceof TCon && $right instanceof TCon
-        && $left->name === $right->name
-        && isset($state->associatedFamilies[$left->name])
-    ) {
-        if (\count($left->args) !== \count($right->args)) {
-            throw typeFail($state, 'type arity mismatch on `' . $left->name . '`', $at);
-        }
-        foreach ($left->args as $i => $arg) {
-            unify($state, $arg, $right->args[$i], $at);
-        }
-
-        return;
-    }
-
     if ($left instanceof TVar) {
         if ($right instanceof TVar) {
             if ($left->name === $right->name) {
@@ -645,10 +696,28 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
 
                 return;
             }
+            if (isset($state->restrictedVars[$left->name]) && $rightRigid) {
+                $rename = friendlyTypeVarNames([$left, $right]);
+                throw typeFail(
+                    $state,
+                    'the pattern binding\'s type would have to be the rigid type variable `'
+                        . typeToString($right, $rename)
+                        . '`; give the binding a signature',
+                    $at,
+                    'unify',
+                );
+            }
             if (isset($state->restrictedVars[$left->name]) && ! isset($state->restrictedVars[$right->name])) {
                 unify($state, $right, $left, $at);
 
                 return;
+            }
+            if (isset($state->restrictedVars[$left->name], $state->restrictedVars[$right->name])) {
+                if (\strnatcmp($left->name, $right->name) < 0) {
+                    unify($state, $right, $left, $at);
+
+                    return;
+                }
             }
         } elseif (isset($state->rigidVars[$left->name])) {
             throw typeFail($state, formatUnifyError($state, $left, $right), $at, 'unify');
@@ -684,6 +753,39 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
 
             return;
         }
+    }
+
+    if ($left instanceof TCon && $right instanceof TCon
+        && $left->name === $right->name
+        && isset($state->associatedFamilies[$left->name])
+    ) {
+        if (\count($left->args) !== \count($right->args)) {
+            throw typeFail($state, 'type arity mismatch on `' . $left->name . '`', $at);
+        }
+
+        /*
+         * Neither side reduced, so both applications are stuck on their head.
+         *
+         * The head decides which instance's equation the family applies, so two
+         * applications are the same type only when the head is *the same head* --
+         * compared by identity, never unified: learning `a = Foo` from
+         * `Rep a x ~ Rep Foo y` is the injectivity the family does not have.
+         *
+         * At that fixed head the family is an ordinary function of what is left,
+         * so `Rep a b ~ Rep a c` is `b ~ c` and those arguments unify as any
+         * other type's do.
+         */
+        $headArgs = \count($state->associatedFamilies[$left->name]['params']);
+        for ($i = 0; $i < $headArgs && $i < \count($left->args); ++$i) {
+            if (! typesMatchForAmbient($state, $left->args[$i], $right->args[$i])) {
+                throw typeFail($state, formatUnifyError($state, $left, $right), $at, 'unify');
+            }
+        }
+        for ($i = $headArgs; $i < \count($left->args); ++$i) {
+            unify($state, $left->args[$i], $right->args[$i], $at);
+        }
+
+        return;
     }
 
     if (samePrimitiveType($left, $right)) {
@@ -908,7 +1010,13 @@ function typeVarLetter(int $index): string
 
 function prune(TypeCheckState $state, Type $type): Type
 {
-    if ($state->subst === []) {
+    if ($state->subst === [] && (
+        $type instanceof TVar
+        || $type instanceof TVarApp
+        || $type instanceof TCon
+        || $type instanceof TArrow
+        || $type instanceof TPromoted
+    )) {
         return $type;
     }
 
@@ -926,9 +1034,9 @@ function prune(TypeCheckState $state, Type $type): Type
     if ($type instanceof TVarApp) {
         $args = [];
         $changed = false;
-        foreach ($type->args as $i => $arg) {
+        foreach ($type->args as $arg) {
             $pruned = prune($state, $arg);
-            $args[$i] = $pruned;
+            $args[] = $pruned;
             if ($pruned !== $arg) {
                 $changed = true;
             }
@@ -941,20 +1049,6 @@ function prune(TypeCheckState $state, Type $type): Type
         return $changed ? new TVarApp($type->name, $args) : $type;
     }
 
-    if ($type instanceof TCon) {
-        $args = [];
-        $changed = false;
-        foreach ($type->args as $i => $arg) {
-            $pruned = prune($state, $arg);
-            $args[$i] = $pruned;
-            if ($pruned !== $arg) {
-                $changed = true;
-            }
-        }
-
-        return $changed ? new TCon($type->name, $args) : $type;
-    }
-
     if ($type instanceof TArrow) {
         $from = prune($state, $type->from);
         $to = prune($state, $type->to);
@@ -962,7 +1056,59 @@ function prune(TypeCheckState $state, Type $type): Type
         return $from === $type->from && $to === $type->to ? $type : new TArrow($from, $to);
     }
 
-    return $type;
+    if ($type instanceof TCon || $type instanceof TPromoted) {
+        if ($type->args === []) {
+            return $type;
+        }
+
+        $args = [];
+        $changed = false;
+        foreach ($type->args as $arg) {
+            $pruned = prune($state, $arg);
+            $args[] = $pruned;
+            if ($pruned !== $arg) {
+                $changed = true;
+            }
+        }
+
+        if (! $changed) {
+            return $type;
+        }
+
+        return $type instanceof TCon
+            ? new TCon($type->name, $args)
+            : new TPromoted($type->name, $args);
+    }
+
+    return mapTypeChildren($type, static fn (Type $child): Type => prune($state, $child));
+}
+
+/**
+ * Publish a term's checked type: the internal type is the authority a consumer
+ * reads, and the surface node is only its projection for tooling.
+ *
+ * Every place the checker settles a node's type goes through here, so the two
+ * halves cannot disagree and no reader has to convert one back into the other.
+ */
+function publishInferredType(TypeCheckState $state, Ast\AstNode $node, Type $type): void
+{
+    $pruned = prune($state, $type);
+    $node->inferredInternalType = $pruned;
+    $node->inferredType = internalTypeToAstNode($pruned);
+}
+
+/**
+ * Hand a node the type another node publishes, both halves together.
+ *
+ * A rewrite that substitutes one elaborated node for another — an intrinsic
+ * wrapper, an evidence application, a desugared literal — carries the source
+ * node's type across, so the term the caller holds keeps the fact its source
+ * had.
+ */
+function copyInferredType(Ast\AstNode $to, Ast\AstNode $from): void
+{
+    $to->inferredInternalType = $from->inferredInternalType;
+    $to->inferredType = $from->inferredType;
 }
 
 /**
@@ -971,11 +1117,9 @@ function prune(TypeCheckState $state, Type $type): Type
  */
 function zonkInferredTypesInExpr(TypeCheckState $state, Ast\AstNode $expr): void
 {
-    if ($expr->inferredType !== null) {
-        $expr->inferredType = internalTypeToAst(
-            prune($state, inferredTypeAstToInternal($expr->inferredType)),
-            $state->subst,
-        );
+    if ($expr->inferredInternalType !== null) {
+        $expr->inferredInternalType = prune($state, $expr->inferredInternalType);
+        $expr->inferredType = internalTypeToAstNode($expr->inferredInternalType);
     }
 
     match ($expr::class) {
@@ -1077,11 +1221,9 @@ function zonkInferredTypesInPattern(TypeCheckState $state, ?Ast\AstNode $pattern
     if ($pattern === null || ! \is_object($pattern) || $pattern instanceof Ast\TypeNode) {
         return;
     }
-    if ($pattern->inferredType !== null) {
-        $pattern->inferredType = internalTypeToAst(
-            prune($state, inferredTypeAstToInternal($pattern->inferredType)),
-            $state->subst,
-        );
+    if ($pattern->inferredInternalType !== null) {
+        $pattern->inferredInternalType = prune($state, $pattern->inferredInternalType);
+        $pattern->inferredType = internalTypeToAstNode($pattern->inferredInternalType);
     }
 
     match ($pattern::class) {
@@ -1110,44 +1252,6 @@ function zonkInferredTypesInPattern(TypeCheckState $state, ?Ast\AstNode $pattern
     };
 }
 
-/**
- * Lenient AST→internal conversion for inferredType snapshots (no kind checks).
- * Fresh HKT heads like `t0` are ordinary TCon names; prune rewrites them.
- */
-function inferredTypeAstToInternal(Ast\TypeNode $type): Type
-{
-    return match ($type::class) {
-        Ast\TypeVar::class => new TVar($type->name),
-        Ast\TypeUnit::class => new TUnit(),
-        Ast\TypeCon::class => new TCon($type->name),
-        Ast\TypePromoted::class => new TPromoted($type->name),
-        Ast\TypeStringLit::class => new TStringLit($type->value),
-        Ast\TypeNatLit::class => new TNatLit(canonicalNatDigits($type->digits)),
-        Ast\TypeApp::class => (static function () use ($type): Type {
-            $args = \array_map(inferredTypeAstToInternal(...), $type->args);
-            if ($type->con instanceof Ast\TypePromoted) {
-                return new TPromoted($type->con->name, $args);
-            }
-
-            return match ($type->con::class) {
-                Ast\TypeVar::class => new TVarApp($type->con->name, $args),
-                Ast\TypeCon::class => new TCon($type->con->name, $args),
-                default => throw new \InvalidArgumentException(
-                    'unexpected inferred type app head: ' . $type->con::class,
-                ),
-            };
-        })(),
-        Ast\TypeArrow::class => new TArrow(
-            inferredTypeAstToInternal($type->from),
-            inferredTypeAstToInternal($type->to),
-        ),
-        Ast\TypeConstrained::class => inferredTypeAstToInternal($type->body),
-        default => throw new \InvalidArgumentException(
-            'unexpected inferred type node: ' . $type::class,
-        ),
-    };
-}
-
 function occurs(TypeCheckState $state, string $var, Type $type, ?Ast\AstNode $at = null): void
 {
     $type = prune($state, $type);
@@ -1159,21 +1263,8 @@ function occurs(TypeCheckState $state, string $var, Type $type, ?Ast\AstNode $at
         throw typeFail($state, "infinite type: `{$shown}` occurs in itself", $at);
     }
 
-    if ($type instanceof TCon || $type instanceof TVarApp) {
-        foreach ($type->args as $arg) {
-            occurs($state, $var, $arg, $at);
-        }
-    }
-
-    if ($type instanceof TPromoted) {
-        foreach ($type->args as $arg) {
-            occurs($state, $var, $arg, $at);
-        }
-    }
-
-    if ($type instanceof TArrow) {
-        occurs($state, $var, $type->from, $at);
-        occurs($state, $var, $type->to, $at);
+    foreach (typeChildren($type) as $child) {
+        occurs($state, $var, $child, $at);
     }
 }
 
@@ -1481,10 +1572,18 @@ function internedTypeNode(Ast\TypeNode $node): Ast\TypeNode
 
 function internalTypeToAst(Type $type, array $subst): Ast\TypeNode
 {
-    $pruneState = new TypeCheckState('');
-    $pruneState->subst = $subst;
-    $type = prune($pruneState, $type);
+    if ($subst !== []) {
+        $pruneState = new TypeCheckState('');
+        $pruneState->subst = $subst;
+        $type = prune($pruneState, $type);
+    }
 
+    return internalTypeToAstNode($type);
+}
+
+/** Convert a type whose variables are already pruned; only allocates the nodes. */
+function internalTypeToAstNode(Type $type): Ast\TypeNode
+{
     $node = match ($type::class) {
         TInt::class => new Ast\TypeCon('Int'),
         TStr::class => new Ast\TypeCon('String'),
@@ -1505,7 +1604,7 @@ function internalTypeToAst(Type $type, array $subst): Ast\TypeNode
         TPromoted::class => \count($type->args) === 0
             ? new Ast\TypePromoted($type->name)
             : new Ast\TypeApp(new Ast\TypePromoted($type->name), \array_map(
-                static fn (Type $arg): Ast\TypeNode => internalTypeToAst($arg, $subst),
+                static fn (Type $arg): Ast\TypeNode => internalTypeToAstNode($arg),
                 $type->args,
             )),
         TStringLit::class => new Ast\TypeStringLit($type->value),
@@ -1513,16 +1612,16 @@ function internalTypeToAst(Type $type, array $subst): Ast\TypeNode
         TCon::class => \count($type->args) === 0
             ? new Ast\TypeCon($type->name)
             : new Ast\TypeApp(new Ast\TypeCon($type->name), \array_map(
-                static fn (Type $arg): Ast\TypeNode => internalTypeToAst($arg, $subst),
+                static fn (Type $arg): Ast\TypeNode => internalTypeToAstNode($arg),
                 $type->args,
             )),
         TVarApp::class => new Ast\TypeApp(new Ast\TypeVar($type->name), \array_map(
-            static fn (Type $arg): Ast\TypeNode => internalTypeToAst($arg, $subst),
+            static fn (Type $arg): Ast\TypeNode => internalTypeToAstNode($arg),
             $type->args,
         )),
         TArrow::class => new Ast\TypeArrow(
-            internalTypeToAst($type->from, $subst),
-            internalTypeToAst($type->to, $subst),
+            internalTypeToAstNode($type->from),
+            internalTypeToAstNode($type->to),
         ),
         default => throw new \InvalidArgumentException('unknown type: ' . $type::class),
     };
@@ -1556,16 +1655,35 @@ function knownTypeConstructorNames(TypeCheckState $state): array
     return \array_values(\array_unique($names));
 }
 
+/** The text of a file a diagnostic points into, read at most once per compile. */
+function sourceTextForDiagnostic(string $path): ?string
+{
+    static $sources = [];
+    if (\array_key_exists($path, $sources)) {
+        return $sources[$path];
+    }
+
+    return $sources[$path] = \is_file($path) ? (\file_get_contents($path) ?: null) : null;
+}
+
 function typeFail(TypeCheckState $state, string $message, Ast\AstNode|Ast\TypeNode|null $at = null, ?string $code = null): TypeError
 {
     $line = 0;
     $col = 0;
     $endCol = 0;
 
+    $filename = $state->filename;
+    $source = $state->source;
+
     if ($at !== null && $at->line !== 0) {
         $line = $at->line;
         $col = $at->col;
         $endCol = $at->endCol;
+        $file = $at instanceof Ast\AstNode ? $at->sourceFile : null;
+        if ($file !== null && $file !== $filename) {
+            $filename = $file;
+            $source = sourceTextForDiagnostic($filename) ?? $source;
+        }
     } elseif ($state->declSpan['line'] !== 0) {
         $line = $state->declSpan['line'];
         $col = $state->declSpan['col'];
@@ -1574,8 +1692,8 @@ function typeFail(TypeCheckState $state, string $message, Ast\AstNode|Ast\TypeNo
 
     $error = new TypeError(
         $message,
-        $state->filename,
-        $state->source,
+        $filename,
+        $source,
         $line,
         $col,
         $endCol,

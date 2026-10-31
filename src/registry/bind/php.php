@@ -2,22 +2,18 @@
 
 namespace Moggi\Registry\Bind;
 
-use function Moggi\Backend\DotNet\Dependencies\dotNetSidecarDiscriminator;
-
 use Moggi\Backend\Jvm\JvmBackend;
-
-use function Moggi\Backend\Php\Dependencies\phpDeclaredSymbols;
-
 use Moggi\Backend\Php\PhpBackend;
-
-use function Moggi\Cache\runtimeCacheDir;
-
 use ReflectionClass;
 use ReflectionFunction;
-
 use ReflectionFunctionAbstract;
 use ReflectionNamedType;
 use ReflectionType;
+use ReflectionUnionType;
+
+use function Moggi\Backend\DotNet\Dependencies\dotNetSidecarDiscriminator;
+use function Moggi\Backend\Php\Dependencies\phpDeclaredSymbols;
+use function Moggi\Cache\runtimeCacheDir;
 
 /**
  * The PHP side of `moggi bind`: read a Composer-style tree on disk and describe
@@ -67,12 +63,6 @@ function phpSegmentToModule(string $segment): string
     return bindSegmentToModule($segment);
 }
 
-/**
- * The module a bound library lives in: `acme/hello` is `Composer.Acme.Hello`.
- * The ecosystem prefix keeps three backends' bindings for "the same" library
- * apart (R7), and one segment per component keeps the module/file law resolving
- * generated modules with no new lookup rule.
- */
 function phpBindModuleName(string $vendor, string $package): string
 {
     $segments = ['Composer', phpSegmentToModule($vendor)];

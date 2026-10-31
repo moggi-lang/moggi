@@ -4,9 +4,11 @@ module
   function add3(a, b, c)
       ret intrinsic intAdd#(intrinsic intAdd#(a, b), c)
   function apply2(f, x, y)
-      ret call_value f(x, y)
+      t1 = call_value f(x, y)
+      ret t1
   function apply3(f, x, y, z)
-      ret call_value f(x, y, z)
+      t4 = call_value f(x, y, z)
+      ret t4
   function direct2()
       ret 9
   function direct3()
@@ -17,13 +19,13 @@ module
             arm 0
                 ret acc
             arm _
-                t8 = call add2(1, n)
-                tail_recall(intrinsic intSub#(n, 1), intrinsic intAdd#(acc, t8))
+                t10 = call add2(1, n)
+                tail_recall(intrinsic intSub#(n, 1), intrinsic intAdd#(acc, t10))
   function loop3(n, acc)
       loop
           match_return n
             arm 0
                 ret acc
             arm _
-                t11 = call add3(1, 2, n)
-                tail_recall(intrinsic intSub#(n, 1), intrinsic intAdd#(acc, t11))
+                t14 = call add3(1, 2, n)
+                tail_recall(intrinsic intSub#(n, 1), intrinsic intAdd#(acc, t14))
