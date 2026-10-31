@@ -1,0 +1,671 @@
+.class public abstract auto ansi sealed beforefieldinit Moggi.Main
+       extends [System.Runtime]System.Object
+{
+.method public hidebysig static object 'tryAny'(object) cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1)
+  .line 11, 11 : 1, 1 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldc.i4.1
+  ldc.i4.1
+  newobj instance void Moggi.Fn.Moggi_Main____ioThunk0__1::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldarg.0
+  stelem.ref
+  newobj instance void Moggi.Rt.Partial::.ctor(int32, class Moggi.Rt.Fn, object[])
+  stloc.0
+  ldloc.0
+  newobj instance void Moggi.Rt.IO::.ctor(object)
+  stloc.1
+  ldloc.1
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object '__w_tryAny'(object) cil managed
+{
+  .maxstack 64
+  .line 12, 12 : 10, 10 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  call object Moggi.Moggi.Exception.Type::'__ev_Show_SomeException'()
+  call object Moggi.Moggi.Exception.Type::'__ev_Exception_SomeException'()
+  ldarg.0
+  call object Moggi.Control.Exception.Base::'__w_try'(object, object, object)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'combine'(object, object) cil managed
+{
+  .maxstack 64
+  .line 15, 15 : 15, 15 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  .line 15, 15 : 15, 15 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldarg.0
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  ldarg.1
+  call int64 Moggi.Rt.RT::UnboxInt(object)
+  add
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'report'(object, object) cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1)
+  .line 18, 18 : 14, 14 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  .line 18, 18 : 14, 14 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldc.i4.2
+  ldc.i4.2
+  newobj instance void Moggi.Fn.Moggi_Main____ioThunk1__2::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  ldc.i4.2
+  newarr object
+  dup
+  ldc.i4.0
+  ldarg.0
+  stelem.ref
+  dup
+  ldc.i4.1
+  ldarg.1
+  stelem.ref
+  newobj instance void Moggi.Rt.Partial::.ctor(int32, class Moggi.Rt.Fn, object[])
+  stloc.0
+  ldloc.0
+  newobj instance void Moggi.Rt.IO::.ctor(object)
+  stloc.1
+  ldloc.1
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object '__w_report'(object, object) cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1, object V2, object V3)
+  .line 18, 18 : 14, 14 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  .line 18, 18 : 14, 14 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldarg.0
+  ldarg.1
+  call object Moggi.Main::'combine'(object, object)
+  stloc.0
+  .line 18, 18 : 14, 14 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  call object Moggi.Data.Int::'__ev_Show_Int'()
+  stloc.1
+  .line 18, 18 : 14, 14 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldloc.1
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldloc.0
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.2
+  .line 18, 18 : 14, 14 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldloc.2
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.3
+  ldnull
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'alias'(object, object) cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1)
+  .line 20, 20 : 1, 1 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldc.i4.2
+  ldc.i4.2
+  newobj instance void Moggi.Fn.Moggi_Main____ioThunk2__2::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  ldc.i4.2
+  newarr object
+  dup
+  ldc.i4.0
+  ldarg.0
+  stelem.ref
+  dup
+  ldc.i4.1
+  ldarg.1
+  stelem.ref
+  newobj instance void Moggi.Rt.Partial::.ctor(int32, class Moggi.Rt.Fn, object[])
+  stloc.0
+  ldloc.0
+  newobj instance void Moggi.Rt.IO::.ctor(object)
+  stloc.1
+  ldloc.1
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object '__w_alias'(object, object) cil managed
+{
+  .maxstack 64
+  .line 21, 21 : 9, 9 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldarg.0
+  ldarg.1
+  call object Moggi.Main::'__w_report'(object, object)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'greet'(object) cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1)
+  .line 25, 25 : 17, 17 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  .line 25, 25 : 17, 17 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldc.i4.1
+  ldc.i4.1
+  newobj instance void Moggi.Fn.Moggi_Main____ioThunk3__1::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldarg.0
+  stelem.ref
+  newobj instance void Moggi.Rt.Partial::.ctor(int32, class Moggi.Rt.Fn, object[])
+  stloc.0
+  ldloc.0
+  newobj instance void Moggi.Rt.IO::.ctor(object)
+  stloc.1
+  ldloc.1
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object '__w_greet'(object) cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  .line 25, 25 : 17, 17 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  .line 25, 25 : 17, 17 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldarg.0
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.0
+  ldnull
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'main'() cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1)
+  .line 28, 28 : 8, 8 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  .line 28, 28 : 8, 8 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldc.i4.0
+  newobj instance void Moggi.Fn.Moggi_Main____ioThunk4__0::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  stloc.0
+  ldloc.0
+  newobj instance void Moggi.Rt.IO::.ctor(object)
+  stloc.1
+  ldloc.1
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object '__w_main'() cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1, object V2, object V3, object V4, object V5, object V6, object V7, object V8, object V9, object V10, object V11, object V12, object V13, object V14, object V15, object V16, object V17, object V18)
+  .line 28, 28 : 8, 8 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  .line 29, 29 : 17, 17 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldc.i4.0
+  newobj instance void Moggi.Fn.Moggi_Main____ioThunk5__0::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  stloc.0
+  ldloc.0
+  newobj instance void Moggi.Rt.IO::.ctor(object)
+  stloc.1
+  .line 12, 12 : 10, 10 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  call object Moggi.Moggi.Exception.Type::'__ev_Show_SomeException'()
+  call object Moggi.Moggi.Exception.Type::'__ev_Exception_SomeException'()
+  ldloc.1
+  call object Moggi.Control.Exception.Base::'__w_try'(object, object, object)
+  stloc.2
+  ldloc.2
+  stloc.3
+  ldloc.3
+  castclass Moggi.Rt.Con
+  ldfld string Moggi.Rt.Con::tag
+  ldstr "Left"
+  call bool [System.Runtime]System.String::Equals(string, string)
+  brfalse match_fail_V3_0
+  ldloc.3
+  castclass Moggi.Rt.Con
+  ldfld object[] Moggi.Rt.Con::fields
+  ldc.i4.0
+  ldelem.ref
+  stloc.s 5
+  .line 31, 31 : 16, 16 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldloc.s 5
+  call string Moggi.Rt.RT::ExceptionDisplay(object)
+  stloc.s 4
+  br match_end_V3
+match_fail_V3_0:
+  ldloc.3
+  castclass Moggi.Rt.Con
+  ldfld string Moggi.Rt.Con::tag
+  ldstr "Right"
+  call bool [System.Runtime]System.String::Equals(string, string)
+  brfalse match_fail_V3_1
+  ldloc.3
+  castclass Moggi.Rt.Con
+  ldfld object[] Moggi.Rt.Con::fields
+  ldc.i4.0
+  ldelem.ref
+  stloc.s 6
+  ldloc.s 6
+  stloc.s 4
+  br match_end_V3
+match_fail_V3_1:
+  ldstr "non-exhaustive match"
+  newobj instance void [System.Runtime]System.Exception::.ctor(string)
+  throw
+match_end_V3:
+  .line 30, 30 : 3, 3 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldloc.s 4
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 7
+  .line 33, 33 : 18, 18 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldc.i4.0
+  newobj instance void Moggi.Fn.Moggi_Main____ioThunk6__0::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  stloc.s 8
+  ldloc.s 8
+  newobj instance void Moggi.Rt.IO::.ctor(object)
+  stloc.s 9
+  .line 12, 12 : 10, 10 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  call object Moggi.Moggi.Exception.Type::'__ev_Show_SomeException'()
+  call object Moggi.Moggi.Exception.Type::'__ev_Exception_SomeException'()
+  ldloc.s 9
+  call object Moggi.Control.Exception.Base::'__w_try'(object, object, object)
+  stloc.s 10
+  ldloc.s 10
+  stloc.s 11
+  ldloc.s 11
+  castclass Moggi.Rt.Con
+  ldfld string Moggi.Rt.Con::tag
+  ldstr "Left"
+  call bool [System.Runtime]System.String::Equals(string, string)
+  brfalse match_fail_V11_0
+  ldloc.s 11
+  castclass Moggi.Rt.Con
+  ldfld object[] Moggi.Rt.Con::fields
+  ldc.i4.0
+  ldelem.ref
+  stloc.s 13
+  .line 35, 35 : 16, 16 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldloc.s 13
+  call string Moggi.Rt.RT::ExceptionDisplay(object)
+  stloc.s 12
+  br match_end_V11
+match_fail_V11_0:
+  ldloc.s 11
+  castclass Moggi.Rt.Con
+  ldfld string Moggi.Rt.Con::tag
+  ldstr "Right"
+  call bool [System.Runtime]System.String::Equals(string, string)
+  brfalse match_fail_V11_1
+  ldloc.s 11
+  castclass Moggi.Rt.Con
+  ldfld object[] Moggi.Rt.Con::fields
+  ldc.i4.0
+  ldelem.ref
+  stloc.s 14
+  ldloc.s 14
+  stloc.s 12
+  br match_end_V11
+match_fail_V11_1:
+  ldstr "non-exhaustive match"
+  newobj instance void [System.Runtime]System.Exception::.ctor(string)
+  throw
+match_end_V11:
+  .line 34, 34 : 3, 3 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldloc.s 12
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 15
+  .line 21, 21 : 9, 9 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldc.i8 40
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldc.i8 2
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Main::'__w_report'(object, object)
+  stloc.s 16
+  .line 21, 21 : 9, 9 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldc.i8 -1
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldc.i8 1
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Main::'__w_report'(object, object)
+  stloc.s 17
+  .line 25, 25 : 17, 17 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldstr "hi"
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 18
+  ldnull
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static void Main(string[]) cil managed
+{
+  .entrypoint
+  .maxstack 64
+  .locals init (class [System.Runtime]System.Exception V0, object V1)
+  .try
+  {
+  ldarg.0
+  call void Moggi.Rt.Platform::SetArgs(string[])
+  call object Moggi.Main::'main'()
+  call object Moggi.Rt.RT::IoRun(object)
+  pop
+  leave MAIN_END
+  }
+  catch [System.Runtime]System.Exception
+  {
+  stloc.0
+  ldloc.0
+  call void Moggi.Rt.RT::ReportUncaught(class [System.Runtime]System.Exception)
+  leave MAIN_END
+  }
+MAIN_END:
+  ret
+}
+
+.method public hidebysig static object __ioThunk0(object) cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  ldarg.0
+  call object Moggi.Main::'__w_tryAny'(object)
+  stloc.0
+  ldloc.0
+  ret
+}
+
+.method public hidebysig static object __ioThunk1(object, object) cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  ldarg.0
+  ldarg.1
+  call object Moggi.Main::'__w_report'(object, object)
+  stloc.0
+  ldloc.0
+  ret
+}
+
+.method public hidebysig static object __ioThunk2(object, object) cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  ldarg.0
+  ldarg.1
+  call object Moggi.Main::'__w_alias'(object, object)
+  stloc.0
+  ldloc.0
+  ret
+}
+
+.method public hidebysig static object __ioThunk3(object) cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  ldarg.0
+  call object Moggi.Main::'__w_greet'(object)
+  stloc.0
+  ldloc.0
+  ret
+}
+
+.method public hidebysig static object __ioThunk4() cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  call object Moggi.Main::'__w_main'()
+  stloc.0
+  ldloc.0
+  ret
+}
+
+.method public hidebysig static object __ioThunk5() cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1, object V2)
+  .line 29, 29 : 17, 17 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  call object Moggi.System.IO.Base::'__ev_Applicative_IO'()
+  stloc.0
+  .line 29, 29 : 17, 17 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldloc.0
+  ldstr "pure"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldstr "ok"
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.1
+  .line 29, 29 : 17, 17 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldloc.1
+  call object Moggi.Rt.RT::IoRun(object)
+  stloc.2
+  ldloc.2
+  ret
+}
+
+.method public hidebysig static object __ioThunk6() cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1, object V2)
+  .line 33, 33 : 18, 18 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  call object Moggi.Control.Monad.Fail::'__ev_MonadFail_IO'()
+  stloc.0
+  .line 33, 33 : 18, 18 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldloc.0
+  ldstr "fail"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  ldstr "no"
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.1
+  .line 33, 33 : 18, 18 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  ldloc.1
+  call object Moggi.Rt.RT::IoRun(object)
+  stloc.2
+  ldloc.2
+  ret
+}
+
+}
+
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main____ioThunk0__1
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    ldarg 1
+    ldc.i4 0
+    ldelem.ref
+    call object Moggi.Main::'__ioThunk0'(object)
+    ret
+  }
+}
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main____ioThunk1__2
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    ldarg 1
+    ldc.i4 0
+    ldelem.ref
+    ldarg 1
+    ldc.i4 1
+    ldelem.ref
+    call object Moggi.Main::'__ioThunk1'(object, object)
+    ret
+  }
+}
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main____ioThunk2__2
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    ldarg 1
+    ldc.i4 0
+    ldelem.ref
+    ldarg 1
+    ldc.i4 1
+    ldelem.ref
+    call object Moggi.Main::'__ioThunk2'(object, object)
+    ret
+  }
+}
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main____ioThunk3__1
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    ldarg 1
+    ldc.i4 0
+    ldelem.ref
+    call object Moggi.Main::'__ioThunk3'(object)
+    ret
+  }
+}
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main____ioThunk4__0
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    call object Moggi.Main::'__ioThunk4'()
+    ret
+  }
+}
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main____ioThunk5__0
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    call object Moggi.Main::'__ioThunk5'()
+    ret
+  }
+}
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main____ioThunk6__0
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    call object Moggi.Main::'__ioThunk6'()
+    ret
+  }
+}

@@ -118,6 +118,8 @@ function runBackendCases(array $cases, string $backend, bool $multiBackend = fal
             native: ($outcome['native'] ?? false) === true,
         );
 
+        recordCaseDuration($backend, $result);
+
         if ($result->isFailure() && $message !== '') {
             $result->logPath = writeCaseLog($case->name, $message);
             $result->repro = \sprintf('runtest --backend %s %s', $backend, $case->name);
@@ -439,6 +441,8 @@ function emitBackendTail(ResultSet $set, string $backend, float $startedAt): arr
 function finishRun(string $report, array $jsonBackends, array $backends, bool $failed, float $runStarted): int
 {
     global $testArgs;
+
+    writeDurationLedger();
 
     if (\count($backends) > 1) {
         $verdict = [];

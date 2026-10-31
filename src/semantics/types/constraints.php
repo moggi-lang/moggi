@@ -68,7 +68,7 @@ function applyEvidenceMethodInfo(TypeCheckState $state, Ast\AstNode &$expr, arra
         classMethodRole($state, $info['class'], $info['method']),
         methodValueArity($state, $methodType, $methodUserConstraints),
     );
-    $method->pendingConstraints = $expr->pendingConstraints;
+    setPendingObligations($state, $method, pendingConstraintsOf($state, $expr));
     copyInferredType($method, $expr);
     $expr = $method;
 }
@@ -1291,16 +1291,61 @@ function appliedEvidenceKeys(Ast\Apply $expr): array
 }
 
 /**
+ * The obligations this node carries, in the run that is checking it.
+ *
+ * The node is a key into the check's own table, not a field on the tree: a published AST has no
+ * place for an unsettled obligation, and a rewrite that copies a node starts with none because the
+ * copy is a different key. The state is the only way to ask, which is why no caller outside a
+ * check can observe one.
+ *
  * @return list<Ast\PendingConstraint>
  */
-function pendingConstraintsFromExpr(Ast\AstNode $expr): array
+function pendingConstraintsOf(TypeCheckState $state, Ast\AstNode $node): array
 {
-    if ($expr->pendingConstraints !== []) {
-        return $expr->pendingConstraints;
+    return $state->obligations->offsetExists($node) ? $state->obligations[$node][0] : [];
+}
+
+/** The solved dictionaries recorded beside this node's obligations, when it has any. */
+function pendingDictsOf(TypeCheckState $state, Ast\AstNode $node): array
+{
+    return $state->obligations->offsetExists($node) ? $state->obligations[$node][1] : [];
+}
+
+/**
+ * Record the obligations a node carries, or settle it with empty lists.
+ *
+ * Constraints and their solved dictionaries are written together, which is the invariant
+ * {@see assertPendingDictsConsistentInExpr()} checks: a site with neither is detached, so the table
+ * holds only outstanding work.
+ *
+ * @param list<Ast\PendingConstraint> $constraints
+ * @param list<Ast\PendingConstraint> $dicts
+ */
+function setPendingObligations(
+    TypeCheckState $state,
+    Ast\AstNode $node,
+    array $constraints,
+    array $dicts = [],
+): void {
+    if ($constraints === [] && $dicts === []) {
+        $state->obligations->offsetUnset($node);
+
+        return;
+    }
+
+    $state->obligations[$node] = [$constraints, $dicts];
+}
+
+/** @return list<Ast\PendingConstraint> */
+function pendingConstraintsFromExpr(TypeCheckState $state, Ast\AstNode $expr): array
+{
+    $pending = pendingConstraintsOf($state, $expr);
+    if ($pending !== []) {
+        return $pending;
     }
 
     if ($expr instanceof Ast\Apply) {
-        return pendingConstraintsFromExpr($expr->function);
+        return pendingConstraintsFromExpr($state, $expr->function);
     }
 
     return [];
@@ -1318,25 +1363,24 @@ function pendingConstraintsFromExpr(Ast\AstNode $expr): array
  *
  * @return array{0: list<Ast\PendingConstraint>, 1: list<Ast\PendingConstraint>}
  */
-function pendingConstraintsAndDicts(Ast\AstNode $expr): array
+function pendingConstraintsAndDicts(TypeCheckState $state, Ast\AstNode $expr): array
 {
-    if ($expr->pendingConstraints !== []) {
-        return [$expr->pendingConstraints, $expr->pendingDicts];
+    if ($state->obligations->offsetExists($expr)) {
+        return [$state->obligations[$expr][0], $state->obligations[$expr][1]];
     }
 
     if ($expr instanceof Ast\Apply) {
-        return pendingConstraintsAndDicts($expr->function);
+        return pendingConstraintsAndDicts($state, $expr->function);
     }
 
     return [[], []];
 }
 
-function clearPendingConstraints(Ast\AstNode $expr): void
+function clearPendingConstraints(TypeCheckState $state, Ast\AstNode $expr): void
 {
-    $expr->pendingConstraints = [];
-    $expr->pendingDicts = [];
+    setPendingObligations($state, $expr, []);
     if ($expr instanceof Ast\Apply) {
-        clearPendingConstraints($expr->function);
+        clearPendingConstraints($state, $expr->function);
     }
 }
 
@@ -1357,13 +1401,15 @@ function clearPendingConstraints(Ast\AstNode $expr): void
  */
 function pendingConstraintsDeep(Ast\AstNode $expr, ?TypeCheckState $state = null): array
 {
+    if ($state === null) {
+        return [];
+    }
+
     $found = [];
     $seen = [];
     $visit = static function (Ast\AstNode $node) use (&$found, &$seen, $state): void {
-        foreach ($node->pendingConstraints as $constraint) {
-            $args = $state === null
-                ? $constraint->args
-                : \array_map(static fn (Type $arg): Type => prune($state, $arg), $constraint->args);
+        foreach (pendingConstraintsOf($state, $node) as $constraint) {
+            $args = \array_map(static fn (Type $arg): Type => prune($state, $arg), $constraint->args);
             $key = $constraint->class . ':' . constraintArgsKey($args);
             if (isset($seen[$key])) {
                 continue;
@@ -1425,13 +1471,15 @@ function walkAstValues(Ast\AstNode $expr, callable $visit): void
 function assertPendingDictsConsistentInExpr(TypeCheckState $state, Ast\AstNode $expr): void
 {
     walkAstValues($expr, static function (Ast\AstNode $node) use ($state): void {
-        if ($node->pendingConstraints === [] || $node->pendingDicts === []) {
+        $pending = pendingConstraintsOf($state, $node);
+        $dicts = pendingDictsOf($state, $node);
+        if ($pending === [] || $dicts === []) {
             return;
         }
 
         $dictClasses = [];
         $dictVars = [];
-        foreach ($node->pendingDicts as $dict) {
+        foreach ($dicts as $dict) {
             $dictClasses[$dict->class] = true;
             foreach ($dict->args as $arg) {
                 $dictVars += typeVars($arg);
@@ -1440,7 +1488,7 @@ function assertPendingDictsConsistentInExpr(TypeCheckState $state, Ast\AstNode $
 
         $constraintClasses = [];
         $constraintVars = [];
-        foreach ($node->pendingConstraints as $constraint) {
+        foreach ($pending as $constraint) {
             $constraintClasses[$constraint->class] = true;
             foreach ($constraint->args as $arg) {
                 $constraintVars += typeVars($arg);

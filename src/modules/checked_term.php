@@ -184,6 +184,8 @@ final class CheckedLambda extends CheckedTerm
         public readonly array $parameterNames,
         public readonly array $parameterBinders,
         public readonly array $captures,
+        /** The body this lambda scopes, a child lowered in place. */
+        public readonly ?Ast\AstNode $body = null,
     ) {
         parent::__construct($id, $origin);
     }
@@ -206,10 +208,22 @@ final class CheckedLambda extends CheckedTerm
  */
 final class CheckedApplication extends CheckedTerm
 {
+    /**
+     * @param ?Ast\AstNode $callee the expression applied, a child lowered in place; null only for a
+     *   term built without a node (a synthetic application lowering never reads)
+     * @param ?Ast\AstNode $argument the argument this application supplies, a child lowered in place
+     * @param ?string $intrinsic the primop this application names, when the site is both a primop
+     *   site and an application (an under-applied primop): one term then carries both facts, so the
+     *   spine is not lost when the primop decision replaces it
+     */
     public function __construct(
         TermId $id,
         string $origin,
         public readonly int $remainingArity,
+        public readonly ?Ast\AstNode $callee = null,
+        public readonly ?Ast\AstNode $argument = null,
+        /** The primop this application names, when the site is also a primop site. */
+        public readonly ?string $intrinsic = null,
     ) {
         parent::__construct($id, $origin);
     }

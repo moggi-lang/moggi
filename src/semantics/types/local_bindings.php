@@ -492,12 +492,12 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
             }
         }
 
-        $constraints = pendingConstraintsFromExpr($rhs);
+        $constraints = pendingConstraintsFromExpr($state, $rhs);
         $rhsConstraints[$bi] = $constraints;
         $bodyConstraints[$bi] = $generalize ? pendingConstraintsDeep($rhs, $state) : [];
 
         if ($binding->value instanceof Ast\TypeAsc) {
-            $binding->value->pendingConstraints = $constraints;
+            setPendingObligations($state, $binding->value, $constraints, pendingDictsOf($state, $binding->value));
         }
 
         if ($binding->pattern instanceof Ast\PatVar) {
@@ -545,6 +545,7 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
             $binding = $bindings[$bi];
             [$rhs] = peelBindingAnnotation($binding->value);
             markRecursiveGroupEvidence(
+                $state,
                 $rhs,
                 static fn (Ast\Variable $use): ?array => $use->binderId === null
                     ? null

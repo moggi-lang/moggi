@@ -280,9 +280,7 @@ function mapStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
             $stmt->callee,
             \array_map(static fn (IR\Operand $arg): IR\Operand => mapOperand($arg, $temps, $locals), $stmt->args),
             $stmt->dest,
-            $stmt->intrinsic ?? null,
-            $stmt->runtime ?? null,
-            $stmt->foreign ?? null,
+            $stmt->op,
             $stmt->srcLoc,
         ),
         IR\IoRun::class => new IR\IoRun(
@@ -584,9 +582,7 @@ function withFirstOperandReplaced(IR\Stmt $stmt, int $dest, IR\Operand $value): 
                 $stmt->callee,
                 [$value, ...\array_slice($stmt->args, 1)],
                 $stmt->dest,
-                $stmt->intrinsic,
-                $stmt->runtime,
-                $stmt->foreign,
+                $stmt->op,
                 $stmt->srcLoc,
             )
             : null,

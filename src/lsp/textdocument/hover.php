@@ -150,7 +150,10 @@ function astTreeContains(object $root, Ast\AstNode $needle): bool
     if ($root instanceof Ast\TypeNode) {
         return false;
     }
-    foreach (\get_object_vars($root) as $prop) {
+    foreach (\get_object_vars($root) as $key => $prop) {
+        if ($key === 'core') {
+            continue;
+        }
         if (\is_object($prop)) {
             if (astTreeContains($prop, $needle)) {
                 return true;
@@ -421,28 +424,6 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
     }
     if ($typeSig !== null) {
         $pushType($typeSig);
-    }
-
-    if ($node !== null && $node->pendingConstraints !== []) {
-        $cs = [];
-        foreach ($node->pendingConstraints as $c) {
-            if (\is_object($c) && isset($c->class)) {
-                $arg = '';
-                if (isset($c->args) && \is_array($c->args)) {
-                    $argParts = [];
-                    foreach ($c->args as $a) {
-                        if ($a instanceof Ast\TypeNode) {
-                            $argParts[] = dumpTypeForDocs($a);
-                        }
-                    }
-                    $arg = $argParts !== [] ? ' ' . \implode(' ', $argParts) : '';
-                }
-                $cs[] = $c->class . $arg;
-            }
-        }
-        if ($cs !== []) {
-            $push('**constraints:** `' . \implode('`, `', \array_unique($cs)) . '`');
-        }
     }
 
     if ($node !== null && $node->doc) {

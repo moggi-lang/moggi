@@ -66,6 +66,14 @@ function printModeNames(): array
 final class CompilationContext
 {
     /**
+     * The backend this compilation emits for, derived from {@see $backendId}.
+     *
+     * There is deliberately no constructor parameter for it: the id is the single source of truth,
+     * so a context cannot be built whose id and instance disagree.
+     */
+    public readonly Backend $backend;
+
+    /**
      * @param array<string, true> $entries module names treated as entry points
      * @param list<string> $roots module search roots, in search order
      * @param list<string> $sources source paths in the compilation
@@ -75,13 +83,13 @@ final class CompilationContext
      */
     public function __construct(
         public readonly string $backendId,
-        public readonly Backend $backend,
         public readonly CompilePurpose $purpose,
         public readonly array $entries,
         public readonly array $roots,
         public readonly array $sources,
         public readonly string $host = '',
     ) {
+        $this->backend = backendById($backendId);
     }
 
     /**
@@ -98,7 +106,6 @@ final class CompilationContext
     ): self {
         return new self(
             $backendId,
-            backendById($backendId),
             $purpose,
             \array_fill_keys($entryModules, true),
             \array_values($roots),
@@ -137,7 +144,6 @@ final class CompilationContext
     {
         return new self(
             $this->backendId,
-            $this->backend,
             $this->purpose,
             $this->entries,
             $this->roots,
@@ -146,7 +152,6 @@ final class CompilationContext
         );
     }
 
-    /** @param list<string> $roots */
     /**
      * The inputs a cache entry depends on, in one stable spelling.
      *

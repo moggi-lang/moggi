@@ -61,6 +61,11 @@ What lands in `out/` differs by target:
 | `jvm` | `.class` files per module, plus the emitted runtime |
 | `dotnet` | `.il` per module and an `.ilproj`, assembled by the SDK |
 
+On Windows a classfile whose name is a reserved device name — the runtime's `moggi/rt/Con`, or a
+module called `Con` — cannot live in the tree, because `Con.class` names the console there. Those
+classes are written to `moggi-classes.jar` beside the tree instead; add it to the classpath when
+running an unpacked build (`java -cp "out;out/moggi-classes.jar" moggi.Main`).
+
 This is the fastest way to see what a construct became, and it is also how a
 library is built when the compiled tree, not an executable, is the output
 ([stdlib.md](stdlib.md)).

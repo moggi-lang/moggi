@@ -17,8 +17,9 @@
  * to remove, and it is why the family could not be cut over. This test pins the
  * three consequences:
  *
- * 1. every primop site of a real program is published as a `CheckedIntrinsicCall`
- *    whose name is the checker's, for all four shapes;
+ * 1. every primop site of a real program is published as a term carrying the
+ *    checker's name, for all four shapes — a `CheckedIntrinsicCall`, or a
+ *    `CheckedApplication` that names the primop it also supplies an argument to;
  * 2. lowering reads that term and not the node — scrubbing every site's payload
  *    field leaves the IR byte-identical;
  * 3. a primop node built after publication cannot be lowered at all, so eta
@@ -36,6 +37,7 @@ require $root . '/tests/suite/support/workspace.php';
 
 use Moggi\IR;
 use Moggi\Modules;
+use Moggi\Modules\CheckedApplication;
 use Moggi\Modules\CheckedIntrinsicCall;
 use Moggi\Pipeline\CompilationContext;
 use Moggi\Pipeline\CompilePurpose;
@@ -110,15 +112,18 @@ try {
                 return;
             }
             $term = $node->checkedTerm === null ? null : $record?->term($node->checkedTerm);
-            if (! $term instanceof CheckedIntrinsicCall) {
+            $planned = $term instanceof CheckedIntrinsicCall
+                ? $term->intrinsic
+                : ($term instanceof CheckedApplication ? $term->intrinsic : null);
+            if ($planned === null) {
                 throw new \RuntimeException(
                     'the primop site `' . $name . '` on a ' . $node::class . ' at line ' . $node->line
                     . ' of `' . $item->name . '` is not published as a checked term',
                 );
             }
-            if ($term->intrinsic !== $name) {
+            if ($planned !== $name) {
                 throw new \RuntimeException(
-                    'the term for the site at line ' . $node->line . ' names `' . $term->intrinsic
+                    'the term for the site at line ' . $node->line . ' names `' . $planned
                     . '` where the checker wrote `' . $name . '`',
                 );
             }

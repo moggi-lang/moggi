@@ -35,7 +35,9 @@ use function Moggi\Backend\Meta\constructorArityMapFromRegistry;
 use function Moggi\Backend\Meta\newtypeConstructorMap;
 use function Moggi\Backend\Meta\newtypeConstructorMapFromRegistry;
 use function Moggi\Debug\normalizeDisplayPath;
+use function Moggi\IR\Callables\arityBySymbol;
 use function Moggi\IR\Callables\captureMeta;
+use function Moggi\IR\Callables\table;
 use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Optimize\Support\indexCapturedFunctions;
@@ -59,13 +61,19 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     $wrapperRegistry = new FnWrapperRegistry();
     $ioThunkRegistry = new IoThunkRegistry();
 
+    $callableTables = $options['callableTables'] ?? [];
+    $callableTable = ($callableTables[$moduleName] ?? null) instanceof \Moggi\IR\Callables\CallableTable
+        ? $callableTables[$moduleName]
+        : table($module->functions, (string) $moduleName);
+    $programArity = arityBySymbol($callableTables);
+
     $functionArity = [];
     /** @var array<string, true> $localBindings */
     $localBindings = [];
     foreach ($module->functions as $fn) {
         $localBindings[$fn->name] = true;
-        $functionArity[$fn->name] = \count($fn->params)
-            + \count($lambdaMeta[$fn->name]['captures'] ?? []);
+        $functionArity[$fn->name] = $callableTable->sig($fn->name)?->runtimeArity()
+            ?? \count($fn->params);
     }
     foreach (constructorArityMap($module->data) as $name => $arity) {
         $localBindings[$name] = true;
@@ -94,7 +102,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
             }
         }
     }
-    foreach ($options['globalFnArity'] ?? [] as $name => $arity) {
+    foreach ($programArity as $name => $arity) {
         if (! isset($functionArity[$name])) {
             $functionArity[$name] = $arity;
         }
@@ -108,11 +116,6 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
                 continue;
             }
             $functionArity[resolvedSymbol($moduleName, $name)] = $arity;
-        }
-    }
-    foreach ($options['globalFnArity'] ?? [] as $name => $arity) {
-        if (! isset($functionArity[$name])) {
-            $functionArity[$name] = $arity;
         }
     }
 

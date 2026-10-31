@@ -8,6 +8,7 @@ namespace Moggi\Modules;
  */
 
 use Moggi\Cache;
+use Moggi\Profile;
 use Moggi\IR\EntryPointKind;
 use Moggi\IR\Module;
 use Moggi\Pipeline\CompilationContext;
@@ -20,11 +21,12 @@ use Moggi\Syntax\Parser\ParseError;
 use function Moggi\Backend\codegenWith;
 use function Moggi\Semantics\Foreign\programDeclaresForeign;
 use function Moggi\Backend\Jvm\Foreign\jvmInterfaceNamesFromPrograms;
-use function Moggi\IR\Callables\captureCandidates;
-use function Moggi\IR\Callables\captureMeta;
+use function Moggi\IR\Callables\table;
 use function Moggi\IR\Dump\dump as dumpIr;
 use function Moggi\IR\Validate\validateCallableLayouts;
 use function Moggi\IR\Visit\collectIrCodegenUsage;
+use function Moggi\Memory\pause;
+use function Moggi\Memory\resume;
 use function Moggi\Optimize\Specialize\specializeAcrossModules;
 use function Moggi\Optimize\TreeShake\treeShakeModules;
 use function Moggi\Pipeline\run as pipelineRun;
@@ -69,19 +71,14 @@ function compileProjectBoth(array $paths, string $rootDir, CompilationContext $c
         return $cached;
     }
 
-    /*
-     * Releasing a checked program is what keeps a whole-project compile inside the
-     * memory floor, and it is sound only where the module cache can hand the program
-     * back. A compile with the cache off (`--no-cache`, `MOGGI_NO_CACHE=1`, a
-     * read-only cache root) keeps its products in memory — the behaviour this call
-     * had before releasing existed — instead of refusing to compile at all.
-     */
-    $outputs = compilePreparedProject(
-        prepareProjectCached($paths, $rootDir, $context, releaseChecked: Cache\cacheEnabled()),
-        $context,
-        $optimize,
-        $strip,
-    );
+    pause();
+    try {
+        $prepared = prepareProjectCached($paths, $rootDir, $context, releaseChecked: Cache\cacheEnabled());
+    } finally {
+        resume();
+    }
+
+    $outputs = compilePreparedProject($prepared, $context, $optimize, $strip);
     Cache\artifactPut($outputsKey, $outputs);
 
     return $outputs;
@@ -171,18 +168,14 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         )))
         : [];
 
-    $globalFnArity = [];
+    /*
+     * One published table per module, handed to emit as-is. The backends project arity from
+     * these `CallableSig`s; nothing here (and nothing in a backend) recounts parameters and
+     * captures into a second map.
+     */
+    $callableTables = [];
     foreach ($optByModule as $moduleName => $optimizedIr) {
-        $lambdaMeta = captureMeta(
-            captureCandidates($optimizedIr->functions),
-        );
-        foreach ($optimizedIr->functions as $fn) {
-            $arity = \count($fn->params);
-            if ($fn->shape->kind->takesCaptures()) {
-                $arity += \count($lambdaMeta[$fn->name]['captures'] ?? []);
-            }
-            $globalFnArity[resolvedSymbol((string) $moduleName, $fn->name)] = $arity;
-        }
+        $callableTables[(string) $moduleName] = table($optimizedIr->functions, (string) $moduleName);
     }
 
     $emitOutputs = [];
@@ -271,7 +264,7 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
             'outputRelative' => $outputRelative,
             'irUsage' => $irUsage,
             'artifactModuleName' => $moduleName,
-            'globalFnArity' => $globalFnArity,
+            'callableTables' => $callableTables,
             'foreignInterfaces' => $foreignInterfaces,
         ]);
 

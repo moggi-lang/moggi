@@ -9,6 +9,8 @@ namespace Moggi\Modules;
 
 
 use Moggi\Cache;
+use Moggi\Memory;
+use Moggi\Profile;
 use Moggi\Pipeline\CompilationContext;
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
@@ -414,6 +416,8 @@ function prepareProject(
             $checked[$moduleName] = $checkedFull;
             $units[$moduleName]['checkedProgram'] = $checkedFull;
         }
+
+        Memory\tick();
     }
 
     foreach ($sortedModules as $moduleName) {

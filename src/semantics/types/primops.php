@@ -16,10 +16,10 @@ use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
  * Rewrite saturated applications of imported `#` primops into IntrinsicCall
  * nodes named by the IR/backend id (`intAdd# a b` → `intrinsic intAdd# a b`).
  */
-function rewriteIntrinsicApplies(Ast\AstNode $expr): Ast\AstNode
+function rewriteIntrinsicApplies(TypeCheckState $state, Ast\AstNode $expr): Ast\AstNode
 {
     return match ($expr::class) {
-        Ast\Variable::class, Ast\QualifiedRef::class => (static function () use ($expr): Ast\AstNode {
+        Ast\Variable::class, Ast\QualifiedRef::class => (static function () use ($state, $expr): Ast\AstNode {
             $wrapper = $expr->intrinsicWrapper;
             if ($wrapper === null) {
                 return $expr;
@@ -34,13 +34,13 @@ function rewriteIntrinsicApplies(Ast\AstNode $expr): Ast\AstNode
             $call = new Ast\IntrinsicCall($internal, [], $expr->line, $expr->col, $expr->endCol);
             $call->intrinsicId = $internal;
             copyInferredType($call, $expr);
-            $call->pendingConstraints = $expr->pendingConstraints;
+            setPendingObligations($state, $call, pendingConstraintsOf($state, $expr), pendingDictsOf($state, $expr));
 
             return $call;
         })(),
-        Ast\Apply::class => (static function () use ($expr): Ast\AstNode {
-            $expr->function = rewriteIntrinsicApplies($expr->function);
-            $expr->argument = rewriteIntrinsicApplies($expr->argument);
+        Ast\Apply::class => (static function () use ($state, $expr): Ast\AstNode {
+            $expr->function = rewriteIntrinsicApplies($state, $expr->function);
+            $expr->argument = rewriteIntrinsicApplies($state, $expr->argument);
 
             $parts = flattenApplyForIntrinsicWrapper($expr);
             $callee = $parts['function'];
@@ -65,67 +65,67 @@ function rewriteIntrinsicApplies(Ast\AstNode $expr): Ast\AstNode
             $call = new Ast\IntrinsicCall($internal, $args, $expr->line, $expr->col, $expr->endCol);
             $call->intrinsicId = $internal;
             copyInferredType($call, $expr);
-            $call->pendingConstraints = $expr->pendingConstraints;
+            setPendingObligations($state, $call, pendingConstraintsOf($state, $expr), pendingDictsOf($state, $expr));
 
             return $call;
         })(),
-        Ast\IntrinsicCall::class => (static function () use ($expr): Ast\AstNode {
+        Ast\IntrinsicCall::class => (static function () use ($state, $expr): Ast\AstNode {
             $internal = resolveIntrinsicName($expr->name) ?? $expr->name;
             $expr->name = $internal;
             $expr->intrinsicId = $internal;
             foreach ($expr->args as $i => $arg) {
-                $expr->args[$i] = rewriteIntrinsicApplies($arg);
+                $expr->args[$i] = rewriteIntrinsicApplies($state, $arg);
             }
 
             return $expr;
         })(),
-        Ast\Lambda::class => (static function () use ($expr): Ast\AstNode {
-            $expr->body = rewriteIntrinsicApplies($expr->body);
+        Ast\Lambda::class => (static function () use ($state, $expr): Ast\AstNode {
+            $expr->body = rewriteIntrinsicApplies($state, $expr->body);
 
             return $expr;
         })(),
-        Ast\Let::class => (static function () use ($expr): Ast\AstNode {
+        Ast\Let::class => (static function () use ($state, $expr): Ast\AstNode {
             foreach ($expr->bindings as $binding) {
-                $binding->value = rewriteIntrinsicApplies($binding->value);
+                $binding->value = rewriteIntrinsicApplies($state, $binding->value);
             }
-            $expr->body = rewriteIntrinsicApplies($expr->body);
+            $expr->body = rewriteIntrinsicApplies($state, $expr->body);
 
             return $expr;
         })(),
-        Ast\Where::class => (static function () use ($expr): Ast\AstNode {
+        Ast\Where::class => (static function () use ($state, $expr): Ast\AstNode {
             foreach ($expr->bindings as $binding) {
-                $binding->value = rewriteIntrinsicApplies($binding->value);
+                $binding->value = rewriteIntrinsicApplies($state, $binding->value);
             }
-            $expr->expr = rewriteIntrinsicApplies($expr->expr);
+            $expr->expr = rewriteIntrinsicApplies($state, $expr->expr);
 
             return $expr;
         })(),
-        Ast\CaseExpr::class => (static function () use ($expr): Ast\AstNode {
-            $expr->scrutinee = rewriteIntrinsicApplies($expr->scrutinee);
+        Ast\CaseExpr::class => (static function () use ($state, $expr): Ast\AstNode {
+            $expr->scrutinee = rewriteIntrinsicApplies($state, $expr->scrutinee);
             foreach ($expr->alts as $alt) {
-                $alt->body = rewriteIntrinsicApplies($alt->body);
+                $alt->body = rewriteIntrinsicApplies($state, $alt->body);
             }
 
             return $expr;
         })(),
-        Ast\GuardsExpr::class => (static function () use ($expr): Ast\AstNode {
+        Ast\GuardsExpr::class => (static function () use ($state, $expr): Ast\AstNode {
             foreach ($expr->clauses as $clause) {
-                $clause->guard = rewriteIntrinsicApplies($clause->guard);
-                $clause->body = rewriteIntrinsicApplies($clause->body);
+                $clause->guard = rewriteIntrinsicApplies($state, $clause->guard);
+                $clause->body = rewriteIntrinsicApplies($state, $clause->body);
             }
 
             return $expr;
         })(),
-        Ast\DoExpr::class => (static function () use ($expr): Ast\AstNode {
+        Ast\DoExpr::class => (static function () use ($state, $expr): Ast\AstNode {
             if ($expr->desugared !== null) {
-                $expr->desugared = rewriteIntrinsicApplies($expr->desugared);
+                $expr->desugared = rewriteIntrinsicApplies($state, $expr->desugared);
             }
 
             return $expr;
         })(),
-        Ast\Infix::class => (static function () use ($expr): Ast\AstNode {
-            $expr->left = rewriteIntrinsicApplies($expr->left);
-            $expr->right = rewriteIntrinsicApplies($expr->right);
+        Ast\Infix::class => (static function () use ($state, $expr): Ast\AstNode {
+            $expr->left = rewriteIntrinsicApplies($state, $expr->left);
+            $expr->right = rewriteIntrinsicApplies($state, $expr->right);
 
             $primop = $expr->resolvedIntrinsic;
             if ($primop === null || isShortCircuitPrimop($primop)) {
@@ -150,35 +150,35 @@ function rewriteIntrinsicApplies(Ast\AstNode $expr): Ast\AstNode
 
             return $call;
         })(),
-        Ast\Tuple::class, Ast\ListLit::class => (static function () use ($expr): Ast\AstNode {
+        Ast\Tuple::class, Ast\ListLit::class => (static function () use ($state, $expr): Ast\AstNode {
             foreach ($expr->elements as $i => $el) {
-                $expr->elements[$i] = rewriteIntrinsicApplies($el);
+                $expr->elements[$i] = rewriteIntrinsicApplies($state, $el);
             }
 
             return $expr;
         })(),
-        Ast\TypeAsc::class => (static function () use ($expr): Ast\AstNode {
-            $expr->expr = rewriteIntrinsicApplies($expr->expr);
+        Ast\TypeAsc::class => (static function () use ($state, $expr): Ast\AstNode {
+            $expr->expr = rewriteIntrinsicApplies($state, $expr->expr);
 
             return $expr;
         })(),
-        Ast\RecordCon::class => (static function () use ($expr): Ast\AstNode {
+        Ast\RecordCon::class => (static function () use ($state, $expr): Ast\AstNode {
             foreach ($expr->fields as $field) {
-                $field->expr = rewriteIntrinsicApplies($field->expr);
+                $field->expr = rewriteIntrinsicApplies($state, $field->expr);
             }
 
             return $expr;
         })(),
-        Ast\RecordUpdate::class => (static function () use ($expr): Ast\AstNode {
-            $expr->object = rewriteIntrinsicApplies($expr->object);
+        Ast\RecordUpdate::class => (static function () use ($state, $expr): Ast\AstNode {
+            $expr->object = rewriteIntrinsicApplies($state, $expr->object);
             foreach ($expr->fields as $field) {
-                $field->expr = rewriteIntrinsicApplies($field->expr);
+                $field->expr = rewriteIntrinsicApplies($state, $field->expr);
             }
 
             return $expr;
         })(),
-        Ast\FieldAccess::class => (static function () use ($expr): Ast\AstNode {
-            $expr->object = rewriteIntrinsicApplies($expr->object);
+        Ast\FieldAccess::class => (static function () use ($state, $expr): Ast\AstNode {
+            $expr->object = rewriteIntrinsicApplies($state, $expr->object);
 
             return $expr;
         })(),
@@ -311,7 +311,7 @@ function isEvidenceApplyArg(Ast\AstNode $arg): bool
 function resolveDeferredInfixPrimops(TypeCheckState $state, Ast\AstNode $expr): void
 {
     walkAstValues($expr, static function (Ast\AstNode $node) use ($state): void {
-        if ($node->pendingConstraints === [] && $node->pendingDicts === []) {
+        if (pendingConstraintsOf($state, $node) === [] && pendingDictsOf($state, $node) === []) {
             return;
         }
 
@@ -350,8 +350,7 @@ function resolveDeferredInfixPrimops(TypeCheckState $state, Ast\AstNode $expr): 
 
         if ($target instanceof Ast\Infix) {
             $target->resolvedIntrinsic = $primop;
-            $target->pendingConstraints = [];
-            $target->pendingDicts = [];
+            setPendingObligations($state, $target, []);
 
             return;
         }
@@ -359,13 +358,11 @@ function resolveDeferredInfixPrimops(TypeCheckState $state, Ast\AstNode $expr): 
         $target->intrinsicWrapper = $primop;
         $cursor = $target;
         while ($cursor instanceof Ast\Apply) {
-            $cursor->pendingConstraints = [];
-            $cursor->pendingDicts = [];
+            setPendingObligations($state, $cursor, []);
             $cursor = $cursor->function;
         }
         if ($cursor instanceof Ast\AstNode) {
-            $cursor->pendingConstraints = [];
-            $cursor->pendingDicts = [];
+            setPendingObligations($state, $cursor, []);
         }
     });
 }

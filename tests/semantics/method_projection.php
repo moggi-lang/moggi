@@ -107,7 +107,7 @@ $resolve = static function (TypeExpr\Type $parameter, TypeExpr\Type $operand, ar
 
     $head = new TypeExpr\TVar('h');
     $callee = new Ast\Variable('from');
-    $callee->pendingConstraints = [new Ast\PendingConstraint('Has', [$head], '', false, null)];
+    Types\setPendingObligations($state, $callee, [new Ast\PendingConstraint('Has', [$head], '', false, null)]);
 
     Types\resolveMethodHeadFromArgument($state, $callee, $parameter, $operand);
 

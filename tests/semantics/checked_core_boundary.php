@@ -37,6 +37,7 @@ use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Types\assertNoPendingConstraintsInExpr;
+use function Moggi\Semantics\Types\setPendingObligations;
 
 $assert = static function (bool $condition, string $message): void {
     if (! $condition) {
@@ -47,9 +48,9 @@ $assert = static function (bool $condition, string $message): void {
 $state = new TypeCheckState('', 'checked_core_boundary.mog');
 $obligation = new Ast\PendingConstraint('Eq', [new TCon('Int', [])]);
 
-$carrying = static function () use ($obligation): Ast\IntegerLit {
+$carrying = static function () use ($obligation, $state): Ast\IntegerLit {
     $lit = new Ast\IntegerLit(1, 1, 1, 2);
-    $lit->pendingConstraints = [$obligation];
+    setPendingObligations($state, $lit, [$obligation]);
 
     return $lit;
 };
@@ -121,7 +122,7 @@ $publishable = static function (Ast\AstNode $body): Ast\Program {
 };
 
 $settled = $publishable(new Ast\Variable('x', 2, 1, 2));
-Modules\publishElaboration($settled);
+Modules\publishElaboration($settled, $state);
 $assert(
     $settled->core?->function('probe') !== null,
     'publishing a settled body dropped the record it published',
@@ -130,7 +131,7 @@ $assert(
 $unsettled = $publishable($carrying());
 $message = '';
 try {
-    Modules\publishElaboration($unsettled);
+    Modules\publishElaboration($unsettled, $state);
 } catch (\LogicException $e) {
     $message = $e->getMessage();
 }

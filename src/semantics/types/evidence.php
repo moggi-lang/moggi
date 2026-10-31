@@ -143,7 +143,7 @@ function freshenConstraintMethod(TypeCheckState $state, Ast\EvidenceMethod $expr
         $expr->classObligation = \array_pop($instantiated['constraints']);
     }
     if ($instantiated['constraints'] !== []) {
-        $expr->pendingConstraints = $instantiated['constraints'];
+        setPendingObligations($state, $expr, $instantiated['constraints'], pendingDictsOf($state, $expr));
     }
 
     return $instantiated['type'];
@@ -202,7 +202,7 @@ function resolveMethodHeadFromArgument(
  */
 function methodDictionaryHeadVars(TypeCheckState $state, Ast\AstNode $callee): array
 {
-    [$pending] = pendingConstraintsAndDicts($callee);
+    [$pending] = pendingConstraintsAndDicts($state, $callee);
 
     $heads = [];
     foreach ($pending as $constraint) {
@@ -316,13 +316,12 @@ function takeKnownOperandType(TypeCheckState $state, Ast\AstNode $operand): ?Typ
  */
 function parkApplyConstraints(TypeCheckState $state, Ast\Apply $expr): void
 {
-    [$pending, $dicts] = pendingConstraintsAndDicts($expr->function);
+    [$pending, $dicts] = pendingConstraintsAndDicts($state, $expr->function);
     if ($pending === []) {
         return;
     }
 
-    $expr->pendingConstraints = $pending;
-    $expr->pendingDicts = $dicts;
+    setPendingObligations($state, $expr, $pending, $dicts);
 }
 
 /**
@@ -353,7 +352,7 @@ function elaborateApplyEvidence(TypeCheckState $state, Ast\Apply $expr): void
     if ($root instanceof Ast\EvidenceMethod) {
         verifyMethodClassObligation($state, $root, $expr);
     }
-    [$pending, $dicts] = pendingConstraintsAndDicts($expr->function);
+    [$pending, $dicts] = pendingConstraintsAndDicts($state, $expr->function);
     if ($pending === []) {
         return;
     }
@@ -363,7 +362,7 @@ function elaborateApplyEvidence(TypeCheckState $state, Ast\Apply $expr): void
         return;
     }
 
-    clearPendingConstraints($expr);
+    clearPendingConstraints($state, $expr);
     prependEvidenceAtRoot($state, $expr, $evidence);
 }
 
@@ -378,7 +377,7 @@ function elaborateApplyEvidence(TypeCheckState $state, Ast\Apply $expr): void
 function inferApplyAndElaborate(TypeCheckState $state, Ast\Apply $expr, array $env): Type
 {
     $type = inferApply($state, $expr, $env);
-    if ($expr->pendingConstraints !== [] || $expr->pendingDicts !== []) {
+    if (pendingConstraintsOf($state, $expr) !== [] || pendingDictsOf($state, $expr) !== []) {
         elaborateApplyEvidence($state, $expr);
     }
 
@@ -430,11 +429,11 @@ function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode $expr):
             $expr->left = tryResolveValueEvidence($state, $expr->left);
             $expr->right = tryResolveValueEvidence($state, $expr->right);
 
-            if ($expr->pendingConstraints === []) {
+            if (pendingConstraintsOf($state, $expr) === []) {
                 return $expr;
             }
 
-            $constraints = dictsForPending($state, $expr->pendingConstraints, $expr->pendingDicts);
+            $constraints = dictsForPending($state, pendingConstraintsOf($state, $expr), pendingDictsOf($state, $expr));
             $evidence = tryResolveEvidenceExprs($state, $constraints, $expr);
             if ($evidence === null) {
                 return $expr;
@@ -630,9 +629,9 @@ function tryResolveApplyEvidence(TypeCheckState $state, Ast\Apply $expr): void
     if ($root instanceof Ast\EvidenceMethod) {
         verifyMethodClassObligation($state, $root, $expr);
     }
-    [$pending, $dicts] = pendingConstraintsAndDicts($expr->function);
+    [$pending, $dicts] = pendingConstraintsAndDicts($state, $expr->function);
     if ($pending === []) {
-        [$pending, $dicts] = [$expr->pendingConstraints, $expr->pendingDicts];
+        [$pending, $dicts] = [pendingConstraintsOf($state, $expr), pendingDictsOf($state, $expr)];
     }
 
     if ($pending === []) {
@@ -645,7 +644,7 @@ function tryResolveApplyEvidence(TypeCheckState $state, Ast\Apply $expr): void
         return;
     }
 
-    clearPendingConstraints($expr);
+    clearPendingConstraints($state, $expr);
     prependEvidenceAtRoot($state, $expr, $evidence);
 }
 
@@ -667,18 +666,17 @@ function tryResolveValueEvidence(TypeCheckState $state, Ast\AstNode $expr): Ast\
         return $expr;
     }
 
-    if ($expr->pendingConstraints === []) {
+    if (pendingConstraintsOf($state, $expr) === []) {
         return $expr;
     }
 
-    $constraints = dictsForPending($state, $expr->pendingConstraints, $expr->pendingDicts);
+    $constraints = dictsForPending($state, pendingConstraintsOf($state, $expr), pendingDictsOf($state, $expr));
     $evidence = tryResolveEvidenceExprs($state, $constraints, $expr);
     if ($evidence === null) {
         return $expr;
     }
 
-    $expr->pendingConstraints = [];
-    $expr->pendingDicts = [];
+    setPendingObligations($state, $expr, []);
 
     return prependEvidenceToCall($state, $expr, $evidence);
 }

@@ -259,10 +259,11 @@ $check(
     'the analysis owner answered from the scan of the body it replaced',
 );
 
+// A shape is a readonly record, so marking a declaration is a replacement, not a field write.
 $marked = new IR\FunctionDecl('faulting', ['n'], null, $quiet->body);
-$marked->shape->ioEffect = true;
+$marked->shape = $marked->shape->with(['ioEffect' => true]);
 $withIo = $analysis->modelFor([$total, $marked, $indirectBody, $indirectApply, $indirectPartial]);
-$check($withIo !== $rewritten, 'the analysis owner kept its model across an io mark set in place');
+$check($withIo !== $rewritten, 'the analysis owner kept its model across an adopted io mark');
 $check($withIo->ofCall('faulting')->executes, 'the analysis owner missed an io mark while reusing its scan');
 
 if ($failures !== []) {

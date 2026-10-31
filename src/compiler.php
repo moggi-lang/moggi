@@ -66,6 +66,7 @@ if (\PHP_INT_SIZE < 8) {
 }
 
 require __DIR__ . '/errors.php';
+require __DIR__ . '/memory.php';
 require __DIR__ . '/semantics/kernel.php';
 require __DIR__ . '/cache/cache.php';
 require __DIR__ . '/version.php';

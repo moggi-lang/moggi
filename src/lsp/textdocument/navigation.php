@@ -301,7 +301,10 @@ function findEvidenceMethodForNode(object $root, Ast\AstNode $needle): ?Ast\Evid
     if ($root instanceof Ast\TypeNode) {
         return null;
     }
-    foreach (\get_object_vars($root) as $prop) {
+    foreach (\get_object_vars($root) as $key => $prop) {
+        if ($key === 'core') {
+            continue;
+        }
         if (\is_object($prop)) {
             $hit = findEvidenceMethodForNode($prop, $needle);
             if ($hit !== null) {

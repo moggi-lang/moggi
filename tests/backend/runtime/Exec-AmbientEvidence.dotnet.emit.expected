@@ -1,0 +1,478 @@
+.class public abstract auto ansi sealed beforefieldinit Moggi.Main
+       extends [System.Runtime]System.Object
+{
+.method public hidebysig static object 'eqBoth'(object, object, object) cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  .line 8, 8 : 1, 1 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldarg.0
+  ldstr "=="
+  ldc.i4.2
+  newarr object
+  dup
+  ldc.i4.0
+  ldarg.1
+  stelem.ref
+  dup
+  ldc.i4.1
+  ldarg.2
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.0
+  ldloc.0
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'useEq'(object, object, object) cil managed
+{
+  .maxstack 64
+  .line 12, 12 : 13, 13 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  .line 12, 12 : 13, 13 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldarg.0
+  ldarg.1
+  ldarg.2
+  call object Moggi.Main::'eqBoth'(object, object, object)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'memEq'(object, object, object) cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1, object V2, object V3, object V4, object V5, object V6)
+  .line 17, 17 : 14, 14 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldarg.2
+  stloc.0
+  ldloc.0
+  brtrue match_fail_V0_0
+  ldc.i4.0
+  box bool
+  ret
+match_fail_V0_0:
+  ldloc.0
+  brfalse match_fail_V0_1
+  ldloc.0
+  castclass Moggi.Rt.MList
+  ldfld object Moggi.Rt.MList::head
+  stloc.1
+  ldloc.0
+  castclass Moggi.Rt.MList
+  ldfld class Moggi.Rt.MList Moggi.Rt.MList::tail
+  stloc.2
+  .line 19, 19 : 15, 15 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldarg.0
+  ldstr "=="
+  ldc.i4.2
+  newarr object
+  dup
+  ldc.i4.0
+  ldarg.1
+  stelem.ref
+  dup
+  ldc.i4.1
+  ldarg.2
+  castclass Moggi.Rt.MList
+  ldfld object Moggi.Rt.MList::head
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.3
+  ldloc.3
+  stloc.s 4
+  ldloc.s 4
+  unbox.any bool
+  brfalse match_fail_V4_0
+  ldc.i4.1
+  box bool
+  stloc.s 5
+  br match_end_V4
+match_fail_V4_0:
+  ldloc.s 4
+  unbox.any bool
+  brtrue match_fail_V4_1
+  .line 21, 21 : 14, 14 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldarg.0
+  ldarg.1
+  ldarg.2
+  castclass Moggi.Rt.MList
+  ldfld class Moggi.Rt.MList Moggi.Rt.MList::tail
+  call object Moggi.Main::'memEq'(object, object, object)
+  stloc.s 6
+  ldloc.s 6
+  stloc.s 5
+  br match_end_V4
+match_fail_V4_1:
+  ldstr "non-exhaustive match"
+  newobj instance void [System.Runtime]System.Exception::.ctor(string)
+  throw
+match_end_V4:
+  ldloc.s 5
+  ret
+match_fail_V0_1:
+  ldstr "non-exhaustive match"
+  newobj instance void [System.Runtime]System.Exception::.ctor(string)
+  throw
+match_end_V0:
+  ldnull
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'demoEqTrue'() cil managed
+{
+  .maxstack 64
+  .line 24, 24 : 14, 14 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  .line 12, 12 : 13, 13 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  call object Moggi.Data.Eq::'__ev_Eq_Int'()
+  ldc.i8 3
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldc.i8 3
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Main::'eqBoth'(object, object, object)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'demoEqFalse'() cil managed
+{
+  .maxstack 64
+  .line 27, 27 : 15, 15 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  .line 12, 12 : 13, 13 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  call object Moggi.Data.Eq::'__ev_Eq_Int'()
+  ldc.i8 3
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldc.i8 4
+  call object Moggi.Rt.RT::BoxInt(int64)
+  call object Moggi.Main::'eqBoth'(object, object, object)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'demoMemTrue'() cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  .line 30, 30 : 15, 15 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  .line 30, 30 : 15, 15 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  call object Moggi.Data.Eq::'__ev_Eq_Int'()
+  ldc.i8 3
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldnull
+  stloc.0
+  ldc.i8 3
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldloc.0
+  call class Moggi.Rt.MList Moggi.Rt.RT::Cons(object, object)
+  stloc.0
+  ldc.i8 2
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldloc.0
+  call class Moggi.Rt.MList Moggi.Rt.RT::Cons(object, object)
+  stloc.0
+  ldc.i8 1
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldloc.0
+  call class Moggi.Rt.MList Moggi.Rt.RT::Cons(object, object)
+  stloc.0
+  ldloc.0
+  call object Moggi.Main::'memEq'(object, object, object)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'demoMemFalse'() cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  .line 33, 33 : 16, 16 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  .line 33, 33 : 16, 16 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  call object Moggi.Data.Eq::'__ev_Eq_Int'()
+  ldc.i8 9
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldnull
+  stloc.0
+  ldc.i8 3
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldloc.0
+  call class Moggi.Rt.MList Moggi.Rt.RT::Cons(object, object)
+  stloc.0
+  ldc.i8 2
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldloc.0
+  call class Moggi.Rt.MList Moggi.Rt.RT::Cons(object, object)
+  stloc.0
+  ldc.i8 1
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldloc.0
+  call class Moggi.Rt.MList Moggi.Rt.RT::Cons(object, object)
+  stloc.0
+  ldloc.0
+  call object Moggi.Main::'memEq'(object, object, object)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'applyListFn'(object, object) cil managed
+{
+  .maxstack 64
+  .line 39, 39 : 20, 20 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  .line 39, 39 : 20, 20 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldarg.0
+  ldarg.1
+  call object Moggi.Rt.RT::Apply1(object, object)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'demoQualifiedValue'() cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1, object V2)
+  .line 42, 42 : 22, 22 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  .line 42, 42 : 22, 22 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldc.i4.3
+  newobj instance void Moggi.Fn.Moggi_Data_List__sort__3::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  call object Moggi.Data.Eq::'__ev_Eq_Int'()
+  call object Moggi.Rt.RT::Apply1(object, object)
+  stloc.0
+  .line 42, 42 : 22, 22 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldloc.0
+  call object Moggi.Data.Ord::'__ev_Ord_Int'()
+  call object Moggi.Rt.RT::Apply1(object, object)
+  stloc.1
+  .line 39, 39 : 20, 20 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldloc.1
+  ldnull
+  stloc.2
+  ldc.i8 2
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldloc.2
+  call class Moggi.Rt.MList Moggi.Rt.RT::Cons(object, object)
+  stloc.2
+  ldc.i8 1
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldloc.2
+  call class Moggi.Rt.MList Moggi.Rt.RT::Cons(object, object)
+  stloc.2
+  ldc.i8 3
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ldloc.2
+  call class Moggi.Rt.MList Moggi.Rt.RT::Cons(object, object)
+  stloc.2
+  ldloc.2
+  call object Moggi.Rt.RT::Apply1(object, object)
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object 'main'() cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1)
+  .line 45, 45 : 8, 8 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  .line 45, 45 : 8, 8 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldc.i4.0
+  newobj instance void Moggi.Fn.Moggi_Main____ioThunk0__0::.ctor()
+  newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  stloc.0
+  ldloc.0
+  newobj instance void Moggi.Rt.IO::.ctor(object)
+  stloc.1
+  ldloc.1
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static object '__w_main'() cil managed
+{
+  .maxstack 64
+  .locals init (object V0, object V1, object V2, object V3, object V4, object V5, object V6, object V7, object V8, object V9, object V10, object V11)
+  .line 45, 45 : 8, 8 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  .line 46, 46 : 3, 3 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  call object Moggi.Text.Show::'__ev_Show_Bool'()
+  stloc.0
+  .line 46, 46 : 3, 3 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldloc.0
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  call object Moggi.Main::'demoEqTrue'()
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.1
+  .line 46, 46 : 3, 3 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldloc.1
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.2
+  .line 47, 47 : 3, 3 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldloc.0
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  call object Moggi.Main::'demoEqFalse'()
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.3
+  .line 47, 47 : 3, 3 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldloc.3
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 4
+  .line 48, 48 : 3, 3 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldloc.0
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  call object Moggi.Main::'demoMemTrue'()
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.s 5
+  .line 48, 48 : 3, 3 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldloc.s 5
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 6
+  .line 49, 49 : 3, 3 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldloc.0
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  call object Moggi.Main::'demoMemFalse'()
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.s 7
+  .line 49, 49 : 3, 3 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldloc.s 7
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 8
+  .line 50, 50 : 3, 3 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  call object Moggi.Data.Int::'__ev_Show_Int'()
+  call object Moggi.Data.List::'__ev_Show_List'(object)
+  stloc.s 9
+  .line 50, 50 : 3, 3 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldloc.s 9
+  ldstr "show"
+  ldc.i4.1
+  newarr object
+  dup
+  ldc.i4.0
+  call object Moggi.Main::'demoQualifiedValue'()
+  stelem.ref
+  call object Moggi.Rt.RT::DictCall(object, string, object[])
+  stloc.s 10
+  .line 50, 50 : 3, 3 'tests/backend/runtime/Exec-AmbientEvidence.mog'
+  ldloc.s 10
+  call object Moggi.System.IO::'__w_putStrLn'(object)
+  stloc.s 11
+  ldnull
+  ret
+  ldnull
+  ret
+}
+
+.method public hidebysig static void Main(string[]) cil managed
+{
+  .entrypoint
+  .maxstack 64
+  .locals init (class [System.Runtime]System.Exception V0, object V1)
+  .try
+  {
+  ldarg.0
+  call void Moggi.Rt.Platform::SetArgs(string[])
+  call object Moggi.Main::'main'()
+  call object Moggi.Rt.RT::IoRun(object)
+  pop
+  leave MAIN_END
+  }
+  catch [System.Runtime]System.Exception
+  {
+  stloc.0
+  ldloc.0
+  call void Moggi.Rt.RT::ReportUncaught(class [System.Runtime]System.Exception)
+  leave MAIN_END
+  }
+MAIN_END:
+  ret
+}
+
+.method public hidebysig static object __ioThunk0() cil managed
+{
+  .maxstack 64
+  .locals init (object V0)
+  call object Moggi.Main::'__w_main'()
+  stloc.0
+  ldloc.0
+  ret
+}
+
+}
+
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Data_List__sort__3
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    ldarg 1
+    ldc.i4 0
+    ldelem.ref
+    ldarg 1
+    ldc.i4 1
+    ldelem.ref
+    ldarg 1
+    ldc.i4 2
+    ldelem.ref
+    call object Moggi.Data.List::'sort'(object, object, object)
+    ret
+  }
+}
+.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main____ioThunk0__0
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 32
+    call object Moggi.Main::'__ioThunk0'()
+    ret
+  }
+}

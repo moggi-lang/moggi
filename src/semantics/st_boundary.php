@@ -311,7 +311,7 @@ function childExpressions(Ast\AstNode $expr): array
 {
     $children = [];
     foreach (\get_object_vars($expr) as $key => $value) {
-        if ($key === 'inferredType' || $key === 'inferredInternalType' || $key === 'pendingConstraints') {
+        if ($key === 'inferredType' || $key === 'inferredInternalType') {
             continue;
         }
 

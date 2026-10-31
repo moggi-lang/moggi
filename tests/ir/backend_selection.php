@@ -33,6 +33,7 @@ $assert = static function (bool $condition, string $message): void {
 };
 
 /** Every PHP source of the tree, relative to the project root. */
+$rootPrefix = \str_replace('\\', '/', $root) . '/';
 $sources = [];
 $iterator = new \RecursiveIteratorIterator(
     new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS),
@@ -45,7 +46,7 @@ foreach ($iterator as $file) {
     if (\str_contains($path, '/.moggi/') || \str_contains($path, '/vendor/') || \str_contains($path, '/dist/')) {
         continue;
     }
-    $relative = \str_replace($root . '/', '', $path);
+    $relative = \str_starts_with($path, $rootPrefix) ? \substr($path, \strlen($rootPrefix)) : $path;
     if ($relative === 'tests/ir/backend_selection.php') {
         // This case names what it forbids; a scan that read itself would always find it.
         continue;

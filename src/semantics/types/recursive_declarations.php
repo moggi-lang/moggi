@@ -278,6 +278,7 @@ function solveRecursiveGroupConstraints(TypeCheckState $state, array $group): ar
         $changed = false;
         foreach ($inferred as $member) {
             markRecursiveGroupEvidence(
+                $state,
                 $member->fn->body,
                 static fn (Ast\Variable $use): ?array => $use->binderId === null
                     ? ($byName[$use->name] ?? null)
@@ -317,16 +318,20 @@ function solveRecursiveGroupConstraints(TypeCheckState $state, array $group): ar
  *
  * @param callable(Ast\Variable): (?list<Ast\PendingConstraint>) $constraintsFor
  */
-function markRecursiveGroupEvidence(Ast\AstNode $expr, callable $constraintsFor): void
+function markRecursiveGroupEvidence(
+    TypeCheckState $state,
+    Ast\AstNode $expr,
+    callable $constraintsFor,
+): void
 {
-    walkAstValues($expr, static function (Ast\AstNode $node) use ($constraintsFor): void {
+    walkAstValues($expr, static function (Ast\AstNode $node) use ($state, $constraintsFor): void {
         if (! $node instanceof Ast\Variable) {
             return;
         }
 
         $constraints = $constraintsFor($node);
         if ($constraints !== null) {
-            $node->pendingConstraints = $constraints;
+            setPendingObligations($state, $node, $constraints, pendingDictsOf($state, $node));
         }
     });
 }
@@ -397,7 +402,7 @@ function finishRecursiveMember(TypeCheckState $state, RecursiveMember $member, a
 
     $wrapper = trivialIntrinsicWrapper($fn);
     resolveInstanceIntrinsicMethods($state, $fn->body);
-    $fn->body = rewriteIntrinsicApplies($fn->body);
+    $fn->body = rewriteIntrinsicApplies($state, $fn->body);
     if ($wrapper !== null) {
         $fn->intrinsicWrapper = $wrapper;
         $state->intrinsicWrappers[$fn->name] = $wrapper;

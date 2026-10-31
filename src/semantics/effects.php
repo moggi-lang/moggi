@@ -40,6 +40,7 @@ function checkAndNormalize(
     array $entryModules = [],
     string $backendId = 'php',
 ): Program {
+    $state = null;
     $typed = checkRaw(
         $program,
         $source,
@@ -49,12 +50,13 @@ function checkAndNormalize(
         $interface,
         $entryModules,
         $backendId,
+        $state,
     );
     validateIo($typed, $source, $filename);
     validateSt($typed, $source, $filename);
 
     $final = analyze(normalize($typed));
-    publishElaboration($final);
+    publishElaboration($final, $state);
 
     return $final;
 }

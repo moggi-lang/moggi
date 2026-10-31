@@ -247,11 +247,6 @@ function substituteTempInExpr(IR\Operand $expr, int $id, IR\Operand $replacement
     );
 }
 
-function isLambdaName(string $name): bool
-{
-    return \str_starts_with($name, 'λ');
-}
-
 function preserveMatchArm(IR\MatchArm $arm, IR\Block $body): IR\MatchArm
 {
     return $arm->withBody($body);

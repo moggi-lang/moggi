@@ -243,16 +243,35 @@ final class FunctionShape
      * @param FunctionKind $kind source, worker, lifted callable, specialization or generated stub
      * @param ?string $origin the declaration this function was cloned or lifted from
      */
+    /** The traits this record carries, in constructor order. */
+    private const TRAITS = [
+        'export',
+        'instanceMethod',
+        'entryKind',
+        'foreign',
+        'actionConvention',
+        'ioEffect',
+        'ioStraightLine',
+        'kind',
+        'origin',
+    ];
+
+    /**
+     * Every trait is `readonly`: a pass that wants to change one calls {@see with()} and adopts
+     * the returned copy, so a shape held by a published `FunctionDecl` cannot change under a
+     * reader that already looked at it. `FunctionDecl` itself stays mutable for `body`/`params`,
+     * which rewriting passes replace by design; this record is the part that had no such need.
+     */
     public function __construct(
-        public bool $export = false,
-        public bool $instanceMethod = false,
-        public ?EntryPointKind $entryKind = null,
-        public bool $foreign = false,
-        public ActionConvention $actionConvention = ActionConvention::Executes,
-        public bool $ioEffect = false,
-        public bool $ioStraightLine = false,
-        public FunctionKind $kind = FunctionKind::Source,
-        public ?string $origin = null,
+        public readonly bool $export = false,
+        public readonly bool $instanceMethod = false,
+        public readonly ?EntryPointKind $entryKind = null,
+        public readonly bool $foreign = false,
+        public readonly ActionConvention $actionConvention = ActionConvention::Executes,
+        public readonly bool $ioEffect = false,
+        public readonly bool $ioStraightLine = false,
+        public readonly FunctionKind $kind = FunctionKind::Source,
+        public readonly ?string $origin = null,
     ) {
     }
 
@@ -260,21 +279,20 @@ final class FunctionShape
      * A copy of this shape with the named traits replaced.
      *
      * A rewrite changes a trait or two; listing them by name reads better than re-passing nine
-     * positionals, and a property that does not exist is a caller error rather than a silent drop.
+     * positionals, and a trait that does not exist is a caller error rather than a silent drop.
+     * The copy is a new record rather than a clone-write, because the fields are `readonly`.
      *
      * @param array<string, mixed> $fields
      */
     public function with(array $fields): self
     {
-        $copy = clone $this;
-        foreach ($fields as $field => $value) {
-            if (! \property_exists($copy, $field)) {
+        foreach (\array_keys($fields) as $field) {
+            if (! \in_array($field, self::TRAITS, true)) {
                 throw new \InvalidArgumentException("FunctionShape has no `{$field}` trait");
             }
-            $copy->{$field} = $value;
         }
 
-        return $copy;
+        return new self(...\array_merge(\get_object_vars($this), $fields));
     }
 }
 
@@ -561,12 +579,30 @@ final class Unit implements Operand
 
 final class Partial implements Operand
 {
-    /** @param list<Operand> $args */
+    /**
+     * A callable value with a prefix of its runtime slots already supplied.
+     *
+     * `$arity` is the entry's published runtime arity ({@see \Moggi\IR\Callables\CallableSig::runtimeArity()}),
+     * so `count($args) <= $arity` always holds: a partial is under-applied by definition, and a
+     * full application is a `Call`. The post-lower validator checks `$arity` against the table at
+     * every seam; the two checks below are the shapes no later pass could make sense of.
+     *
+     * @param list<Operand> $args
+     */
     public function __construct(
         public string $fn,
         public int $arity,
         public array $args,
     ) {
+        if ($fn === '') {
+            throw new \InvalidArgumentException('a partial must name the callable it holds');
+        }
+        if ($arity < \count($args)) {
+            throw new \InvalidArgumentException(
+                "partial of `{$fn}` supplies " . \count($args) . " of {$arity} slots; a full "
+                . 'application is a call, not a partial',
+            );
+        }
     }
 }
 
@@ -772,16 +808,67 @@ final class Loop implements Stmt
     }
 }
 
+/**
+ * What an `IoCall` statement invokes. One variant per shape; the three nullable
+ * properties it used to carry admitted eight combinations, of which four were legal by convention
+ * alone.
+ *
+ * `IoForeign` carries its runtime wrapper because a foreign call is emitted as a call *through*
+ * that wrapper (`foreign:either`); a plain runtime helper has no foreign call. There is no
+ * variant that combines an intrinsic with either companion, because a primop is not a host call.
+ */
+abstract class IoOp
+{
+}
+
+/** An ordinary action call: the callee is a Moggi-level entry. */
+final class IoPlain extends IoOp
+{
+}
+
+/** A primop performed in action position. */
+final class IoIntrinsic extends IoOp
+{
+    public function __construct(public readonly string $name)
+    {
+    }
+}
+
+/** A runtime-helper call (`__apply`, `foreign:either`, …). */
+final class IoRuntime extends IoOp
+{
+    public function __construct(public readonly string $runtime)
+    {
+    }
+}
+
+/** A host call, optionally through the runtime wrapper that unwraps its `IO` result. */
+final class IoForeign extends IoOp
+{
+    public function __construct(
+        public readonly ForeignCall $call,
+        public readonly ?string $runtime = null,
+    ) {
+    }
+}
+
 final class IoCall implements Stmt
 {
-    /** @param list<Operand> $args */
+    /**
+     * One action call and exactly one operation variant.
+     *
+     * The statement stores the variant itself rather than projecting it onto independent nullable
+     * fields: a primop, a runtime helper, a host call and a plain call are four shapes, and there is
+     * no value of this class that is two of them at once. A reader matches the variant it handles;
+     * a rewrite copies it unchanged.
+     *
+     * @param list<Operand> $args
+     */
     public function __construct(
         public string $callee,
         public array $args,
         public ?int $dest,
-        public ?string $intrinsic = null,
-        public ?string $runtime = null,
-        public ?ForeignCall $foreign = null,
+        public readonly IoOp $op = new IoPlain(),
         public ?SrcLoc $srcLoc = null,
     ) {
     }

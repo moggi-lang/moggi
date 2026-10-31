@@ -901,9 +901,10 @@ final class AnalysisService
                 ];
             }
             foreach (\get_object_vars($node) as $key => $prop) {
-                if ($key === 'inferredType' || $key === 'inferredInternalType') {
+                if (\in_array($key, ['inferredType', 'inferredInternalType', 'core'], true)) {
                     continue;
                 }
+
                 if (\is_object($prop)) {
                     $walk($prop);
                 } elseif (\is_array($prop)) {

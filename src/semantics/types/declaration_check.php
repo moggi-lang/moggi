@@ -336,7 +336,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
 
     $wrapper = trivialIntrinsicWrapper($fn);
     resolveInstanceIntrinsicMethods($state, $fn->body);
-    $fn->body = rewriteIntrinsicApplies($fn->body);
+    $fn->body = rewriteIntrinsicApplies($state, $fn->body);
 
     if ($wrapper !== null) {
         $fn->intrinsicWrapper = $wrapper;
@@ -563,7 +563,7 @@ function openRestrictedVarsInExpr(TypeCheckState $state, Ast\AstNode $body): arr
 
     $known = \array_flip(knownTypeConstructorNames($state));
     $open = [];
-    foreach (pendingConstraintsDeep($body) as $constraint) {
+    foreach (pendingConstraintsDeep($body, $state) as $constraint) {
         foreach ($constraint->args as $arg) {
             foreach (signatureVarsInType(prune($state, $arg), $known) as $name => $_) {
                 if (isset($state->restrictedVars[$name])) {
@@ -792,7 +792,7 @@ function settleDeferredDeclaration(TypeCheckState $state, array $entry): void
         recordRestrictedSolutions($state);
         $wrapper = trivialIntrinsicWrapper($fn);
         resolveInstanceIntrinsicMethods($state, $fn->body);
-        $fn->body = rewriteIntrinsicApplies($fn->body);
+        $fn->body = rewriteIntrinsicApplies($state, $fn->body);
         if ($wrapper !== null) {
             $fn->intrinsicWrapper = $wrapper;
             $state->intrinsicWrappers[$fn->name] = $wrapper;

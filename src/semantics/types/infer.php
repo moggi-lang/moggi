@@ -234,8 +234,7 @@ function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): T
     }
     $instantiated = instantiateScheme($state, $scheme);
     if ($instantiated['constraints'] !== []) {
-        $expr->pendingConstraints = $instantiated['constraints'];
-        $expr->pendingDicts = $instantiated['dicts'];
+        setPendingObligations($state, $expr, $instantiated['constraints'], $instantiated['dicts']);
     }
 
     return $instantiated['type'];
@@ -295,8 +294,7 @@ function inferOperatorRef(TypeCheckState $state, Ast\AstNode &$expr, array $env)
 
     $instantiated = instantiateScheme($state, $scheme);
     if ($instantiated['constraints'] !== []) {
-        $expr->pendingConstraints = $instantiated['constraints'];
-        $expr->pendingDicts = $instantiated['dicts'];
+        setPendingObligations($state, $expr, $instantiated['constraints'], $instantiated['dicts']);
     }
 
     return $instantiated['type'];
@@ -359,7 +357,7 @@ function inferEvidenceMethod(TypeCheckState $state, Ast\AstNode $expr): Type
         $userConstraints,
     );
     if ($instantiated['constraints'] !== []) {
-        $expr->pendingConstraints = $instantiated['constraints'];
+        setPendingObligations($state, $expr, $instantiated['constraints'], pendingDictsOf($state, $expr));
     }
 
     return $instantiated['type'];
@@ -606,8 +604,7 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
             return inferRewrittenInfixFromOperands($state, $expr, $op, $leftType, $rightType, $env, false);
         }
 
-        $expr->pendingConstraints = $instantiated['constraints'];
-        $expr->pendingDicts = $instantiated['dicts'];
+        setPendingObligations($state, $expr, $instantiated['constraints'], $instantiated['dicts']);
 
         return $result;
     }
@@ -622,8 +619,7 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
     }
 
     if ($classOperator && $constraints !== []) {
-        $expr->pendingConstraints = $instantiated['constraints'];
-        $expr->pendingDicts = $instantiated['dicts'];
+        setPendingObligations($state, $expr, $instantiated['constraints'], $instantiated['dicts']);
 
         return $result;
     }
@@ -897,11 +893,12 @@ function describeUnresolvedConstraints(TypeCheckState $state, array $constraints
 function assertNoPendingConstraintsInExpr(TypeCheckState $state, Ast\AstNode $expr, ?Ast\AstNode $at = null): void
 {
     walkAstValues($expr, static function (Ast\AstNode $node) use ($state, $at): void {
-        if ($node->pendingConstraints === []) {
+        $pending = pendingConstraintsOf($state, $node);
+        if ($pending === []) {
             return;
         }
 
-        throw typeFail($state, describeUnresolvedConstraints($state, $node->pendingConstraints), $at ?? $node);
+        throw typeFail($state, describeUnresolvedConstraints($state, $pending), $at ?? $node);
     });
 }
 
@@ -1014,8 +1011,7 @@ function instantiateQualifiedScheme(TypeCheckState $state, Ast\QualifiedRef $exp
 {
     $instantiated = instantiateScheme($state, $scheme);
     if ($instantiated['constraints'] !== []) {
-        $expr->pendingConstraints = $instantiated['constraints'];
-        $expr->pendingDicts = $instantiated['dicts'];
+        setPendingObligations($state, $expr, $instantiated['constraints'], $instantiated['dicts']);
     }
 
     return $instantiated['type'];
