@@ -44,6 +44,20 @@ require $root . '/src/compiler.php';
 require $root . '/tests/suite/support/assert.php';
 require $root . '/tests/suite/support/workspace.php';
 
+/*
+ * Release mode hands each checked program to the module cache and reads it back, so this case needs a
+ * cache no other compilation is writing to. The suite shares one cache root across the workers, and
+ * a worker that compiles the same module under another key — another host material, another purpose
+ * — replaces the entry this case just wrote; the read-back then misses a product it cannot recover
+ * by re-checking, which is exactly the failure this case would otherwise report against the
+ * compiler. A private root under the harness scratch keeps the read-back the case's own.
+ */
+$ambientCache = \getenv('MOGGI_CACHE_DIR');
+\putenv(
+    'MOGGI_CACHE_DIR=' . \rtrim($ambientCache === false || $ambientCache === '' ? $root . '/.moggi' : $ambientCache, '/')
+        . '/test/checked-core-differential',
+);
+
 use Moggi\IR;
 use Moggi\Modules;
 use function Moggi\Debug\normalizeDisplayPath;

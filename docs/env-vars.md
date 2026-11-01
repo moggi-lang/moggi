@@ -71,7 +71,7 @@ between runs, each kind of thing under a directory named for what put it there:
 
 ```text
 <cache>/fingerprint                                    the compiler that filled the rest
-<cache>/compile/<backend>/<source-mirror>.<kind>.mogc  a compilation entry
+<cache>/compile/<backend>/<source-mirror>.<kind>/<key>.mogc  a compilation entry
 <cache>/compile/artifacts/<key>.blob                   a whole-project artifact
 <cache>/compile/docs-index/<key>.json                  the mogdoc/moogle index
 <cache>/docs/                                          `moggi mogdoc serve` output
