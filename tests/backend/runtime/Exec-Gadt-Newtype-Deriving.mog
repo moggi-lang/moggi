@@ -1,0 +1,12 @@
+module Main where
+
+import Moggi.Internal.Base
+
+newtype Tagged a where
+  Tagged :: Int -> Tagged Int
+  deriving (Eq, Show)
+
+main :: IO ()
+main = do
+  putStrLn (show (Tagged 1 == Tagged 2))
+  putStrLn (show (Tagged 3))

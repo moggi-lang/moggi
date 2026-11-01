@@ -74,7 +74,7 @@ function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env, ?Type 
         Ast\Infix::class => inferInfix($state, $expr, $env),
         Ast\Tuple::class => inferTuple($state, $expr, $env),
         Ast\ListLit::class => inferList($state, $expr, $env),
-        Ast\Lambda::class => inferLambda($state, $expr, $env),
+        Ast\Lambda::class => inferLambda($state, $expr, $env, $expected),
         Ast\Let::class => inferLet($state, $expr, $env, $expected),
         Ast\Where::class => inferWhere($state, $expr, $env, $expected),
         Ast\CaseExpr::class => inferCase($state, $expr, $env, $expected),
@@ -731,9 +731,34 @@ function inferList(TypeCheckState $state, Ast\ListLit $expr, array $env): Type
     return new TCon('List', [$elemType]);
 }
 
-function inferLambda(TypeCheckState $state, Ast\Lambda $expr, array $env): Type
+function inferLambda(TypeCheckState $state, Ast\Lambda $expr, array $env, ?Type $expected = null): Type
 {
-    $bodyExpected = freshType($state);
+    /*
+     * A lambda in a checked position takes its parameter types, and the type
+     * its body is checked against, from the type the context asks for: that is
+     * how `\e -> case e of …` sees the scrutinee as the signature's rigid type
+     * instead of a fresh variable a GADT alternative may pin. When the expected
+     * type does not cover every parameter (a partial application, or a flexible
+     * variable), the lambda falls back to inferring its own.
+     */
+    $expectedParams = [];
+    $expectedBody = null;
+    if ($expected !== null) {
+        $cursor = prune($state, $expected);
+        $covered = 0;
+        while ($covered < \count($expr->params) && $cursor instanceof TArrow) {
+            $expectedParams[] = $cursor->from;
+            $cursor = $cursor->to;
+            ++$covered;
+        }
+        if ($covered === \count($expr->params)) {
+            $expectedBody = $cursor;
+        } else {
+            $expectedParams = [];
+        }
+    }
+
+    $bodyExpected = $expectedBody ?? freshType($state);
     $bodyEnv = $env;
     $paramTypes = [];
     $paramPatterns = [];
@@ -750,17 +775,20 @@ function inferLambda(TypeCheckState $state, Ast\Lambda $expr, array $env): Type
     $state->pushBinderScope();
 
     try {
-        foreach ($expr->params as $param) {
+        foreach ($expr->params as $i => $param) {
             $pattern = $param instanceof Ast\LambdaParam ? $param->pattern : $param;
 
             $paramType = $param instanceof Ast\LambdaParam && $param->type !== null
                 ? astType($state, $param->type)
-                : freshType($state);
+                : ($expectedParams[$i] ?? freshType($state));
+            if (isset($expectedParams[$i])) {
+                unify($state, $paramType, $expectedParams[$i], $expr);
+            }
             [, $bodyEnv] = bindPattern($state, $pattern, $paramType, $bodyEnv);
             $paramTypes[] = $paramType;
         }
 
-        unify($state, inferExpr($state, $expr->body, $bodyEnv), $bodyExpected);
+        unify($state, inferExpr($state, $expr->body, $bodyEnv, $expectedBody), $bodyExpected);
     } finally {
         $state->popBinderScope();
     }

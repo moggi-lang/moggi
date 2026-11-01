@@ -1,0 +1,20 @@
+module Main where
+
+import Moggi.Internal.Base
+
+data Expr a where
+  Lit :: Int -> Expr Int
+  Truth :: Expr Bool
+  Pair :: Expr a -> Expr b -> Expr (a, b)
+
+inferEval e = go e
+  where
+    go :: Expr b -> b
+    go (Lit n) = n
+    go Truth = True
+    go (Pair x y) = (go x, go y)
+
+main :: IO ()
+main = do
+  putStrLn (show (inferEval (Lit 5)))
+  putStrLn (show (fst (inferEval (Pair (Lit 1) Truth))))

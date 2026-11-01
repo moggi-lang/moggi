@@ -512,32 +512,127 @@ function parseGadtConstructorBlock(ParserState $state, Token $dataToken): array
 }
 
 /**
- * One GADT constructor's type, in either field spelling:
+ * Whether the tokens ahead are a constructor context (`Show a, Eq b =>`) that
+ * the record field block of a GADT signature follows.
+ *
+ * The context's constraint types are ordinary types, so they can only be parsed
+ * once it is known that a `{` — which is not a type at all — is what comes
+ * after them; this lookahead decides that without consuming anything. Brackets
+ * are skipped: `Eq (f a)` is one constraint on an application, not the end of
+ * the context, and a `->` before any `=>` means the signature is an ordinary
+ * function type with no record block.
+ */
+function gadtRecordFollowsContext(ParserState $state): bool
+{
+    $depth = 0;
+    $count = \count($state->tokens);
+    for ($i = $state->pos; $i < $count; ++$i) {
+        $token = $state->tokens[$i];
+        switch ($token->kind) {
+            case TokenKind::LParen:
+            case TokenKind::LBracket:
+                ++$depth;
+
+                continue 2;
+            case TokenKind::RParen:
+            case TokenKind::RBracket:
+                --$depth;
+
+                continue 2;
+            case TokenKind::LBrace:
+            case TokenKind::RBrace:
+            case TokenKind::Eof:
+                return false;
+            case TokenKind::Op:
+                break;
+            default:
+
+                continue 2;
+        }
+
+        if ($depth !== 0) {
+            continue;
+        }
+
+        if ($token->lexeme === '=>') {
+            return $i + 1 < $count && $state->tokens[$i + 1]->kind === TokenKind::LBrace;
+        }
+
+        if ($token->lexeme === '->') {
+            return false;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * One GADT constructor's type, in either field spelling, with the quantifier
+ * and context that may precede either:
  *
  *   C :: Int -> Bool -> T Int
  *   C :: { left :: Int, right :: Bool } -> T Int
+ *   C :: forall a. Show a => { shown :: a } -> T a
  *
- * The record form returns its fields and a synthetic signature over them, so
- * everything downstream sees one shape.
+ * A record block states its fields as a record, so the arrow list around it is
+ * not a type the ordinary grammar can produce: the fields sit between the
+ * prefix (`forall`, context) and the `->` result type. The record form returns
+ * its fields (the selectors name them) and one synthetic signature over them,
+ * so everything downstream sees one shape.
  *
  * @return array{0: list<Ast\CtorField>, 1: Ast\TypeNode}
  */
 function parseGadtConstructorSignature(ParserState $state): array
 {
-    if (isAt($state, TokenKind::LBrace)) {
-        $fields = parseRecordFieldDecls($state);
-        expectOp($state, '->');
-        $result = parseType($state);
+    $forall = isForallStart($state) ? parseForallHead($state) : null;
 
-        $signature = $result;
-        foreach (\array_reverse($fields) as $field) {
-            $signature = new Ast\TypeArrow($field->type, $signature);
+    if (! isAt($state, TokenKind::LBrace) && ! gadtRecordFollowsContext($state)) {
+        $signature = parseType($state);
+        if ($forall !== null) {
+            $signature = forallSignature($forall, $signature);
         }
 
-        return [$fields, $signature];
+        return [[], $signature];
     }
 
-    return [[], parseType($state)];
+    $constraints = [];
+    if (! isAt($state, TokenKind::LBrace)) {
+        $constraints[] = parseTypeInfix($state);
+        while (isAt($state, TokenKind::Comma)) {
+            advance($state);
+            $constraints[] = parseTypeInfix($state);
+        }
+        expectOp($state, '=>');
+    }
+
+    $fields = parseRecordFieldDecls($state);
+    expectOp($state, '->');
+    $signature = parseType($state);
+    foreach (\array_reverse($fields) as $field) {
+        $signature = new Ast\TypeArrow($field->type, $signature);
+    }
+
+    if ($constraints !== []) {
+        $signature = new Ast\TypeConstrained($constraints, $signature);
+    }
+
+    if ($forall !== null) {
+        $signature = forallSignature($forall, $signature);
+    }
+
+    return [$fields, $signature];
+}
+
+/**
+ * Wrap a signature body in the `forall` a constructor head opened.
+ *
+ * @param array{binders: list<string>, kinds: list<?Ast\KindNode>, token: Token} $head
+ */
+function forallSignature(array $head, Ast\TypeNode $body): Ast\TypeNode
+{
+    $node = new Ast\TypeForall($head['binders'], $head['kinds'], $body);
+
+    return withTypeLocation($node, $head['token']);
 }
 
 function parseDataDecl(ParserState $state): Ast\DataDecl
@@ -647,18 +742,34 @@ function parseDataParamAtom(ParserState $state): Ast\DataParam
  */
 function parseNewtypeDecl(ParserState $state): Ast\DataDecl
 {
-    expect($state, TokenKind::KwNewtype);
+    $newtypeToken = expect($state, TokenKind::KwNewtype);
     [$name, $params, $nameToken] = parseDataHead($state);
 
-    expectOp($state, '=');
+    $constructors = [];
+    if (isAt($state, TokenKind::KwWhere)) {
+        $constructors = parseGadtConstructorBlock($state, $newtypeToken);
+        if (\count($constructors) !== 1) {
+            throw parseError($state, 'a newtype must have exactly one constructor');
+        }
 
-    $ctor = parseDocumentedConstructor($state);
-    if (isAt($state, TokenKind::Pipe)) {
-        throw parseError($state, 'a newtype must have exactly one constructor');
-    }
+        $ctor = $constructors[0];
+        $fieldCount = $ctor->isGadt()
+            ? \count($ctor->fieldTypeAsts())
+            : \count($ctor->fields);
+        if ($fieldCount !== 1) {
+            throw parseError($state, 'a newtype constructor must have exactly one field');
+        }
+    } else {
+        expectOp($state, '=');
 
-    if (\count($ctor->fields) !== 1) {
-        throw parseError($state, 'a newtype constructor must have exactly one field');
+        $constructors = [parseDocumentedConstructor($state)];
+        if (isAt($state, TokenKind::Pipe)) {
+            throw parseError($state, 'a newtype must have exactly one constructor');
+        }
+
+        if (\count($constructors[0]->fields) !== 1) {
+            throw parseError($state, 'a newtype constructor must have exactly one field');
+        }
     }
 
     $derivingClasses = parseDerivingClause($state);
@@ -666,7 +777,7 @@ function parseNewtypeDecl(ParserState $state): Ast\DataDecl
     return new Ast\DataDecl(
         $name,
         $params,
-        [$ctor],
+        $constructors,
         $nameToken->line,
         $nameToken->col,
         $nameToken->col + \max(0, \strlen($name) - 1),

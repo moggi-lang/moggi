@@ -333,9 +333,10 @@ dictionary stored in the constructor; the dictionary is a field the source never
 writes, and pattern matching binds it for you.
 
 Other forms work as they do in an ordinary declaration: `forall` may be written
-out (`Anon :: forall b. b -> Box`), record constructors use the brace form
-(`Circle :: { radius :: Int } -> Shape`), and a signature may mention a
-higher-kinded parameter.
+out (`Anon :: forall b. b -> Box`), a quantifier and a context may precede a
+record block (`MkBox :: forall a. Show a => { item :: a } -> Box a`), `newtype`
+accepts the same `where` form, and a signature may mention a higher-kinded
+parameter.
 
 Deriving follows the same rules as in Haskell. `Eq`, `Show`, `Ord`, `Enum` and
 `Bounded` are derived from the constructors' fields; `Functor`, `Foldable` and
