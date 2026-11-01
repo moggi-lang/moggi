@@ -1,0 +1,38 @@
+-- The importing side: constructing `Circle`/`Rect`/`Tagged` by field name must
+-- reach the field list the declaring module published, and matching them must
+-- still refine -- `area Empty` produces an `Int` where the signature promised a
+-- `Num n => n`, and `describe` may `show` the payload because the constructor's
+-- context is a dictionary the value carries.
+module Main where
+
+import Moggi.Internal.Base
+import Shapes (Region(..), Tagged(..), area, labelOf, describe)
+
+circle :: Region Int
+circle = Circle { radius = 2, label = "c" }
+
+rect :: Region Int
+rect = Rect { width = 3, height = 4, label = "r" }
+
+narrow :: Region Int
+narrow = Rect { width = 1, height = 2, label = "s" }
+
+taggedInt :: Tagged Int
+taggedInt = Tagged { payload = 42, title = "n" }
+
+taggedBool :: Tagged Bool
+taggedBool = Tagged { payload = True, title = "flag" }
+
+scaled :: Region Int -> Int
+scaled r = area r * 10
+
+main :: IO ()
+main = do
+  putStrLn (show (area circle))
+  putStrLn (show (area rect))
+  putStrLn (show (area Empty))
+  putStrLn (labelOf circle)
+  putStrLn (labelOf Empty)
+  putStrLn (describe taggedInt)
+  putStrLn (describe taggedBool)
+  putStrLn (show (scaled narrow))

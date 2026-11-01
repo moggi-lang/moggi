@@ -49,10 +49,9 @@ is why a polymorphic function behaves the same at every type.
 
 ## What is not implemented
 
-A few things a reader may look for are absent, not hidden. Indexed data
-declarations whose constructors refine the type parameter do not parse; use an
-explicit tag plus a smart constructor
-([data types](data-types.md#what-is-not-available)). Families are only
+A few things a reader may look for are absent, not hidden. A type constructor
+may not compute over its indices: a GADT refines one, but nothing evaluates on
+it ([data types](data-types.md#what-is-not-available)). Families are only
 class-associated ([classes](classes.md#associated-type-families)), and kinds are
 not polymorphic ([kinds](kinds.md#limits)). A signature cannot require a
 polymorphic argument, and instance selection has no overlap pragmas, only
