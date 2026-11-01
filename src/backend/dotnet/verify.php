@@ -72,7 +72,11 @@ function verifyDotNetForeignImport(
 
     $inspector = ensureInspectorBinary($dotnet);
     if ($inspector === null) {
-        warnOnceInspectorBroken($name, 'could not build the CLR inspector');
+        $why = inspectorFailureDetail();
+        warnOnceInspectorBroken(
+            $name,
+            'could not build the CLR inspector' . ($why === null ? '' : ": {$why}"),
+        );
 
         return null;
     }
@@ -145,7 +149,9 @@ function ensureInspectorBinary(string $dotnet): ?string
     if (! \is_file($source)) {
         return $binary = null;
     }
-    $tmp = $outDir . DIRECTORY_SEPARATOR . 'inspect.build.dll';
+
+    $tmp = $outDir . DIRECTORY_SEPARATOR . 'inspect.build.' . \getmypid()
+        . '.' . \bin2hex(\random_bytes(4)) . '.dll';
     $command = [
         $dotnet, $csc, '-nologo', '-out:' . $tmp, '-target:exe', '-nostdlib', '-noconfig',
         '-reference:' . $frameworkDir . DIRECTORY_SEPARATOR . 'System.Private.CoreLib.dll',
@@ -159,10 +165,25 @@ function ensureInspectorBinary(string $dotnet): ?string
     if (($captured['exitCode'] ?? -1) !== 0 || ! \is_file($tmp)) {
         @\unlink($tmp);
 
+        if (\is_file($dll)) {
+            return $binary = $dll;
+        }
+        inspectorFailureDetail(describeProcessFailure($captured));
+
         return $binary = null;
+    }
+    if (\is_file($dll)) {
+        @\unlink($tmp);
+
+        return $binary = $dll;
     }
     if (! @\rename($tmp, $dll)) {
         @\unlink($tmp);
+
+        if (\is_file($dll)) {
+            return $binary = $dll;
+        }
+        inspectorFailureDetail('the built inspector could not be installed in `' . $outDir . '`');
 
         return $binary = null;
     }
@@ -283,6 +304,46 @@ function dotNetReferenceSet(): array
     }
 
     return $refs;
+}
+
+/**
+ * Why the inspector could not be built, for the warning that stands down.
+ *
+ * A build failure is a tool-level failure, not a rejection of the program, so
+ * the compile continues — but "could not build the CLR inspector" on its own
+ * leaves no way to tell a missing reference from a worker that lost a race.
+ * The detail is stored rather than thrown: the first `foreign dotnet`
+ * declaration to ask reports it.
+ */
+function inspectorFailureDetail(?string $detail = null): ?string
+{
+    static $stored = null;
+    if ($detail !== null) {
+        $stored = $detail;
+    }
+
+    return $stored;
+}
+
+/**
+ * The first meaningful line of a failed process, for a diagnostic.
+ *
+ * The inspector is a small C# program the compiler builds for itself with the
+ * SDK's Roslyn; nothing a user writes is C#, so a failure is reported as the
+ * inspector build failing rather than as a C# error.
+ */
+function describeProcessFailure(array $captured): string
+{
+    foreach (['stderr', 'stdout'] as $stream) {
+        foreach (\preg_split('/\R/', (string) ($captured[$stream] ?? '')) ?: [] as $line) {
+            $line = \trim($line);
+            if ($line !== '') {
+                return $line;
+            }
+        }
+    }
+
+    return 'the inspector build exited with status ' . (string) ($captured['exitCode'] ?? 'unknown');
 }
 
 function warnOnceInspectorBroken(string $name, string $detail): void
