@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Generic1-Nested.mog:6:44: type error: cannot derive Generic1: field type `f a` of `Wrapped` is not representable (the parameter is under a type variable, which would need a Functor the representation cannot name)
+
+  6 | data Wrapped f a = Wrapped (f a) deriving (Generic1)
+    |                                            ^^^^^^^^

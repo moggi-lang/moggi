@@ -1,4 +1,4 @@
-tests/semantics/Bad-Derive-Generic1.mog:3:30: type error: expected kind `Type -> Type`, got `Type`
+tests/semantics/Bad-Derive-Generic1.mog:3:30: type error: cannot derive Generic1: `Foo` has no type parameter to abstract over, and the class expects a type constructor of kind `Type -> Type`
 
   3 | data Foo = Foo Int deriving (Generic1)
     |                              ^^^^^^^^

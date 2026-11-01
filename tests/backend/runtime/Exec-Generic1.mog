@@ -1,0 +1,61 @@
+module Main where
+
+import Moggi.Generics
+import Moggi.Internal.Base
+import Data.Int
+import Data.Maybe
+
+-- `Generic1` over the last type parameter: `Par1` marks the parameter, `Rec1` the datatype's own
+-- recursion, `Rec0` a field the parameter does not occur in, and `:.:` a parameter that sits inside
+-- another type constructor.
+
+data Maybe1 a = N1 | J1 a deriving (Generic1, Eq)
+
+data Tree1 a = Leaf1 a | Node1 (Tree1 a) (Tree1 a) deriving (Generic1, Eq)
+
+-- The parameter under another constructor: the representation composes it, and the conversions go
+-- through that constructor's own `map`.
+data Nested a = Nested (Maybe a) deriving (Generic1, Eq)
+
+data Rose a = Rose a (List (Rose a)) deriving (Generic1, Eq)
+
+-- Both representation classes over one declaration: the metadata instances they share are stated
+-- once, so the pair derives rather than colliding with itself.
+data Pair1 a b = P1 a b deriving (Generic, Generic1, Eq)
+
+-- Structure-directed walks over the derived `Rep1`, which is what the representation is for.
+leaves :: Tree1 Int -> Int
+leaves t = case from1 t of
+  M1 (L1 (M1 (M1 (Par1 n)))) -> n
+  M1 (R1 (M1 (M1 (Rec1 l) :*: M1 (Rec1 r)))) -> leaves l + leaves r
+
+boxed :: Nested Int -> Int
+boxed n = case from1 n of
+  M1 (M1 (M1 (Comp1 (Rec1 m)))) -> case m of
+    Nothing -> 0
+    Just (Par1 x) -> x
+
+roseTotal :: Rose Int -> Int
+roseTotal r = case from1 r of
+  M1 (M1 (M1 (Par1 n) :*: M1 (Comp1 (Rec1 kids)))) -> n + kidsTotal kids
+
+-- The children are a list of *representations*: composition puts `Rec1 Rose` inside the list, so a
+-- walk unwraps it once per element.
+kidsTotal :: List (Rec1 Rose Int) -> Int
+kidsTotal ks = case ks of
+  [] -> 0
+  k : rest -> (case k of Rec1 kid -> roseTotal kid) + kidsTotal rest
+
+main :: IO ()
+main = do
+  putStrLn (show (leaves (Node1 (Leaf1 1) (Leaf1 2))))
+  putStrLn (show (leaves (Node1 (Node1 (Leaf1 3) (Leaf1 4)) (Leaf1 5))))
+  putStrLn (show (to1 (from1 (J1 42)) == J1 42))
+  putStrLn (show (to1 (from1 (N1 :: Maybe1 Int)) == N1))
+  putStrLn (show (to1 (from1 (P1 (7 :: Int) (Just "x"))) == P1 7 (Just "x")))
+  putStrLn (show (boxed (Nested (Just 9))))
+  putStrLn (show (boxed (Nested Nothing)))
+  putStrLn (show (to1 (from1 (Nested (Just (5 :: Int)))) == Nested (Just 5)))
+  putStrLn (show (to1 (from1 (Nested Nothing :: Nested Int)) == Nested Nothing))
+  putStrLn (show (roseTotal (Rose 1 [Rose 2 [], Rose 3 []])))
+  putStrLn (show (to1 (from1 (Rose (1 :: Int) [Rose 2 [], Rose 3 []])) == Rose 1 [Rose 2 [], Rose 3 []]))

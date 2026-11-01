@@ -1,0 +1,6 @@
+import Moggi.Generics
+
+-- Mapping into `f` would need a `Functor f` the derived instance cannot name, so a parameter under a
+-- type *variable* is refused at the declaration. A parameter under a concrete constructor (`Maybe
+-- a`) is representable by composition; see tests/backend/runtime/Exec-Generic1.mog.
+data Wrapped f a = Wrapped (f a) deriving (Generic1)

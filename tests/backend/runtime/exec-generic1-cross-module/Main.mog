@@ -1,0 +1,27 @@
+module Main where
+
+import Moggi.Generics
+import Moggi.Internal.Base
+import Data.Int
+import Data.Maybe
+import Shape
+
+-- The representation of a `Shape` derived in another module, matched through the constructors a
+-- `Rep1` is built from: one `M1` per metadata level, `L1`/`R1` per constructor, `M1` per field,
+-- then `Par1`, `Rec1` or a `Comp1` composition.
+payload :: Shape Int -> Int
+payload s = case from1 s of
+  M1 (L1 (M1 (M1 (Par1 n)))) -> n
+  M1 (R1 (L1 (M1 (M1 (Par1 a) :*: M1 (Par1 b))))) -> a + b
+  M1 (R1 (R1 (M1 (M1 (Comp1 (Rec1 m)))))) -> case m of
+    Nothing -> 0
+    Just (Par1 x) -> x
+
+main :: IO ()
+main = do
+  putStrLn (show (payload (Point 7)))
+  putStrLn (show (payload (Line 30 40)))
+  putStrLn (show (payload (Boxed (Just 40))))
+  putStrLn (show (payload (Boxed Nothing)))
+  putStrLn (show (to1 (from1 (Boxed (Just (7 :: Int)))) == Boxed (Just 7)))
+  putStrLn (show (to1 (from1 (Line (1 :: Int) 2)) == Line 1 2))
