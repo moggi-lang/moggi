@@ -1,0 +1,9 @@
+module Shape where
+
+import Moggi.Generics
+import Data.Maybe
+
+-- A declaration another module walks: `Par1` for the parameter, `Rec1` for its own recursion, and a
+-- `:.:` composition for a parameter under `Maybe`. The instance is derived here, and nothing about
+-- it crosses the interface except the class and the representation's equation.
+data Shape a = Point a | Line a a | Boxed (Maybe a) deriving (Generic1, Eq)

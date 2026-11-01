@@ -154,6 +154,7 @@ function stockDeriveClasses(): array
         'Foldable' => new StockDerive(deriveFoldable(...), 'functorial'),
         'Traversable' => new StockDerive(deriveTraversable(...), 'functorial'),
         'Generic' => new StockDerive(deriveGeneric(...), synthesizesRepresentation: true),
+        'Generic1' => new StockDerive(deriveGeneric1(...), synthesizesRepresentation: true),
     ];
 }
 
@@ -355,6 +356,7 @@ function standaloneDerivingProjectRecords(
         $records[0]['associatedEquations'] = genericProjectAssociatedEquations(
             $dataDecl,
             $moduleName,
+            $decl->className,
             $facts->associatedTypeNames($decl->className),
         );
         $records = [...$records, ...genericMetadataProjectInstances($dataDecl, $moduleName)];
@@ -403,11 +405,20 @@ function processDeriving(TypeCheckState $state, Ast\DataDecl $decl): array
     }
 
     $derived = [];
+    $metadataSeen = [];
     foreach ($decl->derivingClasses as $ref) {
         $item = resolveAndDerive($state, $decl, $ref);
         $derived[] = $item;
         if ($item->contributesMetadata) {
+            // `Generic` and `Generic1` share one set of metadata instances: the representation's
+            // `M1` tags are the same either way, so a declaration deriving both states each once
+            // instead of colliding with itself.
             foreach (deriveGenericMetadataInstances($state, $decl, $ref) as $meta) {
+                $key = $meta->className . ' ' . Ast\dumpTypeInline($meta->typeHead);
+                if (isset($metadataSeen[$key])) {
+                    continue;
+                }
+                $metadataSeen[$key] = true;
                 $derived[] = $meta;
             }
         }
@@ -895,7 +906,7 @@ function derivedProjectInstanceRecords(Ast\DataDecl $decl, string $moduleName, C
 
         $constraints = projectStubConstraints($decl, $ref->name, $useNewtype, $facts, $stock);
         $associatedEquations = $stock !== null && $stock->synthesizesRepresentation
-            ? genericProjectAssociatedEquations($decl, $moduleName, $facts->associatedTypeNames($ref->name))
+            ? genericProjectAssociatedEquations($decl, $moduleName, $ref->name, $facts->associatedTypeNames($ref->name))
             : [];
         $records[] = [
             'module' => $moduleName,
@@ -1029,20 +1040,22 @@ function projectStubConstraints(
  * declares `type Rep a :: Type -> Type` is the one whose stub equation is named `Rep`, so the name
  * is the declaration's rather than the deriving framework's.
  *
+ * @param string $className the representation class (`Generic` or `Generic1`)
  * @param list<string> $families the class's declared associated type names
  * @return array<string, array{lhsArgs: list<Ast\TypeNode>, rhs: Ast\TypeNode}>
  */
-function genericProjectAssociatedEquations(Ast\DataDecl $decl, string $moduleName, array $families): array
-{
+function genericProjectAssociatedEquations(
+    Ast\DataDecl $decl,
+    string $moduleName,
+    string $className,
+    array $families,
+): array {
     $state = newState('');
     $state->currentModule = $moduleName;
 
     $equations = [];
     foreach ($families as $family) {
-        $equations[$family] = [
-            'lhsArgs' => [dataDeclHeadAst($decl)],
-            'rhs' => synthesizeRepType($state, $decl),
-        ];
+        $equations[$family] = representationEquationParts($state, $decl, $className);
     }
 
     return $equations;

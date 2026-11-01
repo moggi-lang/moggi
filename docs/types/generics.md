@@ -1,6 +1,6 @@
 ---
 title: "Generic programming"
-description: Writing one function for the shape of any data type — Generic, representation types, metadata, and Generic1's limits.
+description: Writing one function for the shape of any data type — Generic, representation types, metadata, and Generic1.
 ---
 # Generic programming
 
@@ -176,20 +176,53 @@ example.
 ## `Generic1`
 
 `Generic1` is the same idea for a type constructor of kind `Type -> Type`: its
-representation marks the recursive and parameter positions with `Par1` and
-`Rec1`, and it exposes `Rep1`, `from1` and `to1`.
+representation marks the parameter position with `Par1` and the datatype's own
+recursion with `Rec1`, and it exposes `Rep1`, `from1` and `to1`.
 
-It is **not derivable** in this release. `deriving (Generic1)` on a parameterized
-type is rejected:
+`deriving (Generic1)` abstracts over the declaration's **last** type parameter, so
+the instance head drops it — `data Pair a b` derives `Generic1 (Pair a)`:
 
-```text
-Main.mog:4:13: type error: expected kind `Type -> Type`, got `Type`
+```moggi
+data Tree a = Leaf a | Node (Tree a) (Tree a)
+  deriving (Generic1)
+
+leaves :: Tree Int -> Int
+leaves t = case from1 t of
+  M1 (L1 (M1 (M1 (Par1 n)))) -> n
+  M1 (R1 (M1 (M1 (Rec1 l) :*: M1 (Rec1 r)))) -> leaves l + leaves r
 ```
 
-So `Generic1` is present in the library and usable by code that writes its
-instances by hand, but there is no compiler-generated `Rep1` for your types. For
-container-shaped generic code, write the class over the container directly
-([Higher-kinded types](higher-kinded-types.md)) or write the instance per type.
+A field may name the parameter as itself (`Par1`), as the datatype's own
+recursion at it (`Rec1`, as `Tree a` does above), or under another type
+constructor — `Maybe a`, `[a]` — which the representation composes, so a `Rose`
+whose children are a list gets `Rec1 List :.: Rec1 Rose`:
+
+```moggi
+data Rose a = Rose a (List (Rose a))
+  deriving (Generic1)
+-- type Rep1 Rose =
+--   D1 (MetaData "Rose" …) (C1 (MetaCons "Rose" …)
+--        (S1 (MetaSel …) Par1 :*: S1 (MetaSel …) (Rec1 List :.: Rec1 Rose)))
+```
+
+The composition is the one form that is not a wrapper: the representation lives
+*inside* the container, so `from1` and `to1` go through that constructor's own
+`map` — which `Moggi.Generics` re-exports, so a derived representation does not
+depend on what else the module imports. The head needs a `Functor` instance
+(`Functor Maybe`, `Functor List`), which the library provides for the containers
+it ships.
+
+A field the parameter does not occur in is a constant (`Rec0`), which is how
+`Pair a b` gets a `Par1` for its last parameter and constants for the ones before
+it.
+
+A parameter anywhere else is refused at the declaration: in a non-final argument
+of an application it has no position to be mapped into, and under a type
+*variable* (`f a`, as a `Free f a` would have) mapping it would need a
+`Functor f` that the derived instance cannot name.
+
+A declaration may derive `Generic` and `Generic1` together: the metadata
+instances the two representations share are stated once.
 
 ## Wrappers
 
@@ -201,7 +234,9 @@ once you write the instances your own classes need; they are not a drop-in
 
 ## Limits
 
-* **`Generic1` cannot be derived**, as above.
+* **`Generic1` cannot name a `Functor` constraint.** A parameter under a type
+  *variable* (`f a`) is refused rather than approximated; one under a concrete
+  constructor is represented by composition ([above](#generic1)).
 * **`Generic` is stock-only.** `deriving newtype (Generic)` is refused: the
   representation must be the structure of the declaration, not of its
   representation type ([Deriving](../deriving.md#restrictions)).

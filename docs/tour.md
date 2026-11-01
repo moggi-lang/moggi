@@ -244,8 +244,8 @@ instance Pretty Shape where
 * Instances are global: every module sees every instance without importing it.
 * A signature may require a class: `biggest :: Ord a => [a] -> a`. That is the
   constraint written in front, not a type parameter list.
-* `Show`, `Eq`, `Ord`, `Enum`, `Bounded`, `Functor`, `Foldable`, `Traversable`
-  and `Generic` can be derived instead of written by hand
+* `Show`, `Eq`, `Ord`, `Enum`, `Bounded`, `Functor`, `Foldable`, `Traversable`,
+  `Generic` and `Generic1` can be derived instead of written by hand
   ([deriving.md](deriving.md)).
 
 [Type classes](types/classes.md) has the rules: how an instance is chosen,

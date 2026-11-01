@@ -41,6 +41,8 @@ module Moggi.Generics
     -- * Generic classes
   , Generic(..)
   , Generic1(..)
+    -- * The `map` a composed representation needs
+  , Functor(..)
     -- * Wrappers
   , Generically(..)
   , Generically1(..)
@@ -48,6 +50,7 @@ module Moggi.Generics
 
 import Data.Bool
 import Data.Foldable (Foldable(foldr))
+import Data.Functor (Functor(..))
 import Data.Int
 import Data.String
 import Moggi.Internal.Base

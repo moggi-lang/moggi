@@ -48,13 +48,9 @@ function deriveGeneric(
         }
     }
 
-    $head = dataDeclHeadAst($decl);
-    $repRhs = synthesizeRepType($state, $decl);
-    $repArgs = [$head];
-
     return new DerivedInstance(
         'Generic',
-        $head,
+        dataDeclHeadAst($decl),
         [],
         [
             synthesizeGenericFrom($decl, $ref),
@@ -63,16 +59,216 @@ function deriveGeneric(
         $ref,
         strategy: 'Stock',
         associatedEquations: [
-            new Ast\AssociatedTypeEquation(
-                'Rep',
-                $repArgs,
-                $repRhs,
-                $ref->line,
-                $ref->col,
-                $ref->endCol,
-            ),
+            representationEquation($state, $decl, $ref, 'Generic', 'Rep'),
         ],
         contributesMetadata: true,
+    );
+}
+
+/**
+ * Stock `deriving Generic1`: the same representation over the decl's last type parameter, with the
+ * parameter marked `Par1` and the declaration's own recursion marked `Rec1`.
+ *
+ * The instance head drops the abstracted parameter (`data Pair a b` gets `Generic1 (Pair a)`), which
+ * is what makes the class's `f` the declaration applied to its leading parameters.
+ */
+function deriveGeneric1(
+    TypeCheckState $state,
+    Ast\DataDecl $decl,
+    Ast\DerivingClassRef $ref,
+): DerivedInstance {
+    foreach ($decl->constructors as $ctor) {
+        if ($ctor->isGadt()) {
+            throw typeFail(
+                $state,
+                "cannot derive Generic1: constructor `{$ctor->name}` is GADT-style, "
+                    . 'which has no single representation over the type parameter',
+                $ref,
+            );
+        }
+    }
+
+    $param = lastDataParamName($decl);
+    if ($param === null) {
+        throw typeFail(
+            $state,
+            "cannot derive Generic1: `{$decl->name}` has no type parameter to abstract over, "
+                . 'and the class expects a type constructor of kind `Type -> Type`',
+            $ref,
+        );
+    }
+
+    foreach ($decl->constructors as $ctor) {
+        foreach (constructorDeriveFields($ctor) as $field) {
+            $desc = rep1OfType($decl, $param, $field->type);
+            if ($desc['tag'] === 'bad') {
+                throw typeFail(
+                    $state,
+                    "cannot derive Generic1: field type `" . Ast\dumpTypeInline($field->type)
+                        . "` of `{$ctor->name}` is not representable ({$desc['reason']})",
+                    $ref,
+                );
+            }
+        }
+    }
+
+    return new DerivedInstance(
+        'Generic1',
+        functorialHeadAst($decl),
+        [],
+        [
+            synthesizeGeneric1From($decl, $param, $ref),
+            synthesizeGeneric1To($decl, $param, $ref),
+        ],
+        $ref,
+        strategy: 'Stock',
+        associatedEquations: [
+            representationEquation($state, $decl, $ref, 'Generic1', 'Rep1'),
+        ],
+        contributesMetadata: true,
+    );
+}
+
+/**
+ * How one field contributes to a `Rep1`.
+ *
+ * - `param`: the field *is* the abstracted parameter -- `Par1`.
+ * - `self`: the field is the datatype applied to its own parameters -- `Rec1`.
+ * - `const`: the parameter does not occur in it, so it is a constant -- `Rec0`.
+ * - `compose`: the parameter is the last argument of another type constructor (`Maybe a`, `[Rose
+ *   a]`), which the representation composes -- `Rec1 Maybe :.: Par1`.
+ * - `bad`: the parameter is somewhere the representation cannot put it -- a non-final argument, or
+ *   under a type *variable* (`f a`), where composing would need a `Functor f` the derived instance
+ *   cannot name.
+ *
+ * @return array{tag: 'param'|'self'|'const'|'compose'|'bad', type?: Ast\TypeNode, head?: Ast\TypeNode, inner?: array{tag: string}, reason?: string}
+ */
+function rep1OfType(Ast\DataDecl $decl, string $param, Ast\TypeNode $type): array
+{
+    if (! typeMentionsParam($type, $param)) {
+        return ['tag' => 'const', 'type' => $type];
+    }
+
+    if ($type instanceof Ast\TypeVar && $type->name === $param) {
+        return ['tag' => 'param'];
+    }
+
+    if (typeIsSelfAtParams($type, $decl)) {
+        return ['tag' => 'self'];
+    }
+
+    if (! $type instanceof Ast\TypeApp || $type->args === []) {
+        return [
+            'tag' => 'bad',
+            'type' => $type,
+            'reason' => 'the parameter is not the last argument of a type application',
+        ];
+    }
+
+    $leading = \array_slice($type->args, 0, -1);
+    foreach ($leading as $arg) {
+        if (typeMentionsParam($arg, $param)) {
+            return [
+                'tag' => 'bad',
+                'type' => $type,
+                'reason' => 'the parameter occurs in a non-final argument',
+            ];
+        }
+    }
+
+    if ($type->con instanceof Ast\TypeVar) {
+        return [
+            'tag' => 'bad',
+            'type' => $type,
+            'reason' => 'the parameter is under a type variable, which would need a Functor '
+                . 'the representation cannot name',
+        ];
+    }
+
+    $inner = rep1OfType($decl, $param, $type->args[\count($type->args) - 1]);
+    if ($inner['tag'] === 'bad') {
+        return $inner;
+    }
+
+    return [
+        'tag' => 'compose',
+        'type' => $type,
+        'head' => $leading === [] ? $type->con : new Ast\TypeApp($type->con, $leading),
+        'inner' => $inner,
+    ];
+}
+
+/** Whether `$type` is the declaration applied to exactly its own parameters (`Tree a`). */
+function typeIsSelfAtParams(Ast\TypeNode $type, Ast\DataDecl $decl): bool
+{
+    if (! $type instanceof Ast\TypeApp) {
+        return false;
+    }
+
+    if (! $type->con instanceof Ast\TypeCon || $type->con->name !== $decl->name) {
+        return false;
+    }
+
+    if (\count($type->args) !== \count($decl->params)) {
+        return false;
+    }
+
+    foreach ($decl->params as $i => $typeParam) {
+        $arg = $type->args[$i];
+        if (! $arg instanceof Ast\TypeVar || $arg->name !== $typeParam->name) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * The `type <family> … = …` equation a derived representation contributes.
+ *
+ * `Generic` states it at the declaration's head over its whole parameter list. `Generic1` states
+ * it at the head abstracted over the last parameter, which is what makes `Rep1 f` a
+ * `Type -> Type` type constructor. One place decides both, so the checked instance and the
+ * project-instance stub another module reads cannot disagree about the shape.
+ *
+ * @return array{lhsArgs: list<Ast\TypeNode>, rhs: Ast\TypeNode}
+ */
+function representationEquationParts(
+    TypeCheckState $state,
+    Ast\DataDecl $decl,
+    string $className,
+): array {
+    if ($className === 'Generic1') {
+        // A declaration with no parameter has nothing to abstract over, which the check refuses;
+        // the stub phase still records the declaration's own head so it never has to invent one.
+        return [
+            'lhsArgs' => [$decl->params === [] ? dataDeclHeadAst($decl) : functorialHeadAst($decl)],
+            'rhs' => synthesizeRep1Type($state, $decl),
+        ];
+    }
+
+    return [
+        'lhsArgs' => [dataDeclHeadAst($decl)],
+        'rhs' => synthesizeRepType($state, $decl),
+    ];
+}
+
+function representationEquation(
+    TypeCheckState $state,
+    Ast\DataDecl $decl,
+    Ast\DerivingClassRef $ref,
+    string $className,
+    string $family,
+): Ast\AssociatedTypeEquation {
+    $parts = representationEquationParts($state, $decl, $className);
+
+    return new Ast\AssociatedTypeEquation(
+        $family,
+        $parts['lhsArgs'],
+        $parts['rhs'],
+        $ref->line,
+        $ref->col,
+        $ref->endCol,
     );
 }
 
@@ -82,6 +278,276 @@ function synthesizeRepType(TypeCheckState $state, Ast\DataDecl $decl): Ast\TypeN
     $body = synthesizeRepSum($decl);
 
     return typeApp('D1', [$meta, $body]);
+}
+
+function synthesizeRep1Type(TypeCheckState $state, Ast\DataDecl $decl): Ast\TypeNode
+{
+    $param = lastDataParamName($decl) ?? '';
+
+    return typeApp('D1', [metaDataType($state, $decl), synthesizeRep1Sum($decl, $param)]);
+}
+
+function synthesizeRep1Sum(Ast\DataDecl $decl, string $param): Ast\TypeNode
+{
+    if ($decl->constructors === []) {
+        return new Ast\TypeCon('V1');
+    }
+
+    $parts = [];
+    foreach ($decl->constructors as $ctor) {
+        $parts[] = synthesizeRep1Constructor($decl, $param, $ctor);
+    }
+
+    return foldInfixType(':+:', $parts);
+}
+
+function synthesizeRep1Constructor(
+    Ast\DataDecl $decl,
+    string $param,
+    Ast\ConstructorDecl $ctor,
+): Ast\TypeNode {
+    $fields = [];
+    foreach (constructorDeriveFields($ctor) as $field) {
+        $fields[] = typeApp('S1', [metaSelType($field), rep1TypeOfField($decl, $param, $field->type)]);
+    }
+
+    $product = $fields === [] ? new Ast\TypeCon('U1') : foldInfixType(':*:', $fields);
+
+    return typeApp('C1', [metaConsType($ctor), $product]);
+}
+
+/** The representation of one field: `Par1`, `Rec1 <self>`, `Rec0 <type>`, or a composition. */
+function rep1TypeOfField(Ast\DataDecl $decl, string $param, Ast\TypeNode $fieldType): Ast\TypeNode
+{
+    return rep1TypeOf($decl, rep1OfType($decl, $param, $fieldType));
+}
+
+/** @param array{tag: string, type?: Ast\TypeNode, head?: Ast\TypeNode, inner?: array{tag: string}} $desc */
+function rep1TypeOf(Ast\DataDecl $decl, array $desc): Ast\TypeNode
+{
+    return match ($desc['tag']) {
+        'param' => new Ast\TypeCon('Par1'),
+        'self' => typeApp('Rec1', [functorialHeadAst($decl)]),
+        'compose' => new Ast\TypeApp(new Ast\TypeCon(':.:'), [
+            typeApp('Rec1', [$desc['head']]),
+            rep1TypeOf($decl, $desc['inner']),
+        ]),
+        default => typeApp('Rec0', [$desc['type']]),
+    };
+}
+
+/**
+ * A field value as its representation, and the inverse a `to1` binds.
+ *
+ * The four simple forms wrap a value (`Par1`, `Rec1`, `K1`) and read it back through a pattern.
+ * A composition is the one form that is not a wrapper: the container is `map`ped, because the
+ * representation lives *inside* it, so there is no way to get from `Maybe a` to
+ * `Maybe (Par1 a)` without going through the constructor's own `Functor`.
+ *
+ * @param array{tag: string, head?: Ast\TypeNode, inner?: array{tag: string}} $desc
+ */
+function rep1ValueOfField(Ast\DataDecl $decl, array $desc, Ast\AstNode $value): Ast\AstNode
+{
+    return match ($desc['tag']) {
+        'param' => applyCon('Par1', [$value]),
+        'self' => applyCon('Rec1', [$value]),
+        'compose' => applyCon('Comp1', [
+            applyCon('Rec1', [applyVar('map', rep1Lambda($decl, $desc['inner'], false), $value)]),
+        ]),
+        default => applyCon('K1', [$value]),
+    };
+}
+
+/**
+ * A top-level field, whose pattern already unwrapped `Par1`/`Rec1`/`K1` into a plain binder.
+ *
+ * A composed field is the exception: its pattern bound the container of representations, so the
+ * inner one has to be mapped over and unwrapped.
+ *
+ * @param array{tag: string, inner?: array{tag: string}} $desc
+ */
+function rep1FieldOfValue(Ast\DataDecl $decl, array $desc, Ast\AstNode $rep): Ast\AstNode
+{
+    return $desc['tag'] === 'compose'
+        ? applyVar('map', rep1Lambda($decl, $desc['inner'], true), $rep)
+        : $rep;
+}
+
+/**
+ * A representation value as the field value it stands for.
+ *
+ * This is the inverse of `rep1ValueOfField`, and it is a `case` rather than a projection: the
+ * wrapper is a constructor, so reading through it is a match. Inside a composition the inverse is
+ * mapped, since the representations are the container's elements.
+ *
+ * @param array{tag: string, inner?: array{tag: string}} $desc
+ */
+function rep1FromRep(Ast\DataDecl $decl, array $desc, Ast\AstNode $rep): Ast\AstNode
+{
+    if ($desc['tag'] === 'compose') {
+        return applyVar('map', rep1Lambda($decl, $desc['inner'], true), $rep);
+    }
+
+    $wrapper = match ($desc['tag']) {
+        'param' => 'Par1',
+        'self' => 'Rec1',
+        default => 'K1',
+    };
+
+    return new Ast\CaseExpr($rep, [
+        new Ast\Alt(
+            new Ast\PatCon($wrapper, [new Ast\PatVar('__v')]),
+            new Ast\Variable('__v'),
+        ),
+    ]);
+}
+
+/** `\__g -> <__g as the inner representation>` (or its inverse). */
+function rep1Lambda(Ast\DataDecl $decl, array $desc, bool $fromRep): Ast\AstNode
+{
+    $var = new Ast\Variable('__g');
+
+    return new Ast\Lambda(
+        [new Ast\LambdaParam(new Ast\PatVar('__g'))],
+        $fromRep
+            ? rep1FromRep($decl, $desc, $var)
+            : rep1ValueOfField($decl, $desc, $var),
+    );
+}
+
+function synthesizeGeneric1From(
+    Ast\DataDecl $decl,
+    string $param,
+    Ast\DerivingClassRef $ref,
+): Ast\FunctionDecl {
+    return new Ast\FunctionDecl(
+        'from1',
+        null,
+        [new Ast\PatVar('__x')],
+        synthesizeFrom1Body($decl, $param, '__x'),
+        instanceMethod: true,
+        line: $ref->line,
+        col: $ref->col,
+        endCol: $ref->endCol,
+    );
+}
+
+function synthesizeGeneric1To(
+    Ast\DataDecl $decl,
+    string $param,
+    Ast\DerivingClassRef $ref,
+): Ast\FunctionDecl {
+    return new Ast\FunctionDecl(
+        'to1',
+        null,
+        [new Ast\PatVar('__r')],
+        synthesizeTo1Body($decl, $param, '__r'),
+        instanceMethod: true,
+        line: $ref->line,
+        col: $ref->col,
+        endCol: $ref->endCol,
+    );
+}
+
+function synthesizeFrom1Body(Ast\DataDecl $decl, string $param, string $scrutinee): Ast\AstNode
+{
+    if ($decl->constructors === []) {
+        return new Ast\Apply(
+            new Ast\Variable('from1'),
+            new Ast\Variable($scrutinee),
+        );
+    }
+
+    $n = \count($decl->constructors);
+    $alts = [];
+    foreach ($decl->constructors as $i => $ctor) {
+        $binders = [];
+        $patArgs = [];
+        foreach (constructorDeriveFields($ctor) as $j => $_) {
+            $name = '__f' . $j;
+            $binders[] = $name;
+            $patArgs[] = new Ast\PatVar($name);
+        }
+        $rep = injectSum($n, $i, m1(synthesizeFrom1Fields($decl, $param, $ctor, $binders)));
+        $alts[] = new Ast\Alt(new Ast\PatCon($ctor->name, $patArgs), m1($rep));
+    }
+
+    return new Ast\CaseExpr(new Ast\Variable($scrutinee), $alts);
+}
+
+/** @param list<string> $binders */
+function synthesizeFrom1Fields(
+    Ast\DataDecl $decl,
+    string $param,
+    Ast\ConstructorDecl $ctor,
+    array $binders,
+): Ast\AstNode {
+    if ($binders === []) {
+        return new Ast\ConstructorRef('U1');
+    }
+
+    $parts = [];
+    foreach (constructorDeriveFields($ctor) as $j => $field) {
+        $desc = rep1OfType($decl, $param, $field->type);
+        $parts[] = m1(rep1ValueOfField($decl, $desc, new Ast\Variable($binders[$j])));
+    }
+
+    return foldInfixExpr(':*:', $parts);
+}
+
+function synthesizeTo1Body(Ast\DataDecl $decl, string $param, string $scrutinee): Ast\AstNode
+{
+    if ($decl->constructors === []) {
+        return new Ast\Apply(
+            new Ast\Variable('to1'),
+            new Ast\Variable($scrutinee),
+        );
+    }
+
+    $n = \count($decl->constructors);
+    $alts = [];
+    foreach ($decl->constructors as $i => $ctor) {
+        $binders = [];
+        $descs = [];
+        foreach (constructorDeriveFields($ctor) as $j => $field) {
+            $binders[] = '__t' . $j;
+            $descs[] = rep1OfType($decl, $param, $field->type);
+        }
+        $innerPat = synthesizeTo1FieldsPat($descs, $binders);
+        $sumPat = injectSumPat($n, $i, new Ast\PatCon('M1', [$innerPat]));
+        $outerPat = new Ast\PatCon('M1', [$sumPat]);
+
+        $conArgs = [];
+        foreach ($descs as $j => $desc) {
+            $conArgs[] = rep1FieldOfValue($decl, $desc, new Ast\Variable($binders[$j]));
+        }
+        $alts[] = new Ast\Alt($outerPat, applyConstructor($ctor->name, $conArgs));
+    }
+
+    return new Ast\CaseExpr(new Ast\Variable($scrutinee), $alts);
+}
+
+/** @param list<array{tag: string}> $descs @param list<string> $binders */
+function synthesizeTo1FieldsPat(array $descs, array $binders): Ast\AstNode
+{
+    if ($binders === []) {
+        return new Ast\PatCon('U1', []);
+    }
+
+    $parts = [];
+    foreach ($descs as $j => $desc) {
+        $binder = new Ast\PatVar($binders[$j]);
+        $parts[] = match ($desc['tag']) {
+            'param' => new Ast\PatCon('M1', [new Ast\PatCon('Par1', [$binder])]),
+            'self' => new Ast\PatCon('M1', [new Ast\PatCon('Rec1', [$binder])]),
+            'compose' => new Ast\PatCon('M1', [
+                new Ast\PatCon('Comp1', [new Ast\PatCon('Rec1', [$binder])]),
+            ]),
+            default => new Ast\PatCon('M1', [new Ast\PatCon('K1', [$binder])]),
+        };
+    }
+
+    return foldInfixPat(':*:', $parts);
 }
 
 function synthesizeRepSum(Ast\DataDecl $decl): Ast\TypeNode
