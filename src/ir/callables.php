@@ -33,12 +33,11 @@ use function Moggi\Syntax\Ast\generatedWorkerPrefix;
  * not a derived convenience.
  *
  * Not published here — the migration list, not a permanent caveat: imported entries, whose facts
- * travel in the module `facts` record (and, on the import side, in `ImportInterface::abi()`), and
+ * travel in the module `facts` record, and
  * the action worker/action-value split at the IR node level, which `IR\FunctionDecl::$kind`
  * (`Worker`) and `$actionConvention` carry in the tree. Closing either moves a reader onto the
  * owner that already holds the fact; neither needs a new derivation.
  */
-const ABI_VERSION = 1;
 
 /**
  * The local name of an entry's worker.
@@ -157,7 +156,6 @@ final class CallableSig
         public ResultConvention $result,
         public AcquisitionKind $acquisition,
         public ?bool $returnsCallable = null,
-        public int $abiVersion = ABI_VERSION,
     ) {
     }
 

@@ -6,6 +6,7 @@ use Moggi\IR\Module;
 
 require_once __DIR__ . '/Backend.php';
 require_once __DIR__ . '/inspect.php';
+require_once __DIR__ . '/managed/abi_facts.php';
 require_once __DIR__ . '/php/PhpBackend.php';
 require_once __DIR__ . '/jvm/JvmBackend.php';
 require_once __DIR__ . '/dotnet/DotNetBackend.php';

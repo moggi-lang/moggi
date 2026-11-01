@@ -138,68 +138,47 @@ final class EmitPlan
 function moduleOutputPathsForUnits(array $units, string $rootPrefix, string $backendId): array
 {
     $paths = [];
-    $extension = backendById($backendId)->extension();
+    $backend = backendById($backendId);
     foreach ($units as $moduleName => $unit) {
         if (($unit['synthetic'] ?? false) === true || ! isset($unit['path'])) {
             continue;
         }
 
-        $paths[$moduleName] = mogPathToOutputRelative($unit['path'], $rootPrefix, $extension);
+        $paths[$moduleName] = $backend->artifactRelativePath(
+            (string) $moduleName,
+            mogPathToOutputRelative($unit['path'], $rootPrefix, '.mog'),
+        );
     }
 
     return $paths;
 }
 
 /**
- * Render the emission plan a module's artifact consumes, from its interface and its IR.
+ * The modules this module's IR reaches: discovery's question, by {@see resolveCallees()}'s rule.
  *
- * Pruned to what the module calls: externals, `use function`/`use namespace` lines and require
- * lines are the ones its IR reaches, because a listed module that is never called must not be
- * required and an external it never names must not be installed. Two regions travel whole, and
- * deliberately: `constructorRenames` and `importedData` describe *types*, not calls — an imported
- * constructor a match arm names is not a callee, so pruning by call site would drop a constructor
- * the emitted code still has to build — and a type fact is the same in every artifact that imports
- * it.
- *
- * @param list<string>|null $usedCallees the callees the caller already collected from `$ir`
+ * @return array<string, true>
  */
-function planEmission(
-    ImportInterface $interface,
-    EmitPlan $target,
-    IR\Module $ir,
-    array $usedCallees,
-    ?string $fromOutputRelative = null,
-    ?string $absoluteRequireRoot = null,
-): EmitPlan {
-    $render = static fn (
-        array $requireLines,
-        array $functionUseLines,
-        array $namespaceUseLines,
-        array $externalFns,
-        array $externalFnRuntimeArity,
-        array $moduleAsNames,
-        array $requiredModules = [],
-    ): EmitPlan => new EmitPlan(
-        backendId: $target->backendId,
-        outputRelative: $target->outputRelative,
-        moduleOutputPaths: $target->moduleOutputPaths,
-        moduleAsNames: $moduleAsNames,
-        namespaceModules: $target->namespaceModules,
-        requireLines: $requireLines,
-        functionUseLines: $functionUseLines,
-        namespaceUseLines: $namespaceUseLines,
-        externalFns: $externalFns,
-        externalFnRuntimeArity: $externalFnRuntimeArity,
-        constructorRenames: $interface->constructorRenames(),
-        importedData: $interface->data(),
-        requiredModules: $requiredModules,
-    );
-
+function moduleDependencies(ImportInterface $interface, EmitPlan $target, IR\Module $ir): array
+{
     $localFnNames = [];
     foreach ($ir->functions as $fn) {
         $localFnNames[$fn->name] = true;
     }
 
+    return resolveCallees($interface, $target, $localFnNames, collectIrCodegenUsage($ir)['callees'])['modules'];
+}
+
+/**
+ * Resolve a module's callees into the modules, namespaces and externals its plan names.
+ *
+ * The single walk behind `planEmission()` and `moduleDependencies()`.
+ *
+ * @param array<string, true> $localFnNames
+ * @param array<string, mixed> $usedCallees
+ * @return array{modules: array<string, true>, namespaces: array<string, true>, externals: array<string, true>}
+ */
+function resolveCallees(ImportInterface $interface, EmitPlan $target, array $localFnNames, array $usedCallees): array
+{
     $usedExternal = [];
     $usedModules = [];
     $usedNamespaces = [];
@@ -250,6 +229,67 @@ function planEmission(
             $usedExternal[$member] = true;
         }
     }
+
+    return ['modules' => $usedModules, 'namespaces' => $usedNamespaces, 'externals' => $usedExternal];
+}
+
+/**
+ * Render the emission plan a module's artifact consumes, from its interface and its IR.
+ *
+ * Pruned to what the module calls: externals, `use function`/`use namespace` lines and require
+ * lines are the ones its IR reaches, because a listed module that is never called must not be
+ * required and an external it never names must not be installed. Two regions travel whole, and
+ * deliberately: `constructorRenames` and `importedData` describe *types*, not calls — an imported
+ * constructor a match arm names is not a callee, so pruning by call site would drop a constructor
+ * the emitted code still has to build — and a type fact is the same in every artifact that imports
+ * it.
+ *
+ * @param list<string>|null $usedCallees the callees the caller already collected from `$ir`
+ */
+function planEmission(
+    ImportInterface $interface,
+    EmitPlan $target,
+    IR\Module $ir,
+    array $usedCallees,
+    ?string $fromOutputRelative = null,
+    ?string $absoluteRequireRoot = null,
+): EmitPlan {
+    $localFnNames = [];
+    foreach ($ir->functions as $fn) {
+        $localFnNames[$fn->name] = true;
+    }
+
+    $render = static fn (
+        array $requireLines,
+        array $functionUseLines,
+        array $namespaceUseLines,
+        array $externalFns,
+        array $externalFnRuntimeArity,
+        array $moduleAsNames,
+        array $requiredModules = [],
+    ): EmitPlan => new EmitPlan(
+        backendId: $target->backendId,
+        outputRelative: $target->outputRelative,
+        moduleOutputPaths: $target->moduleOutputPaths,
+        moduleAsNames: $moduleAsNames,
+        namespaceModules: $target->namespaceModules,
+        requireLines: $requireLines,
+        functionUseLines: $functionUseLines,
+        namespaceUseLines: $namespaceUseLines,
+        externalFns: $externalFns,
+        externalFnRuntimeArity: $externalFnRuntimeArity,
+        constructorRenames: $interface->constructorRenames(),
+        importedData: $interface->data(),
+        requiredModules: $requiredModules,
+    );
+
+    $localFnNames = [];
+    foreach ($ir->functions as $fn) {
+        $localFnNames[$fn->name] = true;
+    }
+
+    ['modules' => $usedModules, 'namespaces' => $usedNamespaces, 'externals' => $usedExternal]
+        = resolveCallees($interface, $target, $localFnNames, $usedCallees);
 
     $externalFns = \array_intersect_key($interface->externalFns(), $usedExternal);
     $externalFnRuntimeArity = \array_intersect_key($interface->externalFnRuntimeArity(), $externalFns);

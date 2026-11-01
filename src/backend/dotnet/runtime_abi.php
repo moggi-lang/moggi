@@ -76,6 +76,8 @@ require_once __DIR__ . '/il.php';
 /** @return string ILASM text: `.class` definitions for the Moggi.Rt namespace only. */
 function languageRuntime(): string
 {
+    require_once __DIR__ . '/../managed/abi_facts.php';
+
     static $cached = null;
     if (\is_string($cached)) {
         return $cached;
@@ -111,6 +113,11 @@ function languageRuntime(): string
         word64ClassIl(),
         platformRuntime(),
     ]);
+
+    $missing = \Moggi\Backend\Managed\missingDotNetProtocol($cached);
+    if ($missing !== []) {
+        throw new \RuntimeException('.NET runtime does not implement: ' . \implode(', ', $missing));
+    }
 
     return $cached;
 }

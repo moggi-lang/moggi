@@ -260,7 +260,7 @@ function runSuite(): int
  */
 function warmSharedCache(array $backends): void
 {
-    if (! \Moggi\Cache\cacheEnabled()) {
+    if ($backends === [] || ! \Moggi\Cache\cacheEnabled()) {
         return;
     }
 
@@ -277,33 +277,114 @@ function warmSharedCache(array $backends): void
     }
 
     $multiBackend = \count($backends) > 1;
+    $missing = [];
     foreach ($backends as $backend) {
         if (! libBackendTreeReady($projectRoot, $backend)) {
             suiteEcho(renderLibWarmupStart($backend, $multiBackend));
+            $missing[] = $backend;
         }
-        try {
-            \Moggi\Compiler\compileFile($source, 'php');
-        } catch (\Throwable) {
-        }
-        \Moggi\Modules\ProjectCache::clearCheckedModules();
-        \Moggi\Modules\ProjectCache::clearPreparedProjects();
-        if (\function_exists('gc_collect_cycles')) {
-            gc_collect_cycles();
-        }
-        $startedAt = \microtime(true);
-        $built = false;
-        try {
-            writeLibBackendOutputs($projectRoot, $backend, $built);
-        } catch (\Throwable) {
-        }
-        if ($built || libBackendTreeReady($projectRoot, $backend)) {
-            suiteEcho(renderLibWarmupDone($backend, $built, \microtime(true) - $startedAt, $multiBackend));
-        }
-        \Moggi\Modules\ProjectCache::clearCheckedModules();
-        \Moggi\Modules\ProjectCache::clearPreparedProjects();
     }
 
+    try {
+        \Moggi\Compiler\compileFile($source, 'php');
+    } catch (\Throwable) {
+    }
+    \Moggi\Modules\ProjectCache::clearCheckedModules();
+    \Moggi\Modules\ProjectCache::clearPreparedProjects();
+    if (\function_exists('gc_collect_cycles')) {
+        gc_collect_cycles();
+    }
+
+    $startedAt = \microtime(true);
+    $built = [];
+
+    if (\count($missing) > 1 && \function_exists('pcntl_fork')) {
+        $children = [];
+        foreach ($missing as $backend) {
+            $pid = \pcntl_fork();
+            if ($pid === 0) {
+                try {
+                    writeLibBackendOutputs($projectRoot, $backend);
+                } catch (\Throwable) {
+                }
+                exit(0);
+            }
+            if ($pid > 0) {
+                $children[$pid] = $backend;
+            }
+        }
+        foreach ($children as $pid => $backend) {
+            \pcntl_waitpid($pid, $status);
+            if (libBackendTreeReady($projectRoot, $backend)) {
+                $built[] = $backend;
+            }
+        }
+    } else {
+        foreach ($missing as $backend) {
+            $wasBuilt = false;
+            try {
+                writeLibBackendOutputs($projectRoot, $backend, $wasBuilt);
+            } catch (\Throwable) {
+            }
+            if ($wasBuilt || libBackendTreeReady($projectRoot, $backend)) {
+                $built[] = $backend;
+            }
+        }
+    }
+
+    $elapsed = \microtime(true) - $startedAt;
+    foreach ($built as $backend) {
+        suiteEcho(renderLibWarmupDone($backend, true, $elapsed, $multiBackend));
+    }
+
+    \Moggi\Modules\ProjectCache::clearCheckedModules();
+    \Moggi\Modules\ProjectCache::clearPreparedProjects();
+
     @\unlink($source);
+}
+
+
+/**
+ * The backends whose staged library tree this run reads.
+ *
+ * The harness executes fixtures against the staged tree for PHP only (`execTreeRoot()`); the
+ * managed targets build their own runnable artifact. Warming a tree for a target nothing reads
+ * spends a full library build after every compiler edit, and a selection that only compiles never
+ * opens the tree at all.
+ *
+ * @param list<string> $backends
+ * @return list<string>
+ */
+function stagedTreeBackends(array $backends, bool $runsProgram): array
+{
+    return $runsProgram && \in_array('php', $backends, true) ? ['php'] : [];
+}
+
+/**
+ * Whether this selection runs a PHP program — the only consumer of the staged tree.
+ *
+ * A fixture that runs is compiled into the tree (`compileFixtureEntry()`) so its imports resolve
+ * against the library. Every other kind compares a compile product (`tokens` through `emit`, a
+ * diagnostic) or runs a `.script`/`.exec.php` of its own, and never opens the tree.
+ *
+ * @param list<TestCase> $cases
+ * @param list<array{path: string, directory: bool}> $pathFilters
+ * @param list<string> $groups
+ */
+function selectionRunsProgram(array $cases, array $pathFilters, array $groups): bool
+{
+    foreach (selectCases($cases, $pathFilters, $groups, 'php') as $case) {
+        if ($case->buildOnly || $case->scriptCase) {
+            continue;
+        }
+        if ($case->goldenBeside($case->base(), 'stdout', 'php') !== null
+            || $case->goldenBeside($case->base(), 'stderr', 'php') !== null
+            || \is_file($case->base() . '.exec.php')) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -329,7 +410,10 @@ function runSelection(array $cases, array $backends, array $pathFilters): int
         suiteEcho(renderWorkerBanner(1, (int) $testArgs['jobsRequested']));
     } else {
         suiteEcho(renderWorkerBanner($pool->jobCount(), (int) $testArgs['jobsRequested']));
-        warmSharedCache($backends);
+        warmSharedCache(stagedTreeBackends(
+            $backends,
+            selectionRunsProgram($cases, $pathFilters, $testArgs['groups']),
+        ));
     }
 
     $lastBackend = null;

@@ -12,7 +12,6 @@ use function Moggi\Backend\DotNet\Foreign\resolveDotNetForeignOverload;
 use function Moggi\Backend\DotNet\resolveDotnetExecutable;
 use function Moggi\Backend\DotNet\Verify\ensureInspectorBinary;
 use function Moggi\Backend\DotNet\Verify\inspectDotNetType;
-use function Moggi\Backend\DotNet\Naming\artifactPath;
 use function Moggi\Backend\DotNet\Naming\symbolName;
 use function Moggi\Backend\DotNet\Naming\typeArtifactPath;
 use function Moggi\Backend\DotNet\Verify\verifyDotNetForeignImport;
@@ -53,9 +52,10 @@ final class DotNetBackend implements Backend
         return '.il';
     }
 
-    public function artifactPath(string $moduleName): ?string
+    /** Where this target writes the module's artifact, relative to the output root. */
+    public function artifactRelativePath(string $moduleName, string $sourceRelative): string
     {
-        return artifactPath($moduleName);
+        return \Moggi\Backend\sourceDerivedArtifactPath($sourceRelative, $this->extension());
     }
 
     public function symbolName(string $name): string

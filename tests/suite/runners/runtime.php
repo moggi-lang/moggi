@@ -826,18 +826,29 @@ function fixtureExtraLibArgs(string $projectRoot): array
 /** @return list<string> every `.mog` under every library root, sorted */
 function testLibraryFiles(string $projectRoot): array
 {
-    $files = [];
-    foreach (testLibraryRoots($projectRoot) as $root) {
-        $files = [...$files, ...findModuleMogFiles($root)];
+    static $files = [];
+    if (isset($files[$projectRoot])) {
+        return $files[$projectRoot];
     }
-    \sort($files);
 
-    return $files;
+    $found = [];
+    foreach (testLibraryRoots($projectRoot) as $root) {
+        $found = [...$found, ...findModuleMogFiles($root)];
+    }
+    \sort($found);
+
+    return $files[$projectRoot] = $found;
 }
 
-/** Content signature of the library build: backend + compiler + library sources + the PHP runtime. */
+/** Content signature of the library build: backend + compiler + library sources + runtime. */
 function testLibSignature(string $projectRoot, string $backend): string
 {
+    static $signatures = [];
+    $memo = $projectRoot . '|' . $backend;
+    if (isset($signatures[$memo])) {
+        return $signatures[$memo];
+    }
+
     $parts = [$backend, \Moggi\Cache\compilerFingerprint()];
     foreach (testLibraryFiles($projectRoot) as $file) {
         $parts[] = testRelativePath($file) . ':' . \Moggi\Cache\fileFingerprint($file);
@@ -846,7 +857,7 @@ function testLibSignature(string $projectRoot, string $backend): string
         $parts[] = 'runtime:' . \Moggi\Cache\fileFingerprint($projectRoot . '/src/backend/php/runtime.php');
     }
 
-    return \hash('xxh3', \implode("\n", $parts));
+    return $signatures[$memo] = \hash('xxh3', \implode("\n", $parts));
 }
 
 /** @return list<string> every `.mog` under `$root` */

@@ -211,7 +211,7 @@ function injectPreludeImport(
         return $imports;
     }
 
-    if (isset(preludeDependencyClosure($path)[moduleNameForPath($path)])) {
+    if (isset(preludeClosureAnyBackend($path)[moduleNameForPath($path)])) {
         return $imports;
     }
 
@@ -229,21 +229,47 @@ function moduleNameForPath(string $path): ?string
 }
 
 /**
- * Prelude plus everything Prelude transitively depends on, as a module-name set.
+ * Prelude plus everything the *compile for this backend* reaches, as a module-name set.
  *
- * Follows the explicit imports written in each source plus the backend
- * implementation each facade routes to for `$backendId`, since a facade's
- * implementation is as much a dependency as an import. A facade's halves for
- * the other backends are modules of another compilation: they are not followed,
- * because preparing them checks code this one never emits. Only explicit edges
- * are followed, so the walk terminates regardless of where the implicit import
- * would otherwise be added. `$backendId` is null for the one caller that asks a
- * different question — whether a module belongs to the closure at all — and that
- * answer may name any half.
+ * Follows the explicit imports written in each source plus the backend implementation each facade
+ * routes to, since a facade's implementation is as much a dependency as an import. A facade's
+ * halves for the other backends are modules of another compilation: they are not followed, because
+ * preparing them checks code this one never emits. Only explicit edges are followed, so the walk
+ * terminates regardless of where the implicit import would otherwise be added.
+ *
+ * The backend is required because "is this module in the Prelude closure" has one answer per
+ * compilation, and it must be the same answer the module set uses. The backend-agnostic question
+ * is a *different* one, asked only by import suppression, and it has its own name —
+ * {@see preludeClosureAnyBackend()} — so a caller cannot pick the wrong answer by accident.
  *
  * @return array<string, true>
  */
-function preludeDependencyClosure(string $fromPath, ?string $backendId = null): array
+function preludeDependencyClosure(string $fromPath, string $backendId): array
+{
+    return preludeClosureWalk($fromPath, $backendId);
+}
+
+/**
+ * Prelude plus everything it depends on through *any* backend half.
+ *
+ * Import suppression's question: a module that is part of the Prelude's own sources — a facade,
+ * either half, or an implementation — must never receive an implicit `import Prelude`, whichever
+ * target is building it. The compile's module set asks the backend-aware
+ * {@see preludeDependencyClosure()} instead.
+ *
+ * @return array<string, true>
+ */
+function preludeClosureAnyBackend(string $fromPath): array
+{
+    return preludeClosureWalk($fromPath, null);
+}
+
+/**
+ * The walk both questions share; `$backendId` null follows every facade half.
+ *
+ * @return array<string, true>
+ */
+function preludeClosureWalk(string $fromPath, ?string $backendId): array
 {
     $root = locateStdlibRoot($fromPath);
     if ($root === null) {

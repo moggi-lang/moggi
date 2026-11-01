@@ -8,7 +8,6 @@ use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
 
-use const Moggi\IR\Callables\ABI_VERSION;
 
 use function Moggi\Backend\backendById;
 use function Moggi\Backend\Php\Naming\basePhpFunctionName;
@@ -341,7 +340,7 @@ function moduleTrueBindingOriginsAll(array $units): array
  *   actionReturn: array<string, true>,
  *   workers: array<string, true>,
  *   trueBindings: array<string, true>,
- *   callables: array{abi: int, entries: array<string, array{evidence: int, params: int, arity: int}>}
+ *   callables: array{entries: array<string, array{evidence: int, params: int, arity: int}>}
  * }
  */
 function preparedModuleFacts(array $unit, Ast\Program $checked, string $moduleName): array
@@ -387,7 +386,7 @@ function preparedModuleFacts(array $unit, Ast\Program $checked, string $moduleNa
  * a hidden slot from a value parameter without re-deriving either.
  *
  * @param array<string, int> $evidenceArities evidence factory name => dictionary count
- * @return array{abi: int, entries: array<string, array{evidence: int, params: int, arity: int}>}
+ * @return array{entries: array<string, array{evidence: int, params: int, arity: int}>}
  */
 function callableFactsFromProgram(Ast\Program $program, array $evidenceArities = []): array
 {
@@ -420,7 +419,7 @@ function callableFactsFromProgram(Ast\Program $program, array $evidenceArities =
         $entries[$name] ??= evidenceCallableLayout($arity);
     }
 
-    return ['abi' => ABI_VERSION, 'entries' => $entries];
+    return ['entries' => $entries];
 }
 
 /**
@@ -470,7 +469,7 @@ function programConstructorArities(Ast\Program $program): array
  *
  * @param array<string, mixed> $exports the module's collected exports (`env` holds the schemes)
  * @param array<string, int> $evidenceArities evidence factory name => dictionary count
- * @return array{abi: int, entries: array<string, array{evidence: int, params: int, arity: int}>}
+ * @return array{entries: array<string, array{evidence: int, params: int, arity: int}>}
  */
 function parsedCallableFacts(Ast\Program $program, array $exports, array $evidenceArities = []): array
 {
@@ -499,7 +498,7 @@ function parsedCallableFacts(Ast\Program $program, array $exports, array $eviden
         $entries[$name] ??= evidenceCallableLayout($arity);
     }
 
-    return ['abi' => ABI_VERSION, 'entries' => $entries];
+    return ['entries' => $entries];
 }
 
 /**

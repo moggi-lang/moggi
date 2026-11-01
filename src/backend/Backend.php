@@ -34,15 +34,19 @@ interface Backend
     public function extension(): string;
 
     /**
-     * Name-derived relative path of a module's primary artifact, or null when
-     * the backend's layout is source-path-derived instead.
+     * Where this target writes one module's primary artifact, relative to the output root.
      *
-     * The PHP backend maps a module to a file by the module's source path, so it
-     * has no name-derived answer; the JVM and .NET backends derive a fixed
-     * package layout from the module name. Callers use this to locate a
-     * module's artifact without hardcoding a backend id.
+     * The one answer to "which path is this module's artifact". The project layer asks it for
+     * every module it writes, so a target spells its layout once and shared code never derives a
+     * path by substituting an extension (which is how PHP's, JVM's and .NET's spellings used to
+     * drift apart from what an emitter actually wrote).
+     *
+     * `$sourceRelative` is the module's source path relative to the output root. A source-derived
+     * layout (PHP) and a package-derived one (JVM, .NET) both take it as an input: the module
+     * graph keeps a module's name and its source path in step, and a target that derives paths
+     * from names ignores it. {@see sourceDerivedArtifactPath()} is the shared rule for the former.
      */
-    public function artifactPath(string $moduleName): ?string;
+    public function artifactRelativePath(string $moduleName, string $sourceRelative): string;
 
     /** Mangle a Moggi binding to a legal backend symbol. */
     public function symbolName(string $name): string;
@@ -98,7 +102,8 @@ interface Backend
     /**
      * Human-readable dump of an `emit()` result for tooling (`:emit` /
      * `:dump emit`). Each backend owns the shape of its own artifacts, so
-     * callers never have to sniff file extensions.
+     * callers never have to sniff file extensions. The text is for humans: no
+     * caller parses it, and a consumer that compares artifacts compares the map.
      *
      * @param array<string, string> $emit
      * @param list<string> $focusNames Moggi names to keep (empty = whole module)
@@ -196,6 +201,17 @@ interface Backend
  */
 final class VerificationUnavailable extends \RuntimeException
 {
+}
+
+/**
+ * The artifact path a source-derived layout writes for one module: its source path, re-extensioned.
+ *
+ * The shared rule behind the three backends' `artifactRelativePath()`, so the mapping from
+ * `X.mog` to `X.<ext>` exists once rather than in each target and again in the project layer.
+ */
+function sourceDerivedArtifactPath(string $sourceRelative, string $extension): string
+{
+    return \preg_replace('/\.mog$/', $extension, $sourceRelative) ?? $sourceRelative;
 }
 
 /** @return list<string> */

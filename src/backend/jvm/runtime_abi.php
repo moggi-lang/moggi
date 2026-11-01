@@ -84,6 +84,8 @@ require_once __DIR__ . '/classfile.php';
 /** @return array<string, string> internalName => classfile bytes */
 function languageRuntime(): array
 {
+    require_once __DIR__ . '/../managed/abi_facts.php';
+
     static $cached = null;
     if (\is_array($cached)) {
         return $cached;
@@ -120,6 +122,11 @@ function languageRuntime(): array
         'moggi/rt/Word64' => buildWord64Class(),
         'moggi/rt/Platform' => buildPlatformClass(),
     ];
+
+    $missing = \Moggi\Backend\Managed\missingJvmProtocol($cached);
+    if ($missing !== []) {
+        throw new \RuntimeException('the JVM runtime does not implement: ' . \implode(', ', $missing));
+    }
 
     return $cached;
 }

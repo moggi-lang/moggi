@@ -24,12 +24,6 @@ function typeArtifactPath(string $typeName): string
     return moduleNameToPath($typeName) . '.il';
 }
 
-/** Relative path for a module's primary `.il` artifact (e.g. `Moggi/Data/String.il`). */
-function artifactPath(string $moduleName): string
-{
-    return typeArtifactPath(moduleTypeName($moduleName));
-}
-
 /**
  * Mangle a Moggi binding to a legal CLR member name.
  *

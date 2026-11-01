@@ -15,7 +15,6 @@ use Moggi\Pipeline\CompilationContext;
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
 
-use const Moggi\IR\Callables\ABI_VERSION;
 
 use function Moggi\Paths\canonicalPath;
 use function Moggi\Paths\canonicalSeparators;
@@ -528,7 +527,6 @@ function publishCallableFacts(array &$units, string $moduleName): void
     $facts = \is_array($unit['facts'] ?? null) ? $unit['facts'] : [];
     $unit['facts'] = $facts;
     $facts['callables'] = [
-        'abi' => ABI_VERSION,
         'entries' => unitCallableEntries($unit, $units, $moduleName),
     ];
     $units[$moduleName]['facts'] = $facts;
