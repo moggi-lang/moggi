@@ -26,6 +26,7 @@ use Moggi\Syntax\Ast;
 use function Moggi\Debug\normalizeDisplayPath;
 
 use function Moggi\Modules\intrinsicNameFor;
+use function Moggi\Modules\isQualifiedSymbol;
 use function Moggi\Semantics\Exhaustiveness\guardIsConstantTrue;
 use function Moggi\Semantics\IntrinsicRegistry\isIoExceptionPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\isShortCircuitPrimop;
@@ -827,21 +828,13 @@ function lowerIntrinsicValue(string $name, array $astArgs, Ast\AstNode $node, Lo
 }
 
 /**
- * Lower a call to a known top-level function by name, honouring the number of
- * parameters it is declared with: exact fit is a direct call, fewer arguments
- * build a partial application, more arguments apply the returned value (a
- * function may be eta-reduced, e.g. `($) f = f`). Returns null when the callee
- * is not a known top-level function.
- *
- * @param list<Operand> $args
- */
-/**
  * The runtime arity of a callee name.
  *
- * A cross-module callee is spelled `Module::name` at the call site, while the import table
- * publishes the entry under the spelling this module imported (`name`). The emitter already
- * accepts that member spelling; lowering does too, so a qualified call stays a direct call
- * instead of degrading to a value application of a zero-argument function.
+ * The arity belongs to the entry the name resolves to: a local declaration, an imported
+ * spelling, or the resolved symbol of a qualified callee (`Module::name`), which the import
+ * interface publishes beside the prefix it was reached through. The bare member spelling is
+ * never a fallback — a qualified `M.lookup` names Data.Map's `lookup`, while a bare `lookup` in
+ * the same module can be a different function (Data.List's) with a different arity.
  */
 function functionArityFor(string $name, LowerCtx $ctx): ?int
 {
@@ -850,19 +843,26 @@ function functionArityFor(string $name, LowerCtx $ctx): ?int
         return $arity;
     }
 
-    $separator = \strrpos($name, '::');
-    if ($separator === false) {
-        $separator = \strrpos($name, '\\');
-        if ($separator === false) {
-            return null;
-        }
-
-        return $ctx->functionArity[\substr($name, $separator + 1)] ?? null;
+    if (! isQualifiedSymbol($name) || \str_contains($name, '::')) {
+        return null;
     }
 
-    return $ctx->functionArity[\substr($name, $separator + 2)] ?? null;
+    $separator = (int) \strrpos($name, '\\');
+    $module = \str_replace('\\', '.', \substr($name, 0, $separator));
+    $member = \substr($name, $separator + 1);
+
+    return $ctx->functionArity[$module . '::' . $member] ?? null;
 }
 
+/**
+ * Lower a call to a known top-level function by name, honouring the number of
+ * parameters it is declared with: exact fit is a direct call, fewer arguments
+ * build a partial application, more arguments apply the returned value (a
+ * function may be eta-reduced, e.g. `($) f = f`). Returns null when the callee
+ * is not a known top-level function.
+ *
+ * @param list<Operand> $args
+ */
 function lowerNamedApply(string $name, array $args, LowerCtx $ctx, ?SrcLoc $srcLoc = null): ?Operand
 {
     $arity = functionArityFor($name, $ctx);

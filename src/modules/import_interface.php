@@ -23,12 +23,19 @@ final class ImportQualified
      * @param ?string $originModule the module that declares the entry, when it is not `$module`
      *        (a re-export); null when the prefix's own module declares it
      * @param ?string $originName the entry's spelling in the declaring module, beside `$originModule`
+     * @param ?string $symbol the entry's resolved symbol (`Data.Map::lookup`): the spelling a call
+     *        through this prefix names, which is not necessarily the unqualified spelling's entry
+     * @param ?array{evidence: int, params: int, arity: int}|null $layout the entry's runtime layout,
+     *        published beside the prefix because a qualified spelling can name a different entry
+     *        than the same spelling imported unqualified
      */
     public function __construct(
         public readonly string $module,
         public readonly ?Scheme $scheme = null,
         public readonly ?string $originModule = null,
         public readonly ?string $originName = null,
+        public readonly ?string $symbol = null,
+        public readonly ?array $layout = null,
     ) {
     }
 }
@@ -359,6 +366,38 @@ final class ImportInterface
         $arity = [];
         foreach ($this->abi() as $name => $record) {
             $arity[$name] = $record->layout['arity'];
+        }
+
+        return $arity;
+    }
+
+    /**
+     * The runtime arity of every entry reached through a module prefix, keyed by resolved symbol.
+     *
+     * A qualified spelling can name a different entry than the same spelling imported unqualified —
+     * `M.lookup` is `Data.Map::lookup` while a bare `lookup` may be `Data.List::lookup` — so the
+     * qualified answer is published beside its own record, under the symbol the call names, instead
+     * of under the bare spelling.
+     *
+     * @return array<string, int>
+     */
+    public function qualifiedFnRuntimeArity(): array
+    {
+        $arity = [];
+        foreach ($this->symbols as $imported) {
+            foreach ($imported->qualified as $entry) {
+                if ($entry->symbol === null) {
+                    continue;
+                }
+
+                $layout = $entry->layout
+                    ?? ($entry->symbol === $imported->symbol ? $imported->layout : null);
+                if ($layout === null) {
+                    continue;
+                }
+
+                $arity[$entry->symbol] = $layout['arity'];
+            }
         }
 
         return $arity;
