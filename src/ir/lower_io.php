@@ -940,8 +940,8 @@ function ioActionCall(Ast\AstNode $expr, LowerCtx $ctx): Intrinsic|IoCall|null
 
     $emitCallee = ioActionEmitCalleeName($parts['function'], $ctx) ?? $callee;
 
-    $knownArity = $ctx->functionArity[$callee]
-        ?? ($emitCallee !== $callee ? ($ctx->functionArity[$emitCallee] ?? null) : null);
+    $knownArity = functionArityFor($callee, $ctx)
+        ?? ($emitCallee !== $callee ? functionArityFor($emitCallee, $ctx) : null);
     if ($knownArity !== null && \count($parts['args']) !== $knownArity) {
         return null;
     }

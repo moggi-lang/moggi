@@ -236,41 +236,43 @@ match_end_V0:
 .method public hidebysig static object 'demoQualifiedValue'() cil managed
 {
   .maxstack 64
-  .locals init (object V0, object V1, object V2)
+  .locals init (object V0)
   .line 42, 42 : 22, 22 'tests/backend/runtime/Exec-AmbientEvidence.mog'
   .line 42, 42 : 22, 22 'tests/backend/runtime/Exec-AmbientEvidence.mog'
   ldc.i4.3
+  ldc.i4.3
   newobj instance void Moggi.Fn.Moggi_Data_List__sort__3::.ctor()
   newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
+  ldc.i4.2
+  newarr object
+  dup
+  ldc.i4.0
   call object Moggi.Data.Eq::'__ev_Eq_Int'()
-  call object Moggi.Rt.RT::Apply1(object, object)
-  stloc.0
-  .line 42, 42 : 22, 22 'tests/backend/runtime/Exec-AmbientEvidence.mog'
-  ldloc.0
+  stelem.ref
+  dup
+  ldc.i4.1
   call object Moggi.Data.Ord::'__ev_Ord_Int'()
-  call object Moggi.Rt.RT::Apply1(object, object)
-  stloc.1
-  .line 39, 39 : 20, 20 'tests/backend/runtime/Exec-AmbientEvidence.mog'
-  ldloc.1
+  stelem.ref
+  newobj instance void Moggi.Rt.Partial::.ctor(int32, class Moggi.Rt.Fn, object[])
   ldnull
-  stloc.2
+  stloc.0
   ldc.i8 2
   call object Moggi.Rt.RT::BoxInt(int64)
-  ldloc.2
+  ldloc.0
   call class Moggi.Rt.MList Moggi.Rt.RT::Cons(object, object)
-  stloc.2
+  stloc.0
   ldc.i8 1
   call object Moggi.Rt.RT::BoxInt(int64)
-  ldloc.2
+  ldloc.0
   call class Moggi.Rt.MList Moggi.Rt.RT::Cons(object, object)
-  stloc.2
+  stloc.0
   ldc.i8 3
   call object Moggi.Rt.RT::BoxInt(int64)
-  ldloc.2
+  ldloc.0
   call class Moggi.Rt.MList Moggi.Rt.RT::Cons(object, object)
-  stloc.2
-  ldloc.2
-  call object Moggi.Rt.RT::Apply1(object, object)
+  stloc.0
+  ldloc.0
+  call object Moggi.Main::'applyListFn'(object, object)
   ret
   ldnull
   ret

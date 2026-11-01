@@ -72,6 +72,7 @@ function functionFromArray(array $fn): IR\FunctionDecl
                 ? IR\FunctionKind::from($fn['kind'])
                 : IR\FunctionKind::Source,
         ),
+        captures: isset($fn['captures']) && \is_array($fn['captures']) ? $fn['captures'] : null,
     );
 }
 

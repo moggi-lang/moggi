@@ -22,6 +22,7 @@
  * 2. **A cleared form refuses**, and **a cleared disposition refuses**, each naming the site — not
  *    falling back to a classifier, and not emitting code chosen by what the attempt happened to do.
  *    This is the checked-core families' "a cleared id refuses" applied to the spine's two facts.
+ *    The fact is published in the checked structure; the source node only carries a projection.
  * 3. **Restoring them changes nothing.** The IR is byte-identical to the IR from the untouched tree.
  *
  * The fixture deliberately exercises all five forms and all four dispositions: a pure statement
@@ -158,9 +159,24 @@ try {
     $pristine = IR\Dump\dump(IR\lower($program, $program->interface->data(), $path));
 
     // 2. A cleared fact refuses, naming the site — one at a time, so every position is proved.
-    $refuse = static function (Ast\AstNode $node, string $field, string $expected) use ($program, $path): string {
-        $saved = $node->{$field};
-        $node->{$field} = null;
+    // The published fact lives in the checked structure, not on the source node: clearing the
+    // source projection is not clearing what lowering reads, so the structure's payload is what
+    // this clears and restores.
+    $refuse = static function (string $function, Ast\AstNode $node, string $field, string $expected) use ($program, $path): string {
+        $terms = $program->core->function($function)?->terms;
+        $structure = $terms?->structureFor($node);
+        if ($structure === null) {
+            return 'no checked structure was published for the site';
+        }
+
+        $payload = $structure->payload;
+        unset($payload[$field]);
+        $terms->addStructure($node, new Modules\CheckedStructure(
+            $structure->id,
+            $structure->origin,
+            $structure->kind,
+            $payload,
+        ));
 
         try {
             IR\lower($program, $program->interface->data(), $path);
@@ -177,13 +193,16 @@ try {
 
             return 'REFUSED';
         } finally {
-            $node->{$field} = $saved;
+            // A lowering run releases the decoded tree, so decode the blob before restoring the
+            // original structure over the cleared one.
+            $terms->structure($structure->id->value);
+            $terms->addStructure($node, $structure);
         }
     };
 
     $refused = 0;
     foreach ($sites as $site) {
-        $verdict = $refuse($site['node'], 'ioForm', 'without a published form');
+        $verdict = $refuse($site['function'], $site['node'], 'ioForm', 'without a published form');
         $assert(
             $verdict === 'REFUSED',
             'lowering accepted the `' . $site['node']::class . '` at line ' . $site['node']->line
@@ -195,7 +214,7 @@ try {
 
     $refusedKinds = 0;
     foreach ($statements as $statement) {
-        $verdict = $refuse($statement['node'], 'ioKind', 'with no published disposition');
+        $verdict = $refuse($statement['function'], $statement['node'], 'ioKind', 'with no published disposition');
         $assert(
             $verdict === 'REFUSED',
             'lowering accepted the `' . $statement['node']::class . '` at line ' . $statement['node']->line

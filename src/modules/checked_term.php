@@ -284,7 +284,7 @@ final class CheckedTerms implements \ArrayAccess, \Countable, \IteratorAggregate
         if ($object instanceof Ast\AstNode) {
             foreach (['inferredType', 'inferredInternalType'] as $name) {
                 if (! \array_key_exists($name, $structure->payload)) {
-                    $object->{$name} = null;
+                    $object->{$name} = $source instanceof Ast\AstNode ? ($source->{$name} ?? null) : null;
                 }
             }
         }

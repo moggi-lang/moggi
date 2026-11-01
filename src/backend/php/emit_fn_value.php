@@ -123,11 +123,11 @@ function emitPartialCallableName(string $name, EmitEnv $env): string
 
     $external = $env->externalFns[$name] ?? null;
     if ($external !== null) {
-        return \var_export(formatQualifiedCallee($external, $env), true);
+        return \var_export(formatQualifiedCallee($external, $env, false), true);
     }
 
     if (\str_contains($name, '::') || \str_contains($name, '\\')) {
-        return \var_export(formatQualifiedCallee($name, $env), true);
+        return \var_export(formatQualifiedCallee($name, $env, false), true);
     }
 
     $phpName = phpFunctionName($name, $env->phpNames);
