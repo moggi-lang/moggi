@@ -6,7 +6,7 @@ caused by: System.FormatException: The input string 'uncaught-host' was not in a
   #2 Moggi.Main.throwHost (il:0)
   #3 Moggi.Main.__w_main (il:0)
   #4 Moggi.Main.__ioThunk0 (il:0)
-  #5 Moggi.Fn.Moggi_Main____ioThunk0__0.Invoke (il:0)
+  #5 Moggi.Rt.StaticFn0.Invoke (il:0)
   #6 Moggi.Rt.TopLevelFn.Invoke (il:0)
   #7 Moggi.Rt.RT.Apply (il:205)
   #8 Moggi.Rt.RT.IoRun (il:0)

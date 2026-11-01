@@ -1497,6 +1497,12 @@ function addRtFrameAppenders(ClassBuilder $b): void
             $c->astore(6);
 
             $c->aload(6);
+            $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getClassName', '()Ljava/lang/String;'), 0, true);
+            $c->ldc($cp->string_('java.lang.invoke.'));
+            $c->invokevirtual($cp->methodRef('java/lang/String', 'startsWith', '(Ljava/lang/String;)Z'), 1, true);
+            $c->ifne('next');
+
+            $c->aload(6);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getLineNumber', '()I'), 0, true);
             $c->ifle('next');
             $c->aload(6);
