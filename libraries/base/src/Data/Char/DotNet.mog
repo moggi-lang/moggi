@@ -61,11 +61,11 @@ foreign dotnet function toLower "System.Char:ToLower" :: Char -> Char
 -- BCL has no Char.ToTitleCase; ToUpper is the closest single-scalar stand-in.
 foreign dotnet function toTitle "System.Char:ToUpper" :: Char -> Char
 
--- The category is a CLR enum, not an int: declaring `Int32` would put `(char)int32` on the
--- call against a host that declares `(char)UnicodeCategory`, which the verifier refuses (and the
--- runtime would too). The enum rides as its own foreign type and `Convert.ToInt32` — the
--- underlying 32-bit value — carries it back to `Int32`.
-foreign dotnet type UnicodeCategory "System.Globalization.UnicodeCategory"
+-- The category is a CLR enum, not an int: `(char)int32` against a host that declares
+-- `(char)UnicodeCategory` is refused. It rides as its own foreign type, spelled `valuetype` so the
+-- signature is right whether or not library metadata is discovered, and `Convert.ToInt32` carries
+-- the underlying 32-bit value back to `Int32`.
+foreign dotnet type UnicodeCategory "valuetype System.Globalization.UnicodeCategory"
 
 foreign dotnet function rawGetType "System.Globalization.CharUnicodeInfo:GetUnicodeCategory" :: Char -> UnicodeCategory
 

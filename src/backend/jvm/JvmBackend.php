@@ -10,7 +10,6 @@ use function Moggi\Backend\Jvm\Codegen\emitModule;
 
 use function Moggi\Backend\Jvm\Foreign\jvmDescriptorFromMoggiType;
 use function Moggi\Backend\Jvm\Foreign\resolveJvmForeignOverload;
-use function Moggi\Backend\Jvm\Naming\artifactPath;
 use function Moggi\Backend\Jvm\Verify\javapClassTable;
 use function Moggi\Backend\Jvm\Verify\javapMethodIsVarargs;
 use function Moggi\Backend\Jvm\Naming\symbolName;
@@ -45,9 +44,10 @@ final class JvmBackend implements Backend
         return '.class';
     }
 
-    public function artifactPath(string $moduleName): ?string
+    /** Where this target writes the module's artifact, relative to the output root. */
+    public function artifactRelativePath(string $moduleName, string $sourceRelative): string
     {
-        return artifactPath($moduleName);
+        return \Moggi\Backend\sourceDerivedArtifactPath($sourceRelative, $this->extension());
     }
 
     public function symbolName(string $name): string

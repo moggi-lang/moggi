@@ -35,9 +35,10 @@ final class PhpBackend implements Backend
         return '.php';
     }
 
-    public function artifactPath(string $moduleName): ?string
+    /** Where this target writes the module's artifact, relative to the output root. */
+    public function artifactRelativePath(string $moduleName, string $sourceRelative): string
     {
-        return null;
+        return \Moggi\Backend\sourceDerivedArtifactPath($sourceRelative, $this->extension());
     }
 
     public function symbolName(string $name): string

@@ -5,7 +5,6 @@ namespace Moggi\IR\Validate;
 use Moggi\IR;
 use Moggi\IR\Callables\CallableTable;
 
-use const Moggi\IR\Callables\ABI_VERSION;
 
 use function Moggi\IR\Callables\table;
 use function Moggi\IR\Visit\irPatternBoundNames;
@@ -134,7 +133,7 @@ function checkDirectCall(
         if ($actual !== $imported) {
             throw new InvalidIr(
                 "function {$function}: call `{$callee}` supplies {$actual} of {$imported} published "
-                . 'slot(s) (imported entry, ABI v' . ABI_VERSION . ')',
+                . 'slot(s) (imported entry)',
                 $pass,
                 $function,
             );
@@ -151,7 +150,7 @@ function checkDirectCall(
     if ($actual < $expected) {
         throw new InvalidIr(
             "function {$function}: direct call `{$callee}` supplies {$actual} of "
-            . "{$expected} slots; an under-application is a `Partial`, not a call (ABI v{$sig->abiVersion})",
+            . "{$expected} slots; an under-application is a `Partial`, not a call",
             $pass,
             $function,
         );
@@ -160,7 +159,7 @@ function checkDirectCall(
     throw new InvalidIr(
         "function {$function}: direct call `{$callee}` carries {$actual} argument(s); its published "
         . 'layout is |E|=' . \count($sig->evidence) . ' |C|=' . \count($sig->captures)
-        . ' |V|=' . \count($sig->params) . " ({$expected} slots, ABI v{$sig->abiVersion})",
+        . ' |V|=' . \count($sig->params) . " ({$expected} slots)",
         $pass,
         $function,
     );
@@ -184,7 +183,7 @@ function checkBareReference(CallableTable $table, string $entry, string $pass, s
         "function {$function}: `{$entry}` is referenced bare; an entry with " . \count($sig->captures)
         . ' capture(s) is acquired as a partial of ' . $sig->runtimeArity()
         . " slot(s) (|E|=" . \count($sig->evidence) . ' |C|=' . \count($sig->captures)
-        . ' |V|=' . \count($sig->params) . ', ABI v' . $sig->abiVersion . ')',
+        . ' |V|=' . \count($sig->params) . ')',
         $pass,
         $function,
     );
@@ -209,7 +208,7 @@ function checkPartial(
         if ($arity !== $imported) {
             throw new InvalidIr(
                 "function {$function}: partial of imported `{$fn}` declares arity {$arity}; its "
-                . 'published runtime arity is ' . $imported . ' (ABI v' . ABI_VERSION . ')',
+                . 'published runtime arity is ' . $imported,
                 $pass,
                 $function,
             );
@@ -223,7 +222,7 @@ function checkPartial(
         throw new InvalidIr(
             "function {$function}: partial of `{$fn}` declares arity {$arity}; its published runtime "
             . "arity is {$expected} (|E|=" . \count($sig->evidence) . ' |C|=' . \count($sig->captures)
-            . ' |V|=' . \count($sig->params) . ', ABI v' . $sig->abiVersion . ')',
+            . ' |V|=' . \count($sig->params) . ')',
             $pass,
             $function,
         );
@@ -232,7 +231,7 @@ function checkPartial(
     if ($supplied >= $arity) {
         throw new InvalidIr(
             "function {$function}: partial of `{$fn}` supplies {$supplied} of {$arity} slots, which is not "
-            . 'an underapplication (ABI v' . $sig->abiVersion . ')',
+            . 'an underapplication',
             $pass,
             $function,
         );

@@ -35,18 +35,20 @@ final class CheckedStructure
     }
 
     /**
-     * The inferred-type projection is tooling state, not structure. Omitting it here keeps the
-     * structural tree from duplicating the checker's type graphs in the module cache; lowering
-     * materializes the view and never reads those fields (F1's scrub tests pin that).
+     * The semantic fields are not structure: they are the checker's type graphs and the evidence
+     * facts, which lowering materializes from the terms instead. Dropping them here keeps the
+     * structural tree from duplicating the checker's state in the module cache (F1's scrub tests
+     * pin that lowering does not read them).
+     *
+     * The list comes from {@see structureSemanticFields()}, the same rule the producer applies, so
+     * the payload a structure carries and the payload it serializes cannot disagree about which
+     * fields are structure — the drift a string list copied into two places invites.
      */
     public function __serialize(): array
     {
         $payload = $this->payload;
-        unset($payload['inferredType'], $payload['inferredInternalType']);
-        if ($this->kind === Ast\EvidenceRef::class) {
-            unset($payload['class'], $payload['context']);
-        } elseif ($this->kind === Ast\EvidenceMethod::class) {
-            unset($payload['class'], $payload['evidence'], $payload['evidenceInstance'], $payload['contextEvidence']);
+        foreach (structureSemanticFields($this->kind) as $field) {
+            unset($payload[$field]);
         }
 
         return [
@@ -64,6 +66,34 @@ final class CheckedStructure
         $this->kind = $data['kind'];
         $this->payload = $data['payload'];
     }
+}
+
+/**
+ * The properties of `$kind` that are checker state rather than structure.
+ *
+ * One rule, read by the producer ({@see checkedStructuresIn()}) and by the serializer
+ * ({@see CheckedStructure::__serialize()}). The fields are named per node class rather than
+ * discovered from a property list because they encode a *semantic* decision: an inferred type or
+ * an evidence dictionary is published by the typed terms, so the structural tree must not carry a
+ * second copy. Keep this list in step with the fields the typed family publishes for the same
+ * class — a new inferred field on `Ast\EvidenceRef` belongs here, next to its siblings.
+ *
+ * @return list<string>
+ */
+function structureSemanticFields(string $kind): array
+{
+    return match ($kind) {
+        Ast\EvidenceRef::class => ['inferredType', 'inferredInternalType', 'class', 'context'],
+        Ast\EvidenceMethod::class => [
+            'inferredType',
+            'inferredInternalType',
+            'class',
+            'evidence',
+            'evidenceInstance',
+            'contextEvidence',
+        ],
+        default => ['inferredType', 'inferredInternalType'],
+    };
 }
 
 /**
@@ -114,17 +144,8 @@ function checkedStructuresIn(Ast\AstWalkable $root, bool $withPayload = true): a
         if ($value instanceof Ast\TypeNode) {
             return false;
         }
-        if ($name === 'inferredType' || $name === 'inferredInternalType') {
-            return false;
-        }
-        if ($value instanceof Ast\EvidenceRef) {
-            return ! \in_array($name, ['class', 'context'], true);
-        }
-        if ($value instanceof Ast\EvidenceMethod) {
-            return ! \in_array($name, ['class', 'evidence', 'evidenceInstance', 'contextEvidence'], true);
-        }
 
-        return true;
+        return ! \in_array($name, structureSemanticFields($value::class), true);
     };
 
     $recurse = null;

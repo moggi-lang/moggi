@@ -6,6 +6,7 @@ use function Moggi\Compiler\compileFileCapturingErrorsBoth;
 
 use function Moggi\Modules\bundledStdlibLibPath;
 use function Moggi\Modules\compileProjectBoth;
+use function Moggi\Modules\compileProjectProduct;
 
 use Moggi\Pipeline\CompilationContext;
 use Moggi\Pipeline\CompilePurpose;
@@ -119,12 +120,12 @@ function runExampleBuild(TestCase $case, string $backend, bool $project = false)
     try {
         if ($project) {
             [$files, $dir] = projectClosure($case->input);
-            compileProjectBoth($files, $dir, CompilationContext::for(
+            compileProjectProduct($files, $dir, CompilationContext::for(
                 $backend,
                 CompilePurpose::Executable,
                 entryModules: ['Main'],
                 sources: $files,
-            ), irDumps: false);
+            ));
         } else {
             $outputs = compileFileCapturingErrorsBoth(testRelativePath($case->input), true, $backend);
             foreach (['emit', 'opt-ir'] as $artifact) {
@@ -460,7 +461,7 @@ function runProjectErrorCase(TestCase $case, array $goldens, string $backend, st
 
     try {
         [$files, $dir] = projectClosure($case->input);
-        compileProjectBoth($files, $dir, CompilationContext::for($backend, CompilePurpose::Library, sources: $files), irDumps: false);
+        compileProjectProduct($files, $dir, CompilationContext::for($backend, CompilePurpose::Library, sources: $files));
     } catch (TestFailure $e) {
         throw $e;
     } catch (\Throwable $e) {

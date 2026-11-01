@@ -17,8 +17,15 @@
  *      own: a memo made process-lifetime but left keyed by name answers the second project with
  *      the first project's exports.
  *
- * What this fails on: lowering the whole closure again (part 1), and re-keying the memo by name
- * (part 2).
+ *   3. A library compile is not entry-gated: with no entry there is no closure to prune to, so every
+ *      prepared module is lowered *and* written — the counterpart of part 1.
+ *   4. The dump view is its own cached product. An emit-only compile writes the emit product; the
+ *      dumps live under a second key, so the dump build that follows still answers with optimized
+ *      IR. A payload whose shape a caller flag decided would answer `[]` here instead.
+ *
+ * What this fails on: lowering the whole closure again (part 1), re-keying the memo by name
+ * (part 2), pruning a library build (part 3), and folding the dumps back into the emit payload
+ * under a shape flag (part 4).
  */
 
 $root = __DIR__;
@@ -66,14 +73,14 @@ $module = static function (string $dir, string $name, string $source): string {
 };
 
 /** A project's import closure, built the way the suite builds one: its sources plus the stdlib. */
-$closure = static function (array $sources): array {
+$closure = static function (array $sources, string $backend = 'php'): array {
     $libDirs = [];
     $bundled = bundledStdlibLibPath();
     if ($bundled !== null) {
         $libDirs[] = $bundled;
     }
 
-    [$files, $root] = projectSourceClosure($sources, $libDirs, 'php');
+    [$files, $root] = projectSourceClosure($sources, $libDirs, $backend);
 
     return [$files, $root, $libDirs];
 };
@@ -89,15 +96,14 @@ try {
 module Main where
 
 import Used
-import Text.Show
 
 main :: IO ()
-main = putStrLn (show (answer + 0))
+main = putStrLn message
 MOG),
         $module($dir, 'Used', <<<'MOG'
 module Used where
 
-answer = 42
+message = "ok"
 MOG),
         // In the prepared closure (same directory, passed in), reached by no plan.
         $module($dir, 'Unused', <<<'MOG'
@@ -107,42 +113,57 @@ nobody = 7
 MOG),
     ];
 
-    [$files, $projectRoot, $libDirs] = $closure($sources);
-    $context = CompilationContext::for(
-        'php',
-        CompilePurpose::Executable,
-        entryModules: ['Main'],
-        roots: [$dir, ...$libDirs],
-        sources: $files,
-    );
-
-    $outputs = Modules\compileProjectBoth($files, $projectRoot, $context);
-
-    $assert(
-        $artifact($outputs['emit'], '/Used.php') !== null,
-        'the module the entry calls was not emitted: ' . \json_encode(\array_keys($outputs['emit'])),
-    );
-    $assert(
-        $artifact($outputs['emit'], '/Unused.php') === null,
-        'a module nothing reaches was emitted: ' . \json_encode(\array_keys($outputs['emit'])),
-    );
-    $assert(
-        $artifact($outputs['opt-ir'], '/Unused.opt-ir') === null,
-        'a module nothing reaches was lowered: ' . \json_encode(\array_keys($outputs['opt-ir'])),
-    );
-
-    foreach (\array_keys($outputs['opt-ir']) as $lowered) {
-        $written = \preg_replace('/\.opt-ir$/', '.php', (string) $lowered);
-        $assert(
-            isset($outputs['emit'][$written]),
-            "the compile lowered `{$lowered}` but wrote no artifact for it, so it lowered a module"
-                . ' this compilation does not write (a module set it read, not the entry closure)',
+    foreach ([
+        ['php', '.php', true],
+        ['jvm', '.class', true],
+        ['dotnet', '.il', false],
+    ] as [$backend, $extension, $optimize]) {
+        [$files, $projectRoot, $libDirs] = $closure($sources, $backend);
+        $context = CompilationContext::for(
+            $backend,
+            CompilePurpose::Executable,
+            entryModules: ['Main'],
+            roots: [$dir, ...$libDirs],
+            sources: $files,
         );
-    }
 
-    $again = Modules\compileProjectBoth($files, $projectRoot, $context);
-    $assert($again['emit'] === $outputs['emit'], 'a repeated compile of one project emitted different artifacts');
-    $assert($again['opt-ir'] === $outputs['opt-ir'], 'a repeated compile of one project lowered a different set');
+        $outputs = Modules\compileProjectBoth($files, $projectRoot, $context, $optimize);
+
+        $named = static function (array $artifacts, string $name): bool {
+            foreach (\array_keys($artifacts) as $key) {
+                if (\basename((string) $key) === $name) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
+        $assert(
+            $named($outputs['emit'], 'Used' . $extension),
+            "{$backend}: the module the entry calls was not emitted: " . \json_encode(\array_keys($outputs['emit'])),
+        );
+        $assert(
+            ! $named($outputs['emit'], 'Unused' . $extension),
+            "{$backend}: a module nothing reaches was emitted: " . \json_encode(\array_keys($outputs['emit'])),
+        );
+        $assert(
+            ! $named($outputs['opt-ir'], 'Unused.opt-ir'),
+            "{$backend}: a module nothing reaches was lowered: " . \json_encode(\array_keys($outputs['opt-ir'])),
+        );
+
+        foreach (\array_keys($outputs['opt-ir']) as $lowered) {
+            $assert(
+                $named($outputs['emit'], \basename((string) \preg_replace('/\.opt-ir$/', $extension, (string) $lowered))),
+                "{$backend}: the compile lowered `{$lowered}` but wrote no artifact for it, so it lowered"
+                    . ' a module this compilation does not write',
+            );
+        }
+
+        $again = Modules\compileProjectBoth($files, $projectRoot, $context, $optimize);
+        $assert($again['emit'] === $outputs['emit'], "{$backend}: a repeated compile emitted different artifacts");
+        $assert($again['opt-ir'] === $outputs['opt-ir'], "{$backend}: a repeated compile lowered a different set");
+    }
 
     // ---- 2 · the export memo is keyed by content, not by module name ----
     $shared = static function (string $dir, string $export) use ($module): array {
@@ -196,6 +217,65 @@ MOG),
             . ' export memo answered with exports from the other project',
     );
 
+    // ---- 3 · a library compile is not entry-gated ----
+    $named = static function (array $artifacts, string $name): bool {
+        foreach (\array_keys($artifacts) as $key) {
+            if (\basename((string) $key) === $name) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    foreach ([
+        ['php', '.php', true],
+        ['jvm', '.class', true],
+        ['dotnet', '.il', false],
+    ] as [$backend, $extension, $optimize]) {
+        [$files, $projectRoot, $libDirs] = $closure($sources, $backend);
+        $context = CompilationContext::for(
+            $backend,
+            CompilePurpose::Library,
+            roots: [$dir, ...$libDirs],
+            sources: $files,
+        );
+
+        $library = Modules\compileProjectBoth($files, $projectRoot, $context, $optimize);
+
+        $assert(
+            $named($library['emit'], 'Unused' . $extension),
+            "{$backend}: a library compile wrote no artifact for a prepared module, so it pruned a build"
+                . ' with no entry to prune to',
+        );
+        $assert(
+            $named($library['opt-ir'], 'Unused.opt-ir'),
+            "{$backend}: a library compile did not lower every prepared module",
+        );
+    }
+
+    // ---- 4 · the dump view is a separate cached product ----
+    [$files, $projectRoot, $libDirs] = $closure($sources);
+    $context = CompilationContext::for(
+        'php',
+        CompilePurpose::Executable,
+        entryModules: ['Main'],
+        roots: [$dir, ...$libDirs],
+        sources: $files,
+    );
+
+    $emitOnly = Modules\compileProject($files, $projectRoot, $context);
+    $withDumps = Modules\compileProjectBoth($files, $projectRoot, $context);
+
+    $assert(
+        $withDumps['emit'] === $emitOnly,
+        'a dump build emitted different artifacts than the emit-only build before it',
+    );
+    $assert(
+        $withDumps['opt-ir'] !== [],
+        'a dump build after an emit-only build answered with no optimized IR: the cached payload still'
+            . ' carries a shape a caller argument decides',
+    );
     echo "emitted-closure lowering tests passed\n";
 } finally {
     removeDirectory($work);

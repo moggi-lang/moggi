@@ -76,9 +76,11 @@ Type checking is the largest phase. Keep type core, declaration registry, class/
 
 ## Backends
 
-Every target implements the same `Backend` contract and uses the same `emit_*` role set, with `EmitEnv $env` first and IR payloads following in the same order. `tests/backend/emit_surface.php` enforces file and role parity; a host-specific file or parameter is a documented exception, not a silent difference.
+Every target implements the same `Backend` contract and uses the same `emit_*` role set, with `EmitEnv $env` first and IR payloads following in the same order. `tests/backend/emit_surface.php` enforces parity over every file a backend directory holds, whatever its extension and nesting: the set must be the shared files plus that host's own, each shared role must be declared *and called*, and each IR-walking signature must start with the same prefix. A host-specific file or parameter is a documented exception, not a silent difference.
 
 The managed backends share statement traversal and ordering in `src/backend/managed/stmt.php`; each `EmitEnv` implements `StmtTarget` for the host instructions. Intrinsics dispatch by family (`emitIntrinsicPrimop`, `emitIntrinsicCompare`, `emitIntrinsicState`, `emitIntrinsicValue`), so adding an intrinsic lands in its family. The stack backends decide source locations once in `src/backend/stack/source_lines.php`; PHP is expression-valued while JVM and .NET are stack-based.
+
+The managed runtimes' shared protocol is declared once in `src/backend/managed/abi_facts.php` and checked against both rendered runtimes by `tests/backend/managed_abi_parity.php`, so a protocol type cannot be renamed on one target alone. A module's artifact path is the target's `artifactRelativePath()`; the project layer asks rather than substituting an extension, and `src/backend/dotnet/inspect/Program.cs` is the IL inspector the .NET verifier compiles.
 
 ## Changing the compiler
 

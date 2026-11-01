@@ -5,29 +5,14 @@
 /**
  * The backend surface, as a contract rather than a convention.
  *
- * `docs/development/architecture.md` promises that every target has the same file set and the same
- * role function names, and that the `Backend` interface is what a target implements. Nothing checked
- * it: a file could be dropped from one backend, or a role renamed in one, and the suite stayed green
- * because each backend is exercised through its own goldens.
+ * Every target's `src/backend/<id>/` holds exactly the shared files plus the ones its host
+ * language needs, whatever their extension and however deeply they nest; every role name in
+ * `$roles` is declared *and called* by every target; every role that walks IR starts its argument
+ * list with the shared prefix; and each registered target implements `Backend`.
  *
- * So the promise is written down twice — in prose and here — and this case is the executable copy:
- *
- *   - every target's `src/backend/<id>/` holds exactly the shared files plus the ones its host
- *     language genuinely needs (`$shared` + `$hostOnly`), so a new file is a deliberate act that
- *     states which column it belongs to;
- *   - every role name in `$roles` is declared by every target, so a reader who learned where
- *     `emitIntrinsicValue` lives in one backend finds it in the other two;
- *   - every role with a shared IR payload starts its argument list the same way, `EmitEnv $env`
- *     first and the same payload types next, so a call site moves between backends unchanged.
- *     A backend may append host-only parameters after that prefix (`int $indent` in php, the
- *     failure label in a stack pattern test), but it may not insert one before the payload;
- *   - each of the three targets the registry answers for implements `Backend`.
- *
- * The asymmetry that is allowed is *stated*, not inferred: php's host is the compiler's own process,
- * so it carries `native.php` and `runtime.php` and no classfile/IL module, and the stack backends
- * carry `frames.php` and (jvm) `classfile.php` / (.NET) `il.php` + `il_size.php` / both
- * `runtime_abi.php`. `foreign.php` is the one place a *shared* file has unequal weight: php
- * registers no host types, so its copy is small — same name, same job, different amount of work.
+ * The asymmetry that is allowed is stated in `$hostOnly`, not inferred: php's host is the
+ * compiler's own process, the stack backends carry `frames.php` and their runtime, and .NET also
+ * ships an IL inspector the verifier compiles.
  */
 
 $root = __DIR__;
@@ -71,7 +56,14 @@ $shared = [
 $hostOnly = [
     'php' => ['PhpBackend.php', 'build_phar.php', 'native.php', 'runtime.php'],
     'jvm' => ['JvmBackend.php', 'classfile.php', 'frames.php', 'runtime_abi.php'],
-    'dotnet' => ['DotNetBackend.php', 'frames.php', 'il.php', 'il_size.php', 'runtime_abi.php'],
+    'dotnet' => [
+        'DotNetBackend.php',
+        'frames.php',
+        'il.php',
+        'il_size.php',
+        'inspect/Program.cs',
+        'runtime_abi.php',
+    ],
 ];
 
 $roles = [
@@ -107,9 +99,6 @@ $roles = [
     'formatDoubleLiteral',
 ];
 
-// The shared parameter prefix for each role that walks IR. Types are matched, not parameter
-// names: callers bind by position. Trailing host-only parameters are allowed; a differing prefix
-// is the accidental drift this contract exists to catch.
 $signatureRoles = [
     'emitBlock' => ['IR\\Block'],
     'emitCallValue' => ['IR\\Call|IR\\CallValue'],
@@ -144,6 +133,24 @@ $normalizeType = static function (string $type): string {
     };
 };
 
+/** Every file under a backend directory, as a path relative to it. @return list<string> */
+$filesUnder = static function (string $dir) use ($fail, &$failures): array {
+    $files = [];
+    $iterator = new \RecursiveIteratorIterator(
+        new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+    );
+    foreach ($iterator as $file) {
+        if (! $file->isFile()) {
+            continue;
+        }
+        $path = \str_replace('\\', '/', \substr($file->getPathname(), \strlen($dir) + 1));
+        $files[] = $path;
+    }
+    \sort($files);
+
+    return $files;
+};
+
 $backendIds = implementedBackendIds();
 if ($backendIds !== \array_keys($hostOnly)) {
     $fail('the registry answers for [' . \implode(', ', $backendIds) . '], not [' . \implode(', ', \array_keys($hostOnly)) . ']');
@@ -157,12 +164,8 @@ foreach ($hostOnly as $backendId => $extra) {
         continue;
     }
 
-    $declared = [];
-    foreach (\glob($dir . '/*.php') ?: [] as $file) {
-        $declared[] = \basename($file);
-    }
+    $declared = $filesUnder($dir);
     $expected = [...$shared, ...$extra];
-    \sort($declared);
     \sort($expected);
     foreach (\array_diff($expected, $declared) as $missing) {
         $fail("{$backendId}: missing {$missing} (the shared set plus this host's own files)");
@@ -173,7 +176,8 @@ foreach ($hostOnly as $backendId => $extra) {
 
     $sources = '';
     $declarations = [];
-    foreach ($declared as $file) {
+    $calls = [];
+    foreach (\array_diff($declared, \array_diff($declared, $expected)) as $file) {
         $text = \file_get_contents($dir . '/' . $file);
         if ($text === false) {
             $fail("{$backendId}: cannot read {$file}");
@@ -183,9 +187,8 @@ foreach ($hostOnly as $backendId => $extra) {
         $sources .= $text . "\n";
     }
     \preg_match_all('/^function\s+([A-Za-z0-9_]+)\s*\(([^)]*)\)/m', $sources, $matches, PREG_SET_ORDER);
-    $declares = [];
     foreach ($matches as $match) {
-        $declares[$match[1]] = true;
+        $declarations[$match[1]] = [];
         $params = [];
         foreach (\explode(',', $match[2]) as $param) {
             $param = \trim($param);
@@ -198,12 +201,18 @@ foreach ($hostOnly as $backendId => $extra) {
         $declarations[$match[1]] = $params;
     }
     foreach ($roles as $role) {
-        if (! isset($declares[$role])) {
+        if (! isset($declarations[$role])) {
             $fail("{$backendId}: no `function {$role}(`; the role names are shared by every backend");
+
+            continue;
+        }
+        $calls[$role] = \preg_match_all('/\b' . \preg_quote($role, '/') . '\s*\(/', $sources);
+        if (($calls[$role] ?? 0) < 2) {
+            $fail("{$backendId}: `{$role}` is declared but never called, so it is not a role any traversal uses");
         }
     }
 
-    foreach ($signatureRoles as $role => $expected) {
+    foreach ($signatureRoles as $role => $expectedPrefix) {
         $params = $declarations[$role] ?? null;
         if ($params === null) {
             continue;
@@ -213,9 +222,9 @@ foreach ($hostOnly as $backendId => $extra) {
 
             continue;
         }
-        $actual = \array_map($normalizeType, \array_slice($params, 1, \count($expected)));
-        if ($actual !== $expected) {
-            $fail("{$backendId}: {$role} signature `(" . \implode(', ', $params) . ')` does not start with the shared prefix `(EmitEnv, ' . \implode(', ', $expected) . ')`');
+        $actual = \array_map($normalizeType, \array_slice($params, 1, \count($expectedPrefix)));
+        if ($actual !== $expectedPrefix) {
+            $fail("{$backendId}: {$role} signature `(" . \implode(', ', $params) . ')` does not start with the shared prefix `(EmitEnv, ' . \implode(', ', $expectedPrefix) . ')`');
         }
     }
 }

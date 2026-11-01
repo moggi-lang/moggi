@@ -8,10 +8,10 @@ namespace Moggi\Modules;
  */
 
 use Moggi\Cache;
-use Moggi\Profile;
 use Moggi\IR\EntryPointKind;
 use Moggi\IR\Module;
 use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
 use Moggi\Pipeline\PipelineRequest;
 use Moggi\Pipeline\PipelineStage;
 use Moggi\Semantics\Types\TypeError;
@@ -31,46 +31,67 @@ use function Moggi\Optimize\Specialize\specializeAcrossModules;
 use function Moggi\Optimize\TreeShake\treeShakeModules;
 use function Moggi\Pipeline\run as pipelineRun;
 
-/**
- * The shape of a cached project product.
- *
- * Part of the artifact key, not a field patched on read: a product written by another shape is a
- * different key, so a reader either gets a record of exactly this shape or prepares the project.
- * Every field the product promises is present, including the two that may be null.
- */
-const PROJECT_PRODUCT_SHAPE = 2;
-
 /** @param list<string> $paths @return array<string, string> relative output path => emitted artifact */
 function compileProject(array $paths, string $rootDir, CompilationContext $context, bool $optimize = true, bool $strip = false): array
 {
-    return compileProjectBoth($paths, $rootDir, $context, $optimize, $strip, irDumps: false)['emit'];
+    return compileProjectCached($paths, $rootDir, $context, $optimize, $strip, withDumps: false)['emit'];
 }
 
 /**
+ * The compiled product: the tree it writes, its entry, and whether it pruned.
+ *
+ * @param list<string> $paths
+ * @return array{
+ *   emit: array<string, string>,
+ *   entryModule: ?string,
+ *   entryRelative: ?string,
+ *   pruned: bool
+ * }
+ */
+function compileProjectProduct(array $paths, string $rootDir, CompilationContext $context, bool $optimize = true, bool $strip = false): array
+{
+    return compileProjectCached($paths, $rootDir, $context, $optimize, $strip, withDumps: false);
+}
+
+/**
+ * The product plus the optimized IR of every module the compile lowered.
+ *
  * @param list<string> $paths
  * @return array{
  *   emit: array<string, string>,
  *   opt-ir: array<string, string>,
  *   entryModule: ?string,
- *   entryRelative: ?string
+ *   entryRelative: ?string,
+ *   pruned: bool
  * }
  */
-function compileProjectBoth(array $paths, string $rootDir, CompilationContext $context, bool $optimize = true, bool $strip = false, bool $irDumps = true): array
+function compileProjectBoth(array $paths, string $rootDir, CompilationContext $context, bool $optimize = true, bool $strip = false): array
 {
-    $timing = \getenv('MOGGI_PHASE_TIMING') === '1';
-    $phaseStarted = \microtime(true);
-    $outputsKey = Cache\hashContent(
-        preparedProjectDiskKey($paths, $rootDir, $context)
-            . '|opt=' . ($optimize ? '1' : '0')
-            . '|strip=' . ($strip ? '1' : '0')
-            . '|emit=' . $context->backend->emitCacheDiscriminator()
-            . '|context=' . $context->cacheKey()
-            . '|out=emit'
-            . '|shape=' . PROJECT_PRODUCT_SHAPE,
-    );
-    $cached = Cache\artifactGet($outputsKey);
-    if (\is_array($cached)) {
-        return $cached;
+    $compiled = compileProjectCached($paths, $rootDir, $context, $optimize, $strip, withDumps: true);
+
+    return [...$compiled, 'opt-ir' => $compiled['dumps'] ?? []];
+}
+
+/**
+ * The cached path behind every project entry point: two products, two keys.
+ *
+ * @param list<string> $paths
+ * @return array<string, mixed>
+ */
+function compileProjectCached(array $paths, string $rootDir, CompilationContext $context, bool $optimize, bool $strip, bool $withDumps): array
+{
+    $emitKey = projectProductKey($paths, $rootDir, $context, $optimize, $strip, 'emit');
+    $irKey = projectProductKey($paths, $rootDir, $context, $optimize, $strip, 'ir');
+
+    $product = Cache\artifactGet($emitKey);
+    if (\is_array($product)) {
+        if (! $withDumps) {
+            return $product;
+        }
+        $dumps = Cache\artifactGet($irKey);
+        if (\is_array($dumps)) {
+            return [...$product, 'dumps' => $dumps];
+        }
     }
 
     pause();
@@ -79,35 +100,57 @@ function compileProjectBoth(array $paths, string $rootDir, CompilationContext $c
     } finally {
         resume();
     }
-    if ($timing) {
-        \fwrite(STDERR, \sprintf("phase prepare %.2fs\n", \microtime(true) - $phaseStarted));
+    $compiled = compilePreparedProjectImpl($prepared, $context, $optimize, $strip, $withDumps);
+
+    Cache\artifactPut($emitKey, $compiled['product']);
+    if ($withDumps) {
+        Cache\artifactPut($irKey, $compiled['dumps']);
     }
 
-    $outputs = compilePreparedProject($prepared, $context, $optimize, $strip, $irDumps);
-    if ($timing) {
-        \fwrite(STDERR, \sprintf("phase project total %.2fs\n", \microtime(true) - $phaseStarted));
-    }
-    Cache\artifactPut($outputsKey, $outputs);
+    return $withDumps ? [...$compiled['product'], 'dumps' => $compiled['dumps']] : $compiled['product'];
+}
 
-    return $outputs;
+/** @param list<string> $paths */
+function projectProductKey(array $paths, string $rootDir, CompilationContext $context, bool $optimize, bool $strip, string $product): string
+{
+    return Cache\hashContent(
+        preparedProjectDiskKey($paths, $rootDir, $context)
+            . '|opt=' . ($optimize ? '1' : '0')
+            . '|strip=' . ($strip ? '1' : '0')
+            . '|emit=' . $context->backend->emitCacheDiscriminator()
+            . '|context=' . $context->cacheKey()
+            . '|product=' . $product,
+    );
 }
 
 /**
- * Compile a prepared project into backend artifacts and optimized IR.
+ * Compile a prepared project into backend artifacts.
  *
  * @return array{
  *   emit: array<string, string>,
- *   opt-ir: array<string, string>,
  *   entryModule: ?string,
- *   entryRelative: ?string
+ *   entryRelative: ?string,
+ *   pruned: bool
  * }
  */
-function compilePreparedProject(PreparedProject $prepared, CompilationContext $context, bool $optimize = true, bool $strip = false, bool $irDumps = true): array
+function compilePreparedProject(PreparedProject $prepared, CompilationContext $context, bool $optimize = true, bool $strip = false): array
 {
-    $timing = \getenv('MOGGI_PHASE_TIMING') === '1';
-    $pipelineSeconds = 0.0;
-    $specializeSeconds = 0.0;
-    $emitSeconds = 0.0;
+    return compilePreparedProjectImpl($prepared, $context, $optimize, $strip, false)['product'];
+}
+
+/**
+ * @return array{
+ *   product: array{
+ *     emit: array<string, string>,
+ *     entryModule: ?string,
+ *     entryRelative: ?string,
+ *     pruned: bool
+ *   },
+ *   dumps: array<string, string>
+ * }
+ */
+function compilePreparedProjectImpl(PreparedProject $prepared, CompilationContext $context, bool $optimize = true, bool $strip = false, bool $withDumps = false): array
+{
     $relativeByModule = [];
     foreach ($prepared->units as $moduleName => $unit) {
         if (($unit['synthetic'] ?? false) === true) {
@@ -120,14 +163,12 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         $relativeByModule[$moduleName] = outputRelativePath($unit['path'], $prepared->rootPrefix);
     }
 
-    $ext = $context->backend->extension();
     $allModuleOutputPaths = [];
     foreach ($relativeByModule as $mn => $rel) {
-        $allModuleOutputPaths[$mn] = \preg_replace('/\.mog$/', $ext, $rel) ?? $rel;
+        $allModuleOutputPaths[$mn] = $context->backend->artifactRelativePath($mn, $rel);
     }
 
-    /** Lower and optimize one module, read back from the module cache when it is there. */
-    $lowerModule = function (string $moduleName) use ($prepared, $context, $optimize, &$pipelineSeconds): Module {
+    $lowerModule = function (string $moduleName) use ($prepared, $context, $optimize): Module {
         $unit = $prepared->units[$moduleName];
         $program = ($unit['program'] ?? null) instanceof Ast\Program ? $unit['program'] : null;
         $irCacheKey = isset($unit['cacheRelPath'])
@@ -144,7 +185,6 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
             }
         }
 
-        $pipelineStarted = \microtime(true);
         $artifacts = pipelineRun(new PipelineRequest(
             filename: $unit['path'],
             typedProgram: $prepared->program($moduleName, $context),
@@ -152,7 +192,6 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
             importContext: $prepared->importContexts[$moduleName],
             context: $context,
         ), PipelineStage::IrOpt);
-        $pipelineSeconds += \microtime(true) - $pipelineStarted;
         $optimized = $artifacts->irOpt
             ?? throw new \RuntimeException("pipeline produced no IR for module `{$moduleName}`");
         if ($irCacheKey !== null) {
@@ -162,19 +201,6 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         return $optimized;
     };
 
-    /*
-     * Which modules are lowered: the ones this compilation writes, and no others.
-     *
-     * A compilation that names an entry point writes that entry's own closure, so lowering the rest
-     * of what it read buys nothing — those modules would be lowered, optimized, specialized and
-     * dumped for a tree none of them is part of, and the standard library is the bulk of that
-     * rest. The seeds are the declared entries; a module joins the set when a plan in the set names
-     * it as a requirement, which is `emittedClosure()`'s own walk. The plan is the edge, so the
-     * lowered set and the written set cannot drift apart.
-     *
-     * A compilation with no entry point (a library build) writes every module that declares code,
-     * so there is nothing to prune and its whole module set is lowered.
-     */
     $entrySeeds = [];
     foreach (\array_keys($relativeByModule) as $moduleName) {
         if ($context->isEntry($moduleName)) {
@@ -182,47 +208,85 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         }
     }
 
-    $optByModule = [];
-    $pending = $entrySeeds === [] ? \array_keys($relativeByModule) : $entrySeeds;
-    while ($pending !== []) {
-        $moduleName = \array_pop($pending);
-        if (isset($optByModule[$moduleName]) || ! isset($relativeByModule[$moduleName])) {
-            continue;
-        }
+    if ($entrySeeds === [] && $context->entries !== [] && $context->purpose === CompilePurpose::Executable) {
+        throw new \LogicException(
+            'this compilation declares entry point(s) ['
+            . \implode(', ', \array_keys($context->entries))
+            . '], none of which is a prepared module: there is no entry closure to write and no `main` to run',
+        );
+    }
 
-        $optimizedIr = $lowerModule($moduleName);
-        $optByModule[$moduleName] = $optimizedIr;
+    $pruned = $entrySeeds !== [];
 
-        if ($entrySeeds === []) {
-            continue;
-        }
-
-        $importContext = $prepared->importContexts[$moduleName];
-        $plan = $importContext->plan;
+    $layoutPlan = static function (string $moduleName) use ($prepared, $context, $allModuleOutputPaths): EmitPlan {
+        $plan = $prepared->importContexts[$moduleName]->plan;
         if ($context->backendId === 'php') {
             $plan = $plan->withModuleOutputPaths($allModuleOutputPaths);
         }
-        $discovery = planEmission(
-            $importContext->interface,
-            $plan,
-            $optimizedIr,
-            collectIrCodegenUsage($optimizedIr)['callees'],
-            $allModuleOutputPaths[$moduleName],
-        );
-        foreach (\array_keys($discovery->requiredModules) as $dependency) {
-            $pending[] = $dependency;
+
+        return $plan;
+    };
+
+    $optByModule = [];
+    $pending = $pruned ? $entrySeeds : \array_keys($relativeByModule);
+
+    $lowerPending = function () use (&$pending, &$optByModule, $relativeByModule, $lowerModule, $prepared, $layoutPlan, $pruned): void {
+        while ($pending !== []) {
+            $moduleName = \array_pop($pending);
+            if (isset($optByModule[$moduleName]) || ! isset($relativeByModule[$moduleName])) {
+                continue;
+            }
+
+            $optimizedIr = $lowerModule($moduleName);
+            $optByModule[$moduleName] = $optimizedIr;
+
+            if (! $pruned) {
+                continue;
+            }
+
+            $importContext = $prepared->importContexts[$moduleName];
+            foreach (\array_keys(moduleDependencies($importContext->interface, $layoutPlan($moduleName), $optimizedIr)) as $dependency) {
+                $pending[] = $dependency;
+            }
         }
+    };
+    $lowerPending();
+    $externalFnsByModule = [];
+    foreach ($prepared->importContexts as $moduleName => $importContext) {
+        $externalFnsByModule[$moduleName] = $importContext->interface->externalFns();
     }
 
     if ($optimize) {
-        $externalFnsByModule = [];
-        foreach ($prepared->importContexts as $moduleName => $importContext) {
-            $externalFnsByModule[$moduleName] = $importContext->interface->externalFns();
+        for ($round = 0; ; ++$round) {
+            $optByModule = specializeAcrossModules($optByModule, $externalFnsByModule)['modules'];
+
+            if (! $pruned) {
+                break;
+            }
+
+            $missing = [];
+            foreach ($optByModule as $moduleName => $optimizedIr) {
+                $importContext = $prepared->importContexts[$moduleName];
+                foreach (\array_keys(moduleDependencies($importContext->interface, $layoutPlan($moduleName), $optimizedIr)) as $dependency) {
+                    if (! isset($optByModule[$dependency]) && isset($relativeByModule[$dependency])) {
+                        $missing[$dependency] = true;
+                    }
+                }
+            }
+
+            if ($missing === []) {
+                break;
+            }
+            if ($round >= 8) {
+                throw new \LogicException(
+                    'specialization did not reach a fixed point after 8 rounds; still missing: '
+                    . \implode(', ', \array_keys($missing)),
+                );
+            }
+
+            $pending = \array_keys($missing);
+            $lowerPending();
         }
-        $specializeStarted = \microtime(true);
-        $specialized = specializeAcrossModules($optByModule, $externalFnsByModule);
-        $optByModule = $specialized['modules'];
-        $specializeSeconds += \microtime(true) - $specializeStarted;
     }
 
     if ($strip) {
@@ -244,11 +308,6 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         )))
         : [];
 
-    /*
-     * One published table per module, handed to emit as-is. The backends project arity from
-     * these `CallableSig`s; nothing here (and nothing in a backend) recounts parameters and
-     * captures into a second map.
-     */
     $callableTables = [];
     foreach ($optByModule as $moduleName => $optimizedIr) {
         $callableTables[(string) $moduleName] = table($optimizedIr->functions, (string) $moduleName);
@@ -272,7 +331,7 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
     $entryRelative = null;
     foreach ($optByModule as $moduleName => $optimizedIr) {
         $relative = $relativeByModule[$moduleName];
-        if ($irDumps) {
+        if ($withDumps) {
             $optIrOutputs[\preg_replace('/\.mog$/', '.opt-ir', $relative) ?? $relative] = dumpIr($optimizedIr);
         }
 
@@ -285,17 +344,12 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         $importContext = $prepared->importContexts[$moduleName];
         $irUsage = collectIrCodegenUsage($optimizedIr);
 
-        $plan = $importContext->plan;
-        if ($context->backendId === 'php') {
-            $plan = $plan->withModuleOutputPaths($candidateOutputPaths);
-        }
-
         $plans[$moduleName] = [
             'unit' => $unit,
             'outputRelative' => $outputRelative,
             'plan' => planEmission(
                 $importContext->interface,
-                $plan,
+                $layoutPlan($moduleName),
                 $optimizedIr,
                 $irUsage['callees'],
                 $outputRelative,
@@ -316,13 +370,6 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         }
     }
 
-    /*
-     * Every target writes the entry's own closure. A module nothing reaches has no artifact to
-     * ship, and all three targets have to agree on what the program is; the closure is the same
-     * one PHP has always written, because a module's references are its plans' — a data value is
-     * a tagged runtime `Con` on both managed targets, so no emitted class names another module's
-     * data type on its own.
-     */
     $written = $entryModule !== null
         ? emittedClosure(
             \array_map(static fn (array $planned): EmitPlan => $planned['plan'], $plans),
@@ -330,14 +377,6 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         )
         : \array_keys($plans);
 
-    /*
-     * Everything an emitter reads that is *not* the module's own IR: the target and its
-     * discriminator, the optimize/strip modes, the JVM interface set, the program-wide arity
-     * tables and (per module) the rendered plan. An emitted artifact is reused only when all of
-     * it matches, because those facts decide descriptors, arity maps and imported layout just as
-     * the body does; a body-only edit leaves this fingerprint alone, so the untouched modules are
-     * served from cache instead of the whole project being re-emitted.
-     */
     $emitProgramFingerprint = \hash('xxh128', \serialize([
         'backend' => $context->backendId,
         'discriminator' => $context->backend->emitCacheDiscriminator(),
@@ -380,7 +419,6 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
             }
         }
 
-        $emitStarted = \microtime(true);
         $emitted = codegenWith($context->backend, $optimizedIr, $unit['path'], [
             'namespace' => $unit['namespace'],
             'plan' => $planned['plan'],
@@ -390,7 +428,6 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
             'callableTables' => $callableTables,
             'foreignInterfaces' => $foreignInterfaces,
         ]);
-        $emitSeconds += \microtime(true) - $emitStarted;
 
         foreach ($emitted as $path => $bytes) {
             $emitOutputs[$path] = $bytes;
@@ -402,20 +439,15 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
     }
 
     $emitOutputs = $context->backend->foldProgramEmit($emitOutputs);
-    if ($timing) {
-        \fwrite(STDERR, \sprintf(
-            "phase pipeline %.2fs specialize %.2fs emit %.2fs\n",
-            $pipelineSeconds,
-            $specializeSeconds,
-            $emitSeconds,
-        ));
-    }
 
     return [
-        'emit' => $emitOutputs,
-        'opt-ir' => $optIrOutputs,
-        'entryModule' => $entryModule,
-        'entryRelative' => $entryRelative,
+        'product' => [
+            'emit' => $emitOutputs,
+            'entryModule' => $entryModule,
+            'entryRelative' => $entryRelative,
+            'pruned' => $pruned,
+        ],
+        'dumps' => $optIrOutputs,
     ];
 }
 
