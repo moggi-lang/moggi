@@ -3,75 +3,45 @@
 namespace Moggi\Backend\Jvm\Codegen;
 
 
-use Moggi\Backend\Jvm\Classfile\ClassBuilder;
 use Moggi\Backend\Jvm\Classfile\CodeBuilder;
 use Moggi\Backend\Jvm\Classfile\ConstantPool;
 use Moggi\IR;
 
-function fnWrapperName(string $targetOwner, string $targetSym, int $arity): string
+/**
+ * Push a first-class function value for one static target.
+ *
+ * The value is a `TopLevelFn` (which is what lets `RT.Apply` apply the whole arity at once) over a
+ * single `moggi/rt/StaticFn`, which carries the target as a method handle. One adapter serves every
+ * target and arity; the class-per-target wrapper this replaced was one class per
+ * (owner, symbol, arity) pair, which is thousands of class files in an ordinary program.
+ */
+function pushTopLevelFn(CodeBuilder $c, ConstantPool $cp, string $targetOwner, string $targetSym, int $arity): void
 {
-    $sym = \preg_replace('/[^A-Za-z0-9_$]/', '_', $targetSym) ?? $targetSym;
+    $descriptor = '(' . \str_repeat('Ljava/lang/Object;', $arity) . ')Ljava/lang/Object;';
+    $handle = $cp->methodHandle(6, $cp->methodRef($targetOwner, $targetSym, $descriptor));
 
-    return $targetOwner . '$fn$' . $sym . '$' . $arity;
-}
-
-function buildJvmFnWrapperClass(string $internal, string $targetOwner, string $targetSym, int $arity): string
-{
-    $b = new ClassBuilder($internal);
-    $b->implement('moggi/rt/Fn');
-    $b->addMethod(
-        '<init>',
-        '()V',
-        0x0001,
+    $c->new_($cp->class_('moggi/rt/TopLevelFn'));
+    $c->dup();
+    $c->iconst($arity);
+    $c->new_($cp->class_('moggi/rt/StaticFn'));
+    $c->dup();
+    $c->ldc($handle);
+    $c->invokespecial(
+        $cp->methodRef('moggi/rt/StaticFn', '<init>', '(Ljava/lang/invoke/MethodHandle;)V'),
         1,
-        [$internal],
-        static function (CodeBuilder $c, ConstantPool $cp): void {
-            $c->aload(0);
-            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
-            $c->return_();
-        }
+        false,
     );
-    $b->addMethod(
-        'invoke',
-        '([Ljava/lang/Object;)Ljava/lang/Object;',
-        0x0001,
-        \max($arity + 2, 2),
-        [$internal, '[Ljava/lang/Object;'],
-        static function (CodeBuilder $c, ConstantPool $cp) use ($targetOwner, $targetSym, $arity): void {
-            for ($i = 0; $i < $arity; ++$i) {
-                $c->aload(1);
-                $c->iconst($i);
-                $c->aaload();
-            }
-            $desc = '(' . \str_repeat('Ljava/lang/Object;', $arity) . ')Ljava/lang/Object;';
-            $c->invokestatic($cp->methodRef($targetOwner, $targetSym, $desc), $arity, true);
-            $c->areturn();
-        }
+    $c->invokespecial(
+        $cp->methodRef('moggi/rt/TopLevelFn', '<init>', '(ILmoggi/rt/Fn;)V'),
+        2,
+        false,
     );
-
-    return $b->toBytes();
 }
 
 function emitTopLevelFnValue(EmitEnv $env, string $name, int $arity, ?string $ownerModule = null): void
 {
     $target = resolveCallableTarget($env->owner, $env->externalFns, $name, $ownerModule, $env->localCallables);
-    $wrapper = $env->wrapperRegistry?->ensure($target['owner'], $target['sym'], $arity)
-        ?? fnWrapperName($target['owner'], $target['sym'], $arity);
-    $env->c->new_($env->cp->class_('moggi/rt/TopLevelFn'));
-    $env->c->dup();
-    $env->c->iconst($arity);
-    $env->c->new_($env->cp->class_($wrapper));
-    $env->c->dup();
-    $env->c->invokespecial(
-        $env->cp->methodRef($wrapper, '<init>', '()V'),
-        0,
-        false,
-    );
-    $env->c->invokespecial(
-        $env->cp->methodRef('moggi/rt/TopLevelFn', '<init>', '(ILmoggi/rt/Fn;)V'),
-        2,
-        false,
-    );
+    pushTopLevelFn($env->c, $env->cp, $target['owner'], $target['sym'], $arity);
 }
 
 /** @param list<IR\Operand> $args */
@@ -90,4 +60,3 @@ function emitPartialValue(EmitEnv $env, string $fn, int $arity, array $args): vo
         false,
     );
 }
-

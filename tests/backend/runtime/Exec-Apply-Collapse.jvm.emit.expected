@@ -211,231 +211,237 @@ public class moggi.Main {
 
   public static java.lang.Object main();
     Code:
-         0: new           #76                 // class moggi/rt/TopLevelFn
+         0: new           #80                 // class moggi/rt/TopLevelFn
          3: dup
          4: iconst_0
-         5: new           #78                 // class moggi/Main$fn$__ioThunk0$0
+         5: new           #82                 // class moggi/rt/StaticFn
          8: dup
-         9: invokespecial #81                 // Method moggi/Main$fn$__ioThunk0$0."<init>":()V
-        12: invokespecial #84                 // Method moggi/rt/TopLevelFn."<init>":(ILmoggi/rt/Fn;)V
-        15: astore_0
-        16: new           #86                 // class moggi/rt/IO
-        19: dup
-        20: aload_0
-        21: invokespecial #89                 // Method moggi/rt/IO."<init>":(Ljava/lang/Object;)V
-        24: astore_1
-        25: aload_1
-        26: areturn
-        27: aconst_null
+         9: ldc           #78                 // MethodHandle REF_invokeStatic moggi/Main.__ioThunk0:()Ljava/lang/Object;
+        11: invokespecial #85                 // Method moggi/rt/StaticFn."<init>":(Ljava/lang/invoke/MethodHandle;)V
+        14: invokespecial #88                 // Method moggi/rt/TopLevelFn."<init>":(ILmoggi/rt/Fn;)V
+        17: astore_0
+        18: new           #90                 // class moggi/rt/IO
+        21: dup
+        22: aload_0
+        23: invokespecial #93                 // Method moggi/rt/IO."<init>":(Ljava/lang/Object;)V
+        26: astore_1
+        27: aload_1
         28: areturn
+        29: aconst_null
+        30: areturn
 
   public static java.lang.Object __w_main();
     Code:
-         0: new           #76                 // class moggi/rt/TopLevelFn
+         0: new           #80                 // class moggi/rt/TopLevelFn
          3: dup
          4: iconst_3
-         5: new           #92                 // class moggi/Main$fn$add3$3
+         5: new           #82                 // class moggi/rt/StaticFn
          8: dup
-         9: invokespecial #93                 // Method moggi/Main$fn$add3$3."<init>":()V
-        12: invokespecial #84                 // Method moggi/rt/TopLevelFn."<init>":(ILmoggi/rt/Fn;)V
-        15: astore_0
-        16: lconst_1
-        17: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
-        20: astore_1
-        21: iconst_2
-        22: i2l
-        23: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
-        26: astore_2
-        27: iconst_3
-        28: i2l
-        29: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
-        32: astore_3
-        33: aload_0
-        34: aload_1
-        35: aload_2
-        36: aload_3
-        37: invokestatic  #95                 // Method apply3:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
-        40: astore        4
-        42: invokestatic  #100                // Method moggi/Data/Int.__ev_Show_Int:()Ljava/lang/Object;
-        45: astore        5
-        47: aload         5
-        49: ldc           #102                // String show
-        51: iconst_1
-        52: anewarray     #4                  // class java/lang/Object
-        55: dup
-        56: iconst_0
-        57: aload         4
-        59: aastore
-        60: invokestatic  #106                // Method moggi/rt/RT.dictCall:(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;
-        63: astore        6
-        65: aload         6
-        67: astore        7
-        69: aload         7
-        71: invokestatic  #111                // Method moggi/System/IO.__w_putStrLn:(Ljava/lang/Object;)Ljava/lang/Object;
-        74: astore        8
-        76: new           #76                 // class moggi/rt/TopLevelFn
-        79: dup
-        80: iconst_2
-        81: new           #113                // class moggi/Main$fn$mul$2
-        84: dup
-        85: invokespecial #114                // Method moggi/Main$fn$mul$2."<init>":()V
-        88: invokespecial #84                 // Method moggi/rt/TopLevelFn."<init>":(ILmoggi/rt/Fn;)V
-        91: astore        9
-        93: bipush        6
-        95: i2l
-        96: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
-        99: astore        10
-       101: bipush        7
-       103: i2l
-       104: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
-       107: astore        11
-       109: aload         9
-       111: aload         10
-       113: aload         11
-       115: invokestatic  #116                // Method apply2:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
-       118: astore        12
-       120: aload         5
-       122: ldc           #102                // String show
-       124: iconst_1
-       125: anewarray     #4                  // class java/lang/Object
-       128: dup
-       129: iconst_0
-       130: aload         12
-       132: aastore
-       133: invokestatic  #106                // Method moggi/rt/RT.dictCall:(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;
-       136: astore        13
-       138: aload         13
-       140: astore        14
-       142: aload         14
-       144: invokestatic  #111                // Method moggi/System/IO.__w_putStrLn:(Ljava/lang/Object;)Ljava/lang/Object;
-       147: astore        15
-       149: aload         5
-       151: ldc           #102                // String show
-       153: iconst_1
-       154: anewarray     #4                  // class java/lang/Object
-       157: dup
-       158: iconst_0
-       159: invokestatic  #118                // Method stepwise:()Ljava/lang/Object;
-       162: aastore
-       163: invokestatic  #106                // Method moggi/rt/RT.dictCall:(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;
-       166: astore        16
-       168: aload         16
-       170: astore        17
-       172: aload         17
-       174: invokestatic  #111                // Method moggi/System/IO.__w_putStrLn:(Ljava/lang/Object;)Ljava/lang/Object;
-       177: astore        18
-       179: new           #76                 // class moggi/rt/TopLevelFn
-       182: dup
-       183: iconst_1
-       184: new           #120                // class moggi/Main$fn$addOne$1
-       187: dup
-       188: invokespecial #121                // Method moggi/Main$fn$addOne$1."<init>":()V
-       191: invokespecial #84                 // Method moggi/rt/TopLevelFn."<init>":(ILmoggi/rt/Fn;)V
-       194: astore        19
-       196: bipush        40
-       198: i2l
-       199: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
-       202: astore        20
-       204: aload         19
-       206: aload         20
-       208: invokestatic  #123                // Method twice:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
-       211: astore        21
-       213: aload         5
-       215: ldc           #102                // String show
-       217: iconst_1
-       218: anewarray     #4                  // class java/lang/Object
-       221: dup
-       222: iconst_0
-       223: aload         21
-       225: aastore
-       226: invokestatic  #106                // Method moggi/rt/RT.dictCall:(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;
-       229: astore        22
-       231: aload         22
-       233: astore        23
-       235: aload         23
-       237: invokestatic  #111                // Method moggi/System/IO.__w_putStrLn:(Ljava/lang/Object;)Ljava/lang/Object;
-       240: astore        24
-       242: new           #76                 // class moggi/rt/TopLevelFn
-       245: dup
-       246: iconst_1
-       247: new           #120                // class moggi/Main$fn$addOne$1
-       250: dup
-       251: invokespecial #121                // Method moggi/Main$fn$addOne$1."<init>":()V
-       254: invokespecial #84                 // Method moggi/rt/TopLevelFn."<init>":(ILmoggi/rt/Fn;)V
-       257: astore        25
-       259: new           #76                 // class moggi/rt/TopLevelFn
-       262: dup
-       263: iconst_1
-       264: new           #125                // class moggi/Main$fn$triple$1
-       267: dup
-       268: invokespecial #126                // Method moggi/Main$fn$triple$1."<init>":()V
-       271: invokespecial #84                 // Method moggi/rt/TopLevelFn."<init>":(ILmoggi/rt/Fn;)V
-       274: astore        26
-       276: bipush        7
-       278: i2l
-       279: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
-       282: astore        27
-       284: aload         25
-       286: aload         26
-       288: aload         27
-       290: invokestatic  #128                // Method compose:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
-       293: astore        28
-       295: aload         5
-       297: ldc           #102                // String show
-       299: iconst_1
-       300: anewarray     #4                  // class java/lang/Object
-       303: dup
-       304: iconst_0
-       305: aload         28
-       307: aastore
-       308: invokestatic  #106                // Method moggi/rt/RT.dictCall:(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;
-       311: astore        29
-       313: aload         29
-       315: astore        30
-       317: aload         30
-       319: invokestatic  #111                // Method moggi/System/IO.__w_putStrLn:(Ljava/lang/Object;)Ljava/lang/Object;
-       322: astore        31
-       324: lconst_0
-       325: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
-       328: astore        32
-       330: iconst_4
-       331: i2l
-       332: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
-       335: astore        33
-       337: aload         32
-       339: aload         33
-       341: invokestatic  #130                // Method countdown:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
-       344: astore        34
-       346: aload         5
-       348: ldc           #102                // String show
-       350: iconst_1
-       351: anewarray     #4                  // class java/lang/Object
-       354: dup
-       355: iconst_0
-       356: aload         34
-       358: aastore
-       359: invokestatic  #106                // Method moggi/rt/RT.dictCall:(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;
-       362: astore        35
-       364: aload         35
-       366: astore        36
-       368: aload         36
-       370: invokestatic  #111                // Method moggi/System/IO.__w_putStrLn:(Ljava/lang/Object;)Ljava/lang/Object;
-       373: astore        37
-       375: aconst_null
-       376: areturn
-       377: aconst_null
-       378: areturn
+         9: ldc           #95                 // MethodHandle REF_invokeStatic moggi/Main.add3:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+        11: invokespecial #85                 // Method moggi/rt/StaticFn."<init>":(Ljava/lang/invoke/MethodHandle;)V
+        14: invokespecial #88                 // Method moggi/rt/TopLevelFn."<init>":(ILmoggi/rt/Fn;)V
+        17: astore_0
+        18: lconst_1
+        19: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+        22: astore_1
+        23: iconst_2
+        24: i2l
+        25: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+        28: astore_2
+        29: iconst_3
+        30: i2l
+        31: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+        34: astore_3
+        35: aload_0
+        36: aload_1
+        37: aload_2
+        38: aload_3
+        39: invokestatic  #97                 // Method apply3:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+        42: astore        4
+        44: invokestatic  #102                // Method moggi/Data/Int.__ev_Show_Int:()Ljava/lang/Object;
+        47: astore        5
+        49: aload         5
+        51: ldc           #104                // String show
+        53: iconst_1
+        54: anewarray     #4                  // class java/lang/Object
+        57: dup
+        58: iconst_0
+        59: aload         4
+        61: aastore
+        62: invokestatic  #108                // Method moggi/rt/RT.dictCall:(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;
+        65: astore        6
+        67: aload         6
+        69: astore        7
+        71: aload         7
+        73: invokestatic  #113                // Method moggi/System/IO.__w_putStrLn:(Ljava/lang/Object;)Ljava/lang/Object;
+        76: astore        8
+        78: new           #80                 // class moggi/rt/TopLevelFn
+        81: dup
+        82: iconst_2
+        83: new           #82                 // class moggi/rt/StaticFn
+        86: dup
+        87: ldc           #116                // MethodHandle REF_invokeStatic moggi/Main.mul:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+        89: invokespecial #85                 // Method moggi/rt/StaticFn."<init>":(Ljava/lang/invoke/MethodHandle;)V
+        92: invokespecial #88                 // Method moggi/rt/TopLevelFn."<init>":(ILmoggi/rt/Fn;)V
+        95: astore        9
+        97: bipush        6
+        99: i2l
+       100: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+       103: astore        10
+       105: bipush        7
+       107: i2l
+       108: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+       111: astore        11
+       113: aload         9
+       115: aload         10
+       117: aload         11
+       119: invokestatic  #118                // Method apply2:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+       122: astore        12
+       124: aload         5
+       126: ldc           #104                // String show
+       128: iconst_1
+       129: anewarray     #4                  // class java/lang/Object
+       132: dup
+       133: iconst_0
+       134: aload         12
+       136: aastore
+       137: invokestatic  #108                // Method moggi/rt/RT.dictCall:(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;
+       140: astore        13
+       142: aload         13
+       144: astore        14
+       146: aload         14
+       148: invokestatic  #113                // Method moggi/System/IO.__w_putStrLn:(Ljava/lang/Object;)Ljava/lang/Object;
+       151: astore        15
+       153: aload         5
+       155: ldc           #104                // String show
+       157: iconst_1
+       158: anewarray     #4                  // class java/lang/Object
+       161: dup
+       162: iconst_0
+       163: invokestatic  #120                // Method stepwise:()Ljava/lang/Object;
+       166: aastore
+       167: invokestatic  #108                // Method moggi/rt/RT.dictCall:(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;
+       170: astore        16
+       172: aload         16
+       174: astore        17
+       176: aload         17
+       178: invokestatic  #113                // Method moggi/System/IO.__w_putStrLn:(Ljava/lang/Object;)Ljava/lang/Object;
+       181: astore        18
+       183: new           #80                 // class moggi/rt/TopLevelFn
+       186: dup
+       187: iconst_1
+       188: new           #82                 // class moggi/rt/StaticFn
+       191: dup
+       192: ldc           #123                // MethodHandle REF_invokeStatic moggi/Main.addOne:(Ljava/lang/Object;)Ljava/lang/Object;
+       194: invokespecial #85                 // Method moggi/rt/StaticFn."<init>":(Ljava/lang/invoke/MethodHandle;)V
+       197: invokespecial #88                 // Method moggi/rt/TopLevelFn."<init>":(ILmoggi/rt/Fn;)V
+       200: astore        19
+       202: bipush        40
+       204: i2l
+       205: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+       208: astore        20
+       210: aload         19
+       212: aload         20
+       214: invokestatic  #125                // Method twice:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+       217: astore        21
+       219: aload         5
+       221: ldc           #104                // String show
+       223: iconst_1
+       224: anewarray     #4                  // class java/lang/Object
+       227: dup
+       228: iconst_0
+       229: aload         21
+       231: aastore
+       232: invokestatic  #108                // Method moggi/rt/RT.dictCall:(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;
+       235: astore        22
+       237: aload         22
+       239: astore        23
+       241: aload         23
+       243: invokestatic  #113                // Method moggi/System/IO.__w_putStrLn:(Ljava/lang/Object;)Ljava/lang/Object;
+       246: astore        24
+       248: new           #80                 // class moggi/rt/TopLevelFn
+       251: dup
+       252: iconst_1
+       253: new           #82                 // class moggi/rt/StaticFn
+       256: dup
+       257: ldc           #123                // MethodHandle REF_invokeStatic moggi/Main.addOne:(Ljava/lang/Object;)Ljava/lang/Object;
+       259: invokespecial #85                 // Method moggi/rt/StaticFn."<init>":(Ljava/lang/invoke/MethodHandle;)V
+       262: invokespecial #88                 // Method moggi/rt/TopLevelFn."<init>":(ILmoggi/rt/Fn;)V
+       265: astore        25
+       267: new           #80                 // class moggi/rt/TopLevelFn
+       270: dup
+       271: iconst_1
+       272: new           #82                 // class moggi/rt/StaticFn
+       275: dup
+       276: ldc           #128                // MethodHandle REF_invokeStatic moggi/Main.triple:(Ljava/lang/Object;)Ljava/lang/Object;
+       278: invokespecial #85                 // Method moggi/rt/StaticFn."<init>":(Ljava/lang/invoke/MethodHandle;)V
+       281: invokespecial #88                 // Method moggi/rt/TopLevelFn."<init>":(ILmoggi/rt/Fn;)V
+       284: astore        26
+       286: bipush        7
+       288: i2l
+       289: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+       292: astore        27
+       294: aload         25
+       296: aload         26
+       298: aload         27
+       300: invokestatic  #130                // Method compose:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+       303: astore        28
+       305: aload         5
+       307: ldc           #104                // String show
+       309: iconst_1
+       310: anewarray     #4                  // class java/lang/Object
+       313: dup
+       314: iconst_0
+       315: aload         28
+       317: aastore
+       318: invokestatic  #108                // Method moggi/rt/RT.dictCall:(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;
+       321: astore        29
+       323: aload         29
+       325: astore        30
+       327: aload         30
+       329: invokestatic  #113                // Method moggi/System/IO.__w_putStrLn:(Ljava/lang/Object;)Ljava/lang/Object;
+       332: astore        31
+       334: lconst_0
+       335: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+       338: astore        32
+       340: iconst_4
+       341: i2l
+       342: invokestatic  #21                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+       345: astore        33
+       347: aload         32
+       349: aload         33
+       351: invokestatic  #132                // Method countdown:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+       354: astore        34
+       356: aload         5
+       358: ldc           #104                // String show
+       360: iconst_1
+       361: anewarray     #4                  // class java/lang/Object
+       364: dup
+       365: iconst_0
+       366: aload         34
+       368: aastore
+       369: invokestatic  #108                // Method moggi/rt/RT.dictCall:(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;
+       372: astore        35
+       374: aload         35
+       376: astore        36
+       378: aload         36
+       380: invokestatic  #113                // Method moggi/System/IO.__w_putStrLn:(Ljava/lang/Object;)Ljava/lang/Object;
+       383: astore        37
+       385: aconst_null
+       386: areturn
+       387: aconst_null
+       388: areturn
 
   public static void main(java.lang.String[]);
     Code:
-         0: invokestatic  #138                // Method moggi/rt/Platform.useUtf8Console:()V
+         0: invokestatic  #141                // Method moggi/rt/Platform.useUtf8Console:()V
          3: aload_0
-         4: invokestatic  #141                // Method moggi/rt/Platform.setArgs:([Ljava/lang/String;)V
-         7: invokestatic  #143                // Method main:()Ljava/lang/Object;
-        10: invokestatic  #146                // Method moggi/rt/RT.ioRun:(Ljava/lang/Object;)Ljava/lang/Object;
+         4: invokestatic  #144                // Method moggi/rt/Platform.setArgs:([Ljava/lang/String;)V
+         7: invokestatic  #146                // Method main:()Ljava/lang/Object;
+        10: invokestatic  #149                // Method moggi/rt/RT.ioRun:(Ljava/lang/Object;)Ljava/lang/Object;
         13: pop
         14: return
-        15: invokestatic  #150                // Method moggi/rt/RT.reportUncaught:(Ljava/lang/Throwable;)V
+        15: invokestatic  #153                // Method moggi/rt/RT.reportUncaught:(Ljava/lang/Throwable;)V
         18: return
       Exception table:
          from    to  target type
@@ -443,89 +449,8 @@ public class moggi.Main {
 
   public static java.lang.Object __ioThunk0();
     Code:
-         0: invokestatic  #155                // Method __w_main:()Ljava/lang/Object;
+         0: invokestatic  #157                // Method __w_main:()Ljava/lang/Object;
          3: astore_0
          4: aload_0
          5: areturn
-}
-public class moggi.Main$fn$__ioThunk0$0 implements moggi.rt.Fn {
-  public moggi.Main$fn$__ioThunk0$0();
-    Code:
-         0: aload_0
-         1: invokespecial #14                 // Method java/lang/Object."<init>":()V
-         4: return
-
-  public java.lang.Object invoke(java.lang.Object[]);
-    Code:
-         0: invokestatic  #22                 // Method moggi/Main.__ioThunk0:()Ljava/lang/Object;
-         3: areturn
-}
-public class moggi.Main$fn$add3$3 implements moggi.rt.Fn {
-  public moggi.Main$fn$add3$3();
-    Code:
-         0: aload_0
-         1: invokespecial #14                 // Method java/lang/Object."<init>":()V
-         4: return
-
-  public java.lang.Object invoke(java.lang.Object[]);
-    Code:
-         0: aload_1
-         1: iconst_0
-         2: aaload
-         3: aload_1
-         4: iconst_1
-         5: aaload
-         6: aload_1
-         7: iconst_2
-         8: aaload
-         9: invokestatic  #22                 // Method moggi/Main.add3:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
-        12: areturn
-}
-public class moggi.Main$fn$mul$2 implements moggi.rt.Fn {
-  public moggi.Main$fn$mul$2();
-    Code:
-         0: aload_0
-         1: invokespecial #14                 // Method java/lang/Object."<init>":()V
-         4: return
-
-  public java.lang.Object invoke(java.lang.Object[]);
-    Code:
-         0: aload_1
-         1: iconst_0
-         2: aaload
-         3: aload_1
-         4: iconst_1
-         5: aaload
-         6: invokestatic  #22                 // Method moggi/Main.mul:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
-         9: areturn
-}
-public class moggi.Main$fn$addOne$1 implements moggi.rt.Fn {
-  public moggi.Main$fn$addOne$1();
-    Code:
-         0: aload_0
-         1: invokespecial #14                 // Method java/lang/Object."<init>":()V
-         4: return
-
-  public java.lang.Object invoke(java.lang.Object[]);
-    Code:
-         0: aload_1
-         1: iconst_0
-         2: aaload
-         3: invokestatic  #22                 // Method moggi/Main.addOne:(Ljava/lang/Object;)Ljava/lang/Object;
-         6: areturn
-}
-public class moggi.Main$fn$triple$1 implements moggi.rt.Fn {
-  public moggi.Main$fn$triple$1();
-    Code:
-         0: aload_0
-         1: invokespecial #14                 // Method java/lang/Object."<init>":()V
-         4: return
-
-  public java.lang.Object invoke(java.lang.Object[]);
-    Code:
-         0: aload_1
-         1: iconst_0
-         2: aaload
-         3: invokestatic  #22                 // Method moggi/Main.triple:(Ljava/lang/Object;)Ljava/lang/Object;
-         6: areturn
 }

@@ -301,6 +301,45 @@ XML;
 }
 
 /**
+ * The arities of the function-value adapters this program's IL references.
+ *
+ * A function value is `Moggi.Rt.TopLevelFn` over `Moggi.Rt.StaticFn<arity>`, one adapter per arity
+ * rather than one class per target, so the runtime fragment carries exactly the arities the
+ * program uses. The module IL is already on disk here, which is what makes that a read rather than
+ * a fact the emitter would have to carry across modules.
+ *
+ * @return list<int>
+ */
+function collectDotNetStaticFnArities(string $outputRoot): array
+{
+    $arities = [];
+    $files = new \RecursiveIteratorIterator(
+        new \RecursiveDirectoryIterator($outputRoot, \FilesystemIterator::SKIP_DOTS),
+    );
+    foreach ($files as $file) {
+        if (! $file->isFile() || $file->getExtension() !== 'il') {
+            continue;
+        }
+        $path = $file->getPathname();
+        if (\str_contains($path, DIRECTORY_SEPARATOR . 'rt' . DIRECTORY_SEPARATOR)) {
+            continue;
+        }
+        $text = \file_get_contents($path);
+        if (! \is_string($text) || \preg_match_all('/Moggi\.Rt\.StaticFn(\d+)/', $text, $matched) === 0) {
+            continue;
+        }
+        foreach ($matched[1] as $arity) {
+            $arities[(int) $arity] = true;
+        }
+    }
+
+    $out = \array_keys($arities);
+    \sort($out);
+
+    return $out;
+}
+
+/**
  * Collect `.il` files under $outputRoot, add runtime IL, assemble to DLL.
  *
  * @param array<string, mixed> $options entryModule?, assemblyName?
@@ -326,7 +365,7 @@ function packageDotNetOutput(string $outputRoot, array $options = []): void
     if (! \is_dir($rtDir) && ! \mkdir($rtDir, 0777, true) && ! \is_dir($rtDir)) {
         throw new \RuntimeException("cannot create {$rtDir}");
     }
-    \file_put_contents($rtPath, languageRuntime());
+    \file_put_contents($rtPath, languageRuntime() . staticFnClassesIl(collectDotNetStaticFnArities($outputRoot)));
 
     \file_put_contents(
         $outputRoot . DIRECTORY_SEPARATOR . 'rt' . DIRECTORY_SEPARATOR . 'Moggi.Frames.il',

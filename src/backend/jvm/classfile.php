@@ -31,6 +31,9 @@ final class ConstantPool
     /** @var array<string, int> */
     private array $refs = [];
 
+    /** @var array<string, int> */
+    private array $methodHandles = [];
+
     /** @var array<int|string, int> */
     private array $ints = [];
 
@@ -149,6 +152,26 @@ final class ConstantPool
         return $this->ref(9, $classInternal, $name, $descriptor);
     }
 
+    /**
+     * CONSTANT_MethodHandle (tag 15): a method handle a `ldc` can push.
+     *
+     * `$kind` is the reference kind (6 = REF_invokeStatic) and `$methodRef` the CONSTANT_Methodref
+     * it targets. This is what lets a first-class function value name its target without a class
+     * of its own per target; it is not `invokedynamic`.
+     */
+    public function methodHandle(int $kind, int $methodRef): int
+    {
+        $key = $kind . "\0" . $methodRef;
+        if (isset($this->methodHandles[$key])) {
+            return $this->methodHandles[$key];
+        }
+        $i = \count($this->entries);
+        $this->entries[] = ['tag' => 15, 'kind' => $kind, 'ref' => $methodRef];
+        $this->methodHandles[$key] = $i;
+
+        return $i;
+    }
+
     public function count(): int
     {
         return \count($this->entries);
@@ -170,6 +193,7 @@ final class ConstantPool
                 8 => \chr(8) . u2($e['string']),
                 9, 10, 11 => \chr($e['tag']) . u2($e['class']) . u2($e['nameAndType']),
                 12 => \chr(12) . u2($e['name']) . u2($e['descriptor']),
+                15 => \chr(15) . \chr($e['kind']) . u2($e['ref']),
                 default => throw new \RuntimeException('unsupported cp tag ' . $e['tag']),
             };
         }

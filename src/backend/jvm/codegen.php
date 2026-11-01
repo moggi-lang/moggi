@@ -68,7 +68,6 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         $b->setSourceFile($displaySource);
     }
 
-    $wrapperRegistry = new FnWrapperRegistry();
     $ioThunkRegistry = new IoThunkRegistry();
 
     $foreignInterfaces = $options['foreignInterfaces'] ?? [];
@@ -78,7 +77,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
             $fn->srcLoc ?? new IR\SrcLoc($moduleName, $fn->name, $displaySource, 0, 0),
             symbolName($fn->name),
         );
-        emitFunction($b, $fn, $internal, $functionArity, $externalFns, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables, $foreignInterfaces);
+        emitFunction($b, $fn, $internal, $functionArity, $externalFns, $lambdaMeta, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables, $foreignInterfaces);
     }
 
     foreach ($module->data as $decl) {
@@ -86,7 +85,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     }
 
     foreach ($module->instanceEvidence as $ev) {
-        emitEvidence($b, $ev, $internal, $functionArity, $externalFns, $wrapperRegistry, $localCallables);
+        emitEvidence($b, $ev, $internal, $functionArity, $externalFns, $localCallables);
     }
 
     if ($module->entry !== null && $module->entry->kind === IR\EntryPointKind::Main) {
@@ -99,17 +98,9 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         );
     }
 
-    emitPendingIoThunkMethods($b, $internal, $functionArity, $externalFns, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $localCallables, $foreignInterfaces);
+    emitPendingIoThunkMethods($b, $internal, $functionArity, $externalFns, $lambdaMeta, $ioThunkRegistry, $newtypeConstructors, $localCallables, $foreignInterfaces);
 
     $classes = [$internal => $b->toBytes()];
-    foreach ($wrapperRegistry->specs() as $spec) {
-        $classes[$spec['internal']] = buildJvmFnWrapperClass(
-            $spec['internal'],
-            $spec['targetOwner'],
-            $spec['targetSym'],
-            $spec['arity'],
-        );
-    }
     $classes['__moggi.map__'] = $sourceMap->toJson();
 
     return $classes;
@@ -128,7 +119,6 @@ function emitFunction(
     array $functionArity,
     array $externalFns,
     array $lambdaMeta = [],
-    ?FnWrapperRegistry $wrapperRegistry = null,
     ?IoThunkRegistry $ioThunkRegistry = null,
     array $newtypeConstructors = [],
     ?SourceMapBuilder $sourceMap = null,
@@ -154,8 +144,8 @@ function emitFunction(
         0x0009,
         $maxLocals,
         $paramV,
-        static function (CodeBuilder $c, ConstantPool $cp) use ($fn, $name, $owner, $functionArity, $externalFns, $lambdaMeta, $params, $arity, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables, $foreignInterfaces): void {
-            $env = new EmitEnv($c, $cp, $owner, $functionArity, $externalFns, $arity, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables, $foreignInterfaces);
+        static function (CodeBuilder $c, ConstantPool $cp) use ($fn, $name, $owner, $functionArity, $externalFns, $lambdaMeta, $params, $arity, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables, $foreignInterfaces): void {
+            $env = new EmitEnv($c, $cp, $owner, $functionArity, $externalFns, $arity, $lambdaMeta, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables, $foreignInterfaces);
             $env->currentMethod = $name;
             foreach ($params as $i => $p) {
                 $env->locals[$p] = $i;
@@ -193,7 +183,6 @@ function emitEvidence(
     string $owner,
     array $functionArity,
     array $externalFns,
-    ?FnWrapperRegistry $wrapperRegistry = null,
     array $localCallables = [],
 ): void {
     $name = symbolName($ev->evidenceName);
@@ -222,7 +211,7 @@ function emitEvidence(
         0x0009,
         $maxLocals,
         $paramV,
-        static function (CodeBuilder $c, ConstantPool $cp) use ($pairs, $wrapperRegistry, $ctxArity, $methodsLocal): void {
+        static function (CodeBuilder $c, ConstantPool $cp) use ($pairs, $ctxArity, $methodsLocal): void {
             $n = \count($pairs) * 2;
             $c->iconst($n);
             $c->anewarray($cp->class_('java/lang/Object'));
@@ -234,23 +223,7 @@ function emitEvidence(
 
                 $c->dup();
                 $c->iconst(($i * 2) + 1);
-                $wrapper = $wrapperRegistry?->ensure($entry['owner'], $entry['sym'], $entry['arity'])
-                    ?? fnWrapperName($entry['owner'], $entry['sym'], $entry['arity']);
-                $c->new_($cp->class_('moggi/rt/TopLevelFn'));
-                $c->dup();
-                $c->iconst($entry['arity']);
-                $c->new_($cp->class_($wrapper));
-                $c->dup();
-                $c->invokespecial(
-                    $cp->methodRef($wrapper, '<init>', '()V'),
-                    0,
-                    false,
-                );
-                $c->invokespecial(
-                    $cp->methodRef('moggi/rt/TopLevelFn', '<init>', '(ILmoggi/rt/Fn;)V'),
-                    2,
-                    false,
-                );
+                pushTopLevelFn($c, $cp, $entry['owner'], $entry['sym'], $entry['arity']);
                 if ($ctxArity > 0) {
                     $c->astore($methodsLocal + 1);
                     $c->new_($cp->class_('moggi/rt/Partial'));

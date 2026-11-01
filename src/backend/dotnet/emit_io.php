@@ -22,7 +22,6 @@ function emitPendingIoThunkMethods(
     array $functionArity,
     array $externalFns,
     array $lambdaMeta,
-    FnWrapperRegistry $wrapperRegistry,
     IoThunkRegistry $ioThunkRegistry,
     array $newtypeConstructors = [],
     array $localCallables = [],
@@ -37,7 +36,7 @@ function emitPendingIoThunkMethods(
             $result = $spec['result'];
 
             $m = new MethodIl();
-            $env = new EmitEnv($m, $owner, $functionArity, $externalFns, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, null, $localCallables);
+            $env = new EmitEnv($m, $owner, $functionArity, $externalFns, $lambdaMeta, $ioThunkRegistry, $newtypeConstructors, null, $localCallables);
             foreach ($params as $i => $p) {
                 $env->locals[$p] = 'arg:' . $i;
             }
