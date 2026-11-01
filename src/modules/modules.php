@@ -43,7 +43,7 @@ const PROJECT_PRODUCT_SHAPE = 2;
 /** @param list<string> $paths @return array<string, string> relative output path => emitted artifact */
 function compileProject(array $paths, string $rootDir, CompilationContext $context, bool $optimize = true, bool $strip = false): array
 {
-    return compileProjectBoth($paths, $rootDir, $context, $optimize, $strip)['emit'];
+    return compileProjectBoth($paths, $rootDir, $context, $optimize, $strip, irDumps: false)['emit'];
 }
 
 /**
@@ -55,7 +55,7 @@ function compileProject(array $paths, string $rootDir, CompilationContext $conte
  *   entryRelative: ?string
  * }
  */
-function compileProjectBoth(array $paths, string $rootDir, CompilationContext $context, bool $optimize = true, bool $strip = false): array
+function compileProjectBoth(array $paths, string $rootDir, CompilationContext $context, bool $optimize = true, bool $strip = false, bool $irDumps = true): array
 {
     $timing = \getenv('MOGGI_PHASE_TIMING') === '1';
     $phaseStarted = \microtime(true);
@@ -83,7 +83,7 @@ function compileProjectBoth(array $paths, string $rootDir, CompilationContext $c
         \fwrite(STDERR, \sprintf("phase prepare %.2fs\n", \microtime(true) - $phaseStarted));
     }
 
-    $outputs = compilePreparedProject($prepared, $context, $optimize, $strip);
+    $outputs = compilePreparedProject($prepared, $context, $optimize, $strip, $irDumps);
     if ($timing) {
         \fwrite(STDERR, \sprintf("phase project total %.2fs\n", \microtime(true) - $phaseStarted));
     }
@@ -102,7 +102,7 @@ function compileProjectBoth(array $paths, string $rootDir, CompilationContext $c
  *   entryRelative: ?string
  * }
  */
-function compilePreparedProject(PreparedProject $prepared, CompilationContext $context, bool $optimize = true, bool $strip = false): array
+function compilePreparedProject(PreparedProject $prepared, CompilationContext $context, bool $optimize = true, bool $strip = false, bool $irDumps = true): array
 {
     $timing = \getenv('MOGGI_PHASE_TIMING') === '1';
     $pipelineSeconds = 0.0;
@@ -272,7 +272,9 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
     $entryRelative = null;
     foreach ($optByModule as $moduleName => $optimizedIr) {
         $relative = $relativeByModule[$moduleName];
-        $optIrOutputs[\preg_replace('/\.mog$/', '.opt-ir', $relative) ?? $relative] = dumpIr($optimizedIr);
+        if ($irDumps) {
+            $optIrOutputs[\preg_replace('/\.mog$/', '.opt-ir', $relative) ?? $relative] = dumpIr($optimizedIr);
+        }
 
         if (! isset($candidateOutputPaths[$moduleName])) {
             continue;
