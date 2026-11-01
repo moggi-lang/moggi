@@ -100,15 +100,27 @@ jobs:
 
       # The json package's Suite resolves jackson-core from Maven Central on
       # the jvm backend, so the suite needs `mvn` next to the JDK — pinned to
-      # the same Maven the nix dev shell carries.
+      # the same Maven the nix dev shell carries. It is a single pinned tarball,
+      # so it is restored from the cache instead of downloaded once per job; the
+      # setup steps below install only when the restore left nothing.
+      - name: Cache the Maven install
+        uses: actions/cache@v4
+        with:
+          path: ~/maven
+          key: maven-3.9.12-${{ runner.os }}-${{ runner.arch }}
+
       - name: Set up Maven (Linux, macOS)
         if: runner.os != 'Windows'
         shell: bash
         run: |
           MAVEN_VERSION=3.9.12
-          curl -fsSL -o /tmp/maven.tar.gz "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz"
-          mkdir -p "$HOME/maven"
-          tar -xzf /tmp/maven.tar.gz -C "$HOME/maven" --strip-components=1
+          if [ -x "$HOME/maven/bin/mvn" ]; then
+            echo "maven ${MAVEN_VERSION} restored from the cache"
+          else
+            curl -fsSL -o /tmp/maven.tar.gz "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz"
+            mkdir -p "$HOME/maven"
+            tar -xzf /tmp/maven.tar.gz -C "$HOME/maven" --strip-components=1
+          fi
           echo "$HOME/maven/bin" >> "$GITHUB_PATH"
 
       - name: Set up Maven (Windows)
@@ -116,9 +128,37 @@ jobs:
         shell: pwsh
         run: |
           $mavenVersion = '3.9.12'
-          Invoke-WebRequest -Uri "https://archive.apache.org/dist/maven/maven-3/${mavenVersion}/binaries/apache-maven-${mavenVersion}-bin.zip" -OutFile "$env:TEMP\maven.zip"
-          Expand-Archive -Path "$env:TEMP\maven.zip" -DestinationPath "$env:USERPROFILE\maven" -Force
-          "$env:USERPROFILE\maven\apache-maven-${mavenVersion}\bin" >> $env:GITHUB_PATH
+          $mavenBin = "$env:USERPROFILE\maven\apache-maven-${mavenVersion}\bin"
+          if (Test-Path "$mavenBin\mvn.cmd") {
+            Write-Host "maven ${mavenVersion} restored from the cache"
+          } else {
+            Invoke-WebRequest -Uri "https://archive.apache.org/dist/maven/maven-3/${mavenVersion}/binaries/apache-maven-${mavenVersion}-bin.zip" -OutFile "$env:TEMP\maven.zip"
+            Expand-Archive -Path "$env:TEMP\maven.zip" -DestinationPath "$env:USERPROFILE\maven" -Force
+          }
+          "$mavenBin" >> $env:GITHUB_PATH
+
+      # What the json package's Suite fetches — jackson from Maven Central, its
+      # PHP and NuGet packages — lands in the tool caches, and what the compiler
+      # fetches lands under `.moggi` in areas it addresses by digest. None of it
+      # is derived from this compiler: the areas cached here survive a compiler
+      # change by design (`compile/` does not, so it is not restored), which is
+      # what makes restoring them a read instead of a re-fetch. The key names the
+      # host requirements; a change to them misses and starts the cache over, so a
+      # restored tree can only be the pinned versions.
+      - name: Cache the host package caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.nuget/packages
+            ~/.composer/cache
+            ~/.cache/composer
+            .moggi/runtime
+            .moggi/catalog
+            .moggi/packages
+          key: moggi-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('libraries/*/*.moggi', 'libraries/*/meta/**', 'tests/registry/**') }}
+          restore-keys: |
+            moggi-host-${{ runner.os }}-${{ runner.arch }}-
 
       # `test-all` is the compiler suite plus every bundled library suite:
       # compiler, base, then the json package's Suite once per backend (which
