@@ -119,7 +119,7 @@ function runExampleBuild(TestCase $case, string $backend, bool $project = false)
 {
     try {
         if ($project) {
-            [$files, $dir] = projectClosure($case->input);
+            [$files, $dir] = projectClosure($case->input, $backend);
             compileProjectProduct($files, $dir, CompilationContext::for(
                 $backend,
                 CompilePurpose::Executable,
@@ -351,7 +351,7 @@ function compareProjectSnapshots(TestCase $case, string $backend): void
         }
         if ($case->goldenBeside($base, 'emit', $backend) !== null || $case->goldenBeside($base, 'opt-ir', $backend) !== null) {
             if ($emitted === null) {
-                [$files, $root] = projectClosure($case->input);
+                [$files, $root] = projectClosure($case->input, $backend);
                 $built = compileProjectBoth($files, $root, CompilationContext::for('php', CompilePurpose::Library, sources: $files));
                 $emitted = [
                     'opt-ir' => projectArtifacts($built['opt-ir']),
@@ -387,7 +387,7 @@ function compareProjectSnapshots(TestCase $case, string $backend): void
  *
  * @return array{list<string>, string}
  */
-function projectClosure(string $input): array
+function projectClosure(string $input, string $backend): array
 {
     $libDirs = [];
     $bundled = bundledStdlibLibPath();
@@ -395,7 +395,7 @@ function projectClosure(string $input): array
         $libDirs[] = $bundled;
     }
 
-    return projectSourceClosure(projectModuleFiles($input), $libDirs, 'php');
+    return projectSourceClosure(projectModuleFiles($input), $libDirs, $backend);
 }
 
 /**
@@ -460,7 +460,7 @@ function runProjectErrorCase(TestCase $case, array $goldens, string $backend, st
     $modules = projectModuleFiles($case->input);
 
     try {
-        [$files, $dir] = projectClosure($case->input);
+        [$files, $dir] = projectClosure($case->input, $backend);
         compileProjectProduct($files, $dir, CompilationContext::for($backend, CompilePurpose::Library, sources: $files));
     } catch (TestFailure $e) {
         throw $e;
