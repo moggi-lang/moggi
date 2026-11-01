@@ -1,0 +1,11 @@
+-- A type variable stands for a monotype: a `forall` may not be an argument of
+-- a type constructor.
+module Main where
+
+import Moggi.Internal.Base
+
+ids :: [forall a. a -> a]
+ids = []
+
+main :: IO ()
+main = print 0

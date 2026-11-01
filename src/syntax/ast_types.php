@@ -804,6 +804,39 @@ final class TypeKindAnnot extends AstNode implements TypeNode
     }
 }
 
+/**
+ * An explicit universal quantifier: `forall a. a -> a`, `forall a b. ...`.
+ *
+ * The binders are a list because order is part of the syntax (source order is
+ * what a reader and, later, visible type application mean by it). `kinds` is
+ * parallel to `binders`; a null entry is an unannotated binder, whose kind is
+ * inferred. A `forall` in constraint position is this same node: whether it
+ * quantifies a type or a constraint is decided by where it appears, not by a
+ * second syntactic form.
+ */
+final class TypeForall extends AstNode implements TypeNode
+{
+    /**
+     * @param list<string> $binders
+     * @param list<?KindNode> $kinds
+     */
+    public function __construct(
+        public array $binders,
+        public array $kinds,
+        public TypeNode $body,
+        int $line = 0,
+        int $col = 0,
+        int $endCol = 0,
+    ) {
+        parent::__construct($line, $col, $endCol);
+    }
+
+    public function childValues(): array
+    {
+        return [...\array_values(\array_filter($this->kinds)), $this->body];
+    }
+}
+
 final class ForeignTypeDecl extends AstNode
 {
     public function __construct(

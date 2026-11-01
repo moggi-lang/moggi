@@ -47,6 +47,7 @@ module Moggi.Generics
   ) where
 
 import Data.Bool
+import Data.Foldable (Foldable(foldr))
 import Data.Int
 import Data.String
 import Moggi.Internal.Base
@@ -69,6 +70,10 @@ newtype Rec1 f p = Rec1 { unRec1 :: f p }
 
 -- | Constants, additional parameters and recursion of kind Type.
 data K1 i c p = K1 { unK1 :: c }
+
+-- | 'K1' holds exactly one value, so folding it applies the step function once.
+instance Foldable (K1 i c) where
+  foldr f z (K1 x) = f x z
 
 -- | Meta-information (constructor names, etc.).
 newtype M1 i c f p = M1 { unM1 :: f p }

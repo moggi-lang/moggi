@@ -1,0 +1,14 @@
+-- A monomorphic function is not a `forall a. a -> a`: passing one where a
+-- polymorphic argument is required must be rejected.
+module Main where
+
+import Moggi.Internal.Base
+
+applyPoly :: (forall a. a -> a) -> Int -> Int
+applyPoly f n = f n
+
+mono :: Int -> Int
+mono x = x
+
+main :: IO ()
+main = print (applyPoly mono 1)

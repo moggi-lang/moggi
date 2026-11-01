@@ -47,6 +47,10 @@ function parseKindAtom(ParserState $state): Ast\KindNode
 
 function parseType(ParserState $state): Ast\TypeNode
 {
+    if (isForallStart($state)) {
+        return parseForall($state);
+    }
+
     $first = parseTypeInfix($state);
 
     if (isAt($state, TokenKind::Comma)) {
@@ -86,6 +90,10 @@ function parseType(ParserState $state): Ast\TypeNode
  */
 function parseTypeNoConstraint(ParserState $state): Ast\TypeNode
 {
+    if (isForallStart($state)) {
+        return parseForall($state);
+    }
+
     $first = parseTypeInfix($state);
 
     if (isAt($state, TokenKind::Op, 0, '->')) {
@@ -352,6 +360,10 @@ function isTypeArgStart(ParserState $state, ?int $headLine = null): bool
             return false;
         }
 
+        if (isForallStart($state)) {
+            return false;
+        }
+
         if (looksLikeSameLineFunctionDecl($state)
             || looksLikeInfixFunctionDecl($state)
             || looksLikeBacktickFunctionDecl($state)) {
@@ -362,4 +374,74 @@ function isTypeArgStart(ParserState $state, ?int $headLine = null): bool
     }
 
     return false;
+}
+
+/** Is the next token the `forall` of an explicit quantifier in type syntax? */
+function isForallStart(ParserState $state): bool
+{
+    return isAt($state, TokenKind::VarId) && peek($state)->lexeme === 'forall';
+}
+
+/**
+ * `forall a b. body`, `forall (a :: k). body`.
+ *
+ * `forall` is not a keyword: it is a `VarId` that starts a quantifier only here,
+ * in type syntax, so a program may still name a value `forall` (Haskell does the
+ * same). The binder list is non-empty and each binder is either a bare variable
+ * or a kind-annotated one in parentheses; a single `.` ends the list.
+ */
+function parseForall(ParserState $state): Ast\TypeNode
+{
+    $forallToken = advance($state);
+    $binders = [];
+    $kinds = [];
+
+    while (true) {
+        if (isAt($state, TokenKind::VarId)) {
+            $binder = advance($state);
+            $binders[] = $binder->lexeme;
+            $kinds[] = null;
+
+            continue;
+        }
+
+        if (
+            isAt($state, TokenKind::LParen)
+            && isAt($state, TokenKind::VarId, 1)
+            && isAt($state, TokenKind::Op, 2, '::')
+        ) {
+            advance($state);
+            $binder = expect($state, TokenKind::VarId);
+            expectOp($state, '::');
+            $kind = parseKind($state);
+            expect($state, TokenKind::RParen);
+            $binders[] = $binder->lexeme;
+            $kinds[] = $kind;
+
+            continue;
+        }
+
+        break;
+    }
+
+    if ($binders === []) {
+        throw parseError($state, '`forall` needs at least one type variable: write `forall a. …`');
+    }
+
+    $seen = [];
+    foreach ($binders as $binder) {
+        if (isset($seen[$binder])) {
+            throw parseError($state, "`forall` binds `{$binder}` twice; a binder may appear once");
+        }
+        $seen[$binder] = true;
+    }
+
+    if (! isAt($state, TokenKind::Op) || peek($state)->lexeme !== '.') {
+        throw parseError($state, 'expected `.` after a `forall` binder list: write `forall a. …`');
+    }
+    advance($state);
+
+    $node = new Ast\TypeForall($binders, $kinds, parseType($state));
+
+    return withTypeLocation($node, $forallToken);
 }

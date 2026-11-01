@@ -13,12 +13,16 @@ module Data.Bifunctor
   ) where
 
 import Data.Either
+import Data.Kind (Type)
+import Data.Functor (Functor)
 import Data.Semigroup (Arg(Arg))
 import Data.Tuple
 import Moggi.Internal.Base
 
--- | A type of two parameters that can be mapped over either or both.
-class Bifunctor (p :: Type -> Type -> Type) where
+-- | A type of two parameters that can be mapped over either or both. Mapping
+-- the second parameter alone is 'map', which is why a 'Bifunctor' is a 'Functor'
+-- in its last parameter for every first parameter.
+class (forall a. Functor (p a)) => Bifunctor (p :: Type -> Type -> Type) where
   {-# MINIMAL bimap | first, second #-}
 
   -- | Map both parameters: the first function is applied to the value in the

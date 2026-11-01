@@ -1,0 +1,22 @@
+program
+  class Wrap p
+    method peek :: forall a. p a -> Int
+  newtype Box a
+    constructor Box
+      field  :: a
+  function peek :: Box a -> Int
+    pat_con Box
+      pat_wild _
+    integer 0
+  function main :: IO ()
+    io_action
+      apply
+        apply
+          variable print
+          evidence_ref Show Int
+        apply
+          evidence_method Wrap.peek evidence= nullary=0
+            instance Box
+          apply
+            constructor_ref Box
+            constructor_ref True

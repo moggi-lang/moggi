@@ -191,17 +191,68 @@ polymorphic function. It is also the tool for an ambiguous constraint: the error
 says *which* class has no instance, and the fix is usually a signature that
 names the type.
 
+## Explicit `forall`
+
+A signature may name the variables it quantifies. `forall a. t` binds `a` in
+`t`, and binders may be listed together:
+
+```moggi
+idPoly :: forall a. a -> a
+idPoly x = x
+
+constFirst :: forall a b. a -> b -> a
+constFirst x _ = x
+```
+
+At the top level the binder changes nothing: `a -> a` and `forall a. a -> a` are
+the same type and print the same way, and variables the signature leaves free
+are still generalised. What a binder buys is **rank**. Under an arrow, a
+`forall` is a promise the *caller* has to keep:
+
+```moggi
+applyPoly :: (forall a. a -> a) -> Int -> Int
+applyPoly f n = f n
+```
+
+`applyPoly` needs an argument that works for every `a` — `idPoly` or a lambda
+does, a monomorphic `Int -> Int` does not. Rank 3 nests the same way,
+`((forall a. a -> a) -> Int) -> Int`. Inference stays rank 1: a binder you do not
+write is not invented, so a higher-rank argument needs its signature.
+
+A binder is in scope in the definition's body as well as its signature, so an
+ascription may name it: `f :: forall a. a -> a` with `f x = (x :: a)` is
+accepted, and a body that ascribes the *wrong* binder is rejected rather than
+generalised. Nothing escapes into other definitions.
+
+Superclasses may be quantified, which is how `Data.Bifunctor` states that a
+bifunctor is a functor in each parameter:
+
+```moggi
+class (forall a. Functor (p a)) => Bifunctor (p :: Type -> Type -> Type) where
+```
+
+`Bifunctor p` then discharges `Functor (p a)` for any `a`. `Type` itself comes
+from `Data.Kind`.
+
 ## Limits
 
-* **No higher-rank signatures.** A signature cannot say "this argument is
-  itself polymorphic". A function argument's type is fixed at the call site,
-  so passing `id` where `a -> a` is expected works only because `id` is
-  instantiated there; a *requirement* that the argument work for every `a`
-  cannot be written. There are no scoped type variables either.
+* **Inference is rank 1.** A `forall` you write is honoured at any depth, but
+  the compiler never invents one: an argument that has to be polymorphic needs
+  a signature of its own.
 
 * **No explicit type application.** There is no syntax to choose a type
-  argument; the compiler infers it, and an ambiguity is resolved with an
-  ascription.
+  argument — `forall` binders cannot be supplied at the call site — so the
+  compiler infers it, and an ambiguity is resolved with an ascription.
+
+* **No impredicative or existential quantification.** A type variable still
+  stands for a monotype, so `[forall a. a -> a]` and `f (forall a. a -> a)` are
+  refused, and a data constructor cannot quantify its own variables
+  (`data Box = forall a. Box a`).
+
+* **Quantified constraints belong to a superclass.** `class (forall a. Functor
+  (p a)) => Bifunctor p` is supported; the same constraint written in an
+  instance context is refused with a message saying so.
+
 
 * **No as-patterns.** `x@(Just n)` is not supported; see
   [Data types](data-types.md#what-is-not-available).

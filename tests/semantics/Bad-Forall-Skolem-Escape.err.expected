@@ -1,0 +1,4 @@
+tests/semantics/Bad-Forall-Skolem-Escape.mog:8:9: type error: could not unify `a` with `Bool`
+
+  8 | bad _ = True
+    |         ^^^^

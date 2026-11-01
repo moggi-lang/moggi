@@ -811,8 +811,30 @@ function validateInstanceSuperclasses(TypeCheckState $state, Ast\InstanceDecl $d
     }
 
     foreach ($classInfo['superclasses'] as $super) {
-        if (! $super instanceof Ast\TypeApp || ! $super->con instanceof Ast\TypeCon) {
+        if (superclassName($super) === null) {
             throw typeFail($state, 'class superclass must be a type class application', $decl);
+        }
+
+        if ($super instanceof Ast\TypeForall) {
+            $constraint = constraintFromSuperclassAst($state, $super, $mapping);
+            $quantifiedInfo = $state->classes[$constraint->class]
+                ?? throw typeFail($state, "unknown superclass `{$constraint->class}`", $decl);
+            $quantifiedHead = instanceHeadFromConstraintArgs($state, $quantifiedInfo['params'], $constraint->args, $decl);
+
+            if (peerInstanceCoversSuperclass($state, $constraint->class, $quantifiedHead, $decl)) {
+                continue;
+            }
+
+            if (! findProjectInstance($state, $constraint->class, $quantifiedHead)) {
+                throw typeFail(
+                    $state,
+                    "missing superclass instance: `{$constraint->class} "
+                        . typeToString($quantifiedHead, friendlyTypeVarNames([$quantifiedHead])) . '`',
+                    $decl,
+                );
+            }
+
+            continue;
         }
 
         $superClass = $super->con->name;
@@ -939,6 +961,7 @@ function typeAstKey(TypeNode $type): string
         Ast\TypeApp::class => 'app(' . typeAstKey($type->con) . ';'
             . \implode(',', \array_map(static fn (TypeNode $arg): string => typeAstKey($arg), $type->args)) . ')',
         Ast\TypeArrow::class => 'fn(' . typeAstKey($type->from) . '->' . typeAstKey($type->to) . ')',
+        Ast\TypeForall::class => 'forall(' . \implode(',', $type->binders) . ').' . typeAstKey($type->body),
         default => 'node:' . $type::class,
     };
 }
@@ -1618,6 +1641,15 @@ function instanceContextConstraints(TypeCheckState $state, Ast\InstanceDecl $dec
     $headVars = matchInstanceHeadVars($state, $decl->head, $headType) ?? [];
     $parsed = [];
     foreach ($decl->constraints as $i => $constraint) {
+        if ($constraint instanceof Ast\TypeForall) {
+            throw typeFail(
+                $state,
+                'a quantified constraint cannot appear in an instance context; '
+                    . 'quantify a superclass instead (`class (forall a. C (f a)) => D f`)',
+                $decl,
+            );
+        }
+
         if (! $constraint instanceof Ast\TypeApp || ! $constraint->con instanceof Ast\TypeCon) {
             throw typeFail($state, 'instance constraint must be a type class application', $decl);
         }
@@ -1647,6 +1679,14 @@ function buildInstanceConstraintEnv(TypeCheckState $state, array $constraints, T
 {
     $env = [];
     foreach ($constraints as $constraint) {
+        if ($constraint instanceof Ast\TypeForall) {
+            throw typeFail(
+                $state,
+                'a quantified constraint cannot appear in an instance context; '
+                    . 'quantify a superclass instead (`class (forall a. C (f a)) => D f`)',
+            );
+        }
+
         if (! $constraint instanceof Ast\TypeApp || ! $constraint->con instanceof Ast\TypeCon) {
             throw typeFail($state, 'instance constraint must be a type class application');
         }
@@ -1755,8 +1795,9 @@ function ownClassMethodNames(TypeCheckState $state, string $className): array
             $names[$methodName] = true;
         }
         foreach ($classInfo['superclasses'] as $super) {
-            if ($super instanceof Ast\TypeApp && $super->con instanceof Ast\TypeCon) {
-                $pending[] = $super->con->name;
+            $superName = superclassName($super);
+            if ($superName !== null) {
+                $pending[] = $superName;
             }
         }
     }
@@ -1796,7 +1837,19 @@ function checkInstanceMethod(
     ]);
     $peeledType = peelDictArrows($expectedType, \count($methodUserConstraints));
 
-    $fnType = $peeledType;
+    [$fnType, $forallSkolems] = openSignatureForalls($state, $peeledType);
+    $savedRigidVars = $state->rigidVars;
+    $savedSkolemScope = $state->skolemScope;
+    $skolemBack = [];
+    foreach ($forallSkolems as $source => $skolem) {
+        $state->rigidVars[$skolem->name] = true;
+        $state->skolemScope[$source] = $skolem->name;
+        $skolemBack[$skolem->name] = new TVar($source);
+    }
+    if ($forallSkolems !== []) {
+        $constraints = substitutePendingConstraints($constraints, $forallSkolems);
+    }
+    $unskolemize = static fn (Type $type): Type => $skolemBack === [] ? $type : substitute($type, $skolemBack);
     foreach (\array_reverse($constraints) as $constraint) {
         $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
     }
@@ -1972,9 +2025,9 @@ function checkInstanceMethod(
         $fn->intrinsicWrapper = $wrapper;
     }
 
-    $fn->type = internalTypeToAst(prune($state, $fnType), $state->subst);
+    $fn->type = internalTypeToAst(prune($state, $unskolemize($fnType)), $state->subst);
 
-    $settledType = prune($state, $fnType);
+    $settledType = prune($state, $unskolemize($fnType));
     $userType = peelDictArrows($settledType, \count($constraints));
     $userObligations = refreshConstraintArgs($state, [...$instanceConstraints, ...$methodUserConstraints]);
     $settledConstraintList = refreshConstraintArgs($state, $constraints);
@@ -2021,6 +2074,8 @@ function checkInstanceMethod(
 
     $state->instanceHeadInScope = $savedInstanceHead;
     $state->instanceOwnMethods = $savedInstanceOwnMethods;
+    $state->rigidVars = $savedRigidVars;
+    $state->skolemScope = $savedSkolemScope;
     $state->popBinderScope();
 
     return $fn;

@@ -1,0 +1,74 @@
+program
+  function idExplicit :: forall a. a -> a
+    pat_var x
+    variable x
+  function idImplicit :: a -> a
+    pat_var x
+    variable x
+  function constFirst :: forall a b. a -> b -> a
+    pat_var x
+    pat_wild _
+    variable x
+  function applyPoly :: (forall a. a -> a) -> Int -> Int
+    pat_var f
+    pat_var n
+    apply
+      variable f
+      variable n
+  function applyRank3 :: (forall a. a -> a) -> Int -> Int
+    pat_var g
+    apply
+      variable g
+      variable idExplicit
+  newtype Wrap (f :: Type -> Type) a
+    constructor Wrap
+      field  :: f a
+  function foldK1 :: K1 R Int Int -> Int
+    pat_var k
+    apply
+      apply
+        apply
+          apply
+            evidence_method Bifoldable.bifoldr evidence= nullary=0
+              instance K1 i
+            lambda
+              pat_var x
+              pat_var acc
+              intrinsic intAdd#
+                variable x
+                variable acc
+          lambda
+            pat_var x
+            pat_var acc
+            intrinsic intAdd#
+              variable x
+              variable acc
+        integer 0
+      variable k
+  function main :: IO ()
+    io_action
+      apply
+        apply
+          variable print
+          evidence_ref Show Int
+        intrinsic intAdd#
+          apply
+            apply
+              variable constFirst
+              apply
+                apply
+                  variable applyPoly
+                  variable idImplicit
+                integer 7
+            apply
+              variable applyRank3
+              lambda
+                pat_var g
+                apply
+                  variable g
+                  integer 1
+          apply
+            variable foldK1
+            apply
+              constructor_ref K1
+              integer 5

@@ -1,0 +1,4 @@
+tests/semantics/Bad-Forall-Monomorphic-Argument.mog:14:15: type error: could not unify `a` with `Int`
+
+  14 | main = print (applyPoly mono 1)
+     |               ^^^^^^^^^^^^^^

@@ -36,6 +36,10 @@ function installConstraintMethods(
     array &$bodyEnv,
 ): void {
     foreach ($constraintList as $constraint) {
+        if (quantifiedConstraintVars($constraint) !== []) {
+            continue;
+        }
+
         $classInfo = $state->classes[$constraint->class];
         $mapping = [];
         foreach ($classInfo['params'] as $i => $param) {
@@ -166,6 +170,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
             $group = new SolvedGroup($userConstraints, $constraints);
             $constraintEnv = buildConstraintEnv($state, $constraints);
             $fnType = astType($state, $bodyTypeAst);
+            [$fnType, $forallSkolems] = openSignatureForalls($state, $fnType);
             Kinds\assertKind($state, $fnType, new Kinds\KType(), $state->varKinds, $fn);
             $state->checkedParameterKinds[\spl_object_id($fn)] = Kinds\declarationParameterKinds($state, $fnType);
             foreach (\array_reverse($constraints) as $constraint) {
@@ -180,7 +185,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         $origFnType = $fnType;
         $origConstraints = $constraints;
         $origUserConstraints = $userConstraints;
-        $skolemSubst = skolemizeSignatureVars($state, $fnType, $constraints);
+        $skolemSubst = $forallSkolems + skolemizeSignatureVars($state, $fnType, $constraints);
         if ($skolemSubst !== []) {
             $fnType = substitute($fnType, $skolemSubst);
             $constraints = substitutePendingConstraints($constraints, $skolemSubst);
@@ -384,6 +389,9 @@ function skolemizeSignatureVars(TypeCheckState $state, Type $fnType, array $cons
 
     $mapping = [];
     foreach (\array_keys($quantified) as $name) {
+        if (isset($state->rigidVars[$name]) || \preg_match('/\$sk\d+$/', $name) === 1) {
+            continue;
+        }
         $mapping[$name] = freshSkolem($state, $name);
     }
 
@@ -504,11 +512,16 @@ function settleCheckedBody(
         $renderedUserType = $userType;
     }
 
-    $fn->type = signatureTypeAst(
+    [$forallNames, $forallKinds] = $hadDeclaredSignature ? declaredForallBinders($fn->type) : [[], []];
+    $renderedType = rebindForallSkolems($renderedType, $forallNames);
+    $renderedSignature = signatureTypeAst(
         $renderedType,
         \array_flip(knownTypeConstructorNames($state)),
         $hadDeclaredSignature ? $state->subst : [],
     );
+    $fn->type = $forallNames === []
+        ? $renderedSignature
+        : new Ast\TypeForall($forallNames, $forallKinds, $renderedSignature);
     $fn->typeInferred = ! $hadDeclaredSignature;
     if ($renderedUserType !== null) {
         $fn->inferredSignatureType = inferredSignatureAst(

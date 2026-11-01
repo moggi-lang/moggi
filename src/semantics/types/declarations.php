@@ -616,8 +616,9 @@ function ownClassMethodSchemes(TypeCheckState $state, string $className): array
             $schemes[$methodName] ??= $scheme;
         }
         foreach ($info['superclasses'] as $super) {
-            if ($super instanceof Ast\TypeApp && $super->con instanceof Ast\TypeCon) {
-                $pending[] = $super->con->name;
+            $superName = superclassName($super);
+            if ($superName !== null) {
+                $pending[] = $superName;
             }
         }
     }
@@ -949,7 +950,7 @@ function registerFunctionScheme(TypeCheckState $state, Ast\FunctionDecl $fn): vo
     foreach (\array_reverse($userConstraints) as $constraint) {
         $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
     }
-    $expected = $fnType;
+    $expected = peelForalls($fnType);
     $paramCount = \count($fn->params) + \count($userConstraints);
     for ($i = 0; $i < $paramCount; ++$i) {
         if (! $expected instanceof TArrow) {

@@ -356,7 +356,7 @@ $validateRecord = static function (
         foreach ($dictionary->args as $argument) {
             foreach (\array_keys(collectTypeVars($argument, [])) as $variable) {
                 $assert(
-                    \in_array($variable, $record->scheme->bound, true),
+                    \in_array($variable, $record->scheme->bound, true) || Types\isQuantifiedVar($variable),
                     "the record for `{$moduleName}::{$name}` discharges `" . constraintKey($dictionary)
                         . "`, which names `{$variable}`, but its scheme binds"
                         . ' ' . \json_encode($record->scheme->bound),
