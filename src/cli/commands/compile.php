@@ -222,7 +222,7 @@ function compileIntoRoot(
     }
 
     try {
-        $compiledBoth = Modules\compileProjectBoth($files, $root, $context, $optimize, $strip);
+        $compiledBoth = Modules\compileProjectBoth($files, $root, $context, $optimize, $strip, irDumps: false);
         $compiled = $compiledBoth['emit'];
         $entryModule = $compiledBoth['entryModule'] ?? null;
         $entryRelative = $compiledBoth['entryRelative'] ?? null;

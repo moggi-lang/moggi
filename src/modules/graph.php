@@ -232,13 +232,18 @@ function moduleNameForPath(string $path): ?string
  * Prelude plus everything Prelude transitively depends on, as a module-name set.
  *
  * Follows the explicit imports written in each source plus the backend
- * implementation each facade routes to, since a facade's implementation is as
- * much a dependency as an import. Only explicit edges are followed, so the walk
- * terminates regardless of where the implicit import would otherwise be added.
+ * implementation each facade routes to for `$backendId`, since a facade's
+ * implementation is as much a dependency as an import. A facade's halves for
+ * the other backends are modules of another compilation: they are not followed,
+ * because preparing them checks code this one never emits. Only explicit edges
+ * are followed, so the walk terminates regardless of where the implicit import
+ * would otherwise be added. `$backendId` is null for the one caller that asks a
+ * different question — whether a module belongs to the closure at all — and that
+ * answer may name any half.
  *
  * @return array<string, true>
  */
-function preludeDependencyClosure(string $fromPath): array
+function preludeDependencyClosure(string $fromPath, ?string $backendId = null): array
 {
     $root = locateStdlibRoot($fromPath);
     if ($root === null) {
@@ -253,7 +258,7 @@ function preludeDependencyClosure(string $fromPath): array
         return [];
     }
 
-    $key = $preludePath . ':' . stdlibMaxMtime($root);
+    $key = $preludePath . ':' . stdlibMaxMtime($root) . ':' . ($backendId ?? '*');
     if (isset($closures[$key])) {
         return $closures[$key];
     }
@@ -273,8 +278,15 @@ function preludeDependencyClosure(string $fromPath): array
             $header['imports'],
         );
 
-        foreach (\array_values($header['backendMap'] ?? []) as $implName) {
-            $dependencies[] = $implName;
+        if ($backendId === null) {
+            foreach (\array_values($header['backendMap'] ?? []) as $half) {
+                $dependencies[] = $half;
+            }
+        } else {
+            $implName = resolveImplModuleName($header['backendMap'] ?? [], $backendId);
+            if ($implName !== null) {
+                $dependencies[] = $implName;
+            }
         }
 
         foreach ($dependencies as $dependency) {
@@ -1154,7 +1166,7 @@ function closureFromModuleIndex(
         }
     }
 
-    $needed = withPreludeDependencyClosure($needed);
+    $needed = withPreludeDependencyClosure($needed, $backendId);
 
     $files = [];
     foreach ($needed as $modulePath) {
@@ -1188,7 +1200,7 @@ function closureFromModuleIndex(
  * @param array<string, string> $needed module name => source path
  * @return array<string, string>
  */
-function withPreludeDependencyClosure(array $needed): array
+function withPreludeDependencyClosure(array $needed, string $backendId): array
 {
     $stdlibPath = null;
     foreach ($needed as $modulePath) {
@@ -1203,7 +1215,7 @@ function withPreludeDependencyClosure(array $needed): array
         return $needed;
     }
 
-    $prelude = preludeDependencyClosure($stdlibPath);
+    $prelude = preludeDependencyClosure($stdlibPath, $backendId);
     if ($prelude === [] || \array_intersect_key($needed, $prelude) === []) {
         return $needed;
     }

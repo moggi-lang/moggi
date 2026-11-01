@@ -124,7 +124,7 @@ function runExampleBuild(TestCase $case, string $backend, bool $project = false)
                 CompilePurpose::Executable,
                 entryModules: ['Main'],
                 sources: $files,
-            ));
+            ), irDumps: false);
         } else {
             $outputs = compileFileCapturingErrorsBoth(testRelativePath($case->input), true, $backend);
             foreach (['emit', 'opt-ir'] as $artifact) {
@@ -460,7 +460,7 @@ function runProjectErrorCase(TestCase $case, array $goldens, string $backend, st
 
     try {
         [$files, $dir] = projectClosure($case->input);
-        compileProjectBoth($files, $dir, CompilationContext::for($backend, CompilePurpose::Library, sources: $files));
+        compileProjectBoth($files, $dir, CompilationContext::for($backend, CompilePurpose::Library, sources: $files), irDumps: false);
     } catch (TestFailure $e) {
         throw $e;
     } catch (\Throwable $e) {
