@@ -167,10 +167,48 @@ try {
             . diffText($cold, $warm),
     );
 
+    // Two keys for one product are two entries: a write under one key must not make
+    // the entry another key holds unreachable, which is what a single file per product
+    // path did, and what let a compilation with a different purpose delete the entry a
+    // released project was about to read.
+    $sibling = $key . '-sibling';
+    Cache\modulePut($relPath, 'checked', $sibling, $payload, 'php');
+    $assert(
+        \is_array(Cache\moduleGet($relPath, 'checked', $key, 'php')),
+        'writing a product under one key made the entry another key holds unreachable',
+    );
+    $assert(
+        \is_array(Cache\moduleGet($relPath, 'checked', $sibling, 'php')),
+        'a product written under a second key did not read back',
+    );
+
+    // Every key keeps its own entry, so a product path grows with each content key a
+    // module is compiled under. It is pruned back to the newest few after every write —
+    // bounded, and never at the price of the entry just written.
+    $trail = $relPath . '-trail';
+    $trailBase = \time() - 1000;
+    for ($i = 0; $i < \Moggi\Cache\MODULE_ENTRIES_KEPT + 4; ++$i) {
+        Cache\modulePut($trail, 'checked', 'trail-' . $i, $payload, 'php');
+        \touch(
+            \Moggi\Cache\modulePath($trail, 'checked', 'trail-' . $i, 'php'),
+            $trailBase + $i,
+        );
+    }
+    $lastKey = 'trail-' . (\Moggi\Cache\MODULE_ENTRIES_KEPT + 3);
+    $kept = \glob(\dirname(\Moggi\Cache\modulePath($trail, 'checked', $lastKey, 'php')) . '/*.mogc') ?: [];
+    $assert(
+        \count($kept) === \Moggi\Cache\MODULE_ENTRIES_KEPT,
+        'a product path kept ' . \count($kept) . ' entries instead of ' . \Moggi\Cache\MODULE_ENTRIES_KEPT,
+    );
+    $assert(
+        \is_array(Cache\moduleGet($trail, 'checked', $lastKey, 'php')),
+        'pruning dropped the entry it had just written',
+    );
+
     $bytes = static function (string $rel, string $key, array $payload): string {
         Cache\modulePut($rel, 'checked', $key, $payload, 'php');
 
-        return (string) \file_get_contents(Cache\modulePath($rel, 'checked', 'php'));
+        return (string) \file_get_contents(Cache\modulePath($rel, 'checked', $key, 'php'));
     };
     $first = $bytes($relPath, $key, $payload);
     $second = $bytes($relPath, $key, $payload);

@@ -246,13 +246,14 @@ try {
         \unlink($blob);
     }
 
+    $contentKey = (string) (Modules\prepareProject($filesA, $project, $phpMainA)->units['Main']['contentKey'] ?? '');
     $moduleCache = Cache\modulePath(
         Modules\moduleCacheRelPath($project . '/Main.mog'),
         'checked',
+        $phpMainA->moduleKey('Main', $contentKey),
         'php',
     );
     $assert(\is_file($moduleCache), 'the compile wrote no php module product to tamper with');
-    $contentKey = (string) (Modules\prepareProject($filesA, $project, $phpMainA)->units['Main']['contentKey'] ?? '');
 
     $tampered = \unserialize((string) \file_get_contents($moduleCache));
     $assert(\is_array($tampered), 'the module product did not decode');

@@ -95,15 +95,23 @@ MOGGI;
         "the consumer's IR lost the provider's inferred dictionary:\n" . $cold,
     );
 
-    // A module's cached interface records the content key it was written for, and
-    // `modulePut` always rewrites its file, so the key says what the entry saw and
-    // the mtime says whether anything produced it.
+    // A module's cached interface records the content key it was written for, and every
+    // key gets an entry of its own, so the newest file says what the last compile saw and
+    // its mtime says whether anything produced it at all.
     $product = static function (string $cacheDir, string $module) use ($assert): array {
-        $paths = \glob($cacheDir . '/compile/*/*/' . $module . '.localtypes.mogc') ?: [];
-        $assert(\count($paths) === 1, "the cache holds " . \count($paths) . " interfaces for {$module}");
+        $paths = \glob($cacheDir . '/compile/*/*/' . $module . '.localtypes/*.mogc') ?: [];
+        $assert($paths !== [], "the cache holds no interface for {$module}");
+        \usort(
+            $paths,
+            static fn (string $a, string $b): int => ((int) \filemtime($b)) <=> ((int) \filemtime($a)),
+        );
         $raw = \unserialize((string) \file_get_contents($paths[0]));
 
-        return ['key' => $raw['key'] ?? null, 'writtenAt' => (int) \filemtime($paths[0])];
+        return [
+            'key' => $raw['key'] ?? null,
+            'writtenAt' => (int) \filemtime($paths[0]),
+            'path' => $paths[0],
+        ];
     };
 
     $importedBefore = $product($work . '/cache-a', 'Prov');
@@ -123,6 +131,14 @@ MOGGI;
     $assert(
         $product($work . '/cache-a', 'Prov')['writtenAt'] === $importedBefore['writtenAt'],
         'the imported module was checked again instead of read from its interface, so the parity below is vacuous',
+    );
+    // The edit adds an entry, it does not take the one the previous key wrote: a
+    // compilation that disagrees about the key must not delete the product another
+    // one is reading.
+    $assert(
+        \is_file($entryBefore['path'])
+            && (\unserialize((string) \file_get_contents($entryBefore['path']))['key'] ?? null) === $entryBefore['key'],
+        'the edit dropped the entry the previous key had written instead of adding its own',
     );
 
     $assert(

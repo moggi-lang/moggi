@@ -12,7 +12,7 @@ use function Moggi\Paths\globPaths;
  * there:
  *
  *   fingerprint                              the compiler that filled the rest
- *   compile/<backend>/<mirror>.<kind>.mogc   a per-module compilation entry
+ *   compile/<backend>/<mirror>.<kind>/<key>.mogc  a per-module compilation entry
  *   compile/artifacts/<key>.blob             a whole-project artifact
  *   compile/docs-index/<key>.json            the mogdoc/moogle index
  *   docs/                                    `moggi mogdoc serve` output
@@ -22,9 +22,11 @@ use function Moggi\Paths\globPaths;
  *   test/                                    the test harness's scratch trees
  *
  * Entries mirror the source tree under a per-backend directory so php/jvm/dotnet
- * caches coexist (switching backends must not overwrite each other). The content
- * key is stored inside and checked on read: a product written under another key
- * is a different product and is never served.
+ * caches coexist (switching backends must not overwrite each other), and each is
+ * named by the key it was written under: `<mirror>.<kind>/<key>.mogc`. A product
+ * written under another key is a different product and is never served — and
+ * since it is another *file*, writing or dropping it never takes a product
+ * another compilation is reading with it.
  *
  * One compiler owns the tree: `fingerprint` holds the hash of its sources, and a
  * compiler whose fingerprint does not match what is written there drops what the
@@ -403,14 +405,16 @@ function decodePayload(string $raw): mixed
  * `$key` is the module's declared cache key: its content Merkle plus the
  * compilation inputs the product depends on — target, purpose and module
  * search roots ({@see \Moggi\Pipeline\CompilationContext::moduleKey}). The
- * key is the entry's identity, not a probe: an entry written under another key
- * is an incompatible product and is never served. It is reported as a miss and
- * dropped, so the next write stores the product this compilation derives
- * rather than leaving one target's result to be handed to the next.
+ * key is the entry's identity, not a probe: it names the file
+ * ({@see modulePath}), so an entry written under another key is unreachable
+ * rather than merely rejected, and a compilation that disagrees with a
+ * concurrent one about the key cannot replace the product that one is reading.
  *
- * The `target` stamp is checked as well as the key. The directory already
- * names the target, so a mismatch means the file was moved or copied by hand
- * into the wrong tree, and that is exactly the case a key alone would trust.
+ * The `key` and `target` stamps are checked as well, both of which the path
+ * already names: a mismatch means the file was moved or copied by hand into the
+ * wrong place, which is exactly the case the path alone would trust. Such an
+ * entry is dropped, so the next write stores the product this compilation
+ * derives.
  *
  * @param string $relPath source path mirrored under the cache root
  * @param string $kind    artifact kind (e.g. 'checked', 'localtypes', 'exports')
@@ -425,7 +429,7 @@ function moduleGet(string $relPath, string $kind, string $key, string $target): 
 
     ensureCache();
 
-    $path = modulePath($relPath, $kind, $target);
+    $path = modulePath($relPath, $kind, $key, $target);
     if (! \is_file($path)) {
         return null;
     }
@@ -452,11 +456,24 @@ function moduleGet(string $relPath, string $kind, string $key, string $target): 
 }
 
 /**
+ * How many keyed entries one product path keeps.
+ *
+ * An entry is never overwritten by a different key, so a product path is a set:
+ * one file per key its module has been compiled under. Pruning keeps the newest
+ * few of them — enough for the keys a single compilation has live for one module
+ * (its own purpose and an importing one, optimized and not), so a concurrent
+ * compilation's entry is never the one dropped — while an editing session's trail
+ * of content keys stays bounded.
+ */
+const MODULE_ENTRIES_KEPT = 8;
+
+/**
  * Write a per-module artifact under its declared key.
  *
  * Products are immutable by convention and by construction: `atomicWrite`
- * renames a complete file into place, so a reader sees either the previous
- * entry or this one, and an entry is never edited in place under a live key.
+ * renames a complete file into place, so a reader sees either no entry under
+ * that key or a whole one, and an entry is never edited in place. A key the tree
+ * already holds a product for is rewritten with the same bytes.
  */
 function modulePut(string $relPath, string $kind, string $key, mixed $payload, string $target): void
 {
@@ -471,22 +488,78 @@ function modulePut(string $relPath, string $kind, string $key, mixed $payload, s
         'target' => $target,
         'payload' => $payload,
     ]);
-    atomicWrite(modulePath($relPath, $kind, $target), $raw);
+    $path = modulePath($relPath, $kind, $key, $target);
+    atomicWrite($path, $raw);
+    pruneModuleEntries(\dirname($path));
 }
 
-function modulePath(string $relPath, string $kind, string $backendId): string
+/**
+ * Drop all but the newest {@see MODULE_ENTRIES_KEPT} entries of one product path.
+ *
+ * Pruning is ordered by mtime, newest first, and the entry just written is the
+ * newest, so a write never removes itself. Files another process currently holds
+ * open are left alone where the platform refuses the unlink (Windows): the entry
+ * survives until a later prune, which is the safe direction — a prune that runs
+ * short costs disk, not a product.
+ */
+function pruneModuleEntries(string $dir): void
+{
+    $entries = @\scandir($dir);
+    if ($entries === false || \count($entries) <= MODULE_ENTRIES_KEPT) {
+        return;
+    }
+
+    $files = [];
+    foreach ($entries as $entry) {
+        if (! \str_ends_with($entry, '.mogc')) {
+            continue;
+        }
+        $path = $dir . '/' . $entry;
+        $mtime = @\filemtime($path);
+        $files[] = ['path' => $path, 'mtime' => $mtime === false ? 0 : $mtime];
+    }
+
+    if (\count($files) <= MODULE_ENTRIES_KEPT) {
+        return;
+    }
+
+    \usort(
+        $files,
+        static fn (array $a, array $b): int => [$b['mtime'], $b['path']] <=> [$a['mtime'], $a['path']],
+    );
+    foreach (\array_slice($files, MODULE_ENTRIES_KEPT) as $stale) {
+        @\unlink($stale['path']);
+    }
+}
+
+/**
+ * The path of one module product: `<backend>/<mirror>.<kind>/<key>.mogc`.
+ *
+ * The key is a path component rather than only a stamp inside the file, which is
+ * what keeps two compilations that disagree about it apart: each writes its own
+ * entry, and neither can hand the other a product it did not derive.
+ */
+function modulePath(string $relPath, string $kind, string $key, string $backendId): string
 {
     $backend = \preg_match('/^[a-z0-9_-]+$/', $backendId) === 1 ? $backendId : 'unknown';
 
-    return compileDir() . '/' . $backend . '/' . mirrorPath($relPath) . '.' . $kind . '.mogc';
+    return compileDir() . '/' . $backend . '/' . mirrorPath($relPath) . '.' . $kind
+        . '/' . artifactFileName($key) . '.mogc';
 }
 
 /**
  * An artifact key as a file name: a Windows name may not have the `:` the stdlib index key carries,
  * so an escaped key keeps a hash of its own spelling and cannot collide with an unescaped twin.
+ *
+ * A key that is empty or names a directory entry — `.` or `..` — has no name of its own to keep, so
+ * it gets a hashed one instead of becoming the path it is written into.
  */
 function artifactFileName(string $key): string
 {
+    if ($key === '' || $key === '.' || $key === '..') {
+        return 'k-' . \substr(\hash('xxh3', $key), 0, 12);
+    }
+
     $safe = \preg_replace('/[^A-Za-z0-9._-]/', '_', $key) ?? $key;
 
     return $safe === $key ? $key : $safe . '-' . \substr(\hash('xxh3', $key), 0, 12);
