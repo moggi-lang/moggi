@@ -108,7 +108,6 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
     $pipelineSeconds = 0.0;
     $specializeSeconds = 0.0;
     $emitSeconds = 0.0;
-    $optByModule = [];
     $relativeByModule = [];
     foreach ($prepared->units as $moduleName => $unit) {
         if (($unit['synthetic'] ?? false) === true) {
@@ -118,9 +117,18 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
             continue;
         }
 
-        $relative = outputRelativePath($unit['path'], $prepared->rootPrefix);
-        $relativeByModule[$moduleName] = $relative;
+        $relativeByModule[$moduleName] = outputRelativePath($unit['path'], $prepared->rootPrefix);
+    }
 
+    $ext = $context->backend->extension();
+    $allModuleOutputPaths = [];
+    foreach ($relativeByModule as $mn => $rel) {
+        $allModuleOutputPaths[$mn] = \preg_replace('/\.mog$/', $ext, $rel) ?? $rel;
+    }
+
+    /** Lower and optimize one module, read back from the module cache when it is there. */
+    $lowerModule = function (string $moduleName) use ($prepared, $context, $optimize, &$pipelineSeconds): Module {
+        $unit = $prepared->units[$moduleName];
         $program = ($unit['program'] ?? null) instanceof Ast\Program ? $unit['program'] : null;
         $irCacheKey = isset($unit['cacheRelPath'])
             ? $context->moduleProductKey(
@@ -132,9 +140,7 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         if ($irCacheKey !== null) {
             $cachedIr = Cache\moduleGet($unit['cacheRelPath'], 'ir', $irCacheKey, $context->backendId);
             if ($cachedIr instanceof Module) {
-                $optByModule[$moduleName] = $cachedIr;
-
-                continue;
+                return $cachedIr;
             }
         }
 
@@ -147,10 +153,64 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
             context: $context,
         ), PipelineStage::IrOpt);
         $pipelineSeconds += \microtime(true) - $pipelineStarted;
-        $optByModule[$moduleName] = $artifacts->irOpt
+        $optimized = $artifacts->irOpt
             ?? throw new \RuntimeException("pipeline produced no IR for module `{$moduleName}`");
         if ($irCacheKey !== null) {
-            Cache\modulePut($unit['cacheRelPath'], 'ir', $irCacheKey, $optByModule[$moduleName], $context->backendId);
+            Cache\modulePut($unit['cacheRelPath'], 'ir', $irCacheKey, $optimized, $context->backendId);
+        }
+
+        return $optimized;
+    };
+
+    /*
+     * Which modules are lowered: the ones this compilation writes, and no others.
+     *
+     * A compilation that names an entry point writes that entry's own closure, so lowering the rest
+     * of what it read buys nothing — those modules would be lowered, optimized, specialized and
+     * dumped for a tree none of them is part of, and the standard library is the bulk of that
+     * rest. The seeds are the declared entries; a module joins the set when a plan in the set names
+     * it as a requirement, which is `emittedClosure()`'s own walk. The plan is the edge, so the
+     * lowered set and the written set cannot drift apart.
+     *
+     * A compilation with no entry point (a library build) writes every module that declares code,
+     * so there is nothing to prune and its whole module set is lowered.
+     */
+    $entrySeeds = [];
+    foreach (\array_keys($relativeByModule) as $moduleName) {
+        if ($context->isEntry($moduleName)) {
+            $entrySeeds[] = $moduleName;
+        }
+    }
+
+    $optByModule = [];
+    $pending = $entrySeeds === [] ? \array_keys($relativeByModule) : $entrySeeds;
+    while ($pending !== []) {
+        $moduleName = \array_pop($pending);
+        if (isset($optByModule[$moduleName]) || ! isset($relativeByModule[$moduleName])) {
+            continue;
+        }
+
+        $optimizedIr = $lowerModule($moduleName);
+        $optByModule[$moduleName] = $optimizedIr;
+
+        if ($entrySeeds === []) {
+            continue;
+        }
+
+        $importContext = $prepared->importContexts[$moduleName];
+        $plan = $importContext->plan;
+        if ($context->backendId === 'php') {
+            $plan = $plan->withModuleOutputPaths($allModuleOutputPaths);
+        }
+        $discovery = planEmission(
+            $importContext->interface,
+            $plan,
+            $optimizedIr,
+            collectIrCodegenUsage($optimizedIr)['callees'],
+            $allModuleOutputPaths[$moduleName],
+        );
+        foreach (\array_keys($discovery->requiredModules) as $dependency) {
+            $pending[] = $dependency;
         }
     }
 
@@ -196,11 +256,6 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
 
     $emitOutputs = [];
     $optIrOutputs = [];
-    $ext = $context->backend->extension();
-    $allModuleOutputPaths = [];
-    foreach ($relativeByModule as $mn => $rel) {
-        $allModuleOutputPaths[$mn] = \preg_replace('/\.mog$/', $ext, $rel) ?? $rel;
-    }
 
     $candidateOutputPaths = [];
     foreach ($optByModule as $moduleName => $optimizedIr) {

@@ -179,7 +179,6 @@ function prepareProject(
 
     $instanceWorld = InstanceWorld::forUnits($units, $fullParseModules);
     $projectClasses = [];
-    enableCollectExportsCache();
     $classScopes = [];
     $classScopeFns = classScopeFunctionRefs($units, $classScopes);
 
@@ -449,7 +448,6 @@ function prepareProject(
         $importContexts[$moduleName] = $importContext->withClassScopes($projectClasses, $classScopes);
     }
 
-    disableCollectExportsCache();
     clearInternedTypeNodes();
 
     return new PreparedProject($rootPrefix, $units, $checked, $importContexts);
@@ -645,6 +643,7 @@ function clearPrepareProjectCaches(): void
 {
     ProjectCache::clearPreparedProjects();
     ProjectCache::clearCheckedModules();
+    ExportsCache::clear();
 }
 
 /**

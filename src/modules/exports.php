@@ -62,50 +62,51 @@ function isQualifiedSymbol(string $name): bool
 }
 
 /**
- * Per-module export memo, live only for the duration of a prepare pass.
+ * Per-module export memo, keyed by what actually decides a module's exports.
  *
- * Exports depend on the whole unit table, so the cache is explicitly enabled
- * while a project is being prepared and invalidated per module as units are
- * re-checked; outside that window it stays off rather than risk a stale answer.
+ * Exports are a function of the module's own tree and of the trees it imports — which is what the
+ * module's content key is the Merkle over — plus the backend whose facade half it compiles with.
+ * Keyed that way an entry stays valid for the next project in the process, which is where the reuse
+ * pays: a worker compiles hundreds of unrelated fixtures over one standard library, and every one
+ * of them asks for the same modules' exports. It cannot answer with a stale result for a module
+ * re-checked in this process, because a re-check changes the content key.
+ *
+ * The memo is bounded and evicts least-recently-used: the entries are worth keeping only while the
+ * same modules keep coming back, and a worker must not grow this without limit.
  */
 final class ExportsCache
 {
-    /** @var ?array<string, array<string, mixed>> */
-    private static ?array $entries = null;
+    /** @var array<string, array<string, mixed>> */
+    private static array $entries = [];
 
-    public static function enable(): void
-    {
-        self::$entries = [];
-    }
-
-    public static function disable(): void
-    {
-        self::$entries = null;
-    }
+    private const MAX_ENTRIES = 256;
 
     /** @return ?array<string, mixed> */
-    public static function get(string $moduleName): ?array
+    public static function get(string $key): ?array
     {
-        return self::$entries[$moduleName] ?? null;
+        $exports = self::$entries[$key] ?? null;
+        if ($exports !== null) {
+            unset(self::$entries[$key]);
+            self::$entries[$key] = $exports;
+        }
+
+        return $exports;
     }
 
     /** @param array<string, mixed> $exports */
-    public static function remember(string $moduleName, array $exports): void
+    public static function remember(string $key, array $exports): void
     {
-        if (self::$entries !== null) {
-            self::$entries[$moduleName] = $exports;
+        unset(self::$entries[$key]);
+        self::$entries[$key] = $exports;
+        while (\count(self::$entries) > self::MAX_ENTRIES) {
+            \array_shift(self::$entries);
         }
     }
-}
 
-function enableCollectExportsCache(): void
-{
-    ExportsCache::enable();
-}
-
-function disableCollectExportsCache(): void
-{
-    ExportsCache::disable();
+    public static function clear(): void
+    {
+        self::$entries = [];
+    }
 }
 
 /**
@@ -122,6 +123,8 @@ function disableCollectExportsCache(): void
  */
 function collectExports(Ast\Program $program, array $localTypes, array $units, string $moduleName): array
 {
+    $cacheKey = exportsCacheKey($units[$moduleName] ?? [], $moduleName);
+
     if (isSyntheticCompilerModuleName($moduleName)) {
         if (isset($units[$moduleName]['exports']) && \is_array($units[$moduleName]['exports'])) {
             return $units[$moduleName]['exports'];
@@ -130,15 +133,38 @@ function collectExports(Ast\Program $program, array $localTypes, array $units, s
         return syntheticExports($moduleName, $localTypes);
     }
 
-    $cached = ExportsCache::get($moduleName);
-    if ($cached !== null) {
-        return $cached;
+    if ($cacheKey !== null) {
+        $cached = ExportsCache::get($cacheKey);
+        if ($cached !== null) {
+            return $cached;
+        }
     }
 
     $exports = collectExportsUncached($program, $localTypes, $units, $moduleName);
-    ExportsCache::remember($moduleName, $exports);
+    if ($cacheKey !== null) {
+        ExportsCache::remember($cacheKey, $exports);
+    }
 
     return $exports;
+}
+
+/**
+ * What a module's exports are a function of, as a memo key: its content — a Merkle over its own and
+ * its imports' sources — the backend it compiles for (facade half, backend map), and its name, which
+ * a source can repeat across projects. A unit with no content key is a hand-built one (an IR
+ * fixture, a single module compiled outside a project): there is nothing stable to key it by, so it
+ * is computed every time.
+ *
+ * @param array<string, mixed> $unit
+ */
+function exportsCacheKey(array $unit, string $moduleName): ?string
+{
+    $content = $unit['contentKey'] ?? null;
+    if (! \is_string($content) || $content === '') {
+        return null;
+    }
+
+    return $content . '|' . ($unit['compileBackend'] ?? '') . '|' . $moduleName;
 }
 
 /**
