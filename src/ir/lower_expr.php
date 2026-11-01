@@ -835,9 +835,37 @@ function lowerIntrinsicValue(string $name, array $astArgs, Ast\AstNode $node, Lo
  *
  * @param list<Operand> $args
  */
-function lowerNamedApply(string $name, array $args, LowerCtx $ctx, ?SrcLoc $srcLoc = null): ?Operand
+/**
+ * The runtime arity of a callee name.
+ *
+ * A cross-module callee is spelled `Module::name` at the call site, while the import table
+ * publishes the entry under the spelling this module imported (`name`). The emitter already
+ * accepts that member spelling; lowering does too, so a qualified call stays a direct call
+ * instead of degrading to a value application of a zero-argument function.
+ */
+function functionArityFor(string $name, LowerCtx $ctx): ?int
 {
     $arity = $ctx->functionArity[$name] ?? null;
+    if ($arity !== null) {
+        return $arity;
+    }
+
+    $separator = \strrpos($name, '::');
+    if ($separator === false) {
+        $separator = \strrpos($name, '\\');
+        if ($separator === false) {
+            return null;
+        }
+
+        return $ctx->functionArity[\substr($name, $separator + 1)] ?? null;
+    }
+
+    return $ctx->functionArity[\substr($name, $separator + 2)] ?? null;
+}
+
+function lowerNamedApply(string $name, array $args, LowerCtx $ctx, ?SrcLoc $srcLoc = null): ?Operand
+{
+    $arity = functionArityFor($name, $ctx);
     if ($arity === null) {
         return null;
     }
@@ -969,7 +997,7 @@ function applyToValue(Operand $value, array $args, LowerCtx $ctx, ?SrcLoc $srcLo
         }
 
         if ($result instanceof FnRef) {
-            $arity = $ctx->functionArity[$result->name] ?? null;
+            $arity = functionArityFor($result->name, $ctx);
             if ($arity !== null) {
                 if ($arity === 0) {
                     $result = applyToValue(lowerCall($result->name, [], $ctx, $srcLoc), [$arg], $ctx, $srcLoc);

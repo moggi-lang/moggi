@@ -2,11 +2,7 @@
 
 namespace Main;
 
-const __MOGGI_MAP = [[22 => 0, 27 => 1], ['Main\\main' => 0, 'Main\\qualifiedMain' => 1], [], [], [[0, 0, 17, 15], [1, 0, 21, 19]], ['Main.main', 'Main.qualifiedMain'], ['tests/semantics/modules/Main.mog']];
-
-require_once __DIR__ . '/../../../_runtime.php';
-
-use function Moggi\__apply;
+const __MOGGI_MAP = [[18 => 0, 23 => 1], ['Main\\main' => 0, 'Main\\qualifiedMain' => 1], [], [], [[0, 0, 17, 15], [1, 0, 21, 19]], ['Main.main', 'Main.qualifiedMain'], ['tests/semantics/modules/Main.mog']];
 
 require_once __DIR__ . '/lib/User.php';
 
@@ -24,5 +20,5 @@ function main($n, $user) {
 }
 
 function qualifiedMain($u) {
-    return __apply(U\getId(...), $u);
+    return U\getId($u);
 }

@@ -98,15 +98,23 @@ function emitReturnedCall(IR\Call|IR\CallValue $call, EmitEnv $env): string
         : emitCallValue($env, $call);
 }
 
-/** @param array{externalFns?: array<string, string>, moduleAsNames?: array<string, string>} $env */
-function formatQualifiedCallee(string $name, EmitEnv $env): string
+/**
+ * The PHP callee for a qualified symbol.
+ *
+ * `$aliasNamespaces` is off for a callable that is emitted as a *string* (a partial's target):
+ * a namespace alias is resolved at compile time and does not apply when the runtime invokes the
+ * name dynamically, so such a value has to carry the canonical, fully qualified name.
+ *
+ * @param array{externalFns?: array<string, string>, moduleAsNames?: array<string, string>} $env
+ */
+function formatQualifiedCallee(string $name, EmitEnv $env, bool $aliasNamespaces = true): string
 {
     if (\str_contains($name, '::')) {
         $parsed = parseResolvedSymbol($name);
         if ($parsed !== null) {
             $namespace = moduleNameToNamespace($parsed['module']);
             $member = basePhpFunctionName($parsed['name']);
-            $asName = $env->moduleAsNames[$namespace] ?? null;
+            $asName = $aliasNamespaces ? ($env->moduleAsNames[$namespace] ?? null) : null;
 
             return $asName !== null ? $asName . '\\' . $member : '\\' . $namespace . '\\' . $member;
         }
@@ -120,7 +128,7 @@ function formatQualifiedCallee(string $name, EmitEnv $env): string
     $separator = \strrpos($phpName, '\\');
     $namespace = \substr($phpName, 0, $separator);
     $member = basePhpFunctionName(\substr($phpName, $separator + 1));
-    $asName = $env->moduleAsNames[$namespace] ?? null;
+    $asName = $aliasNamespaces ? ($env->moduleAsNames[$namespace] ?? null) : null;
     if ($asName !== null) {
         return $asName . '\\' . $member;
     }
