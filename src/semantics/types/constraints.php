@@ -11,6 +11,7 @@ use Moggi\Semantics\TypeExpr\TPromoted;
 use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
+use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\AstNode;
