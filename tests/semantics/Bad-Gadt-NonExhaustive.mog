@@ -1,0 +1,13 @@
+-- `Truth` can be the value at `Expr a`, so a match that only handles `Lit` is
+-- not exhaustive; a constructor the scrutinee's type rules out would not count.
+module Main where
+
+import Moggi.Internal.Base
+
+data Expr a where
+  Lit :: Int -> Expr Int
+  Truth :: Expr Bool
+
+describe :: Expr a -> Int
+describe e = case e of
+  Lit n -> n

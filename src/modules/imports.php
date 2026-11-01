@@ -441,7 +441,7 @@ function programConstructorArities(Ast\Program $program): array
         $declared = [];
         foreach ($item->constructors as $constructor) {
             $declared[] = $constructor->name;
-            $arities[$constructor->name] = \count($constructor->fields);
+            $arities[$constructor->name] = $constructor->runtimeFieldCount();
         }
 
         $alias = surfaceConstructorAlias(

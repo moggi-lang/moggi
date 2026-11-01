@@ -134,13 +134,16 @@ function recordValueFields(TypeCheckState $state, Ast\RecordCon $expr, array $me
     }
 
     foreach ($meta['fields'] as $fieldName) {
+        if (\str_starts_with($fieldName, '$')) {
+            continue;
+        }
         if (! isset($byName[$fieldName])) {
             throw typeFail($state, "missing field `{$fieldName}` in record construction", $expr);
         }
     }
 
     foreach (\array_keys($byName) as $extra) {
-        if (! \in_array($extra, $meta['fields'], true)) {
+        if (! \in_array($extra, $meta['fields'], true) || \str_starts_with($extra, '$')) {
             throw typeFail($state, "unknown field `{$extra}` in record construction", $expr);
         }
     }

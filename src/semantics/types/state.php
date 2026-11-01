@@ -378,6 +378,37 @@ final class TypeCheckState
     public array $rigidVars = [];
 
     /**
+     * Local equality assumptions a GADT pattern match introduced, keyed by the
+     * variable they refine: `Lit :: Int -> Expr Int` matched at `Expr a` puts
+     * `a ~ Int` here for the rest of that alternative.
+     *
+     * {@see prune()} follows these exactly as it follows `$subst`, so every
+     * consumer of a type sees the refined form without asking. The scope is one
+     * alternative; see {@see \Moggi\Semantics\Types\gadtPatternSnapshot()}.
+     *
+     * @var array<string, Type>
+     */
+    public array $gadtEqualities = [];
+
+    /**
+     * Existential skolems the pattern matches of the declaration being checked
+     * introduced. None of them may reach the declaration's own type: a type the
+     * match invented has no meaning outside it.
+     *
+     * @var array<string, true>
+     */
+    public array $gadtExistentials = [];
+
+    /**
+     * Ambient constraints GADT patterns contributed, in the order they were
+     * introduced. A function's parameters are bound before the declaration's own
+     * method table is installed, so these are installed again once it is.
+     *
+     * @var list<Ast\PendingConstraint>
+     */
+    public array $gadtAmbientConstraints = [];
+
+    /**
      * Source spelling → skolem name for the signature variables a body is
      * checked against. Type variables are global by spelling: a nested
      * annotation writing the same name means the same variable, and evidence

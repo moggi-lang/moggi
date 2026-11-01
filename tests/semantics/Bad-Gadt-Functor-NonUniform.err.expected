@@ -1,0 +1,4 @@
+tests/semantics/Bad-Gadt-Functor-NonUniform.mog:9:13: type error: cannot derive Functor: constructor `Lit` does not return `Expr` at the datatype's parameters
+
+   9 |   deriving (Functor)
+     |             ^^^^^^^

@@ -1,0 +1,23 @@
+-- Refinement in a module that imports the GADT: `Lit` must still prove
+-- `a ~ Int` here, and constructing `Lit` must reach the one-field constructor
+-- the declaring module published rather than a nullary one.
+module Main where
+
+import Moggi.Internal.Base
+import Expr (Expr(..), eval)
+
+double :: Expr Int -> Int
+double (Lit n) = n * 2
+
+describe :: Expr a -> String
+describe (Lit _) = "lit"
+describe Truth = "truth"
+describe (Pair _ _) = "pair"
+
+main :: IO ()
+main = do
+  putStrLn (show (eval (Lit 7)))
+  putStrLn (show (double (Lit 4)))
+  putStrLn (show (fst (eval (Pair (Lit 1) Truth))))
+  putStrLn (describe (Lit 1))
+  putStrLn (describe Truth)

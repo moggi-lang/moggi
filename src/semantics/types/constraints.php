@@ -1259,6 +1259,7 @@ function prependEvidenceToCall(TypeCheckState $state, Ast\AstNode $expr, array $
         $expr instanceof Ast\Variable
         || $expr instanceof Ast\OperatorRef
         || $expr instanceof Ast\QualifiedRef
+        || $expr instanceof Ast\ConstructorRef
     ) {
         foreach ($evidence as $ev) {
             if (

@@ -1,4 +1,4 @@
-tests/semantics/Bad-Con-Pattern-Field-Order.mog:4:9: type error: could not unify `String` with `Int`
+tests/semantics/Bad-Con-Pattern-Field-Order.mog:5:39: type error: could not unify `String` with `Int`
 
-  4 | bad p = case p of
-    |         ^^^^^^
+  5 |   MkPair { first = x, second = y } -> y + 1
+    |                                       ^^^^^

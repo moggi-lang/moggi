@@ -244,10 +244,14 @@ from `Data.Kind`.
   argument — `forall` binders cannot be supplied at the call site — so the
   compiler infers it, and an ambiguity is resolved with an ascription.
 
-* **No impredicative or existential quantification.** A type variable still
-  stands for a monotype, so `[forall a. a -> a]` and `f (forall a. a -> a)` are
-  refused, and a data constructor cannot quantify its own variables
-  (`data Box = forall a. Box a`).
+* **No impredicative quantification.** A type variable still stands for a
+  monotype, so `[forall a. a -> a]` is refused; `f (forall a. a -> a)` needs a
+  signature that says so.
+
+* **Existential quantification is written the GADT way.** `data Box = forall a.
+  Box a` is refused, but the `where` form gives the same thing and keeps the
+  variable in scope inside the match: `MkBox :: a -> Box`
+  ([Data types § GADTs](data-types.md#gadts)).
 
 * **Quantified constraints belong to a superclass.** `class (forall a. Functor
   (p a)) => Bifunctor p` is supported; the same constraint written in an

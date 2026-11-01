@@ -1,0 +1,17 @@
+-- A GADT published by its declaring module. What crosses the interface is not
+-- only the constructor's scheme and field list but the facts a pattern needs:
+-- which variables the signature leaves existential, which type the constructor
+-- returns, and how many dictionary fields its context stores.
+module Expr (Expr(..), eval) where
+
+import Moggi.Internal.Base
+
+data Expr a where
+  Lit :: Int -> Expr Int
+  Truth :: Expr Bool
+  Pair :: Expr a -> Expr b -> Expr (a, b)
+
+eval :: Expr a -> a
+eval (Lit n) = n
+eval Truth = True
+eval (Pair a b) = (eval a, eval b)

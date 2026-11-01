@@ -55,7 +55,7 @@ function synthesizeTraverse(
 
     $alts = [];
     foreach ($decl->constructors as $ctor) {
-        $pats = freshPatVars('__v', \count($ctor->fields));
+        $pats = freshPatVars('__v', \count(constructorDeriveFields($ctor)));
         $names = patVarNames($pats);
         $body = synthesizeTraverseConstructor($ctor, $param, new Ast\Variable($f), $names);
         $alts[] = new Ast\Alt(new Ast\PatCon($ctor->name, $pats), $body);
@@ -74,7 +74,7 @@ function synthesizeTraverseConstructor(
     array $fieldNames,
 ): Ast\AstNode {
     $expr = pureCall(new Ast\ConstructorRef($ctor->name));
-    foreach ($ctor->fields as $i => $field) {
+    foreach (constructorDeriveFields($ctor) as $i => $field) {
         $ti = synthesizeTraverseField(
             $field->type,
             $param,

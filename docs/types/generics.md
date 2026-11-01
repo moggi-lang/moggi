@@ -209,8 +209,10 @@ once you write the instances your own classes need; they are not a drop-in
   code, or with a concrete representation type.
 * **No reflection on values.** The metadata is compile-time; nothing inspects a
   value's type at run time.
-* **GADTs do not exist**, so there is no generic programming over index-refined
-  constructors.
+* **`Generic` cannot be derived for a GADT.** A constructor that fixes its index
+  (`Lit :: Int -> Expr Int`) has no single representation over the parameter, so
+  `deriving (Generic)` is refused; `Eq`, `Show` and the rest still derive
+  ([Data types § GADTs](data-types.md#gadts)).
 
 ## Where next
 

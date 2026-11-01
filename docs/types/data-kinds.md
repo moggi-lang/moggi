@@ -158,11 +158,11 @@ cost.
 * **No type-level computation.** There is no addition on `Nat`, no comparison,
   and no type family over indices. `Port (n + 1)` is not a type you can write.
   Without functions on indices, `Nat` is a tag, not a numeric type system.
-* **No GADT refinement.** A constructor cannot inspect its index and produce a
-  different type; `data Expr a where …` does not parse
-  ([Data types](data-types.md#what-is-not-available)). Type-level tags constrain
-  what may be passed; they do not let a function learn something from a value's
-  type at run time.
+* **No computation on tags.** A GADT constructor may *refine* an index —
+  `Lit :: Int -> Expr Int` proves the index is `Int` inside the arm that matched
+  it ([Data types § GADTs](data-types.md#gadts)) — but nothing computes with a
+  tag. `Port (n + 1)` is not a type you can write, and a promoted constructor
+  cannot be the result of a type-level function.
 * **No reflection, beyond one class.** A type-level `Symbol` can be turned into a
   `String` with `KnownSymbol`/`symbolVal` from `Moggi.Generics`; there is no
   equivalent for `Nat` or promoted constructors.

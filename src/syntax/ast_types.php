@@ -657,8 +657,137 @@ final class ConstructorDecl extends AstNode
         public ?string $fixityAssoc = null,
         public ?int $fixityPrec = null,
         public bool $declaredInfix = false,
+        /**
+         * A GADT-style constructor's signature, `C :: Int -> T Int`, exactly as
+         * written (a leading `forall` and context included). `null` for the
+         * ordinary `C Int` form, whose field types say everything.
+         */
+        public ?TypeNode $signature = null,
     ) {
         parent::__construct($line, $col, $endCol);
+    }
+
+    /**
+     * The constructor's fields as the checked declaration registered them, in
+     * runtime order.
+     *
+     * A GADT constructor writes its fields in its signature, so `$fields` is
+     * empty for it; the checker resolves the signature into field types (and
+     * prepends the context's dictionary fields) and records them here. Lowering
+     * reads this, so the runtime constructor has the arity its construction and
+     * pattern matching were elaborated at.
+     *
+     * @var ?list<string>
+     */
+    public ?array $resolvedFieldNames = null;
+
+    /** Whether this constructor declares its type with `::` (GADT syntax). */
+    public function isGadt(): bool
+    {
+        return $this->signature !== null;
+    }
+
+    /**
+     * The constructor's runtime fields: the resolved ones when the checker
+     * recorded them, otherwise the field list as written.
+     *
+     * @return list<string>
+     */
+    public function runtimeFieldNames(): array
+    {
+        if ($this->resolvedFieldNames !== null) {
+            return $this->resolvedFieldNames;
+        }
+
+        return \array_map(static fn (CtorField $field): string => $field->name, $this->fields);
+    }
+
+    /**
+     * How many fields the constructor has at runtime.
+     *
+     * A GADT constructor a module published but this process has not checked
+     * has no resolved field list yet; its signature still states the arity, so
+     * the count comes from there — one field per arrow past the quantifier and
+     * context, plus one stored dictionary per constraint. Publishing the arity
+     * is what lets another module *call* the constructor: a wrong zero would
+     * make `MkGad 3` a call of a nullary constructor as a function value.
+     */
+    public function runtimeFieldCount(): int
+    {
+        if ($this->resolvedFieldNames === null && $this->signature !== null) {
+            return \count($this->fieldTypeAsts()) + $this->contextConstraintCount();
+        }
+
+        return \count($this->runtimeFieldNames());
+    }
+
+    /** How many constraints the constructor's context carries (each one a stored dictionary). */
+    public function contextConstraintCount(): int
+    {
+        $node = $this->signature;
+        while ($node instanceof TypeForall) {
+            $node = $node->body;
+        }
+
+        return $node instanceof TypeConstrained ? \count($node->constraints) : 0;
+    }
+
+    /**
+     * The field types the constructor declares, in order.
+     *
+     * For the `C Int Bool` form that is the field list itself. A signature is
+     * peeled the way a function type is: past its quantifier and context, then
+     * one type per arrow, with the last type standing as the result.
+     *
+     * @return list<TypeNode>
+     */
+    public function fieldTypeAsts(): array
+    {
+        if ($this->signature === null) {
+            return \array_map(static fn (CtorField $field): TypeNode => $field->type, $this->fields);
+        }
+
+        $types = [];
+        $node = $this->signatureBodyAst();
+        while ($node instanceof TypeArrow) {
+            $types[] = $node->from;
+            $node = $node->to;
+        }
+
+        return $types;
+    }
+
+    /**
+     * The data type a GADT constructor returns, `T Int` for `C :: Int -> T Int`;
+     * `null` for an ordinary constructor, whose result is the datatype applied to
+     * its own parameters.
+     */
+    public function resultTypeAst(): ?TypeNode
+    {
+        if ($this->signature === null) {
+            return null;
+        }
+
+        $node = $this->signatureBodyAst();
+        while ($node instanceof TypeArrow) {
+            $node = $node->to;
+        }
+
+        return $node;
+    }
+
+    /** The signature with its quantifier(s) and context peeled off. */
+    private function signatureBodyAst(): TypeNode
+    {
+        $node = $this->signature;
+        while ($node instanceof TypeConstrained) {
+            $node = $node->body;
+        }
+        while ($node instanceof TypeForall) {
+            $node = $node->body;
+        }
+
+        return $node;
     }
 
     /** True when every field is a named record field. */

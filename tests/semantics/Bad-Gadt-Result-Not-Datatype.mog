@@ -1,0 +1,10 @@
+-- A GADT constructor may write its result type, but it still has to be the
+-- datatype being declared: `C :: Int -> Other` would be a constructor of two
+-- types at once.
+module Main where
+
+import Moggi.Internal.Base
+
+data Expr a where
+  Lit :: Int -> Expr Int
+  Wrong :: Int -> Maybe Int

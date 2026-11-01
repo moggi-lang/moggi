@@ -1,0 +1,4 @@
+tests/semantics/Bad-Gadt-NonExhaustive.mog:12:14: type error: non-exhaustive case: missing patterns: Truth
+
+  12 | describe e = case e of
+     |              ^^^^^^

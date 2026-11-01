@@ -38,6 +38,7 @@ require_once __DIR__ . '/types/primops.php';
 require_once __DIR__ . '/types/evidence.php';
 require_once __DIR__ . '/types/local_bindings.php';
 require_once __DIR__ . '/types/patterns.php';
+require_once __DIR__ . '/types/gadt.php';
 require_once __DIR__ . '/types/records.php';
 require_once __DIR__ . '/types/recursive_declarations.php';
 require_once __DIR__ . '/types/normalize.php';

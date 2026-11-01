@@ -1,0 +1,12 @@
+-- `MkBox` hides a type the scrutinee does not name. What the match binds for it
+-- exists only inside the alternative, so returning it would claim a type the
+-- value never had.
+module Main where
+
+import Moggi.Internal.Base
+
+data Box where
+  MkBox :: a -> Box
+
+unbox :: Box -> a
+unbox (MkBox x) = x

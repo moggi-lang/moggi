@@ -44,7 +44,7 @@ function isIoTypeCon(TypeCheckState $state, Type $type): bool
         && \count($type->args) === 1;
 }
 
-function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
+function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env, ?Type $expected = null): Type
 {
     $type = match ($expr::class) {
         Ast\IntegerLit::class => inferIntegerLit($state, $expr),
@@ -52,26 +52,34 @@ function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         Ast\StringLit::class => new TStr(),
         Ast\CharLit::class => new TChar(),
         Ast\Variable::class => inferVariable($state, $expr, $env),
-        Ast\ConstructorRef::class => instantiate($state, $env[$expr->name] ?? throw typeFail(
-            $state,
-            appendDidYouMean(
-                "undefined constructor `{$expr->name}`",
-                $expr->name,
-                constructorCandidateNames($env),
-            ),
-            $expr,
-        )),
+        Ast\ConstructorRef::class => (static function () use ($state, $expr, $env): Type {
+            $scheme = $env[$expr->name] ?? throw typeFail(
+                $state,
+                appendDidYouMean(
+                    "undefined constructor `{$expr->name}`",
+                    $expr->name,
+                    constructorCandidateNames($env),
+                ),
+                $expr,
+            );
+            $instantiated = instantiateScheme($state, $scheme);
+            if ($instantiated['constraints'] !== []) {
+                setPendingObligations($state, $expr, $instantiated['constraints'], $instantiated['dicts']);
+            }
+
+            return $instantiated['type'];
+        })(),
         Ast\OperatorRef::class => inferOperatorRef($state, $expr, $env),
         Ast\Apply::class => inferApplyAndElaborate($state, $expr, $env),
         Ast\Infix::class => inferInfix($state, $expr, $env),
         Ast\Tuple::class => inferTuple($state, $expr, $env),
         Ast\ListLit::class => inferList($state, $expr, $env),
         Ast\Lambda::class => inferLambda($state, $expr, $env),
-        Ast\Let::class => inferLet($state, $expr, $env),
-        Ast\Where::class => inferWhere($state, $expr, $env),
-        Ast\CaseExpr::class => inferCase($state, $expr, $env),
-        Ast\GuardsExpr::class => inferGuards($state, $expr, $env),
-        Ast\DoExpr::class => inferDoExpr($state, $expr, $env),
+        Ast\Let::class => inferLet($state, $expr, $env, $expected),
+        Ast\Where::class => inferWhere($state, $expr, $env, $expected),
+        Ast\CaseExpr::class => inferCase($state, $expr, $env, $expected),
+        Ast\GuardsExpr::class => inferGuards($state, $expr, $env, $expected),
+        Ast\DoExpr::class => inferDoExpr($state, $expr, $env, $expected),
         Ast\RecordCon::class => inferRecordCon($state, $expr, $env),
         Ast\FieldAccess::class => inferFieldAccess($state, $expr, $env),
         Ast\RecordUpdate::class => inferRecordUpdate($state, $expr, $env),
@@ -144,7 +152,7 @@ function reportTypedHoles(TypeCheckState $state): void
     throw $err;
 }
 
-function inferDoExpr(TypeCheckState $state, Ast\DoExpr $expr, array $env): Type
+function inferDoExpr(TypeCheckState $state, Ast\DoExpr $expr, array $env, ?Type $expected = null): Type
 {
     $bind = classMethodWithRole($state, bindRole());
     if ($bind === null) {
@@ -159,7 +167,7 @@ function inferDoExpr(TypeCheckState $state, Ast\DoExpr $expr, array $env): Type
     if ($expr->sourceFile !== null) {
         Ast\markSourceFile($desugared, $expr->sourceFile);
     }
-    $type = inferExpr($state, $desugared, $env);
+    $type = inferExpr($state, $desugared, $env, $expected);
     $expr->desugared = $desugared;
 
     return $type;
@@ -765,7 +773,7 @@ function inferLambda(TypeCheckState $state, Ast\Lambda $expr, array $env): Type
     return $fnType;
 }
 
-function inferLet(TypeCheckState $state, Ast\Let $expr, array $env): Type
+function inferLet(TypeCheckState $state, Ast\Let $expr, array $env, ?Type $expected = null): Type
 {
     assertBindingGroupLinear($state, $expr->bindings);
     $state->pushBinderScope();
@@ -773,13 +781,13 @@ function inferLet(TypeCheckState $state, Ast\Let $expr, array $env): Type
     try {
         $local = inferBindingGroups($state, $expr->bindings, $env, $expr->generalizeBindings);
 
-        return inferExpr($state, $expr->body, $local);
+        return inferExpr($state, $expr->body, $local, $expected);
     } finally {
         $state->popBinderScope();
     }
 }
 
-function inferWhere(TypeCheckState $state, Ast\Where $expr, array $env): Type
+function inferWhere(TypeCheckState $state, Ast\Where $expr, array $env, ?Type $expected = null): Type
 {
     assertBindingGroupLinear($state, $expr->bindings);
     $state->pushBinderScope();
@@ -787,72 +795,87 @@ function inferWhere(TypeCheckState $state, Ast\Where $expr, array $env): Type
     try {
         $local = inferBindingGroups($state, $expr->bindings, $env, true);
 
-        return inferExpr($state, $expr->expr, $local);
+        return inferExpr($state, $expr->expr, $local, $expected);
     } finally {
         $state->popBinderScope();
     }
 }
 
-function inferCase(TypeCheckState $state, Ast\CaseExpr $expr, array $env): Type
+function inferCase(TypeCheckState $state, Ast\CaseExpr $expr, array $env, ?Type $expected = null): Type
 {
     $scrutineeType = inferExpr($state, $expr->scrutinee, $env);
     $altEnvs = [];
     /** @var list<array<string, int>> $altScopes each arm's frame, saved for its body */
     $altScopes = [];
+    /** @var list<array<string, mixed>> $altGadt what each arm's pattern proved */
+    $altGadt = [];
+    $outer = gadtPatternSnapshot($state);
 
     foreach ($expr->alts as $alt) {
         $altEnv = $env;
         assertPatternLinear($state, $alt->pattern);
         $state->pushBinderScope();
-        [$patType, $altEnv] = bindPattern($state, $alt->pattern, freshType($state), $altEnv, generalize: false);
-        unify($state, $patType, $scrutineeType, $expr);
-        $altEnvs[] = $altEnv;
-        $altScopes[] = $state->binderScopes[\count($state->binderScopes) - 1];
-        $state->popBinderScope();
+
+        try {
+            freshType($state);
+            [$_, $altEnv] = bindPattern($state, $alt->pattern, $scrutineeType, $altEnv, generalize: false);
+            $altEnvs[] = $altEnv;
+            $altScopes[] = $state->binderScopes[\count($state->binderScopes) - 1];
+            $altGadt[] = gadtPatternSnapshot($state);
+        } finally {
+            $state->popBinderScope();
+            gadtPatternRestore($state, $outer);
+        }
     }
 
     checkCaseExhaustiveness($state, $expr, $scrutineeType);
     $expr->exhaustive = caseExhaustivenessProven($state, $expr, $scrutineeType);
 
     foreach ($expr->alts as $i => $alt) {
+        gadtPatternRestore($state, $altGadt[$i]);
         $state->binderScopes[] = $altScopes[$i];
         try {
             $altEnvs[$i] = overloadedLiteralPatterns($state, $alt, $altEnvs[$i]);
             $altScopes[$i] = $state->binderScopes[\count($state->binderScopes) - 1];
         } finally {
             \array_pop($state->binderScopes);
+            gadtPatternRestore($state, $outer);
         }
     }
 
-    $result = null;
+    $result = $expected === null ? null : prune($state, $expected);
     foreach ($expr->alts as $i => $alt) {
+        gadtPatternRestore($state, $altGadt[$i]);
         $state->binderScopes[] = $altScopes[$i];
         try {
-            $bodyType = inferExpr($state, $alt->body, $altEnvs[$i]);
+            $expectedHere = $result === null ? null : prune($state, $result);
+            $bodyType = inferExpr($state, $alt->body, $altEnvs[$i], $expectedHere);
+            if ($result === null) {
+                $result = $bodyType;
+            } else {
+                unify($state, $bodyType, $expectedHere, $alt->body);
+            }
         } finally {
             \array_pop($state->binderScopes);
-        }
-        if ($result === null) {
-            $result = $bodyType;
-        } else {
-            unifyCaseBranches($state, $bodyType, $result, $alt->body);
+            gadtPatternRestore($state, $outer);
         }
     }
 
     return $result ?? new TUnit();
 }
 
-function inferGuards(TypeCheckState $state, Ast\GuardsExpr $expr, array $env): Type
+function inferGuards(TypeCheckState $state, Ast\GuardsExpr $expr, array $env, ?Type $expected = null): Type
 {
-    $result = null;
+    $result = $expected === null ? null : prune($state, $expected);
     foreach ($expr->clauses as $clause) {
         $guardType = inferExpr($state, $clause->guard, $env);
         unify($state, $guardType, new TCon('Bool'), $clause->guard);
-        $bodyType = inferExpr($state, $clause->body, $env);
+        $expectedHere = $result === null ? null : prune($state, $result);
+        $bodyType = inferExpr($state, $clause->body, $env, $expectedHere);
         if ($result === null) {
             $result = $bodyType;
         } else {
-            unifyCaseBranches($state, $bodyType, $result, $clause->body);
+            unify($state, $bodyType, $expectedHere, $clause->body);
         }
     }
 
@@ -924,11 +947,35 @@ function inferRecordCon(TypeCheckState $state, Ast\RecordCon $expr, array $env):
     $meta = lookupConstructorMeta($state, $expr->name)
         ?? throw typeFail($state, "unknown constructor {$expr->name}", $expr);
     recordValueFields($state, $expr, $meta);
-    [$fieldTypes, $resultType] = instantiateConstructorTypes($state, $expr->name);
 
-    foreach ($meta['fields'] as $i => $fieldName) {
+    $scheme = $state->env[$expr->name]
+        ?? throw typeFail($state, "unknown constructor {$expr->name}", $expr);
+    $instantiated = instantiateScheme($state, $scheme);
+    $type = $instantiated['type'];
+    $fieldTypes = [];
+    while ($type instanceof TArrow) {
+        $fieldTypes[] = $type->from;
+        $type = $type->to;
+    }
+    $resultType = $type;
+
+    $surfaceNames = $meta['surfaceFieldNames'] ?? $meta['fields'];
+    foreach ($surfaceNames as $i => $fieldName) {
         $fieldExpr = recordValueFieldExpr($expr, $fieldName);
-        unify($state, inferExpr($state, $fieldExpr, $env), $fieldTypes[$i], $fieldExpr);
+        unify($state, inferExpr($state, $fieldExpr, $env, $fieldTypes[$i]), $fieldTypes[$i], $fieldExpr);
+    }
+
+    if ($instantiated['constraints'] !== []) {
+        $evidence = resolveConstraintEvidence($state, $instantiated['constraints'], $expr);
+        foreach ($evidence as $i => $ev) {
+            $expr->fields[] = new Ast\RecordField(
+                gadtContextFieldName($i, $instantiated['constraints'][$i]->class),
+                $ev,
+                $expr->line,
+                $expr->col,
+                $expr->endCol,
+            );
+        }
     }
 
     return $resultType;

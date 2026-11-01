@@ -441,13 +441,114 @@ function parsePrefixFunctionDecl(ParserState $state, string $name, Ast\TypeNode 
 /**
  * @return Ast\DataDecl
  */
+/**
+ * The `where` block of a GADT-style declaration.
+ *
+ * Each item is `C, D :: τ`, where `τ` is a constructor type: an optional
+ * `forall`, an optional context and then the fields and the data type the
+ * constructor returns. The result type is kept as written, because that is the
+ * whole point of the form — `C :: Int -> T Int` says more than a field list can.
+ *
+ * The block ends at the first token written at or left of the `data` keyword, so
+ * it composes with the layout the rest of the language already uses.
+ *
+ * @return list<Ast\ConstructorDecl>
+ */
+function parseGadtConstructorBlock(ParserState $state, Token $dataToken): array
+{
+    expect($state, TokenKind::KwWhere);
+
+    $constructors = [];
+    while (! isAt($state, TokenKind::Eof)) {
+        if (peek($state)->col <= $dataToken->col) {
+            break;
+        }
+        if (isAt($state, TokenKind::KwDeriving)) {
+            break;
+        }
+        if (isAt($state, TokenKind::Pragma)) {
+            advance($state);
+
+            continue;
+        }
+
+        $leadingDoc = consumeLeadingDoc($state);
+        $names = [expect($state, TokenKind::ConId)];
+        while (isAt($state, TokenKind::Comma)) {
+            advance($state);
+            $names[] = expect($state, TokenKind::ConId);
+        }
+        expectOp($state, '::');
+
+        [$fields, $signature] = parseGadtConstructorSignature($state);
+
+        foreach ($names as $nameToken) {
+            $ctor = new Ast\ConstructorDecl(
+                $nameToken->lexeme,
+                $fields,
+                $nameToken->line,
+                $nameToken->col,
+                $nameToken->col + \max(0, \strlen($nameToken->lexeme) - 1),
+                signature: $signature,
+            );
+            if ($leadingDoc !== null) {
+                $ctor->doc = $leadingDoc;
+            }
+            $constructors[] = $ctor;
+        }
+
+        $trailing = consumeTrailingDoc($state);
+        if ($trailing !== null && $constructors !== []) {
+            $last = $constructors[\count($constructors) - 1];
+            $last->doc = mergeDoc($last->doc, $trailing);
+        }
+    }
+
+    if ($constructors === []) {
+        throw parseError($state, 'a `where` data declaration needs at least one constructor');
+    }
+
+    return $constructors;
+}
+
+/**
+ * One GADT constructor's type, in either field spelling:
+ *
+ *   C :: Int -> Bool -> T Int
+ *   C :: { left :: Int, right :: Bool } -> T Int
+ *
+ * The record form returns its fields and a synthetic signature over them, so
+ * everything downstream sees one shape.
+ *
+ * @return array{0: list<Ast\CtorField>, 1: Ast\TypeNode}
+ */
+function parseGadtConstructorSignature(ParserState $state): array
+{
+    if (isAt($state, TokenKind::LBrace)) {
+        $fields = parseRecordFieldDecls($state);
+        expectOp($state, '->');
+        $result = parseType($state);
+
+        $signature = $result;
+        foreach (\array_reverse($fields) as $field) {
+            $signature = new Ast\TypeArrow($field->type, $signature);
+        }
+
+        return [$fields, $signature];
+    }
+
+    return [[], parseType($state)];
+}
+
 function parseDataDecl(ParserState $state): Ast\DataDecl
 {
-    expect($state, TokenKind::KwData);
+    $dataToken = expect($state, TokenKind::KwData);
     [$name, $params, $nameToken] = parseDataHead($state);
 
     $constructors = [];
-    if (isAt($state, TokenKind::Op, 0, '=')) {
+    if (isAt($state, TokenKind::KwWhere)) {
+        $constructors = parseGadtConstructorBlock($state, $dataToken);
+    } elseif (isAt($state, TokenKind::Op, 0, '=')) {
         advance($state);
         $constructors = [parseDocumentedConstructor($state)];
         while (isAt($state, TokenKind::Pipe)) {

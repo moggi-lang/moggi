@@ -66,9 +66,10 @@ function synthesizeEqBody(Ast\DataDecl $decl, string $left, string $right): Ast\
 
     $alts = [];
     foreach ($decl->constructors as $ctor) {
+        $fields = constructorDeriveFields($ctor);
         $leftBinders = [];
         $leftArgs = [];
-        foreach ($ctor->fields as $i => $_) {
+        foreach ($fields as $i => $_) {
             $name = '__a' . $i;
             $leftBinders[] = $name;
             $leftArgs[] = new Ast\PatVar($name);
@@ -77,7 +78,7 @@ function synthesizeEqBody(Ast\DataDecl $decl, string $left, string $right): Ast\
 
         $rightBinders = [];
         $rightArgs = [];
-        foreach ($ctor->fields as $i => $_) {
+        foreach ($fields as $i => $_) {
             $name = '__b' . $i;
             $rightBinders[] = $name;
             $rightArgs[] = new Ast\PatVar($name);

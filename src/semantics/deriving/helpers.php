@@ -19,6 +19,81 @@ use function Moggi\Semantics\Types\typeFail;
  * Shared AST helpers for stock / newtype deriving backends.
  */
 
+/**
+ * The fields a constructor contributes to a derived body.
+ *
+ * An ordinary constructor states them in its field list. A GADT constructor
+ * states them in its signature instead, and the dictionary fields a GADT
+ * context stores are not among them: the pattern binder prepends one for each
+ * constraint by itself, so a derived pattern names only what the source wrote.
+ *
+ * @return list<Ast\CtorField>
+ */
+function constructorDeriveFields(Ast\ConstructorDecl $ctor): array
+{
+    if ($ctor->fields !== []) {
+        return $ctor->fields;
+    }
+
+    if (! $ctor->isGadt()) {
+        return [];
+    }
+
+    $labels = [];
+    foreach ($ctor->resolvedFieldNames ?? [] as $name) {
+        if (! \str_starts_with($name, '$')) {
+            $labels[] = $name;
+        }
+    }
+
+    $fields = [];
+    foreach ($ctor->fieldTypeAsts() as $i => $type) {
+        $fields[] = new Ast\CtorField($labels[$i] ?? '', $type);
+    }
+
+    return $fields;
+}
+
+/**
+ * Whether a GADT constructor returns the datatype at its own parameters, the
+ * shape a functorial derivation needs (`C :: f a -> T a`).
+ *
+ * `C :: Int -> T Int` does not: mapping a constructor that fixes its index
+ * cannot produce a `T a` for an arbitrary `a`, which is why Haskell refuses
+ * `deriving Functor` there.
+ */
+function constructorReturnsParams(Ast\ConstructorDecl $ctor, Ast\DataDecl $decl): bool
+{
+    $result = $ctor->resultTypeAst();
+    if ($result === null) {
+        return true;
+    }
+
+    $head = $result;
+    $args = [];
+    if ($result instanceof Ast\TypeApp) {
+        $head = $result->con;
+        $args = $result->args;
+    }
+
+    if (! $head instanceof Ast\TypeCon || $head->name !== $decl->name) {
+        return false;
+    }
+
+    if (\count($args) !== \count($decl->params)) {
+        return false;
+    }
+
+    foreach ($decl->params as $i => $param) {
+        $arg = $args[$i];
+        if (! $arg instanceof Ast\TypeVar || $arg->name !== $param->name) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 /** Last data parameter name, or null if the decl is nullary. */
 function lastDataParamName(Ast\DataDecl $decl): ?string
 {
@@ -72,7 +147,7 @@ function paramClassConstraints(
 
     $needed = [];
     foreach ($decl->constructors as $ctor) {
-        foreach ($ctor->fields as $field) {
+        foreach (constructorDeriveFields($ctor) as $field) {
             foreach (typeNodeFreeVars($field->type) as $var => $_) {
                 if (! isset($paramNames[$var])) {
                     continue;
@@ -302,7 +377,7 @@ function newtypeRepresentation(Ast\DataDecl $decl): array
 
     return [
         'ctor' => $ctor->name,
-        'field' => $ctor->fields[0]->type,
+        'field' => constructorDeriveFields($ctor)[0]->type,
     ];
 }
 
@@ -340,7 +415,7 @@ function assertNullaryConstructors(
     }
 
     foreach ($decl->constructors as $ctor) {
-        if ($ctor->fields !== []) {
+        if (constructorDeriveFields($ctor) !== []) {
             throw typeFail(
                 $state,
                 "cannot derive {$className}: constructor `{$ctor->name}` has fields (only nullary constructors are allowed)",

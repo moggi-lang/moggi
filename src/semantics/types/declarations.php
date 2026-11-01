@@ -7,6 +7,7 @@ use Moggi\Semantics\Kernel;
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
+use Moggi\Semantics\TypeExpr\TForall;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\Type;
@@ -163,6 +164,21 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
 
             validateConstructorFieldTypeVars($state, $ctor, $params);
 
+            if ($ctor->isGadt()) {
+                $shape = gadtConstructorShape($state, $decl, $ctor, $params);
+
+                $state->data[$decl->name]['constructors'][$ctor->name] = $shape['entry'];
+                $ctor->resolvedFieldNames = $shape['entry']['fields'];
+
+                $state->env[$ctor->name] = scheme(
+                    $shape['type'],
+                    $shape['bound'],
+                    $shape['context'],
+                );
+
+                continue;
+            }
+
             $fieldTypes = [];
             $fieldNames = [];
             foreach ($ctor->fields as $field) {
@@ -284,14 +300,170 @@ function constructorNameExists(TypeCheckState $state, string $name): bool
 
 function validateConstructorFieldTypeVars(TypeCheckState $state, Ast\ConstructorDecl $ctor, array $params): void
 {
+    if ($ctor->isGadt()) {
+        return;
+    }
+
     $bound = \array_fill_keys($params, true);
-    foreach ($ctor->fields as $field) {
-        foreach (typeAstVars($field->type) as $name => $_) {
+    foreach ($ctor->fieldTypeAsts() as $fieldType) {
+        foreach (typeAstVars($fieldType) as $name => $_) {
             if (! isset($bound[$name])) {
-                throw typeFail($state, "unbound type variable `{$name}` in constructor field", $field->type);
+                throw typeFail($state, "unbound type variable `{$name}` in constructor field", $fieldType);
             }
         }
     }
+}
+
+/**
+ * Elaborate one GADT constructor signature into the shape the checker
+ * registers: its runtime fields, the type it constructs, the variables it
+ * quantifies and the context it depends on.
+ *
+ * The signature is where a GADT says something an ordinary constructor cannot:
+ * the result type is written out, so `C :: Int -> T Int` reports `T Int` rather
+ * than `T a` instantiated at the datatype's parameters.
+ *
+ * Two things follow from that and are settled here, once, rather than at every
+ * use site:
+ *
+ *  - the variables the result does *not* mention are existential;
+ *  - a context becomes one stored dictionary field per constraint, because it
+ *    may mention an existential and nothing at the match site could invent that
+ *    dictionary.
+ *
+ * @return array{
+ *   entry: array<string, mixed>,
+ *   type: Type,
+ *   bound: list<string>,
+ *   context: list<Ast\PendingConstraint>
+ * }
+ */
+function gadtConstructorShape(
+    TypeCheckState $state,
+    Ast\DataDecl $decl,
+    Ast\ConstructorDecl $ctor,
+    array $params,
+): array {
+    $signatureAst = $ctor->signature;
+
+    $explicit = [];
+    while ($signatureAst instanceof Ast\TypeForall) {
+        foreach ($signatureAst->binders as $binder) {
+            if (isset($explicit[$binder])) {
+                throw typeFail(
+                    $state,
+                    "constructor `{$ctor->name}` binds `{$binder}` twice in one `forall`",
+                    $ctor,
+                );
+            }
+            $explicit[$binder] = true;
+        }
+        $signatureAst = $signatureAst->body;
+    }
+
+    [$constraintAsts, $signatureAst] = splitTypeAst($signatureAst);
+    $context = $constraintAsts === [] ? [] : parseConstraints($state, $constraintAsts, $ctor);
+
+    $signature = astType($state, $ctor->signature);
+    while ($signature instanceof TForall) {
+        $signature = $signature->body;
+    }
+
+    foreach ($context as $_constraint) {
+        if ($signature instanceof TArrow
+            && $signature->from instanceof TCon
+            && \str_starts_with($signature->from->name, '__Dict_')) {
+            $signature = $signature->to;
+        }
+    }
+
+    $fieldTypes = [];
+    while ($signature instanceof TArrow) {
+        $fieldTypes[] = $signature->from;
+        $signature = $signature->to;
+    }
+
+    $result = $signature;
+    if (! $result instanceof TCon || $result->name !== $decl->name) {
+        throw typeFail(
+            $state,
+            "constructor `{$ctor->name}` must return `{$decl->name}`, not "
+                . typeToString($result),
+            $ctor,
+        );
+    }
+    if (\count($result->args) !== \count($params)) {
+        throw typeFail(
+            $state,
+            "constructor `{$ctor->name}` returns `{$decl->name}` at "
+                . \count($result->args) . ' argument(s); the datatype has ' . \count($params),
+            $ctor,
+        );
+    }
+
+    $fieldNames = [];
+    foreach (\array_keys($fieldTypes) as $i) {
+        $fieldNames[] = isset($ctor->fields[$i]) ? $ctor->fields[$i]->name : '';
+    }
+
+    $resultVars = typeVars($result);
+    $bound = $explicit;
+    foreach ($params as $param) {
+        $bound[$param] = true;
+    }
+    foreach ($resultVars as $name => $_) {
+        $bound[$name] = true;
+    }
+
+    $existential = [];
+    foreach ($fieldTypes as $fieldType) {
+        foreach (\array_keys(typeVars($fieldType)) as $name) {
+            $bound[$name] = true;
+            if (! isset($resultVars[$name])) {
+                $existential[$name] = true;
+            }
+        }
+    }
+    foreach ($context as $constraint) {
+        foreach ($constraint->args as $arg) {
+            foreach (\array_keys(typeVars($arg)) as $name) {
+                $bound[$name] = true;
+                if (! isset($resultVars[$name])) {
+                    $existential[$name] = true;
+                }
+            }
+        }
+    }
+
+    $dictTypes = [];
+    $dictNames = [];
+    foreach ($context as $i => $constraint) {
+        $dictTypes[] = new TCon('__Dict_' . $constraint->class);
+        $dictNames[] = gadtContextFieldName($i, $constraint->class);
+    }
+
+    $ctorType = $result;
+    foreach (\array_reverse($fieldTypes) as $fieldType) {
+        $ctorType = new TArrow($fieldType, $ctorType);
+    }
+
+    return [
+        'entry' => [
+            'name' => $ctor->name,
+            'fields' => [...$dictNames, ...$fieldNames],
+            'fieldTypes' => [...$dictTypes, ...$fieldTypes],
+            'surfaceFieldNames' => $fieldNames,
+            'surfaceFieldTypes' => $fieldTypes,
+            'surfaceFieldCount' => \count($fieldTypes),
+            'context' => $context,
+            'existentials' => \array_keys($existential),
+            'resultType' => $result,
+            'gadt' => true,
+        ],
+        'type' => $ctorType,
+        'bound' => \array_keys($bound),
+        'context' => $context,
+    ];
 }
 
 function registerTypeSynonym(TypeCheckState $state, Ast\TypeSynonymDecl $decl): void

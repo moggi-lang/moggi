@@ -150,10 +150,10 @@ kind errors always name the constructor and both kinds.
 * **No promotion of functions or type constructors** to the type level; only
   data constructors and the two literal kinds are promoted
   ([DataKinds](data-kinds.md)).
-* **No GADTs**, so a constructor cannot refine the type parameters of the value
-  it builds. The kind system checks arity and named kinds; it does not give you
-  the type-indexed reasoning a GADT would
-  ([Data types § What is not available](data-types.md#what-is-not-available)).
+* **No type-level computation.** A GADT constructor may fix the index of the
+  value it builds, and matching one refines the index
+  ([Data types § GADTs](data-types.md#gadts)), but the kind system has no
+  functions: kinds are checked for arity and named arguments, never evaluated.
 
 ## Where next
 

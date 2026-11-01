@@ -459,9 +459,13 @@ function inferDataKind(TypeCheckState $state, Ast\DataDecl $decl): Kind
     unifyKind($ctx, $resultKind, new KType());
 
     foreach ($decl->constructors as $ctor) {
-        foreach ($ctor->fields as $field) {
-            $fieldKind = inferKindAst($ctx, $field->type);
+        foreach ($ctor->fieldTypeAsts() as $fieldType) {
+            $fieldKind = inferKindAst($ctx, $fieldType);
             unifyKind($ctx, $fieldKind, new KType());
+        }
+
+        if ($ctor->signature !== null) {
+            unifyKind($ctx, inferKindAst($ctx, $ctor->signature), new KType());
         }
     }
 
