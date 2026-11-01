@@ -259,13 +259,19 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         }
     }
 
-    $written = \array_keys($plans);
-    if ($context->backendId === 'php' && $entryModule !== null) {
-        $written = emittedClosure(
+    /*
+     * Every target writes the entry's own closure. A module nothing reaches has no artifact to
+     * ship, and all three targets have to agree on what the program is; the closure is the same
+     * one PHP has always written, because a module's references are its plans' — a data value is
+     * a tagged runtime `Con` on both managed targets, so no emitted class names another module's
+     * data type on its own.
+     */
+    $written = $entryModule !== null
+        ? emittedClosure(
             \array_map(static fn (array $planned): EmitPlan => $planned['plan'], $plans),
             $entryModule,
-        );
-    }
+        )
+        : \array_keys($plans);
 
     /*
      * Everything an emitter reads that is *not* the module's own IR: the target and its
@@ -357,11 +363,12 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
 }
 
 /**
- * The modules a compile writes: the entry and everything its plan's require lines reach.
+ * The modules a compile writes: the entry and everything its plan's module references reach.
  *
- * This is the one place that decides what the tree holds. An emitted require can only name a
- * module this returns, and a module it returns is reachable from the entry, so a written tree is
- * the entry's own closure and no artifact can point at a file the same compile did not write.
+ * This is the one place that decides what the tree holds, for every target. An emitted reference
+ * (a PHP require, a JVM or .NET class reference) can only name a module this returns, and a
+ * module it returns is reachable from the entry, so a written tree is the entry's own closure and
+ * no artifact can point at a file the same compile did not write.
  *
  * @param array<string, EmitPlan> $planByModule
  * @return list<string>

@@ -89,6 +89,10 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
         $functionArity[$resolved] ??= $arity;
     }
 
+    foreach ($interface->classScopeFnRuntimeArity() as $resolved => $arity) {
+        $functionArity[$resolved] ??= $arity;
+    }
+
     foreach ($program->instanceEvidence as $ev) {
         if (\is_array($ev)) {
             $functionArity[$ev['evidenceName']] = \count($ev['contextParams'] ?? []);

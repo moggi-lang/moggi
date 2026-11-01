@@ -26,7 +26,6 @@ function emitPendingIoThunkMethods(
     array $functionArity,
     array $externalFns,
     array $lambdaMeta,
-    ?FnWrapperRegistry $wrapperRegistry,
     IoThunkRegistry $ioThunkRegistry,
     array $newtypeConstructors = [],
     array $localCallables = [],
@@ -49,8 +48,8 @@ function emitPendingIoThunkMethods(
                 0x0009,
                 $maxLocals,
                 $paramV,
-                static function (CodeBuilder $c, ConstantPool $cp) use ($owner, $functionArity, $externalFns, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $params, $arity, $body, $result, $newtypeConstructors, $localCallables, $foreignInterfaces): void {
-                    $env = new EmitEnv($c, $cp, $owner, $functionArity, $externalFns, $arity, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, null, $localCallables, $foreignInterfaces);
+                static function (CodeBuilder $c, ConstantPool $cp) use ($owner, $functionArity, $externalFns, $lambdaMeta, $ioThunkRegistry, $params, $arity, $body, $result, $newtypeConstructors, $localCallables, $foreignInterfaces): void {
+                    $env = new EmitEnv($c, $cp, $owner, $functionArity, $externalFns, $arity, $lambdaMeta, $ioThunkRegistry, $newtypeConstructors, null, $localCallables, $foreignInterfaces);
                     foreach ($params as $i => $p) {
                         $env->locals[$p] = $i;
                     }

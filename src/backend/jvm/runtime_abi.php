@@ -116,6 +116,7 @@ function languageRuntime(): array
         'moggi/rt/ConstFn' => buildConstFnClass(),
         'moggi/rt/Rec' => buildRecClass(),
         'moggi/rt/TopLevelFn' => buildTopLevelFnClass(),
+        'moggi/rt/StaticFn' => buildStaticFnClass(),
         'moggi/rt/Word64' => buildWord64Class(),
         'moggi/rt/Platform' => buildPlatformClass(),
     ];
@@ -1167,6 +1168,58 @@ function buildTopLevelFnClass(): string
             $c->aload(1);
             $c->invokeinterface(
                 $cp->ifaceMethodRef('moggi/rt/Fn', 'invoke', '([Ljava/lang/Object;)Ljava/lang/Object;'),
+                1,
+                true,
+            );
+            $c->areturn();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/**
+ * One `Fn` over any static method, so a function value needs no class of its own.
+ *
+ * A method handle already carries the target's own signature, so one adapter serves every target:
+ * `TopLevelFn` applies the value's arity (it is what keeps `RT.Apply` arity-aware), and
+ * `invokeWithArguments` performs the argument adaptation the per-target wrapper used to spell out
+ * with array loads and an `invokestatic`.
+ */
+function buildStaticFnClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/StaticFn');
+    $b->implement('moggi/rt/Fn');
+    $b->addField('target', 'Ljava/lang/invoke/MethodHandle;', 0x0011);
+
+    $b->addMethod(
+        '<init>',
+        '(Ljava/lang/invoke/MethodHandle;)V',
+        0x0001,
+        2,
+        ['moggi/rt/StaticFn', 'java/lang/invoke/MethodHandle'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/StaticFn', 'target', 'Ljava/lang/invoke/MethodHandle;'));
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'invoke',
+        '([Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0001,
+        2,
+        ['moggi/rt/StaticFn', '[Ljava/lang/Object;'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/StaticFn', 'target', 'Ljava/lang/invoke/MethodHandle;'));
+            $c->aload(1);
+            $c->invokevirtual(
+                $cp->methodRef('java/lang/invoke/MethodHandle', 'invokeWithArguments', '([Ljava/lang/Object;)Ljava/lang/Object;'),
                 1,
                 true,
             );

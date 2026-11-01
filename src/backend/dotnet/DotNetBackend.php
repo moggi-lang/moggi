@@ -13,8 +13,6 @@ use function Moggi\Backend\DotNet\resolveDotnetExecutable;
 use function Moggi\Backend\DotNet\Verify\ensureInspectorBinary;
 use function Moggi\Backend\DotNet\Verify\inspectDotNetType;
 use function Moggi\Backend\DotNet\Naming\artifactPath;
-use function Moggi\Backend\DotNet\Naming\fnWrapperBundlePath;
-use function Moggi\Backend\DotNet\Naming\isFnWrapperArtifact;
 use function Moggi\Backend\DotNet\Naming\symbolName;
 use function Moggi\Backend\DotNet\Naming\typeArtifactPath;
 use function Moggi\Backend\DotNet\Verify\verifyDotNetForeignImport;
@@ -108,37 +106,15 @@ final class DotNetBackend implements Backend
     }
 
     /**
-     * Gather every per-function Fn wrapper (`Moggi/Fn/*_<arity>.il`) into the
-     * one shared bundle ({@see \Moggi\Backend\DotNet\Naming\fnWrapperBundlePath()}).
-     *
-     * Each wrapper class is a pure function of its (target, arity), so
-     * duplicates from different modules already collapsed onto one path with
-     * identical bytes during the merge; what remains is sorted for a
-     * deterministic bundle. Module classes and source maps pass through
-     * untouched.
+     * The .NET backend emits one `.il` per module and no auxiliary files of its own — a first-class
+     * function is a runtime adapter over a delegate, not a generated class — so there is nothing to
+     * consolidate.
      *
      * @param array<string, string> $emit
      * @return array<string, string>
      */
     public function foldProgramEmit(array $emit): array
     {
-        $wrappers = [];
-        foreach ($emit as $path => $bytes) {
-            if (isFnWrapperArtifact($path)) {
-                $wrappers[$path] = $bytes;
-                unset($emit[$path]);
-            }
-        }
-        if ($wrappers === []) {
-            return $emit;
-        }
-        \ksort($wrappers, \SORT_STRING);
-        $bundle = '';
-        foreach ($wrappers as $bytes) {
-            $bundle .= \rtrim($bytes, "\n") . "\n";
-        }
-        $emit[fnWrapperBundlePath()] = $bundle;
-
         return $emit;
     }
 

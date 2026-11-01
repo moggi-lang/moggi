@@ -67,7 +67,6 @@ final class EmitEnv implements \Moggi\Backend\Managed\StmtTarget
         public array $externalFns,
         int $paramCount,
         public array $lambdaMeta = [],
-        public ?FnWrapperRegistry $wrapperRegistry = null,
         public ?IoThunkRegistry $ioThunkRegistry = null,
         public array $newtypeConstructors = [],
         public ?SourceMapBuilder $sourceMap = null,
@@ -371,31 +370,6 @@ final class EmitEnv implements \Moggi\Backend\Managed\StmtTarget
     public function unsupported(string $class): \RuntimeException
     {
         return new \RuntimeException('JVM emit: unsupported operand ' . $class);
-    }
-}
-
-final class FnWrapperRegistry
-{
-    /** @var array<string, array{internal: string, targetOwner: string, targetSym: string, arity: int}> */
-    private array $specs = [];
-
-    public function ensure(string $targetOwner, string $targetSym, int $arity): string
-    {
-        $internal = fnWrapperName($targetOwner, $targetSym, $arity);
-        $this->specs[$internal] ??= [
-            'internal' => $internal,
-            'targetOwner' => $targetOwner,
-            'targetSym' => $targetSym,
-            'arity' => $arity,
-        ];
-
-        return $internal;
-    }
-
-    /** @return list<array{internal: string, targetOwner: string, targetSym: string, arity: int}> */
-    public function specs(): array
-    {
-        return \array_values($this->specs);
     }
 }
 

@@ -268,7 +268,7 @@ function compileIntoRoot(
         return $empty(1);
     }
 
-    echo \count($compiled) . " file(s) compiled\n";
+    echo \count($files) . " module(s) compiled\n";
 
     return [
         'exitCode' => 0,

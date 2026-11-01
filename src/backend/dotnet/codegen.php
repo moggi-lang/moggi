@@ -72,7 +72,6 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         $newtypeConstructors,
     ] = managedModuleFacts($module, $sourcePath, $options, 'dotnet', $owner . '.il');
 
-    $wrapperRegistry = new FnWrapperRegistry();
     $ioThunkRegistry = new IoThunkRegistry();
 
     foreach ($module->functions as $fn) {
@@ -80,7 +79,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
             $fn->srcLoc ?? new IR\SrcLoc($moduleName, $fn->name, $displaySource, 0, 0),
             symbolName($fn->name),
         );
-        emitFunction($classBuilder, $fn, $owner, $functionArity, $externalFns, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables);
+        emitFunction($classBuilder, $fn, $owner, $functionArity, $externalFns, $lambdaMeta, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables);
     }
 
     foreach ($module->data as $decl) {
@@ -88,7 +87,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     }
 
     foreach ($module->instanceEvidence as $ev) {
-        emitEvidence($classBuilder, $ev, $owner, $functionArity, $externalFns, $wrapperRegistry, $localCallables);
+        emitEvidence($classBuilder, $ev, $owner, $functionArity, $externalFns, $localCallables);
     }
 
     if ($module->entry !== null && $module->entry->kind === IR\EntryPointKind::Main) {
@@ -101,12 +100,9 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         );
     }
 
-    emitPendingIoThunkMethods($classBuilder, $owner, $functionArity, $externalFns, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $localCallables);
+    emitPendingIoThunkMethods($classBuilder, $owner, $functionArity, $externalFns, $lambdaMeta, $ioThunkRegistry, $newtypeConstructors, $localCallables);
 
     $types = [$owner => $classBuilder->toIl()];
-    foreach ($wrapperRegistry->specs() as $spec) {
-        $types[$spec['typeName']] = buildFnWrapperClass($spec['typeName'], $spec['targetOwner'], $spec['targetSym'], $spec['arity']);
-    }
     $types['__moggi.map__'] = $sourceMap->toJson();
 
     return $types;
@@ -129,7 +125,6 @@ function emitFunction(
     array $functionArity,
     array $externalFns,
     array $lambdaMeta,
-    FnWrapperRegistry $wrapperRegistry,
     IoThunkRegistry $ioThunkRegistry,
     array $newtypeConstructors = [],
     ?SourceMapBuilder $sourceMap = null,
@@ -146,7 +141,7 @@ function emitFunction(
     $arity = \count($params);
 
     $m = new MethodIl();
-    $env = new EmitEnv($m, $owner, $functionArity, $externalFns, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables);
+    $env = new EmitEnv($m, $owner, $functionArity, $externalFns, $lambdaMeta, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables);
     foreach ($params as $i => $p) {
         $env->locals[$p] = 'arg:' . $i;
     }
@@ -178,14 +173,13 @@ function emitEvidence(
     string $owner,
     array $functionArity,
     array $externalFns,
-    FnWrapperRegistry $wrapperRegistry,
     array $localCallables = [],
 ): void {
     $name = symbolName($ev->evidenceName);
     $ctxArity = \count($ev->contextParams);
 
     $m = new MethodIl();
-    $env = new EmitEnv($m, $owner, $functionArity, $externalFns, [], $wrapperRegistry, null, [], null, $localCallables);
+    $env = new EmitEnv($m, $owner, $functionArity, $externalFns, [], null, [], null, $localCallables);
     foreach ($ev->contextParams as $i => $p) {
         $env->locals[$p] = 'arg:' . $i;
     }

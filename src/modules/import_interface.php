@@ -265,6 +265,8 @@ final class ImportInterface
      * @param array<string, string> $qualifiedModules the module each import prefix names
      * @param array<string, true> $trueBindings imported bindings whose body is the host boolean `true`
      * @param array<string, mixed> $summaries optional optimizer region
+     * @param array<string, int> $classScopeArity runtime arity of the class-scope references the
+     *        module's inherited default bodies make, keyed by the symbol each one resolves to
      */
     public function __construct(
         public readonly string $module,
@@ -272,6 +274,7 @@ final class ImportInterface
         public readonly array $qualifiedModules = [],
         public readonly array $trueBindings = [],
         public readonly array $summaries = [],
+        public readonly array $classScopeArity = [],
     ) {
     }
 
@@ -564,6 +567,22 @@ final class ImportInterface
         return $actionReturn;
     }
 
+    /**
+     * The runtime arity of every class-scope reference, keyed by resolved symbol.
+     *
+     * A default body is re-checked in the module that inherits it, so it can call an entry the
+     * importing module also binds — and then the bare spelling belongs to the local binding and
+     * nothing is published under it. The reference still names the declaring module's entry, so the
+     * arity is kept under the symbol the call resolves to and lowering can tell a direct call from
+     * an application of the value.
+     *
+     * @return array<string, int>
+     */
+    public function classScopeFnRuntimeArity(): array
+    {
+        return $this->classScopeArity;
+    }
+
     /** @return array<string, string> imported entry => the worker its declaring module lowers it through */
     public function workers(): array
     {
@@ -592,6 +611,15 @@ final class ImportInterface
     public function withClassScopeRefs(array $refs, array $localNames): self
     {
         $symbols = $this->symbols;
+        $scopeArity = $this->classScopeArity;
+        foreach ($refs['externalFns'] as $name => $symbol) {
+            $layout = $refs['callables'][$name] ?? null;
+            if (! \is_string($symbol) || $symbol === '' || $layout === null) {
+                continue;
+            }
+
+            $scopeArity[$symbol] ??= $layout['arity'];
+        }
         $at = static function (string $name) use (&$symbols): ImportSymbol {
             return $symbols[$name] ?? new ImportSymbol();
         };
@@ -630,7 +658,7 @@ final class ImportInterface
                 ->withLayout($layout);
         }
 
-        return $this->withSymbols($symbols);
+        return $this->withSymbols($symbols, $scopeArity);
     }
 
     /**
@@ -660,7 +688,7 @@ final class ImportInterface
     }
 
     /** Copy with the one table replaced; every other region is carried unchanged. */
-    private function withSymbols(array $symbols): self
+    private function withSymbols(array $symbols, ?array $classScopeArity = null): self
     {
         return new self(
             module: $this->module,
@@ -668,6 +696,7 @@ final class ImportInterface
             qualifiedModules: $this->qualifiedModules,
             trueBindings: $this->trueBindings,
             summaries: $this->summaries,
+            classScopeArity: $classScopeArity ?? $this->classScopeArity,
         );
     }
 }

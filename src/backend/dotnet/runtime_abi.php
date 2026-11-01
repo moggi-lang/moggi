@@ -1048,6 +1048,93 @@ function topLevelFnClassIl(): string
 IL;
 }
 
+/**
+ * One `Fn` over any static method of a given arity, so a function value needs no class of its own.
+ *
+ * The CLR hands no method handle to a runtime object the way the JVM does, so the call site binds the
+ * target's entry point to a delegate of that arity (`ldftn` + `Moggi.Rt.Fn<arity>`) and the adapter
+ * forwards to it. What varies between targets is then only the delegate instance: one pair of classes
+ * per *arity* serves every target of that arity, the same shape as the JVM's single `StaticFn`, where
+ * `MethodHandle` carries the signature instead.
+ */
+function staticFnClassIl(int $arity): string
+{
+    $name = 'Moggi.Rt.StaticFn' . $arity;
+    $delegate = 'Moggi.Rt.Fn' . $arity;
+    $delegateParams = [];
+    $loads = '';
+    $invokeParams = [];
+    for ($i = 0; $i < $arity; ++$i) {
+        $delegateParams[] = "object arg{$i}";
+        $invokeParams[] = 'object';
+        $loads .= "    ldarg.1\n    ldc.i4 {$i}\n    ldelem.ref\n";
+    }
+    $delegateSig = \implode(', ', $delegateParams);
+    $invokeSig = \implode(', ', $invokeParams);
+    $maxstack = \max($arity + 2, 8);
+
+    return <<<IL
+.class public auto ansi sealed {$delegate}
+       extends [System.Runtime]System.MulticastDelegate
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(object 'object', native int 'method') runtime managed
+  {
+  }
+
+  .method public hidebysig newslot virtual
+          instance object Invoke({$delegateSig}) runtime managed
+  {
+  }
+}
+
+.class public auto ansi beforefieldinit {$name}
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .field public class {$delegate} target
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(class {$delegate} target) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.1
+    stfld class {$delegate} {$name}::target
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack {$maxstack}
+    ldarg.0
+    ldfld class {$delegate} {$name}::target
+{$loads}    callvirt instance object {$delegate}::Invoke({$invokeSig})
+    ret
+  }
+}
+
+IL;
+}
+
+/**
+ * The adapters for `$arities`, as IL text appended to the runtime fragment.
+ *
+ * @param list<int> $arities
+ */
+function staticFnClassesIl(array $arities): string
+{
+    $out = '';
+    foreach ($arities as $arity) {
+        $out .= "\n" . staticFnClassIl($arity);
+    }
+
+    return $out;
+}
+
 function rtClassIl(): string
 {
     return \implode("\n", [

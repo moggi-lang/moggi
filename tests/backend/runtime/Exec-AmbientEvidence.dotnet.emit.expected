@@ -241,7 +241,10 @@ match_end_V0:
   .line 42, 42 : 22, 22 'tests/backend/runtime/Exec-AmbientEvidence.mog'
   ldc.i4.3
   ldc.i4.3
-  newobj instance void Moggi.Fn.Moggi_Data_List__sort__3::.ctor()
+  ldnull
+  ldftn object Moggi.Data.List::'sort'(object, object, object)
+  newobj instance void Moggi.Rt.Fn3::.ctor(object, native int)
+  newobj instance void Moggi.Rt.StaticFn3::.ctor(class Moggi.Rt.Fn3)
   newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
   ldc.i4.2
   newarr object
@@ -285,7 +288,10 @@ match_end_V0:
   .line 45, 45 : 8, 8 'tests/backend/runtime/Exec-AmbientEvidence.mog'
   .line 45, 45 : 8, 8 'tests/backend/runtime/Exec-AmbientEvidence.mog'
   ldc.i4.0
-  newobj instance void Moggi.Fn.Moggi_Main____ioThunk0__0::.ctor()
+  ldnull
+  ldftn object Moggi.Main::'__ioThunk0'()
+  newobj instance void Moggi.Rt.Fn0::.ctor(object, native int)
+  newobj instance void Moggi.Rt.StaticFn0::.ctor(class Moggi.Rt.Fn0)
   newobj instance void Moggi.Rt.TopLevelFn::.ctor(int32, class Moggi.Rt.Fn)
   stloc.0
   ldloc.0
@@ -425,56 +431,4 @@ MAIN_END:
   ret
 }
 
-}
-
-.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Data_List__sort__3
-       extends [System.Runtime]System.Object
-       implements Moggi.Rt.Fn
-{
-  .method public hidebysig specialname rtspecialname
-          instance void .ctor() cil managed
-  {
-    .maxstack 8
-    ldarg.0
-    call instance void [System.Runtime]System.Object::.ctor()
-    ret
-  }
-
-  .method public hidebysig newslot virtual final
-          instance object Invoke(object[] args) cil managed
-  {
-    .maxstack 32
-    ldarg 1
-    ldc.i4 0
-    ldelem.ref
-    ldarg 1
-    ldc.i4 1
-    ldelem.ref
-    ldarg 1
-    ldc.i4 2
-    ldelem.ref
-    call object Moggi.Data.List::'sort'(object, object, object)
-    ret
-  }
-}
-.class public auto ansi sealed beforefieldinit Moggi.Fn.Moggi_Main____ioThunk0__0
-       extends [System.Runtime]System.Object
-       implements Moggi.Rt.Fn
-{
-  .method public hidebysig specialname rtspecialname
-          instance void .ctor() cil managed
-  {
-    .maxstack 8
-    ldarg.0
-    call instance void [System.Runtime]System.Object::.ctor()
-    ret
-  }
-
-  .method public hidebysig newslot virtual final
-          instance object Invoke(object[] args) cil managed
-  {
-    .maxstack 32
-    call object Moggi.Main::'__ioThunk0'()
-    ret
-  }
 }
