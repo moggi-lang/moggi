@@ -734,6 +734,7 @@ function buildImportContext(
             $existing = $symbols[$name] ?? null;
 
             $reExported = ! $scheme->classMethod && $origin !== null && $origin['module'] !== $targetName;
+            $qualifiedSymbol = $origin === null ? null : resolvedSymbol($origin['module'], $origin['phpName']);
             $symbols[$name] = ($existing ?? new ImportSymbol())->withQualified(
                 $localPrefix,
                 new ImportQualified(
@@ -741,6 +742,10 @@ function buildImportContext(
                     scheme: $scheme,
                     originModule: $reExported ? $origin['module'] : null,
                     originName: $reExported ? $origin['phpName'] : null,
+                    symbol: $qualifiedSymbol,
+                    layout: $qualifiedSymbol === null
+                        ? null
+                        : publishedCallableLayout($units, $origin['module'], $origin['phpName']),
                 ),
             );
             if (! $scheme->classMethod) {

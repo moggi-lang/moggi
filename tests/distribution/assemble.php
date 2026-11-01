@@ -112,8 +112,7 @@ if (! \Moggi\Dist\runtimeIsPrepared('php-native', $host, $runtimeConfig)) {
     // not run.
     \fwrite(
         STDERR,
-        "distribution: skipped the assembly — php-native for {$host} is not prepared,"
-        . " and bin/moggi is built from it (it is compiled, not downloaded)\n",
+        "distribution: skipped the assembly",
     );
     removeDirectory($work);
     exit(2);
