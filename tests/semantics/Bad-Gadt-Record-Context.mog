@@ -1,0 +1,15 @@
+-- A record GADT constructor's context is a dictionary the construction site has
+-- to supply. `Unshowable` has no `Show` instance, so the context cannot be
+-- discharged here and the construction must be refused -- at the construction,
+-- not silently dropped.
+module Main where
+
+import Moggi.Internal.Base
+
+data Unshowable = MkUnshowable
+
+data Box a where
+  MkBox :: forall a. Show a => { item :: a } -> Box a
+
+box :: Box Unshowable
+box = MkBox { item = MkUnshowable }

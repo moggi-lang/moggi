@@ -571,6 +571,7 @@ function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode $expr):
                 $field->expr = resolvePendingEvidenceInExpr($state, $field->expr);
                 $field->expr = tryResolveValueEvidence($state, $field->expr);
             }
+            tryResolveRecordEvidence($state, $expr);
 
             return $expr;
         })(),
@@ -655,6 +656,98 @@ function tryResolveApplyEvidence(TypeCheckState $state, Ast\Apply $expr): void
  * type. Only fires for reference nodes that directly carry pending constraints;
  * apply spines are handled by tryResolveApplyEvidence.
  */
+/**
+ * Supply the dictionaries a record construction's constructor context needs.
+ *
+ * A GADT constructor with a context stores one dictionary per constraint inside
+ * the value, in the constructor's leading field positions, and the construction
+ * site has to write them there. The construction parks its context as an
+ * obligation because the constraint may mention a variable only the surrounding
+ * expression decides (`circle :: Region Int` fixes `Num n` after the node is
+ * inferred); by the time this pass runs the variable is pruned, so the evidence
+ * is either resolvable or genuinely missing, and the latter is left parked for
+ * the check that reports it.
+ */
+function tryResolveRecordEvidence(TypeCheckState $state, Ast\RecordCon $expr): void
+{
+    $pending = pendingConstraintsOf($state, $expr);
+    if ($pending === []) {
+        return;
+    }
+
+    $constraints = dictsForPending($state, $pending, pendingDictsOf($state, $expr));
+    $evidence = tryResolveEvidenceExprs($state, $constraints, $expr);
+    if ($evidence === null) {
+        assertRecordContextUnsatisfiable($state, $constraints, $expr);
+
+        return;
+    }
+
+    clearPendingConstraints($state, $expr);
+    foreach ($evidence as $i => $ev) {
+        $name = gadtContextFieldName($i, $constraints[$i]->class);
+        foreach ($expr->fields as $field) {
+            if ($field->name === $name) {
+                continue 2;
+            }
+        }
+        $expr->fields[] = new Ast\RecordField(
+            $name,
+            $ev,
+            $expr->line,
+            $expr->col,
+            $expr->endCol,
+        );
+    }
+}
+
+/**
+ * Report a construction whose context nothing can ever discharge.
+ *
+ * Deferring the obligation is what lets `circle :: Region Int` discharge a
+ * `Num n` context on a variable the construction does not pin itself. Once the
+ * context's arguments are concrete and no instance answers them, though, no
+ * later unification can help either — and leaving it to the body's final
+ * unresolved-obligation check would report a constraint against the
+ * declaration's signature rather than the construction that needs it. The
+ * wording is the instance solver's.
+ *
+ * @param list<Ast\PendingConstraint> $constraints
+ */
+function assertRecordContextUnsatisfiable(
+    TypeCheckState $state,
+    array $constraints,
+    Ast\RecordCon $expr,
+): void {
+    foreach ($constraints as $constraint) {
+        $args = \array_map(static fn (Type $arg): Type => prune($state, $arg), $constraint->args);
+        if ($args === []) {
+            continue;
+        }
+        foreach ($args as $arg) {
+            if (freeTypeVars($arg) !== []) {
+                return;
+            }
+        }
+        /*
+         * The lookup answers with nothing it found, which is falsy whether that is `null` or an
+         * empty list -- asking `!== null` would read "no instance" as "an instance".
+         */
+        if (findProjectInstance($state, $constraint->class, $args[0])) {
+            continue;
+        }
+
+        throw typeFail(
+            $state,
+            'missing instance for `'
+                . $constraint->class . ' '
+                . \implode(' ', \array_map(static fn (Type $arg): string => typeToString($arg), $args))
+                . '`',
+            $expr,
+        );
+    }
+}
+
 function tryResolveValueEvidence(TypeCheckState $state, Ast\AstNode $expr): Ast\AstNode
 {
     if ($expr instanceof Ast\EvidenceMethod) {

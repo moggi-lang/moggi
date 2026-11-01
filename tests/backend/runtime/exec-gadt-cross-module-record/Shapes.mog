@@ -1,0 +1,29 @@
+-- A record GADT constructor published by another module. Its signature puts a
+-- quantifier and a context in front of a field block, so the interface has to
+-- carry the field names and positions, the dictionary the context stores, and
+-- the type the constructor returns -- everything a pattern in the importing
+-- module needs to refine.
+module Shapes (Region(..), Tagged(..), area, labelOf, describe) where
+
+import Moggi.Internal.Base
+
+data Region a where
+  Circle :: forall n. Num n => { radius :: n, label :: String } -> Region n
+  Rect :: forall n. Num n => { width :: n, height :: n, label :: String } -> Region n
+  Empty :: Region Int
+
+area :: Num n => Region n -> n
+area (Circle { radius = r }) = r * r * 3
+area (Rect { width = w, height = h }) = w * h
+area Empty = 0
+
+labelOf :: Region a -> String
+labelOf (Circle { label = l }) = l
+labelOf (Rect { label = l }) = l
+labelOf Empty = "empty"
+
+data Tagged a where
+  Tagged :: forall a. Show a => { payload :: a, title :: String } -> Tagged a
+
+describe :: Tagged a -> String
+describe (Tagged { payload = p, title = t }) = t <> "=" <> show p

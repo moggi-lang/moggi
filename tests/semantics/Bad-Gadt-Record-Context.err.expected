@@ -1,0 +1,4 @@
+tests/semantics/Bad-Gadt-Record-Context.mog:15:7: type error: missing instance for `Show Unshowable`
+
+  15 | box = MkBox { item = MkUnshowable }
+     |       ^^^^^

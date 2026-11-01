@@ -993,17 +993,20 @@ function inferRecordCon(TypeCheckState $state, Ast\RecordCon $expr, array $env):
         unify($state, inferExpr($state, $fieldExpr, $env, $fieldTypes[$i]), $fieldTypes[$i], $fieldExpr);
     }
 
+    /*
+     * The context is an obligation this construction carries, not something to solve before it
+     * returns. `Circle { radius = 2 }` has a `Num n` constraint on a variable the surrounding
+     * expression still decides -- `circle :: Region Int` fixes it only after this node has been
+     * inferred -- so resolving it here asks the solver to find an instance for a fresh variable
+     * and reports one that does not exist. Parking it hands the context to the body's evidence
+     * pass once the type is known, exactly as a constructor reference does.
+     *
+     * The obligations are the instantiated constraints, not the scheme's dictionary parameters: the
+     * latter still name the constructor's own variables, so an evidence pass could not tell a
+     * context that is not yet known from one nothing can ever satisfy.
+     */
     if ($instantiated['constraints'] !== []) {
-        $evidence = resolveConstraintEvidence($state, $instantiated['constraints'], $expr);
-        foreach ($evidence as $i => $ev) {
-            $expr->fields[] = new Ast\RecordField(
-                gadtContextFieldName($i, $instantiated['constraints'][$i]->class),
-                $ev,
-                $expr->line,
-                $expr->col,
-                $expr->endCol,
-            );
-        }
+        setPendingObligations($state, $expr, $instantiated['constraints']);
     }
 
     return $resultType;
