@@ -1,0 +1,20 @@
+-- A constrained local signature is rigid too: `go :: Show b => Expr b -> String`
+-- keeps `b` the function's own variable, so its first clause proving `b ~ Int`
+-- does not stop the second clause from proving `b ~ Bool`.
+module Main where
+
+import Moggi.Internal.Base
+
+data Expr a where
+  Lit :: Int -> Expr Int
+  Truth :: Expr Bool
+
+render :: Expr Int -> String
+render e = go e
+  where
+    go :: Show b => Expr b -> String
+    go (Lit n) = show n
+    go Truth = "truth"
+
+main :: IO ()
+main = putStrLn (render (Lit 3))

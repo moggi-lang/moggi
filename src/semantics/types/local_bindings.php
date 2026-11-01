@@ -5,6 +5,7 @@ namespace Moggi\Semantics\Types;
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
+use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 use function Moggi\Semantics\TypeExpr\scheme;
@@ -77,7 +78,22 @@ function inferSequentialBindings(TypeCheckState $state, array $bindings, array $
                 $local,
             );
         } else {
-            $valueType = inferExpr($state, $binding->value, $local);
+            if ($binding->functionBinding && $binding->value instanceof Ast\TypeAsc) {
+                $asc = $binding->value;
+                $valueType = checkAgainstSignatureSkolems(
+                    $state,
+                    static function (Type $expected) use ($state, $asc, $local): Type {
+                        $bodyType = inferExpr($state, $asc->expr, $local, $expected);
+                        unify($state, $bodyType, $expected, $asc);
+
+                        return $expected;
+                    },
+                    astType($state, $asc->type),
+                );
+            } else {
+                $valueType = inferExpr($state, $binding->value, $local);
+            }
+
             if ($generalize) {
                 $binding->value = elaborateNumericLiterals($state, $binding->value);
             }
@@ -156,6 +172,67 @@ function localAnnotationScheme(TypeCheckState $state, Ast\TypeNode $annot, Ast\A
     ];
 }
 
+/**
+ * Check a local binding's body against its signature with the signature's own
+ * variables rigid.
+ *
+ * A signature means the same thing locally as at the top level: its variables
+ * belong to the function, so no clause may choose them and a GADT match may
+ * refine them. Inferring first and unifying afterwards pins `b` to `Int` in the
+ * first clause of `go :: Expr b -> b` and then rejects the second, and a
+ * refinement an arm proves never reaches a local helper at all.
+ *
+ * `$check` receives the annotation's type with its variables replaced by fresh
+ * skolems, infers the body and unifies the two. The type this returns is the
+ * annotation again under the names it was written with, ready to be
+ * generalised; the skolems are reverted in `subst` as well, so every node the
+ * body check typed zonks to the source name and no skolem reaches the IR.
+ *
+ * A signature that reuses a variable an enclosing signature already bound (the
+ * `where go :: Expr b -> b` of `eval :: Expr b -> b`) needs no new skolems:
+ * `skolemScope` already resolves the spelling to that skolem, and the body is
+ * checked against it -- sharing it is exactly what the enclosing refinement is
+ * about.
+ *
+ * @param callable(Type): Type $check
+ */
+function checkAgainstSignatureSkolems(
+    TypeCheckState $state,
+    callable $check,
+    Type $expected,
+    bool $rigid = true,
+): Type {
+    if (! $rigid) {
+        return $check($expected);
+    }
+
+    $skolemSubst = skolemizeSignatureVars($state, $expected, []);
+    if ($skolemSubst === []) {
+        return $check($expected);
+    }
+
+    $savedRigid = $state->rigidVars;
+    $savedScope = $state->skolemScope;
+    $back = [];
+    foreach ($skolemSubst as $source => $skolem) {
+        $state->rigidVars[$skolem->name] = true;
+        $state->skolemScope[$source] = $skolem->name;
+        $back[$skolem->name] = new TVar($source);
+    }
+
+    $rigidType = substitute($expected, $skolemSubst);
+
+    try {
+        $check($rigidType);
+    } finally {
+        $state->rigidVars = $savedRigid;
+        $state->skolemScope = $savedScope;
+        $state->subst += $back;
+    }
+
+    return prune($state, substitute($rigidType, $back));
+}
+
 /** Surface parameter type nodes of a (possibly curried) function type AST. */
 function functionParamTypeAsts(Ast\TypeNode $type): array
 {
@@ -201,6 +278,29 @@ function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value
     $constraints = solveConstraints($state, $userConstraints)->dicts;
     applyConstraintVarKinds($state, $constraints);
 
+    /*
+     * The annotation's variables are the group's own, and they are rigid for the
+     * same reason they are at the top level: a clause that proves `b ~ Int` may
+     * not decide `b` for the next clause. The constraints are skolemized with the
+     * body type because their arguments name the same variables, and evidence
+     * resolution matches an ambient dictionary to a wanted one by those names.
+     */
+    $bodyExpected = astType($state, $bodyTypeAst);
+    $skolemSubst = skolemizeSignatureVars($state, $bodyExpected, $constraints);
+    $skolemBack = [];
+    $savedRigid = $state->rigidVars;
+    $savedSkolemScope = $state->skolemScope;
+    if ($skolemSubst !== []) {
+        $bodyExpected = substitute($bodyExpected, $skolemSubst);
+        $constraints = substitutePendingConstraints($constraints, $skolemSubst);
+        $userConstraints = substitutePendingConstraints($userConstraints, $skolemSubst);
+        foreach ($skolemSubst as $source => $skolem) {
+            $state->rigidVars[$skolem->name] = true;
+            $state->skolemScope[$source] = $skolem->name;
+            $skolemBack[$skolem->name] = new TVar($source);
+        }
+    }
+
     [$params, $abstracted, $dictTypes] = allocateDictParams($state, $constraints);
 
     $ambient = $abstracted;
@@ -235,10 +335,8 @@ function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value
         $innerEnv = $env;
         installConstraintMethods($state, $abstracted, $innerEnv);
 
-        $valueType = inferExpr($state, $inner, $innerEnv);
-        $bodyExpected = astType($state, $bodyTypeAst);
+        $valueType = inferExpr($state, $inner, $innerEnv, $bodyExpected);
         unify($state, $valueType, $bodyExpected, $value);
-        $valueType = prune($state, $bodyExpected);
 
         $inner = resolvePendingEvidenceInExpr($state, $inner);
         $inner = tryResolveValueEvidence($state, $inner);
@@ -249,11 +347,18 @@ function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value
         restoreAmbientConstraints($state, $saved);
         [$state->constraintMethods, $state->constraintMethodAmbiguities, $state->constraintMethodCandidates] = $savedMethods;
         $state->allocation = $savedAllocation;
+        $state->rigidVars = $savedRigid;
+        $state->skolemScope = $savedSkolemScope;
+        $state->subst += $skolemBack;
     }
 
     $lambda = wrapDictLambda($state, $inner, $params, $dictTypes);
 
-    return [$lambda, $valueType, $userConstraints];
+    return [
+        $lambda,
+        prune($state, substitute($bodyExpected, $skolemBack)),
+        substitutePendingConstraints($userConstraints, $skolemBack),
+    ];
 }
 
 /**
@@ -474,14 +579,26 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
         }
 
         [$rhs, $annot] = peelBindingAnnotation($binding->value);
-        $valueType = inferExpr($state, $rhs, $local);
 
         if ($annot !== null) {
+            $annotatedMember = $binding->pattern instanceof Ast\PatVar
+                && isset($annotated[$memberOf[$bi]]);
             $annotType = $binding->pattern instanceof Ast\PatVar
                 ? $expected[$memberOf[$bi]]
                 : astType($state, $annot);
-            unify($state, $valueType, $annotType, $binding->value);
-            $valueType = prune($state, $annotType);
+            $valueType = checkAgainstSignatureSkolems(
+                $state,
+                static function (Type $expectedType) use ($state, $rhs, $local, $binding): Type {
+                    $bodyType = inferExpr($state, $rhs, $local, $expectedType);
+                    unify($state, $bodyType, $expectedType, $binding->value);
+
+                    return $expectedType;
+                },
+                $annotType,
+                $annotatedMember,
+            );
+        } else {
+            $valueType = inferExpr($state, $rhs, $local);
         }
 
         if ($generalize) {

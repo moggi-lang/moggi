@@ -1,0 +1,19 @@
+module Main where
+
+import Moggi.Internal.Base
+
+data Box a where
+  BI :: Int -> Box Int
+  BB :: Bool -> Box Bool
+
+data Duo a b where
+  D :: Box a -> Box b -> Duo a b
+
+both :: Duo Int Bool -> (Int, Bool)
+both (D (BI n) (BB b)) = (n, b)
+
+main :: IO ()
+main = do
+  let (n, b) = both (D (BI 1) (BB True))
+  putStrLn (show n)
+  putStrLn (show b)

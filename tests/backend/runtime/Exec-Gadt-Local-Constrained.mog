@@ -1,0 +1,18 @@
+module Main where
+
+import Moggi.Internal.Base
+
+data Box where
+  MkBox :: Show a => a -> Box
+
+render :: Box -> String
+render b = case b of
+  MkBox x -> go x
+  where
+    go :: Show c => c -> String
+    go v = "[" <> show v <> "]"
+
+main :: IO ()
+main = do
+  putStrLn (render (MkBox 42))
+  putStrLn (render (MkBox True))

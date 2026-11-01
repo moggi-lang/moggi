@@ -1,0 +1,31 @@
+-- A GADT constructor's declaration may put a quantifier and a context in front
+-- of a record field block, and `newtype` may write its constructor in the
+-- `where` form as well.
+module Main where
+
+import Moggi.Internal.Base
+
+data Box a where
+  MkBox :: forall a. Show a => { item :: a } -> Box a
+
+describe :: Box a -> String
+describe (MkBox { item = x }) = show x
+
+data Only a where
+  Only :: Int -> Only Int
+
+get :: Only Int -> Int
+get (Only n) = n
+
+newtype Tagged a where
+  Tagged :: Int -> Tagged Int
+
+untag :: Tagged Int -> Int
+untag (Tagged n) = n
+
+main :: IO ()
+main = do
+  putStrLn (describe (MkBox 42))
+  putStrLn (describe (MkBox True))
+  putStrLn (show (get (Only 7)))
+  putStrLn (show (untag (Tagged 9)))

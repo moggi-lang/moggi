@@ -392,6 +392,24 @@ function isForallStart(ParserState $state): bool
  */
 function parseForall(ParserState $state): Ast\TypeNode
 {
+    $head = parseForallHead($state);
+    $node = new Ast\TypeForall($head['binders'], $head['kinds'], parseType($state));
+
+    return withTypeLocation($node, $head['token']);
+}
+
+/**
+ * The binder half of a `forall`, up to and including its `.`.
+ *
+ * Separate from {@see parseForall} because a GADT constructor's signature may
+ * write a record field block between the quantifier and the result type
+ * (`C :: forall a. { get :: a } -> T a`), where the body is not something the
+ * ordinary type grammar can parse.
+ *
+ * @return array{binders: list<string>, kinds: list<?Ast\KindNode>, token: Token}
+ */
+function parseForallHead(ParserState $state): array
+{
     $forallToken = advance($state);
     $binders = [];
     $kinds = [];
@@ -441,7 +459,5 @@ function parseForall(ParserState $state): Ast\TypeNode
     }
     advance($state);
 
-    $node = new Ast\TypeForall($binders, $kinds, parseType($state));
-
-    return withTypeLocation($node, $forallToken);
+    return ['binders' => $binders, 'kinds' => $kinds, 'token' => $forallToken];
 }
