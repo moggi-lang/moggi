@@ -114,7 +114,7 @@ synonym's parameters take the kind its right-hand side implies.
 
 ## Which kinds exist
 
-`Type` is the kind of ordinary types. Three others are built in:
+`Type` is the kind of ordinary types, also exported by `Data.Kind`. Three others are built in:
 
 * `Nat` — type-level natural numbers, written as literals (`Port 80`).
 * `Symbol` — type-level strings, written as string literals (`Label "hello"`).

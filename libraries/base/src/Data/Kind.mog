@@ -1,0 +1,12 @@
+-- | Kinds that describe other types.
+--
+-- @Type@ is the kind of ordinary types -- the ones that can have values. The
+-- compiler parses it as a keyword wherever a kind is written; the name lives
+-- with the other builtin type names in 'Moggi.Internal.Base', and this module
+-- re-exports it the way @Data.Int@ re-exports @Int@, so a program can say
+-- @import Data.Kind (Type)@ instead of relying on the keyword implicitly.
+module Data.Kind
+  ( Type
+  ) where
+
+import Moggi.Internal.Base (Type)

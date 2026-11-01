@@ -1,0 +1,4 @@
+tests/semantics/Bad-Forall-Instance-Context.mog:12:36: type error: a quantified constraint cannot appear in an instance context; quantify a superclass instead (`class (forall a. C (f a)) => D f`)
+
+  12 | instance (forall a. Same (f a)) => Same (Box f a) where
+     |                                    ^^^^

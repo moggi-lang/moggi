@@ -3,7 +3,7 @@
 /**
  * The five structural laws agree on every type head.
  *
- * The table below is the law's own coverage report: each of the 22 constructors
+ * The table below is the law's own coverage report: each of the 23 constructors
  * of the internal type representation gets one case, and the test fails if the
  * compiler declares a head the table does not cover. The promoted (`'Pair a`)
  * and variable-headed (`f a`) cases are the ones that used to disagree: free
@@ -73,6 +73,15 @@ $heads = [
     TypeExpr\TCon::class => [new TypeExpr\TCon('List', [$var('a')]), 1, ['a']],
     TypeExpr\TArrow::class => [new TypeExpr\TArrow($var('a'), $var('b')), 2, ['a', 'b']],
     TypeExpr\TPromoted::class => [new TypeExpr\TPromoted('Pair', [$var('a')]), 1, ['a']],
+    // A quantifier owns its body and nothing else: `a` is bound, `b` is free.
+    TypeExpr\TForall::class => [
+        new TypeExpr\TForall(
+            [new TypeExpr\ForallBinder('a')],
+            new TypeExpr\TArrow($var('a'), $var('b')),
+        ),
+        1,
+        ['b'],
+    ],
 ];
 
 $declared = [];
@@ -285,6 +294,45 @@ for ($i = 0; $i < 120; ++$i) {
         "normalization changed a type with no synonyms or families: {$text}",
     );
 }
+
+// `forall` binds its own names: the laws must agree about which ones are free,
+// and no substitution may capture a binder.
+$inner = static fn (): TypeExpr\TForall => new TypeExpr\TForall(
+    [new TypeExpr\ForallBinder('a')],
+    new TypeExpr\TArrow($var('a'), $var('b')),
+);
+
+$sameName = Types\substitute($inner(), ['b' => $var('a')]);
+$check(
+    $sameName instanceof TypeExpr\TForall && $sameName->binders[0]->name !== 'a',
+    'substituting `a` under `forall a.` captured the binder',
+);
+$check(
+    $freeVars($sameName) === ['a'],
+    'substitution under `forall` lost or invented a free variable: ['
+        . \implode(',', $freeVars($sameName)) . ']',
+);
+$check(
+    $freeVars(Types\prune((static function (): Types\TypeCheckState {
+        $s = new Types\TypeCheckState('');
+        $s->subst = ['b' => new TypeExpr\TInt()];
+
+        return $s;
+    })(), $inner())) === [],
+    'prune under `forall` left the body unsubstituted',
+);
+$check(
+    $throws(static fn () => Types\occurs(new Types\TypeCheckState(''), 'b', $inner())) instanceof Types\TypeError,
+    'occurs does not reach a free variable under `forall`',
+);
+$check(
+    $throws(static fn () => Types\occurs(new Types\TypeCheckState(''), 'a', $inner())) === null,
+    'occurs treats a bound variable as free',
+);
+$check(
+    Types\typeToString($inner()) === 'forall a. a -> b',
+    'the quantifier does not print: ' . Types\typeToString($inner()),
+);
 
 if ($failures !== []) {
     throw new \RuntimeException(

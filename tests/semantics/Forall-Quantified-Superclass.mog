@@ -1,0 +1,39 @@
+-- Explicit `forall` in signatures, explicit quantification in a class's
+-- superclass, and the `Type` kind named by `Data.Kind`.
+module Main where
+
+import Data.Bifoldable (Bifoldable, bifoldr)
+import Data.Kind (Type)
+import Moggi.Generics (K1(K1), R)
+import Moggi.Internal.Base
+
+-- One binder, spelled out.
+idExplicit :: forall a. a -> a
+idExplicit x = x
+
+-- The same type without the binder: implicit generalization.
+idImplicit :: a -> a
+idImplicit x = x
+
+-- Several binders, and a signature whose free variable stays implicit.
+constFirst :: forall a b. a -> b -> a
+constFirst x _ = x
+
+-- Rank 2: a polymorphic value in argument position.
+applyPoly :: (forall a. a -> a) -> Int -> Int
+applyPoly f n = f n
+
+-- Rank 3: a rank-2 argument to a rank-2 argument.
+applyRank3 :: ((forall a. a -> a) -> Int) -> Int
+applyRank3 g = g idExplicit
+
+-- A kind annotation written with the name `Data.Kind` exports.
+newtype Wrap (f :: Type -> Type) a = Wrap (f a)
+
+-- `Bifoldable`'s superclass is `forall a. Foldable (p a)`, so this body is
+-- typed with `Foldable (K1 R Int)` in scope for every `a`.
+foldK1 :: K1 R Int Int -> Int
+foldK1 k = bifoldr (\x acc -> x + acc) (\x acc -> x + acc) 0 k
+
+main :: IO ()
+main = print (constFirst (applyPoly idImplicit 7) (applyRank3 (\g -> g 1)) + foldK1 (K1 5))

@@ -1,0 +1,17 @@
+-- A class method may quantify for itself: the instance has to work for every
+-- `a`, independently of the class parameter. The method's published type keeps
+-- its `forall`.
+module Main where
+
+import Moggi.Internal.Base
+
+class Wrap (p :: Type -> Type) where
+  peek :: forall a. p a -> Int
+
+newtype Box a = Box a
+
+instance Wrap Box where
+  peek (Box _) = 0
+
+main :: IO ()
+main = print (peek (Box True))

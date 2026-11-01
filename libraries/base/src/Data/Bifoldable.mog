@@ -46,7 +46,8 @@ import Control.Monad (Monad, join)
 import Data.Bool
 import Data.Either (Either(Left, Right))
 import Data.Eq
-import Data.Foldable (concatMap, foldr, foldl)
+import Data.Kind (Type)
+import Data.Foldable (Foldable, concatMap, foldr, foldl)
 import Data.Function (flip, id)
 import Data.Functor (Functor(map))
 import Data.Functor.Const (Const(Const))
@@ -75,7 +76,7 @@ import Moggi.Internal.Prim
 -- @
 -- 'bifoldMap' f g ≡ 'bifold' . 'bimap' f g
 -- @
-class Bifoldable (p :: Type -> Type -> Type) where
+class (forall a. Foldable (p a)) => Bifoldable (p :: Type -> Type -> Type) where
   {-# MINIMAL bifoldr | bifoldMap #-}
 
   -- | Combine the elements of a structure using a monoid.

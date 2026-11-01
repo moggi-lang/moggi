@@ -2,6 +2,9 @@
 
 namespace Moggi\Semantics\Types;
 
+use Moggi\Semantics\TypeExpr\ForallBinder;
+use Moggi\Semantics\TypeExpr\TForall;
+
 use Moggi\Semantics\IntrinsicRegistry;
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
@@ -192,7 +195,7 @@ function freshSkolem(TypeCheckState $state, string $base): TVar
  */
 function skolemTypeVarBase(string $name): string
 {
-    $base = \preg_replace('/\$sk\d+$/', '', $name);
+    $base = \preg_replace('/(?:\$sk\d+)+$/', '', $name);
     if (! \is_string($base) || $base === '') {
         return $name;
     }
@@ -227,7 +230,7 @@ function instantiateScheme(TypeCheckState $state, Scheme $scheme): array
     }
 
     return [
-        'type' => substitute($scheme->type, $mapping),
+        'type' => openForallsFresh($state, substitute($scheme->type, $mapping)),
         'constraints' => $constraints,
         'dicts' => $dicts,
     ];
@@ -338,20 +341,45 @@ function envFreeVars(array $env): array
     return $free;
 }
 
+/**
+ * The variables a type leaves free: every `TVar`/`TVarApp` head not bound by a
+ * `TForall` on the way down.
+ *
+ * `$bound` is the set of names an enclosing quantifier binds. Generalisation,
+ * skolemisation and occurs all read *this*, never `typeChildren`, so a nested
+ * binder is never mistaken for a variable of the surrounding declaration.
+ *
+ * @param array<string, true> $bound
+ * @return array<string, true>
+ */
+function freeTypeVars(Type $type, array $bound = []): array
+{
+    if ($type instanceof TVar) {
+        return isset($bound[$type->name]) ? [] : [$type->name => true];
+    }
+
+    if ($type instanceof TForall) {
+        $inner = $bound;
+        foreach ($type->binders as $binder) {
+            $inner[$binder->name] = true;
+        }
+
+        return freeTypeVars($type->body, $inner);
+    }
+
+    $vars = $type instanceof TVarApp && ! isset($bound[$type->name]) ? [$type->name => true] : [];
+    foreach (typeChildren($type) as $child) {
+        $vars += freeTypeVars($child, $bound);
+    }
+
+    return $vars;
+}
+
 /** @return array<string, true> */
 
 function typeVars(Type $type): array
 {
-    if ($type instanceof TVar) {
-        return [$type->name => true];
-    }
-
-    $vars = $type instanceof TVarApp ? [$type->name => true] : [];
-    foreach (typeChildren($type) as $child) {
-        $vars += typeVars($child);
-    }
-
-    return $vars;
+    return freeTypeVars($type, []);
 }
 
 /** @return array<string, true> */
@@ -375,6 +403,14 @@ function typeAstVars(Ast\TypeNode $type): array
             typeAstVars($type->body),
             ...\array_map(typeAstVars(...), $type->constraints),
         ),
+        Ast\TypeForall::class => (static function () use ($type): array {
+            $vars = typeAstVars($type->body);
+            foreach ($type->binders as $binder) {
+                unset($vars[$binder]);
+            }
+
+            return $vars;
+        })(),
         default => throw new \InvalidArgumentException('unknown type AST `' . $type::class . '`'),
     };
 }
@@ -645,11 +681,231 @@ function substitute(Type $type, array $mapping): Type
             substitute($type->from, $mapping),
             substitute($type->to, $mapping),
         ),
+        TForall::class => substituteForall($type, $mapping),
         default => mapTypeChildren(
             $type,
             static fn (Type $child): Type => substitute($child, $mapping),
         ),
     };
+}
+
+/**
+ * Substitute under a quantifier without capturing its binders.
+ *
+ * Two rules make the result well-formed: the quantifier's own names are removed
+ * from the mapping, and whenever an image would introduce a name the quantifier
+ * binds, the binder is alpha-renamed first. `forall a. forall b. a -> b`
+ * substituted with `a := b` must become `forall a'. forall b. b -> b` naming the
+ * *outer* binder, never the inner one.
+ *
+ * @param array<string, Type> $mapping
+ */
+/**
+ * The binders a written signature quantifies explicitly, outermost first.
+ *
+ * @return array{0: list<string>, 1: list<?Ast\KindNode>}
+ */
+function declaredForallBinders(Ast\TypeNode $type): array
+{
+    $names = [];
+    $kinds = [];
+    while ($type instanceof Ast\TypeForall) {
+        foreach ($type->binders as $i => $binder) {
+            $names[] = $binder;
+            $kinds[] = $type->kinds[$i] ?? null;
+        }
+        $type = $type->body;
+    }
+
+    return [$names, $kinds];
+}
+
+/**
+ * Print a checked signature back under the names it was written with: the skolem
+ * a declaration's own quantifier introduced is the binder the user wrote.
+ *
+ * @param list<string> $binders
+ */
+function rebindForallSkolems(Type $type, array $binders): Type
+{
+    if ($binders === []) {
+        return $type;
+    }
+
+    $given = \array_fill_keys($binders, true);
+    $mapping = [];
+    foreach (\array_keys(typeVars($type)) as $name) {
+        $base = skolemTypeVarBase($name);
+        if (isset($given[$base])) {
+            $mapping[$name] = new TVar($base);
+        }
+    }
+
+    return $mapping === [] ? $type : substitute($type, $mapping);
+}
+
+/**
+ * Drop every outermost quantifier without renaming anything: for walks that only
+ * need the shape of a signature (its parameter count, its arrow spine).
+ */
+function peelForalls(Type $type): Type
+{
+    while ($type instanceof TForall) {
+        $type = $type->body;
+    }
+
+    return $type;
+}
+
+/**
+ * Replace each outermost quantifier of a declared signature with fresh rigid
+ * variables, so the body is checked against the skolems exactly as an implicitly
+ * quantified signature is. Nested quantifiers (rank >= 2) are left in place:
+ * those are the caller's polymorphism, not this declaration's.
+ *
+ * @return array{0: Type, 1: array<string, TVar>} the opened type and its binder→skolem map
+ */
+function openSignatureForalls(TypeCheckState $state, Type $type): array
+{
+    $mapping = [];
+    $body = $type;
+    while ($body instanceof TForall) {
+        foreach ($body->binders as $binder) {
+            $mapping[$binder->name] = freshSkolem($state, $binder->name);
+        }
+        $body = $body->body;
+    }
+
+    if ($mapping === []) {
+        return [$type, []];
+    }
+
+    return [substitute($body, $mapping), $mapping];
+}
+
+/**
+ * Instantiate outermost quantifiers with fresh metavariables: what a *use* of a
+ * polymorphic value does, as opposed to checking one.
+ */
+function openForallsFresh(TypeCheckState $state, Type $type): Type
+{
+    $mapping = [];
+    $body = $type;
+    while ($body instanceof TForall) {
+        foreach ($body->binders as $binder) {
+            $mapping[$binder->name] = freshType($state);
+        }
+        $body = $body->body;
+    }
+
+    return $mapping === [] ? $type : substitute($body, $mapping);
+}
+
+/**
+ * Check `$actual` against what `$expected` requires, which is stricter than
+ * unification once a quantifier is involved: an expected `forall` is skolemised,
+ * so the actual value has to hold for every type, while an actual `forall` is
+ * instantiated, because a polymorphic value may be used at one type. `unify` is
+ * symmetric and cannot tell the two apart, so it hands every quantified pair here
+ * with the left type as the expectation.
+ */
+function subsume(TypeCheckState $state, Type $expected, Type $actual, ?Ast\AstNode $at = null): void
+{
+    $expected = prune($state, $expected);
+    $actual = prune($state, $actual);
+
+    if ($expected instanceof TForall) {
+        unifyAgainstForall($state, $actual, $expected, $at);
+
+        return;
+    }
+
+    if ($actual instanceof TForall) {
+        subsume($state, $expected, openForallsFresh($state, $actual), $at);
+
+        return;
+    }
+
+    unify($state, $expected, $actual, $at);
+}
+
+/**
+ * Check `$actual` against a polymorphic `$expected`: skolemise the expected
+ * binders and unify under them. A rigid binder can only meet itself, so an
+ * argument that uses the parameter at two types fails here — which is the rank
+ * limit, and the escape check at the same time.
+ */
+function unifyAgainstForall(TypeCheckState $state, Type $actual, TForall $expected, ?Ast\AstNode $at): void
+{
+    $savedScope = $state->skolemScope;
+    $savedRigid = $state->rigidVars;
+    $mapping = [];
+    $body = $expected;
+
+    try {
+        while ($body instanceof TForall) {
+            foreach ($body->binders as $binder) {
+                $skolem = freshSkolem($state, $binder->name);
+                $mapping[$binder->name] = $skolem;
+                $state->rigidVars[$skolem->name] = true;
+                $state->skolemScope[$binder->name] = $skolem->name;
+            }
+            $body = $body->body;
+        }
+
+        subsume($state, substitute($body, $mapping), $actual, $at);
+    } finally {
+        $state->skolemScope = $savedScope;
+        $state->rigidVars = $savedRigid;
+    }
+}
+
+function substituteForall(TForall $type, array $mapping): Type
+{
+    $inner = $mapping;
+    foreach ($type->binders as $binder) {
+        unset($inner[$binder->name]);
+    }
+
+    $images = \array_values($inner);
+    $collides = static function (string $name) use ($images): bool {
+        foreach ($images as $image) {
+            if (isset(freeTypeVars($image)[$name])) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    $binders = $type->binders;
+    $body = $type->body;
+    $rename = [];
+    $fresh = 0;
+    foreach ($binders as $binder) {
+        if ($collides($binder->name)) {
+            $rename[$binder->name] = $binder->name . '$f' . (++$fresh);
+        }
+    }
+    if ($rename !== []) {
+        $body = substitute($body, \array_map(
+            static fn (string $name): TVar => new TVar($name),
+            $rename,
+        ));
+        $binders = \array_map(
+            static fn (ForallBinder $binder): ForallBinder => isset($rename[$binder->name])
+                ? new ForallBinder($rename[$binder->name], $binder->kind)
+                : $binder,
+            $binders,
+        );
+    }
+
+    $substituted = substitute($body, $inner);
+    if ($substituted === $body && $binders === $type->binders) {
+        return $type;
+    }
+
+    return new TForall($binders, $substituted, $type->explicit);
 }
 
 /**
@@ -680,6 +936,12 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
 {
     $left = prune($state, $left);
     $right = prune($state, $right);
+
+    if ($left instanceof TForall || $right instanceof TForall) {
+        subsume($state, $left, $right, $at);
+
+        return;
+    }
 
     if ($left instanceof TVar) {
         if ($right instanceof TVar) {
@@ -874,15 +1136,22 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
 function unifyVarApp(TypeCheckState $state, TVarApp $app, Type $other, ?Ast\AstNode $at): void
 {
     if ($other instanceof TVarApp) {
-        if (\count($app->args) !== \count($other->args)) {
-            throw typeFail($state, formatUnifyError($state, $app, $other), $at, 'unify');
-        }
-        unify($state, new TVar($app->name), new TVar($other->name), $at);
-        foreach ($app->args as $i => $arg) {
-            unify($state, $arg, $other->args[$i], $at);
+        if (\count($app->args) === \count($other->args)) {
+            unify($state, new TVar($app->name), new TVar($other->name), $at);
+            foreach ($app->args as $i => $arg) {
+                unify($state, $arg, $other->args[$i], $at);
+            }
+
+            return;
         }
 
-        return;
+        if (\count($app->args) < \count($other->args)) {
+            unifyHktSplitVarHead($state, $app, $other, $at);
+
+            return;
+        }
+
+        throw typeFail($state, formatUnifyError($state, $app, $other), $at, 'unify');
     }
 
     if ($other instanceof TCon) {
@@ -903,6 +1172,30 @@ function unifyVarApp(TypeCheckState $state, TVarApp $app, Type $other, ?Ast\AstN
     }
 
     throw typeFail($state, formatUnifyError($state, $app, $other), $at, 'unify');
+}
+
+/**
+ * Unify `f a1 … ak` with `g x1 … xm` (m > k) by splitting the longer application:
+ * `f := g x1 … x(m-k)`, then the arguments pair up positionally.
+ *
+ * This is how a class method at a polymorphic head gets its type: `map f` seen
+ * at `p a b` uses the given `Functor (p a)`, so the method's own `f` becomes the
+ * partial application `p a` rather than a fresh constructor of its own.
+ */
+function unifyHktSplitVarHead(TypeCheckState $state, TVarApp $app, TVarApp $other, ?Ast\AstNode $at): void
+{
+    if (isset($state->rigidVars[$app->name])) {
+        throw typeFail($state, formatUnifyError($state, $app, $other), $at, 'unify');
+    }
+
+    $split = \count($other->args) - \count($app->args);
+    $prefix = \array_slice($other->args, 0, $split);
+    $suffix = \array_slice($other->args, $split);
+
+    unify($state, new TVar($app->name), new TVarApp($other->name, $prefix), $at);
+    foreach ($app->args as $i => $arg) {
+        unify($state, $arg, $suffix[$i], $at);
+    }
 }
 
 /**
@@ -1252,11 +1545,30 @@ function zonkInferredTypesInPattern(TypeCheckState $state, ?Ast\AstNode $pattern
     };
 }
 
-function occurs(TypeCheckState $state, string $var, Type $type, ?Ast\AstNode $at = null): void
+/**
+ * Refuse a type that contains its own variable.
+ *
+ * A name the type binds is not the variable being checked: `forall t0. t0 -> t0`
+ * mentions `t0` only where it is bound, so substituting `t0` cannot make it
+ * recursive. The traversal therefore drops the binders of each quantifier it
+ * enters, exactly as {@see typeVars} does.
+ *
+ * @param array<string, true> $bound
+ */
+function occurs(TypeCheckState $state, string $var, Type $type, ?Ast\AstNode $at = null, array $bound = []): void
 {
     $type = prune($state, $type);
 
-    if (($type instanceof TVar || $type instanceof TVarApp) && $type->name === $var) {
+    if ($type instanceof TForall) {
+        if (isset($bound[$var])) {
+            return;
+        }
+        foreach ($type->binders as $binder) {
+            $bound[$binder->name] = true;
+        }
+    }
+
+    if (($type instanceof TVar || $type instanceof TVarApp) && $type->name === $var && ! isset($bound[$var])) {
         $rename = friendlyTypeVarNames([$type]);
         $shown = $rename[$var] ?? skolemTypeVarBase($var);
 
@@ -1264,7 +1576,7 @@ function occurs(TypeCheckState $state, string $var, Type $type, ?Ast\AstNode $at
     }
 
     foreach (typeChildren($type) as $child) {
-        occurs($state, $var, $child, $at);
+        occurs($state, $var, $child, $at, $bound);
     }
 }
 
@@ -1440,6 +1752,10 @@ function samePrimitiveType(Type $left, Type $right): bool
  */
 function typeToStringDomain(Type $type, array $rename = []): string
 {
+    if ($type instanceof TForall) {
+        return '(' . typeToString($type, $rename) . ')';
+    }
+
     $text = typeToString($type, $rename);
 
     return $type instanceof TArrow ? '(' . $text . ')' : $text;
@@ -1452,6 +1768,10 @@ function typeToStringDomain(Type $type, array $rename = []): string
  */
 function typeToStringArgument(Type $type, array $rename = []): string
 {
+    if ($type instanceof TForall) {
+        return '(' . typeToString($type, $rename) . ')';
+    }
+
     $text = typeToString($type, $rename);
     $atomic = match ($type::class) {
         TInt::class, TStr::class, TChar::class, TWord::class, TWord8::class, TWord16::class,
@@ -1509,6 +1829,10 @@ function typeToString(Type $type, array $rename = []): string
                 ? ' ' . \implode(' ', \array_map(static fn (Type $arg): string => typeToString($arg, $rename), $type->args))
                 : '');
         })(),
+        TForall::class => 'forall ' . \implode(' ', \array_map(
+            static fn (ForallBinder $binder): string => $binder->name,
+            $type->binders,
+        )) . '. ' . typeToString($type->body, $rename),
         TArrow::class => typeToStringDomain($type->from, $rename) . ' -> ' . typeToString($type->to, $rename),
     };
 }
@@ -1622,6 +1946,11 @@ function internalTypeToAstNode(Type $type): Ast\TypeNode
         TArrow::class => new Ast\TypeArrow(
             internalTypeToAstNode($type->from),
             internalTypeToAstNode($type->to),
+        ),
+        TForall::class => new Ast\TypeForall(
+            \array_map(static fn (ForallBinder $binder): string => $binder->name, $type->binders),
+            \array_map(static fn (): ?Ast\KindNode => null, $type->binders),
+            internalTypeToAstNode($type->body),
         ),
         default => throw new \InvalidArgumentException('unknown type: ' . $type::class),
     };

@@ -365,6 +365,28 @@ function inferKindAst(KindInferCtx $ctx, Ast\TypeNode $typeAst): Kind
             return inferKindAst($ctx, $typeAst->body);
         })(),
         Ast\TypeQualified::class => kindOfTypeConAst($ctx, $typeAst->name),
+        Ast\TypeForall::class => (static function () use ($ctx, $typeAst): Kind {
+            $saved = [];
+            foreach ($typeAst->binders as $i => $binder) {
+                $saved[$binder] = $ctx->varKinds[$binder] ?? null;
+                $kindAst = $typeAst->kinds[$i] ?? null;
+                $ctx->varKinds[$binder] = $kindAst === null ? new KType() : kindAstToKind($ctx, $kindAst);
+            }
+
+            try {
+                unifyKind($ctx, inferKindAst($ctx, $typeAst->body), new KType());
+            } finally {
+                foreach ($saved as $binder => $kind) {
+                    if ($kind === null) {
+                        unset($ctx->varKinds[$binder]);
+                    } else {
+                        $ctx->varKinds[$binder] = $kind;
+                    }
+                }
+            }
+
+            return new KType();
+        })(),
         default => throw new \InvalidArgumentException('unknown type for kind inference: ' . $typeAst::class),
     };
 }
@@ -1034,4 +1056,15 @@ function classParamNames(array $params): array
         static fn (array $param): string => $param['name'],
         $params,
     );
+}
+
+/** A surface kind annotation as the kind it names, for a binder's own kind. */
+function kindAstToKind(KindInferCtx $ctx, Ast\KindNode $kind): Kind
+{
+    return match ($kind::class) {
+        Ast\KindType::class => new KType(),
+        Ast\KindCon::class => new KCon($kind->name),
+        Ast\KindArrow::class => new KArrow(kindAstToKind($ctx, $kind->from), kindAstToKind($ctx, $kind->to)),
+        default => throw new \InvalidArgumentException('unknown kind: ' . $kind::class),
+    };
 }

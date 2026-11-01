@@ -1,0 +1,4 @@
+tests/semantics/Bad-Forall-Impredicative.mog:7:9: type error: impredicative type: a `forall` cannot be an argument of `List`; a type variable stands for a monotype, so give the `forall` its own signature
+
+   7 | ids :: [forall a. a -> a]
+     |         ^^^^^^

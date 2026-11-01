@@ -1,0 +1,8 @@
+-- The body may not pick a concrete type for a variable the signature declares
+-- polymorphic: `a` is rigid here, so `Bool` cannot be unified with it.
+module Main where
+
+import Moggi.Internal.Base
+
+bad :: forall a. a -> a
+bad _ = True

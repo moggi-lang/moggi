@@ -1,0 +1,16 @@
+-- Quantified constraints are a superclass feature; an instance context may not
+-- carry one.
+module Main where
+
+import Moggi.Internal.Base
+
+class Same a where
+  same :: a -> a -> Bool
+
+newtype Box f a = Box (f a)
+
+instance (forall a. Same (f a)) => Same (Box f a) where
+  same (Box x) (Box y) = same x y
+
+main :: IO ()
+main = print 0

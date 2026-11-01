@@ -832,7 +832,7 @@ function addExportedType(
         return;
     }
 
-    if (isBuiltinTupleExportName($name)) {
+    if (isBuiltinTupleExportName($name) || isBuiltinKindExportName($name)) {
         if (isset($exports['ambientTypes'][$name]) || isset($exports['typeSynonyms'][$name]) || isset($exports['data'][$name])) {
             throw exportError("duplicate export `{$name}` in module `{$moduleName}`", $item, $unit);
         }
@@ -876,6 +876,16 @@ function addExportedType(
         $item,
         $unit,
     );
+}
+
+/**
+ * `Type` is the builtin kind of ordinary types, parsed as a keyword wherever a
+ * kind is expected. `Data.Kind` re-exports it without any declaration
+ * introducing the name, the same situation as the builtin `TupleN` types.
+ */
+function isBuiltinKindExportName(string $name): bool
+{
+    return $name === 'Type';
 }
 
 function isBuiltinTupleExportName(string $name): bool

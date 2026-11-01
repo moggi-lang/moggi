@@ -53,7 +53,7 @@ function applyEvidenceMethodInfo(TypeCheckState $state, Ast\AstNode &$expr, arra
     $methodUserConstraints = $info['userConstraints']
         ?? ($state->classes[$info['class']]['methods'][$info['method']]['userConstraints'] ?? []);
     $methodNullary = $methodType !== null
-        && ! (prune($state, $methodType) instanceof TArrow);
+        && ! (peelForalls(prune($state, $methodType)) instanceof TArrow);
 
     $method = new Ast\EvidenceMethod(
         $info['class'],
@@ -87,7 +87,7 @@ function methodValueArity(TypeCheckState $state, ?Type $methodType, array $userC
     if ($methodType === null) {
         return null;
     }
-    $type = prune($state, $methodType);
+    $type = peelForalls(prune($state, $methodType));
     while ($type instanceof TArrow
         && $type->from instanceof TCon
         && \str_starts_with($type->from->name, '__Dict_')) {
@@ -124,6 +124,10 @@ function parseConstraints(TypeCheckState $state, array $constraints, ?AstNode $a
 {
     $parsed = [];
     foreach ($constraints as $i => $constraint) {
+        if ($constraint instanceof Ast\TypeForall) {
+            $constraint = openQuantifiedConstraint($state, $constraint, $at);
+        }
+
         if (! $constraint instanceof Ast\TypeApp || ! $constraint->con instanceof Ast\TypeCon) {
             throw typeFail($state, 'constraint must be a class application', $at);
         }
@@ -173,6 +177,91 @@ function parseConstraints(TypeCheckState $state, array $constraints, ?AstNode $a
     }
 
     return $parsed;
+}
+
+/**
+ * Replaces a quantified constraint's binders with rigid variables.
+ *
+ * `forall a. C (p a)` promises `C (p a)` for every `a`, so the variables it
+ * binds are skolems: nothing outside the constraint may choose them, and an
+ * obligation such as `C (p Int)` is discharged by instantiating them.
+ *
+ * The replaced variables are named `<binder>$q<hash>`: the suffix is how a later
+ * obligation tells a variable it may instantiate from one it may not, the same
+ * way `$sk` marks a declaration's own rigid variable.
+ */
+function openQuantifiedConstraint(TypeCheckState $state, Ast\TypeForall $constraint, ?AstNode $at): Ast\TypeNode
+{
+    $mapping = [];
+    $node = $constraint;
+    while ($node instanceof Ast\TypeForall) {
+        foreach ($node->binders as $binder) {
+            if (isset($mapping[$binder])) {
+                throw typeFail($state, "`forall` binds `{$binder}` twice in one constraint", $at ?? $constraint);
+            }
+            $skolem = quantifiedVar($binder);
+            $state->rigidVars[$skolem->name] = true;
+            $mapping[$binder] = $skolem;
+        }
+        $node = $node->body;
+    }
+
+    if ($node instanceof Ast\TypeConstrained) {
+        throw typeFail(
+            $state,
+            'a quantified constraint cannot carry a context of its own: write `forall a. C a`',
+            $at ?? $constraint,
+        );
+    }
+
+    return substituteInstanceTypeAst($node, $mapping);
+}
+
+/**
+ * The rigid variable a quantified constraint binds to `$binder`.
+ *
+ * The name is derived from the binder, not allocated, so the same written
+ * constraint always describes the same dictionary type.
+ */
+function quantifiedVar(string $binder, int $index = 0): TVar
+{
+    return new TVar($binder . '$q' . \substr(\hash('xxh128', $binder . '|' . $index), 0, 8));
+}
+
+/** Whether a type variable is one a quantified constraint allows us to instantiate. */
+function isQuantifiedVar(string $name): bool
+{
+    return \preg_match('/\$q[0-9a-f]{8}$/', $name) === 1;
+}
+
+/**
+ * The quantified variables a constraint mentions, in argument order.
+ *
+ * @return array<string, true>
+ */
+function quantifiedConstraintVars(Ast\PendingConstraint $constraint): array
+{
+    $found = [];
+    foreach ($constraint->args as $arg) {
+        foreach (\array_keys(typeVars($arg)) as $name) {
+            if (isQuantifiedVar($name)) {
+                $found[$name] = true;
+            }
+        }
+    }
+
+    return $found;
+}
+
+/** The class a written superclass names, with or without a quantifier. */
+function superclassName(Ast\TypeNode $super): ?string
+{
+    $node = $super;
+    while ($node instanceof Ast\TypeForall) {
+        $node = $node->body;
+    }
+
+    return $node instanceof Ast\TypeApp && $node->con instanceof Ast\TypeCon ? $node->con->name : null;
 }
 
 /**
@@ -254,7 +343,7 @@ function constraintClosurePresent(TypeCheckState $state, Ast\PendingConstraint $
     }
 
     foreach ($classInfo['superclasses'] as $super) {
-        if (! $super instanceof Ast\TypeApp || ! $super->con instanceof Ast\TypeCon) {
+        if (superclassName($super) === null) {
             continue;
         }
 
@@ -314,7 +403,7 @@ function expandConstraintsWithSuperclasses(TypeCheckState $state, array $constra
             }
 
             foreach ($classInfo['superclasses'] as $super) {
-                if (! $super instanceof Ast\TypeApp || ! $super->con instanceof Ast\TypeCon) {
+                if (superclassName($super) === null) {
                     continue;
                 }
 
@@ -433,15 +522,43 @@ function constraintArgKey(Type $arg): string
 }
 
 /**
- * @param array<string, Type> $mapping
+ * The constraint a class's superclass imposes on one of its instances.
+ *
+ * A quantified superclass keeps its binders: `class (forall a. Functor (p a)) =>
+ * Bifunctor p` gives a dictionary that is polymorphic in `a`, so the binder
+ * becomes a rigid variable named after the superclass it comes from. That name
+ * is derived from the written superclass, not allocated, so every expansion of
+ * the same class instance produces the same dictionary type.
+ *
+ * @param array<string, Type> $mapping class parameter name => the instance's type
  */
-function constraintFromSuperclassAst(TypeCheckState $state, Ast\TypeApp $super, array $mapping): Ast\PendingConstraint
+function constraintFromSuperclassAst(TypeCheckState $state, Ast\TypeNode $super, array $mapping): Ast\PendingConstraint
 {
-    $className = $super->con->name;
+    $node = $super;
+    if ($node instanceof Ast\TypeForall) {
+        $binderMapping = [];
+        $index = 0;
+        while ($node instanceof Ast\TypeForall) {
+            foreach ($node->binders as $binder) {
+                $bound = quantifiedVar($binder, $index);
+                $state->rigidVars[$bound->name] = true;
+                $binderMapping[$binder] = $bound;
+                ++$index;
+            }
+            $node = $node->body;
+        }
+        $node = substituteInstanceTypeAst($node, $binderMapping);
+    }
+
+    if (! $node instanceof Ast\TypeApp || ! $node->con instanceof Ast\TypeCon) {
+        throw typeFail($state, 'class superclass must be a type class application');
+    }
+
+    $className = $node->con->name;
     $classInfo = $state->classes[$className]
         ?? throw typeFail($state, "unknown class `{$className}` in superclass constraint");
 
-    $substituted = substituteInstanceTypeAst($super, $mapping);
+    $substituted = substituteInstanceTypeAst($node, $mapping);
     if (! $substituted instanceof Ast\TypeApp) {
         throw typeFail($state, "class `{$className}` superclass did not stay an application");
     }
@@ -490,6 +607,10 @@ function buildConstraintEnv(TypeCheckState $state, array $constraints): array
     $env = [];
     $owners = [];
     foreach ($constraints as $constraint) {
+        if (quantifiedConstraintVars($constraint) !== []) {
+            continue;
+        }
+
         $className = $constraint->class;
         $classInfo = $state->classes[$className] ?? throw typeFail($state, "unknown class `{$className}` in constraint");
         $mapping = [];
@@ -629,14 +750,10 @@ function ambientEvidenceFor(TypeCheckState $state, Ast\PendingConstraint $constr
             continue;
         }
 
-        $match = true;
-        foreach ($ambient->args as $i => $ambientArg) {
-            if (! typesMatchForAmbient($state, $ambientArg, $constraint->args[$i])) {
-                $match = false;
-
-                break;
-            }
-        }
+        $quantified = quantifiedConstraintVars($ambient);
+        $match = $quantified === []
+            ? ambientArgsMatch($state, $ambient->args, $constraint->args)
+            : quantifiedAmbientMatches($state, $ambient->args, $constraint->args, $quantified);
 
         if ($match && $ambient->evidence !== '') {
             return $ambient->evidence;
@@ -644,6 +761,113 @@ function ambientEvidenceFor(TypeCheckState $state, Ast\PendingConstraint $constr
     }
 
     return null;
+}
+
+/**
+ * @param list<Type> $left
+ * @param list<Type> $right
+ */
+function ambientArgsMatch(TypeCheckState $state, array $left, array $right): bool
+{
+    foreach ($left as $i => $leftArg) {
+        if (! typesMatchForAmbient($state, $leftArg, $right[$i])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Whether a quantified given constraint covers an obligation.
+ *
+ * The given `forall a. Functor (p a)` promises the obligation at every `a`, so
+ * matching binds each of its binders once and then requires the remaining
+ * structure to be equal: `Functor (p Int)` and `Functor (p Bool)` both match,
+ * while `Functor (q Int)` for a different `q` does not.
+ *
+ * @param list<Type> $ambientArgs
+ * @param list<Type> $obligationArgs
+ * @param array<string, true> $binders
+ */
+function quantifiedAmbientMatches(TypeCheckState $state, array $ambientArgs, array $obligationArgs, array $binders): bool
+{
+    $binding = [];
+    foreach ($ambientArgs as $i => $ambientArg) {
+        if (! constraintArgMatchesQuantified($state, $ambientArg, $obligationArgs[$i], $binders, $binding)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * @param array<string, true> $binders
+ * @param array<string, Type> $binding
+ */
+function constraintArgMatchesQuantified(TypeCheckState $state, Type $pattern, Type $actual, array $binders, array &$binding): bool
+{
+    $pattern = prune($state, $pattern);
+    $actual = prune($state, $actual);
+
+    if ($pattern instanceof TVar && isset($binders[$pattern->name])) {
+        if (\array_key_exists($pattern->name, $binding)) {
+            return typesMatchForAmbient($state, $binding[$pattern->name], $actual);
+        }
+
+        $binding[$pattern->name] = $actual;
+
+        return true;
+    }
+
+    if ($pattern instanceof TCon && $actual instanceof TCon) {
+        if ($pattern->name !== $actual->name || \count($pattern->args) !== \count($actual->args)) {
+            return false;
+        }
+
+        return ambientArgsMatchQuantified($state, $pattern->args, $actual->args, $binders, $binding);
+    }
+
+    if ($pattern instanceof TVarApp && $actual instanceof TVarApp) {
+        if ($pattern->name !== $actual->name || \count($pattern->args) !== \count($actual->args)) {
+            return false;
+        }
+
+        return ambientArgsMatchQuantified($state, $pattern->args, $actual->args, $binders, $binding);
+    }
+
+    if ($pattern instanceof TArrow && $actual instanceof TArrow) {
+        return constraintArgMatchesQuantified($state, $pattern->from, $actual->from, $binders, $binding)
+            && constraintArgMatchesQuantified($state, $pattern->to, $actual->to, $binders, $binding);
+    }
+
+    if ($pattern instanceof TPromoted && $actual instanceof TPromoted) {
+        if ($pattern->name !== $actual->name || \count($pattern->args) !== \count($actual->args)) {
+            return false;
+        }
+
+        return ambientArgsMatchQuantified($state, $pattern->args, $actual->args, $binders, $binding);
+    }
+
+    return typesMatchForAmbient($state, $pattern, $actual);
+}
+
+/**
+ * @param list<Type> $patterns
+ * @param list<Type> $actuals
+ * @param array<string, true> $binders
+ * @param array<string, Type> $binding
+ */
+function ambientArgsMatchQuantified(TypeCheckState $state, array $patterns, array $actuals, array $binders, array &$binding): bool
+{
+    foreach ($patterns as $i => $pattern) {
+        if (! constraintArgMatchesQuantified($state, $pattern, $actuals[$i], $binders, $binding)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 /**
@@ -1497,6 +1721,12 @@ function assertPendingDictsConsistentInExpr(TypeCheckState $state, Ast\AstNode $
 
         $missing = \array_diff_key($constraintClasses, $dictClasses);
         $stray = \array_diff_key($dictVars, $constraintVars);
+
+        foreach (\array_keys($stray) as $variable) {
+            if (isQuantifiedVar($variable)) {
+                unset($stray[$variable]);
+            }
+        }
         if ($missing !== [] || $stray !== []) {
             throw new \RuntimeException(
                 'pending dictionary list does not match its constraints at line ' . $node->line

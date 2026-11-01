@@ -275,22 +275,67 @@ function schemeFreeTypeVars(Type $type, array $bound, array $constraints): array
  * @param array<string, true> $acc
  * @return array<string, true>
  */
-function collectTypeVars(Type $type, array $acc): array
+function collectTypeVars(Type $type, array $acc, array $bound = []): array
 {
     if ($type instanceof TVar) {
-        $acc[$type->name] = true;
+        if (! isset($bound[$type->name])) {
+            $acc[$type->name] = true;
+        }
 
         return $acc;
     }
 
-    if ($type instanceof TVarApp) {
+    if ($type instanceof TForall) {
+        foreach ($type->binders as $binder) {
+            $bound[$binder->name] = true;
+        }
+
+        return collectTypeVars($type->body, $acc, $bound);
+    }
+
+    if ($type instanceof TVarApp && ! isset($bound[$type->name])) {
         $acc[$type->name] = true;
     }
 
     foreach (typeChildren($type) as $child) {
-        $acc = collectTypeVars($child, $acc);
+        $acc = collectTypeVars($child, $acc, $bound);
     }
 
     return $acc;
 }
 
+
+/**
+ * One binder of a `forall`: a name and the kind it was written with (null = `Type`).
+ *
+ * Kinds are carried on the binder rather than in a side table so a quantified
+ * type stays self-describing through substitution, zonking and printing.
+ */
+final class ForallBinder
+{
+    public function __construct(
+        public readonly string $name,
+        public readonly ?\Moggi\Semantics\Kinds\Kind $kind = null,
+    ) {
+    }
+}
+
+/**
+ * An explicit universal quantifier: `forall a. body`.
+ *
+ * The checker identifies type variables by name, so the binders are names, not
+ * de Bruijn indices; the invariant is that a name is bound once within its own
+ * `TForall` and may shadow a binder of an enclosing one. `explicit` records
+ * whether the source wrote the quantifier (it is printed only then); it never
+ * affects checking.
+ */
+final class TForall implements Type
+{
+    /** @param list<ForallBinder> $binders */
+    public function __construct(
+        public readonly array $binders,
+        public readonly Type $body,
+        public readonly bool $explicit = true,
+    ) {
+    }
+}

@@ -4,7 +4,9 @@ namespace Moggi\Semantics\Types;
 
 use function Moggi\Errors\appendDidYouMean;
 use Moggi\Semantics\Kinds;
+use Moggi\Semantics\TypeExpr\ForallBinder;
 use Moggi\Semantics\TypeExpr\TArrow;
+use Moggi\Semantics\TypeExpr\TForall;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TNatLit;
 use Moggi\Semantics\TypeExpr\TPromoted;
@@ -61,6 +63,7 @@ function astType(TypeCheckState $state, Ast\TypeNode $type, array $expanding = [
         Ast\TypeApp::class => applyTypeApp($state, $type->con, $type->args, $expanding),
         Ast\TypeArrow::class => astTypeArrow($state, $type, $expanding),
         Ast\TypeConstrained::class => astTypeSignature($state, $type, $expanding),
+        Ast\TypeForall::class => astTypeForall($state, $type, $expanding),
         Ast\TypeQualified::class => resolveQualifiedType($state, $type->module, $type->name, $expanding, $type),
         default => throw typeFail($state, 'unknown type ' . $type::class),
     };
@@ -253,6 +256,21 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
 {
     if ($argAsts === []) {
         throw typeFail($state, 'type application requires arguments', $con);
+    }
+
+    $headLabel = match ($con::class) {
+        Ast\TypeCon::class, Ast\TypeVar::class, Ast\TypeQualified::class => $con->name,
+        default => 'a type constructor',
+    };
+    foreach ($argAsts as $argAst) {
+        if ($argAst instanceof Ast\TypeForall) {
+            throw typeFail(
+                $state,
+                "impredicative type: a `forall` cannot be an argument of `{$headLabel}`; "
+                    . 'a type variable stands for a monotype, so give the `forall` its own signature',
+                $argAst,
+            );
+        }
     }
 
     if ($con instanceof Ast\TypeVar) {
@@ -619,4 +637,40 @@ function checkTypeAppArgKind(
         );
     }
     Kinds\commitKindInferCtx($state, $ctx);
+}
+
+/**
+ * Elaborate `forall a. body` into a `TForall`.
+ *
+ * Binder kinds are scoped while the body elaborates and restored afterwards, so
+ * an annotated binder constrains only its own body. The binder's *name* is kept:
+ * the checker identifies variables by name, so an occurrence in the body already
+ * elaborates to that name and the quantifier binds it by construction.
+ */
+function astTypeForall(TypeCheckState $state, Ast\TypeForall $type, array $expanding): Type
+{
+    $binders = [];
+    $saved = [];
+    foreach ($type->binders as $i => $name) {
+        $saved[$name] = $state->varKinds[$name] ?? null;
+        $kindAst = $type->kinds[$i] ?? null;
+        $state->varKinds[$name] = $kindAst === null
+            ? new Kinds\KType()
+            : Kinds\astKind($state, $kindAst, $type);
+        $binders[] = new ForallBinder($name, $state->varKinds[$name]);
+    }
+
+    try {
+        $body = astType($state, $type->body, $expanding);
+    } finally {
+        foreach ($saved as $name => $kind) {
+            if ($kind === null) {
+                unset($state->varKinds[$name]);
+            } else {
+                $state->varKinds[$name] = $kind;
+            }
+        }
+    }
+
+    return new TForall($binders, $body);
 }

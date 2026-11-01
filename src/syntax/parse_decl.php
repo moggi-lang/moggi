@@ -1718,6 +1718,14 @@ function parseInstanceMethod(ParserState $state): Ast\FunctionDecl
  */
 function parseConstructorAlt(ParserState $state): Ast\ConstructorDecl
 {
+    if (isForallStart($state)) {
+        throw parseError(
+            $state,
+            'a data constructor cannot quantify its own type variables: existential constructors are '
+                . 'not supported; write the variable in the data declaration instead',
+        );
+    }
+
     if (isAt($state, TokenKind::LParen) && isAt($state, TokenKind::Op, 1)) {
         return parsePrefixConstructorOpAlt($state);
     }

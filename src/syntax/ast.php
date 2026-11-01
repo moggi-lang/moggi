@@ -610,13 +610,26 @@ function dumpTypeInline(TypeNode $node): string
                 $node->args,
             ));
         })(),
-        TypeArrow::class => dumpTypeInline($node->from) . ' -> ' . dumpTypeInline($node->to),
+        TypeArrow::class => dumpTypeDomain($node->from) . ' -> ' . dumpTypeInline($node->to),
         TypeConstrained::class => \implode(', ', \array_map(
             static fn (TypeNode $constraint): string => dumpTypeInline($constraint),
             $node->constraints,
         )) . ' => ' . dumpTypeInline($node->body),
+        TypeForall::class => 'forall ' . \implode(' ', \array_map(
+            static fn (string $binder, ?KindNode $kind): string => $kind === null
+                ? $binder
+                : '(' . $binder . ' :: ' . dumpKindInline($kind) . ')',
+            $node->binders,
+            $node->kinds,
+        )) . '. ' . dumpTypeInline($node->body),
         default => throw new \InvalidArgumentException('unknown type: ' . $node::class),
     };
+}
+
+/** An arrow's domain keeps its parentheses only around a quantifier. */
+function dumpTypeDomain(TypeNode $node): string
+{
+    return $node instanceof TypeForall ? '(' . dumpTypeInline($node) . ')' : dumpTypeInline($node);
 }
 
 /**

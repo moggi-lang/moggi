@@ -31,6 +31,10 @@
 -- exports the name from here. This module declares `String`, `Char`, `Int`, `Word`, the list type
 -- and the `Integer` synonym over the kernel's own arbitrary-precision integer.
 --
+-- `Type`, the kind a signature writes in a kind annotation, is not declared:
+-- the compiler parses it as a keyword wherever a kind is expected. It is
+-- re-exported from here all the same, so `Data.Kind` has something to name.
+--
 -- Nothing else belongs here: no instance, no function, no class. A type's
 -- instances stay with the lower of the type's module and the class's module,
 -- exactly as the rest of the library spells out.
@@ -50,6 +54,7 @@ module Moggi.Internal.Base
   , Char
   , String
   , List
+  , Type
   ) where
 
 import Moggi.Internal.Prim

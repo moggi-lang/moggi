@@ -7,6 +7,7 @@ use Moggi\Semantics\TypeExpr\TBytes;
 use Moggi\Semantics\TypeExpr\TChar;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TDouble;
+use Moggi\Semantics\TypeExpr\TForall;
 use Moggi\Semantics\TypeExpr\TInt;
 use Moggi\Semantics\TypeExpr\TInt16;
 use Moggi\Semantics\TypeExpr\TInt32;
@@ -63,6 +64,7 @@ function typeChildren(Type $type): array
     return match ($type::class) {
         TArrow::class => [$type->from, $type->to],
         TVarApp::class, TCon::class, TPromoted::class => $type->args,
+        TForall::class => [$type->body],
         TInt::class, TStr::class, TChar::class, TWord::class, TWord8::class, TWord16::class,
         TWord32::class, TWord64::class, TInt8::class, TInt16::class, TInt32::class, TInt64::class,
         TBytes::class, TDouble::class, TUnit::class, TVar::class, TStringLit::class, TNatLit::class => [],
@@ -123,6 +125,11 @@ function mapTypeChildren(Type $type, callable $map): Type
             }
 
             return $changed ? new TPromoted($type->name, $args) : $type;
+        })(),
+        TForall::class => (static function () use ($type, $map): Type {
+            $body = $map($type->body);
+
+            return $body === $type->body ? $type : new TForall($type->binders, $body, $type->explicit);
         })(),
         TInt::class, TStr::class, TChar::class, TWord::class, TWord8::class, TWord16::class,
         TWord32::class, TWord64::class, TInt8::class, TInt16::class, TInt32::class, TInt64::class,

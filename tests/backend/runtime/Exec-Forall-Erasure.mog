@@ -1,0 +1,23 @@
+-- `forall` is a type-system construct. Each backend compiles this program and
+-- must agree on its output: no quantification artifact may reach generated code,
+-- whether the quantifier is on a declaration or on a class method.
+module Main where
+
+import Moggi.Internal.Base
+
+idPoly :: forall a. a -> a
+idPoly x = x
+
+applyPoly :: (forall a. a -> a) -> Int -> Int
+applyPoly f n = f n
+
+class Peek (p :: Type -> Type) where
+  peek :: forall a. p a -> Int
+
+newtype Box a = Box a
+
+instance Peek Box where
+  peek (Box _) = 0
+
+main :: IO ()
+main = print (applyPoly idPoly 41 + idPoly 7 + peek (Box True))
