@@ -1,0 +1,4 @@
+tests/semantics/Bad-Gadt-Inaccessible-Alternative.mog:13:9: type error: could not unify `Int` with `Bool`
+
+  13 | onlyLit Truth = 0
+     |         ^^^^^

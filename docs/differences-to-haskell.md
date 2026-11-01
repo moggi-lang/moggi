@@ -53,12 +53,13 @@ you would write there and the syntax that works here with no pragma at all.
 | `DerivingVia` | `deriving via (V) C` |
 | `DerivingStrategies` | `deriving stock (C)`, `deriving newtype (C)`, `deriving anyclass (C)`, `deriving via (V) C` |
 | `StandaloneDeriving` | `deriving instance (Eq a) => Eq (T a)` |
+| `GADTs` | `data Expr a where Lit :: Int -> Expr Int`; with it, existential constructor variables (`MkBox :: a -> Box`) and refinement from a constructor's written result type |
 | `BlockArguments` | `when True do …`, with no `$` |
 
 The reverse has no analogue: an extension with nothing behind it has no pragma
-either. `GADTs` is the one readers look for first — `data Expr a where …` is a
-parse error — and [data types](types/data-types.md#what-is-not-available)
-documents the rest of the gaps.
+either. `GADTs` is the one readers look for first, and it is part of the
+language: `data Expr a where …` parses, refines and runs like it does in
+Haskell ([data types](types/data-types.md#gadts)).
 
 ## Evaluation is strict
 

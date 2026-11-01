@@ -1,0 +1,4 @@
+tests/semantics/Bad-Gadt-Existential-Escape.mog:12:19: type error: an existential type variable `a` would escape its scope
+
+  12 | unbox (MkBox x) = x
+     |                   ^

@@ -295,19 +295,63 @@ value is finite, and recursion must consume what it produces
 ([Polymorphism](polymorphism.md) covers inference; [IO and effects](../effects/io.md)
 covers `error` in context).
 
+## GADTs
+
+The `where` form of a data declaration states each constructor's whole type
+instead of a field list, so a constructor may say what its own parameters are:
+
+```moggi
+data Expr a where
+  Lit :: Int -> Expr Int
+  Truth :: Expr Bool
+
+render :: Expr Int -> String
+render (Lit n) = show n
+```
+
+`Lit` is a constructor of `Expr Int` and of nothing else. Matching it is
+something the checker uses: in an arm that matched `Lit`, the scrutinee's index
+*is* `Int`, so a function with signature `Expr a -> a` may return `n` there and
+`True` in the `Truth` arm. This is refinement, and like Haskell's it needs the
+index to be rigid — a declared signature, or an instance head — because the
+proof holds only inside the arm. A constructor whose result the scrutinee's type
+rule out (`Truth` at `Expr Int`) is inaccessible and is rejected, and a match
+that misses a constructor the type admits is reported as non-exhaustive.
+
+A variable the written result does not mention is existential:
+
+```moggi
+data Box where
+  MkBox :: Show a => a -> Box
+
+render (MkBox x) = show x
+```
+
+`a` is rigid inside the arm and cannot escape it — returning `x` is rejected.
+The context is evidence the value carries, so `show` resolves through the
+dictionary stored in the constructor; the dictionary is a field the source never
+writes, and pattern matching binds it for you.
+
+Other forms work as they do in an ordinary declaration: `forall` may be written
+out (`Anon :: forall b. b -> Box`), record constructors use the brace form
+(`Circle :: { radius :: Int } -> Shape`), and a signature may mention a
+higher-kinded parameter.
+
+Deriving follows the same rules as in Haskell. `Eq`, `Show`, `Ord`, `Enum` and
+`Bounded` are derived from the constructors' fields; `Functor`, `Foldable` and
+`Traversable` are refused for a constructor that fixes its index (`Lit :: Int ->
+Expr Int` is not a case of `Expr a`), and accepted when every constructor
+returns the datatype at its parameters. `Generic` is not derived for a GADT.
+
+At run time a GADT constructor is the ordinary tagged constructor: the index is
+not a field, and a context's dictionary is the only field the source did not
+write.
+
 ## What is not available
 
-* **GADTs.** The `where` form of a data declaration is not part of the language;
-  it is a parse error rather than an unimplemented feature:
-
-  ```text
-  Main.mog:1:13: parse error: expected expression, found keyword 'where'
-  ```
-
-  The alternatives are an ordinary tagged type whose constructor carries the
-  evidence you need, plus a smart constructor that only builds the valid
-  combinations. [Kinds](kinds.md) covers the type-level half of what a GADT
-  would give you.
+* **Type-level computation on indices.** A GADT index is a type, not a value:
+  there is no addition on `Nat`, no type family, so `Port (n + 1)` cannot be
+  written ([Data kinds](data-kinds.md)).
 
 * **As-patterns.** `x@(Just n)` is not supported; bind the whole value in the
   clause head and match again in the body, or use a `case` on the bound name.

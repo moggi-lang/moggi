@@ -59,13 +59,14 @@ function synthesizeShowBody(Ast\DataDecl $decl, string $x, string $d, string $s)
 
     $alts = [];
     foreach ($decl->constructors as $ctor) {
-        $pats = freshPatVars('__f', \count($ctor->fields));
+        $fields = constructorDeriveFields($ctor);
+        $pats = freshPatVars('__f', \count($fields));
         $alts[] = new Ast\Alt(
             new Ast\PatCon($ctor->name, $pats),
             synthesizeShowConstructor(
                 $ctor,
                 patVarNames($pats),
-                \array_map(static fn (Ast\CtorField $f): string => $f->name, $ctor->fields),
+                \array_map(static fn (Ast\CtorField $f): string => $f->name, $fields),
                 $d,
                 $s,
             ),

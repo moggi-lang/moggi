@@ -1,0 +1,13 @@
+-- `Truth :: Expr Bool` cannot be a case of `Expr Int`: the pattern is
+-- inaccessible, and GHC rejects it rather than accept dead code.
+module Main where
+
+import Moggi.Internal.Base
+
+data Expr a where
+  Lit :: Int -> Expr Int
+  Truth :: Expr Bool
+
+onlyLit :: Expr Int -> Int
+onlyLit (Lit n) = n
+onlyLit Truth = 0

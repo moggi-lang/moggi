@@ -218,7 +218,14 @@ newtype Total = Total Int
   except for `Functor`, `Foldable` and `Traversable`.
 * `via` requires equal representations after unwrapping `newtype` chains, and
   cannot convert a parameter under a type constructor.
-* `Generic` cannot be derived with the newtype strategy.
+* `Generic` cannot be derived with the newtype strategy, and not for a
+  GADT-style declaration: a constructor that fixes its index has no single
+  representation over the parameter
+  ([Data types § GADTs](types/data-types.md#gadts)).
+* `Functor`, `Foldable` and `Traversable` are refused for a GADT constructor
+  that does not return the datatype at its parameters, and `Eq`, `Show`, `Ord`,
+  `Enum` and `Bounded` derive over the fields exactly as they do for an
+  ordinary declaration.
 * `Generic1` cannot be derived at all in this release
   ([Generic1](types/generics.md#generic1)).
 * Standalone deriving requires the target type to be in scope.

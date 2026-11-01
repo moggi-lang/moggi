@@ -1,0 +1,4 @@
+tests/semantics/Bad-Gadt-Result-Not-Datatype.mog:10:3: type error: constructor `Wrong` must return `Expr`, not Maybe Int
+
+  10 |   Wrong :: Int -> Maybe Int
+     |   ^^^^^

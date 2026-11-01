@@ -60,7 +60,7 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
             foreach ($item->constructors as $ctor) {
                 $localBindings[$ctor->name] = true;
                 $knownFunctions[$ctor->name] = true;
-                $functionArity[$ctor->name] = \count($ctor->fields);
+                $functionArity[$ctor->name] = $ctor->runtimeFieldCount();
             }
         }
     }
@@ -165,10 +165,7 @@ function lowerData(Ast\DataDecl $decl): DataDecl
         \array_map(
             static fn (Ast\ConstructorDecl $ctor): DataConstructor => new DataConstructor(
                 $ctor->name,
-                \array_map(
-                    static fn (Ast\CtorField $field): string => $field->name,
-                    $ctor->fields,
-                ),
+                $ctor->runtimeFieldNames(),
             ),
             $decl->constructors,
         ),
@@ -192,10 +189,7 @@ function buildDataIndex(Ast\Program $program, array $importedData = []): array
         }
 
         foreach ($item->constructors as $ctor) {
-            $index[$ctor->name] = \array_map(
-                static fn (Ast\CtorField $field): string => $field->name,
-                $ctor->fields,
-            );
+            $index[$ctor->name] = $ctor->runtimeFieldNames();
         }
     }
 

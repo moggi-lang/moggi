@@ -1805,6 +1805,28 @@ function ownClassMethodNames(TypeCheckState $state, string $className): array
     return $names;
 }
 
+/**
+ * Whether the datatype an instance head is about declares a GADT constructor.
+ *
+ * A GADT constructor's written result type is what a pattern refines, so this
+ * is the condition under which an instance's head variables must be rigid.
+ */
+function instanceHeadIsGadt(TypeCheckState $state, Type $headType): bool
+{
+    $headType = prune($state, $headType);
+    if (! $headType instanceof TCon) {
+        return false;
+    }
+
+    foreach ($state->data[$headType->name]['constructors'] ?? [] as $ctor) {
+        if (! empty($ctor['gadt'])) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function checkInstanceMethod(
     TypeCheckState $state,
     Ast\FunctionDecl $fn,
@@ -1849,6 +1871,27 @@ function checkInstanceMethod(
     if ($forallSkolems !== []) {
         $constraints = substitutePendingConstraints($constraints, $forallSkolems);
     }
+
+    $headVars = $headType === null || ! instanceHeadIsGadt($state, $headType)
+        ? []
+        : typeVars($headType);
+    $headSkolems = [];
+    foreach (\array_keys(typeVars($fnType)) as $name) {
+        if (! isset($headVars[$name]) || isset($state->rigidVars[$name]) || \preg_match('/\$sk\d+$/', $name) === 1) {
+            continue;
+        }
+        $headSkolems[$name] = freshSkolem($state, $name);
+    }
+    foreach ($headSkolems as $source => $skolem) {
+        $state->rigidVars[$skolem->name] = true;
+        $state->skolemScope[$source] ??= $skolem->name;
+        $skolemBack[$skolem->name] = new TVar($source);
+    }
+    if ($headSkolems !== []) {
+        $fnType = substitute($fnType, $headSkolems);
+        $constraints = substitutePendingConstraints($constraints, $headSkolems);
+    }
+
     $unskolemize = static fn (Type $type): Type => $skolemBack === [] ? $type : substitute($type, $skolemBack);
     foreach (\array_reverse($constraints) as $constraint) {
         $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);

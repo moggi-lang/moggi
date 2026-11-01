@@ -1,0 +1,53 @@
+-- GADTs at run time: refinement decides which arm an index selects, a
+-- constructor context is a dictionary the value carries, and the runtime
+-- representation is the ordinary tagged constructor in every backend.
+module Main where
+
+import Moggi.Internal.Base
+
+data Expr a where
+  Lit :: Int -> Expr Int
+  Truth :: Expr Bool
+  Pair :: Expr a -> Expr b -> Expr (a, b)
+
+eval :: Expr a -> a
+eval (Lit n) = n
+eval Truth = True
+eval (Pair a b) = (eval a, eval b)
+
+data Box where
+  MkBox :: Show a => a -> Box
+  Anon :: forall b. b -> Box
+
+render :: Box -> String
+render (MkBox x) = show x
+render (Anon _) = "anon"
+
+data Shape where
+  Circle :: { radius :: Int } -> Shape
+  Rect :: { width :: Int, height :: Int } -> Shape
+  deriving (Eq, Show)
+
+area :: Shape -> Int
+area (Circle { radius = r }) = r * r * 3
+area (Rect { width = w, height = h }) = w * h
+
+data Tree a where
+  Leaf :: a -> Tree a
+  Node :: Tree a -> Tree a -> Tree a
+  deriving (Eq, Show, Functor, Foldable)
+
+main :: IO ()
+main = do
+  putStrLn (show (eval (Lit 7)))
+  putStrLn (show (eval Truth))
+  putStrLn (show (fst (eval (Pair (Lit 1) Truth))))
+  putStrLn (show (snd (eval (Pair (Lit 1) Truth))))
+  putStrLn (render (MkBox 42))
+  putStrLn (render (Anon True))
+  putStrLn (show (area (Circle { radius = 2 })))
+  putStrLn (show (area (Rect { width = 3, height = 4 })))
+  putStrLn (show (Circle { radius = 1 } == Circle { radius = 2 }))
+  putStrLn (show (Rect { width = 1, height = 2 }))
+  putStrLn (show (map (\n -> n + 1) (Node (Leaf 1) (Leaf 2))))
+  putStrLn (show (foldr (\x acc -> x + acc) 0 (Node (Leaf 1) (Leaf 2))))

@@ -11,6 +11,7 @@ use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Semantics\Types\gadtConstructorMatches;
 use function Moggi\Semantics\Types\prune;
 use function Moggi\Semantics\Types\typeFail;
 
@@ -89,14 +90,14 @@ function caseExhaustivenessProven(TypeCheckState $state, Ast\CaseExpr $expr, Typ
 
     return match ($mode['kind']) {
         'covered' => true,
-        'data' => dataCaseExhaustivenessProven($state, $expr, $mode['dataName']),
+        'data' => dataCaseExhaustivenessProven($state, $expr, $mode['dataName'], $scrutineeType),
         'int' => intCaseExhaustivenessProven($expr),
         'list' => listCaseExhaustivenessProven($expr),
         default => false,
     };
 }
 
-function dataCaseExhaustivenessProven(TypeCheckState $state, Ast\CaseExpr $expr, string $dataName): bool
+function dataCaseExhaustivenessProven(TypeCheckState $state, Ast\CaseExpr $expr, string $dataName, Type $scrutineeType): bool
 {
     $data = $state->data[$dataName] ?? null;
     if ($data === null) {
@@ -107,6 +108,9 @@ function dataCaseExhaustivenessProven(TypeCheckState $state, Ast\CaseExpr $expr,
 
     foreach ($data['constructors'] as $ctor) {
         if (isset($ctor['aliasOf'])) {
+            continue;
+        }
+        if (! gadtConstructorMatches($state, $ctor, $scrutineeType)) {
             continue;
         }
         $canonical = $ctor['name'];
@@ -159,7 +163,7 @@ function checkCaseExhaustiveness(TypeCheckState $state, Ast\CaseExpr $expr, Type
 
     match ($mode['kind']) {
         'covered' => null,
-        'data' => checkDataCaseExhaustiveness($state, $expr, $mode['dataName']),
+        'data' => checkDataCaseExhaustiveness($state, $expr, $mode['dataName'], $scrutineeType),
         'int' => checkIntCaseExhaustiveness($state, $expr),
         'list' => checkListCaseExhaustiveness($state, $expr),
         default => null,
@@ -171,7 +175,7 @@ function isListScrutineeType(Type $type): bool
     return $type instanceof TCon && $type->name === 'List';
 }
 
-function checkDataCaseExhaustiveness(TypeCheckState $state, Ast\CaseExpr $expr, string $dataName): void
+function checkDataCaseExhaustiveness(TypeCheckState $state, Ast\CaseExpr $expr, string $dataName, Type $scrutineeType): void
 {
     $data = $state->data[$dataName] ?? null;
     if ($data === null) {
@@ -189,6 +193,9 @@ function checkDataCaseExhaustiveness(TypeCheckState $state, Ast\CaseExpr $expr, 
     $missing = [];
     foreach ($data['constructors'] as $ctor) {
         if (isset($ctor['aliasOf'])) {
+            continue;
+        }
+        if (! gadtConstructorMatches($state, $ctor, $scrutineeType)) {
             continue;
         }
         if (empty($covered[$ctor['name']])) {
@@ -446,12 +453,13 @@ function canonicalConstructorName(TypeCheckState $state, string $name): string
     return $state->constructorRenames[$name] ?? $name;
 }
 
-/** @param array{name: string, fields: array<int, string>} $ctor */
+/** @param array{name: string, fields: array<int, string>, surfaceFieldCount?: int} $ctor */
 function formatMissingConstructorPattern(array $ctor): string
 {
-    if ($ctor['fields'] === []) {
+    $fields = $ctor['surfaceFieldCount'] ?? \count($ctor['fields']);
+    if ($fields === 0) {
         return $ctor['name'];
     }
 
-    return $ctor['name'] . ' ' . \implode(' ', \array_fill(0, \count($ctor['fields']), '_'));
+    return $ctor['name'] . ' ' . \implode(' ', \array_fill(0, $fields, '_'));
 }

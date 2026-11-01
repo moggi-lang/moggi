@@ -951,6 +951,13 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
             $leftRigid = isset($state->rigidVars[$left->name]);
             $rightRigid = isset($state->rigidVars[$right->name]);
             if ($leftRigid && $rightRigid) {
+                if (isset($state->gadtExistentials[$left->name])) {
+                    throw typeFail($state, existentialEscapeMessage($left), $at, 'unify');
+                }
+                if (isset($state->gadtExistentials[$right->name])) {
+                    throw typeFail($state, existentialEscapeMessage($right), $at, 'unify');
+                }
+
                 throw typeFail($state, formatUnifyError($state, $left, $right), $at, 'unify');
             }
             if ($leftRigid) {
@@ -1224,8 +1231,48 @@ function formatUnifyError(TypeCheckState $state, Type $left, Type $right): strin
     }
 
     $rename = friendlyTypeVarNames([$left, $right]);
+    $leftText = typeToString($left, $rename);
+    $rightText = typeToString($right, $rename);
 
-    return 'could not unify `' . typeToString($left, $rename) . '` with `' . typeToString($right, $rename) . '`';
+    if ($leftText === $rightText) {
+        $rename += disambiguatingSkolemNames([$left, $right]);
+        $leftText = typeToString($left, $rename);
+        $rightText = typeToString($right, $rename);
+    }
+
+    return 'could not unify `' . $leftText . '` with `' . $rightText . '`';
+}
+
+/**
+ * Display names for the rigid variables in `$types`, numbered so two that share
+ * a base spelling are told apart.
+ *
+ * @param list<Type> $types
+ * @return array<string, string> full variable name => display name
+ */
+function disambiguatingSkolemNames(array $types): array
+{
+    $names = [];
+    $counts = [];
+    $collect = function (Type $type) use (&$collect, &$names, &$counts): void {
+        if (($type instanceof TVar || $type instanceof TVarApp)
+            && \preg_match('/\$sk\d+$/', $type->name) === 1
+            && ! isset($names[$type->name])
+        ) {
+            $base = skolemTypeVarBase($type->name);
+            $counts[$base] = ($counts[$base] ?? 0) + 1;
+            $names[$type->name] = $base . $counts[$base];
+        }
+
+        foreach (typeChildren($type) as $child) {
+            $collect($child);
+        }
+    };
+    foreach ($types as $type) {
+        $collect($type);
+    }
+
+    return $names;
 }
 
 /**
@@ -1303,7 +1350,18 @@ function typeVarLetter(int $index): string
 
 function prune(TypeCheckState $state, Type $type): Type
 {
-    if ($state->subst === [] && (
+    if ($type instanceof TVar && isset($state->gadtEqualities[$type->name])) {
+        return prune($state, $state->gadtEqualities[$type->name]);
+    }
+
+    if ($type instanceof TVarApp && isset($state->gadtEqualities[$type->name])) {
+        return prune($state, applyArgsToHead(
+            $state->gadtEqualities[$type->name],
+            \array_map(static fn (Type $arg): Type => prune($state, $arg), $type->args),
+        ));
+    }
+
+    if ($state->subst === [] && $state->gadtEqualities === [] && (
         $type instanceof TVar
         || $type instanceof TVarApp
         || $type instanceof TCon

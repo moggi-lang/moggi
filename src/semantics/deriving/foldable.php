@@ -56,12 +56,13 @@ function synthesizeFoldableFoldr(
 
     $alts = [];
     foreach ($decl->constructors as $ctor) {
-        $pats = freshPatVars('__v', \count($ctor->fields));
+        $fields = constructorDeriveFields($ctor);
+        $pats = freshPatVars('__v', \count($fields));
         $names = patVarNames($pats);
         $acc = new Ast\Variable($z);
-        for ($i = \count($ctor->fields) - 1; $i >= 0; --$i) {
+        for ($i = \count($fields) - 1; $i >= 0; --$i) {
             $acc = synthesizeFoldableField(
-                $ctor->fields[$i]->type,
+                $fields[$i]->type,
                 $param,
                 new Ast\Variable($f),
                 $acc,

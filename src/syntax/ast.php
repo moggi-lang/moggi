@@ -238,7 +238,8 @@ function dump(AstNode $node, int $indent = 0): string
             . ($node->strategy !== null ? ' ' . $node->strategy : '')
             . ($node->viaType !== null ? ' via (' . dumpTypeInline($node->viaType) . ')' : '')
             . ' instance ' . $node->className . ' ' . dumpTypeInline($node->head) . "\n",
-        ConstructorDecl::class => $pad . 'constructor ' . $node->name . "\n"
+        ConstructorDecl::class => $pad . 'constructor ' . $node->name
+            . ($node->signature !== null ? ' :: ' . dumpTypeInline($node->signature) : '') . "\n"
             . \implode('', \array_map(
                 static function (CtorField $field) use ($pad): string {
                     return $pad . '  field ' . $field->name . ' :: '

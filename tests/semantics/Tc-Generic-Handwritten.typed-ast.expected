@@ -30,7 +30,7 @@ program
             apply
               constructor_ref M1
               constructor_ref U1
-  function to :: Rep Foo t35 -> Foo
+  function to :: Rep Foo t67 -> Foo
     pat_var r
     case
       variable r

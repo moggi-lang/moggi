@@ -1,0 +1,9 @@
+-- `Lit` returns `Expr Int`, not `Expr a`, so no `map` over an arbitrary `a` can
+-- be built from it. Haskell refuses this derivation, and so do we.
+module Main where
+
+import Moggi.Internal.Base
+
+data Expr a where
+  Lit :: Int -> Expr Int
+  deriving (Functor)

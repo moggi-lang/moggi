@@ -41,13 +41,13 @@ function synthesizeOrdCompare(Ast\DataDecl $decl, string $left, string $right): 
 
     $alts = [];
     foreach ($decl->constructors as $i => $ctor) {
-        $leftPats = freshPatVars('__a', \count($ctor->fields));
+        $leftPats = freshPatVars('__a', \count(constructorDeriveFields($ctor)));
         $leftPat = new Ast\PatCon($ctor->name, $leftPats);
         $leftNames = patVarNames($leftPats);
 
         $rightAlts = [];
         foreach ($decl->constructors as $j => $other) {
-            $rightPats = freshPatVars('__b', \count($other->fields));
+            $rightPats = freshPatVars('__b', \count(constructorDeriveFields($other)));
             $rightPat = new Ast\PatCon($other->name, $rightPats);
             if ($i < $j) {
                 $body = new Ast\ConstructorRef('LT');

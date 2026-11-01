@@ -37,6 +37,17 @@ function deriveGeneric(
     Ast\DataDecl $decl,
     Ast\DerivingClassRef $ref,
 ): DerivedInstance {
+    foreach ($decl->constructors as $ctor) {
+        if ($ctor->isGadt()) {
+            throw typeFail(
+                $state,
+                "cannot derive Generic: constructor `{$ctor->name}` is GADT-style, "
+                    . 'which has no single representation over the type parameter',
+                $ref,
+            );
+        }
+    }
+
     $head = dataDeclHeadAst($decl);
     $repRhs = synthesizeRepType($state, $decl);
     $repArgs = [$head];

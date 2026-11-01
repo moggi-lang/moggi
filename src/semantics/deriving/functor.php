@@ -51,7 +51,16 @@ function validateFunctorialStructure(
     string $className,
 ): void {
     foreach ($decl->constructors as $ctor) {
-        foreach ($ctor->fields as $field) {
+        if ($ctor->isGadt() && ! constructorReturnsParams($ctor, $decl)) {
+            throw typeFail(
+                $state,
+                "cannot derive {$className}: constructor `{$ctor->name}` does not return "
+                    . "`{$decl->name}` at the datatype's parameters",
+                $ref,
+            );
+        }
+
+        foreach (constructorDeriveFields($ctor) as $field) {
             $c = classifyFunctorField($field->type, $param);
             if (($c['tag'] ?? '') === 'bad') {
                 $reason = $c['reason'] ?? 'unsupported';
@@ -80,7 +89,7 @@ function functorialContextConstraints(
 ): array {
     $needed = [];
     foreach ($decl->constructors as $ctor) {
-        foreach ($ctor->fields as $field) {
+        foreach (constructorDeriveFields($ctor) as $field) {
             collectFunctorHeadConstraints($field->type, $param, $className, $needed);
         }
     }
@@ -139,10 +148,11 @@ function synthesizeFunctorMap(
 
     $alts = [];
     foreach ($decl->constructors as $ctor) {
-        $pats = freshPatVars('__v', \count($ctor->fields));
+        $fields = constructorDeriveFields($ctor);
+        $pats = freshPatVars('__v', \count($fields));
         $names = patVarNames($pats);
         $mapped = [];
-        foreach ($ctor->fields as $i => $field) {
+        foreach ($fields as $i => $field) {
             $mapped[] = synthesizeFunctorFieldMap($field->type, $param, new Ast\Variable($f), new Ast\Variable($names[$i]));
         }
         $body = applyCtor($ctor->name, $mapped);

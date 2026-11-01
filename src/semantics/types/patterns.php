@@ -387,6 +387,11 @@ function pruneEnvSchemes(TypeCheckState $state, array $env): array
 
 function bindConPattern(TypeCheckState $state, Ast\PatCon $pattern, Type $expected, array $env, bool $generalize, array $constraints = []): array
 {
+    $meta = lookupConstructorMeta($state, $pattern->name);
+    if ($meta !== null && ! empty($meta['gadt'])) {
+        return bindGadtConPattern($state, $pattern, $pattern->args, $expected, $env, $generalize, $constraints, $meta);
+    }
+
     $ctorScheme = $state->env[$pattern->name] ?? throw typeFail($state, "unknown constructor {$pattern->name}", $pattern);
     $ctorType = instantiate($state, $ctorScheme);
     $result = $ctorType;
@@ -400,6 +405,81 @@ function bindConPattern(TypeCheckState $state, Ast\PatCon $pattern, Type $expect
     }
 
     unify($state, $expected, $result);
+    if ($generalize) {
+        $env = generalizePatternBindings($state, $pattern, $env, $constraints);
+    }
+
+    return [$expected, $env];
+}
+
+/**
+ * Bind one GADT constructor pattern.
+ *
+ * Three things distinguish it from an ordinary constructor pattern:
+ *
+ *  - the constructor's existential variables become rigid, so they cannot be
+ *    equated with anything outside the match (see {@see instantiateGadtConstructor()});
+ *  - the context's dictionaries are fields the source does not write, so they
+ *    are bound first and made the alternative's ambient evidence;
+ *  - the written result type is unified with the scrutinee *by refinement*,
+ *    so `Lit :: Expr Int` at `Expr a` proves `a ~ Int` instead of failing.
+ *
+ * @param list<Ast\AstNode> $subpatterns the pattern's own sub-patterns, in field order
+ * @param array<string, Scheme> $env
+ * @param array<string, mixed> $meta
+ * @return array{0: Type, 1: array<string, Scheme>}
+ */
+function bindGadtConPattern(
+    TypeCheckState $state,
+    Ast\AstNode $pattern,
+    array $subpatterns,
+    Type $expected,
+    array $env,
+    bool $generalize,
+    array $constraints,
+    array $meta,
+): array {
+    $ctorScheme = $state->env[$pattern->name] ?? throw typeFail($state, "unknown constructor {$pattern->name}", $pattern);
+    $instantiated = instantiateGadtConstructor($state, $ctorScheme, $meta['existentials'] ?? []);
+    $ctorType = $instantiated['type'];
+
+    [$contextPatterns, $env, $contextFieldNames] = bindGadtContextFields(
+        $state,
+        $pattern,
+        $instantiated['constraints'],
+        $env,
+    );
+
+    $result = $ctorType;
+    foreach ($subpatterns as $arg) {
+        if (! $result instanceof TArrow) {
+            throw typeFail($state, "constructor {$pattern->name} applied to too many arguments", $pattern);
+        }
+        [$argType, $env] = bindPattern($state, $arg, $result->from, $env, generalize: false, constraints: $constraints);
+        $result = $result->to;
+    }
+
+    if ($contextPatterns !== []) {
+        if ($pattern instanceof Ast\PatCon) {
+            $pattern->args = [...$contextPatterns, ...$subpatterns];
+        } elseif ($pattern instanceof Ast\PatRecord) {
+            foreach ($contextPatterns as $i => $contextPattern) {
+                $pattern->fields[] = new Ast\PatField(
+                    $contextFieldNames[$i],
+                    $contextPattern,
+                    $pattern->line,
+                    $pattern->col,
+                    $pattern->endCol,
+                );
+            }
+        }
+    }
+
+    if ($instantiated['constraints'] !== []) {
+        installConstraintMethods($state, $instantiated['constraints'], $env);
+    }
+
+    unifyGadtResult($state, $expected, $result, $pattern);
     if ($generalize) {
         $env = generalizePatternBindings($state, $pattern, $env, $constraints);
     }
@@ -472,6 +552,10 @@ function bindRecordPattern(TypeCheckState $state, Ast\PatRecord $pattern, Type $
         ?? throw typeFail($state, "unknown constructor {$pattern->name}", $pattern);
     $subpatterns = recordPatternFields($state, $pattern, $meta);
 
+    if (! empty($meta['gadt'])) {
+        return bindGadtConPattern($state, $pattern, $subpatterns, $expected, $env, $generalize, $constraints, $meta);
+    }
+
     $ctorScheme = $state->env[$pattern->name] ?? throw typeFail($state, "unknown constructor {$pattern->name}", $pattern);
     $ctorType = instantiate($state, $ctorScheme);
     $result = $ctorType;
@@ -508,6 +592,9 @@ function recordPatternFields(TypeCheckState $state, Ast\PatRecord $pattern, arra
 
     $subpatterns = [];
     foreach ($meta['fields'] as $fieldName) {
+        if (\str_starts_with($fieldName, '$')) {
+            continue;
+        }
         $subpatterns[] = $byName[$fieldName] ?? new Ast\PatWild($pattern->line, $pattern->col, $pattern->endCol);
     }
 

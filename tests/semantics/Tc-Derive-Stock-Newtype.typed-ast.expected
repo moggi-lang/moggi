@@ -403,7 +403,7 @@ program
     constructor Id
       field  :: a
     deriving (Functor)
-  function map :: t806 -> t807 -> Id t806 -> Id t807
+  function map :: t809 -> t807 -> Id t809 -> Id t807
     pat_var __f
     pat_var __x
     case

@@ -1,0 +1,54 @@
+-- GADT declarations and what matching one proves.
+--
+-- A constructor writes its result type, so `Lit :: Int -> Expr Int` refines the
+-- scrutinee's index to `Int` for that alternative: `eval` returns `a`, and each
+-- arm is checked under what its own pattern proved. `Pair` refines the index to
+-- a product, which is also why `eval` must be instantiated freshly at each
+-- recursive use instead of being pinned to the arm's refined result.
+module Main where
+
+import Moggi.Internal.Base
+
+data Expr a where
+  Lit :: Int -> Expr Int
+  Truth :: Expr Bool
+  Pair :: Expr a -> Expr b -> Expr (a, b)
+
+eval :: Expr a -> a
+eval (Lit n) = n
+eval Truth = True
+eval (Pair a b) = (eval a, eval b)
+
+-- An existential is a type the result does not mention; a context over it is a
+-- dictionary the value carries, because nothing at the match site could invent
+-- one. `forall` is written out here only to say so.
+data Box where
+  MkBox :: Show a => a -> Box
+  Anon :: forall b. b -> Box
+
+render :: Box -> String
+render (MkBox x) = show x
+render (Anon _) = "<anon>"
+
+-- Record constructors in the `where` form.
+data Shape where
+  Circle :: { radius :: Int } -> Shape
+  Rect :: { width :: Int, height :: Int } -> Shape
+  deriving (Eq, Show)
+
+area :: Shape -> Int
+area (Circle { radius = r }) = r * r
+area (Rect { width = w, height = h }) = w * h
+
+-- A method's arms refine the same head variable differently, which is why an
+-- instance head's variables are rigid.
+instance Show (Expr a) where
+  show (Lit n) = "lit"
+  show Truth = "truth"
+  show (Pair _ _) = "pair"
+
+-- A GADT parameterized by a type constructor, with the index left alone.
+data Tree f a where
+  Leaf :: a -> Tree f a
+  Branch :: f a -> Tree f a -> Tree f a
+  deriving (Functor, Foldable)

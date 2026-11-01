@@ -28,7 +28,7 @@ function deriveBounded(
 
     $allNullary = true;
     foreach ($decl->constructors as $ctor) {
-        if ($ctor->fields !== []) {
+        if (constructorDeriveFields($ctor) !== []) {
             $allNullary = false;
 
             break;
@@ -70,7 +70,7 @@ function deriveBoundedProduct(Ast\DataDecl $decl, Ast\DerivingClassRef $ref): De
 
     $minArgs = [];
     $maxArgs = [];
-    foreach ($ctor->fields as $_) {
+    foreach (constructorDeriveFields($ctor) as $_) {
         $minArgs[] = new Ast\Variable('minBound');
         $maxArgs[] = new Ast\Variable('maxBound');
     }

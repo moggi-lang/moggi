@@ -135,6 +135,12 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     $savedAllocation = $state->allocation;
     $state->subst = [];
     $state->holes = [];
+    $savedGadtEqualities = $state->gadtEqualities;
+    $savedGadtExistentials = $state->gadtExistentials;
+    $savedGadtAmbient = $state->gadtAmbientConstraints;
+    $state->gadtEqualities = [];
+    $state->gadtExistentials = [];
+    $state->gadtAmbientConstraints = [];
     if (! $fn->instanceMethod && isset($state->instanceMethodNames[$fn->name])) {
         unset($state->env[$fn->name]);
     }
@@ -240,7 +246,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
 
     $bodyEnv = $constraintEnv === [] ? $env : [...$env, ...$constraintEnv];
     $selfType = peelDictArrows($fnType, \count($constraints));
-    $bodyEnv[$fn->name] = scheme($selfType, [], $userConstraints, \count($constraints), $constraints);
+    $bodyEnv[$fn->name] = scheme($selfType, $skolemNames, $userConstraints, \count($constraints), $constraints);
 
     $state->allocation = $allocation;
     $savedConstraintMethods = $state->constraintMethods;
@@ -252,6 +258,9 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     $methodConstraints = $constraints;
 
     installConstraintMethods($state, $methodConstraints, $bodyEnv);
+    if ($state->gadtAmbientConstraints !== []) {
+        installConstraintMethods($state, $state->gadtAmbientConstraints, $bodyEnv);
+    }
     $methodConstraintEnv = buildConstraintEnv($state, $methodConstraints);
     if ($methodConstraintEnv !== []) {
         $bodyEnv = [...$bodyEnv, ...$methodConstraintEnv];
@@ -266,7 +275,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     }
     $state->ambientConstraintsByClass = $byClass;
 
-    $bodyType = inferExpr($state, $fn->body, $bodyEnv);
+    $bodyType = inferExpr($state, $fn->body, $bodyEnv, $bodyExpected);
     assertPendingDictsConsistentInExpr($state, $fn->body);
     $state->constraintMethods = $savedConstraintMethods;
     $state->constraintMethodAmbiguities = $savedConstraintMethodAmbiguities;
@@ -308,6 +317,8 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         }
     }
 
+    assertNoGadtEscape($state, $fnType, $constraints, $fn);
+
     $ownsOpenVars = $restricted
         && quantifiedVars($state, peelDictArrows($fnType, \count($constraints))) !== [];
     $openRestricted = openRestrictedVarsInExpr($state, $fn->body);
@@ -328,6 +339,9 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         recordRestrictedSolutions($state);
         $state->ambientConstraints = $savedAmbientConstraints;
         $state->ambientConstraintsByClass = $savedAmbientByClass;
+        $state->gadtEqualities = $savedGadtEqualities;
+        $state->gadtExistentials = $savedGadtExistentials;
+        $state->gadtAmbientConstraints = $savedGadtAmbient;
         $state->rigidVars = $savedRigidVars;
         $state->skolemScope = $savedSkolemScope;
         $state->varKinds = $savedVarKinds;
@@ -349,6 +363,9 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     }
 
     recordRestrictedSolutions($state);
+    $state->gadtEqualities = $savedGadtEqualities;
+    $state->gadtExistentials = $savedGadtExistentials;
+    $state->gadtAmbientConstraints = $savedGadtAmbient;
     $state->rigidVars = $savedRigidVars;
     $state->skolemScope = $savedSkolemScope;
     $state->varKinds = $savedVarKinds;

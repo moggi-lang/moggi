@@ -1,0 +1,12 @@
+-- `Rep` is a representation of every `Expr a`, and `Lit` is only an `Expr Int`,
+-- so there is no representation to give. Haskell refuses the derivation rather
+-- than inventing one.
+module Main where
+
+import Moggi.Internal.Base
+import Moggi.Generics
+
+data Expr a where
+  Lit :: Int -> Expr Int
+  Truth :: Expr Bool
+  deriving (Generic)
