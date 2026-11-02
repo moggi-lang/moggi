@@ -9,37 +9,7 @@ module Data.Bool
   , bool
   ) where
 
-import Moggi.Internal.Prim
-
--- | The type of truth values: 'False' and 'True'. A @case@ on a 'Bool' is
--- the primitive branch of the language; the operations below are conveniences
--- over it.
-data Bool = False | True
-
-infixr 3 &&
-infixr 2 ||
-
--- | Conjunction: 'True' only when both operands are 'True'. The right operand
--- is not evaluated when the left one is 'False'.
-(&&) :: Bool -> Bool -> Bool
-(&&) a b = boolAnd# a b
-
--- | Disjunction: 'True' when either operand is 'True'. The right operand is not
--- evaluated when the left one is 'True'.
-(||) :: Bool -> Bool -> Bool
-(||) a b = boolOr# a b
-
--- | Negation: 'True' becomes 'False' and 'False' becomes 'True'.
-not :: Bool -> Bool
-not b = boolNot# b
-
--- |'otherwise' is defined as the value 'True'.  It helps to make
--- guards more readable.  eg.
---
--- >  f x | x < 0     = ...
--- >      | otherwise = ...
-otherwise :: Bool
-otherwise = True
+import Moggi.Internal.Base
 
 -- | Case analysis for the 'Bool' type. @'bool' f t p@ evaluates to @f@
 -- when @p@ is 'False', and evaluates to @t@ when @p@ is 'True'.

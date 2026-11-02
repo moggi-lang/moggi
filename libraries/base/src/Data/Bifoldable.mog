@@ -4,9 +4,10 @@
 -- examples), and this module carries the combinators built on it
 -- ('bifold', 'biList', 'bilength', 'biany', 'biall', 'bitraverse_', ...).
 --
--- Moggi is strict, so there are no primed (strict) variants: every fold
--- below already evaluates its step results. For the same reason there are
--- no infinite structures to hang on: every range below is finite.
+-- Moggi evaluates by value, so every fold below already forces its step
+-- results, which is why there is no strict variant of any of them. For the
+-- same reason there are no infinite structures to hang on: every range below
+-- is finite.
 module Data.Bifoldable
   ( Bifoldable(..)
   , bifoldr1
@@ -52,10 +53,10 @@ import Data.Function (flip, id)
 import Data.Functor (Functor(map))
 import Data.Functor.Const (Const(Const))
 import Data.Maybe (Maybe(Nothing, Just))
-import Data.Monoid (Monoid(mempty), First(First), getFirst, All(All), getAll, Any(Any), getAny, Sum(Sum), getSum, Product(Product), getProduct)
+import Data.Monoid (Monoid(mempty), (<>), First(First), getFirst, All(All), getAll, Any(Any), getAny, Sum(Sum), getSum, Product(Product), getProduct, Dual(Dual), getDual, Endo(Endo), appEndo)
 import Data.Num
 import Data.Ord
-import Data.Semigroup
+import Data.Semigroup (Arg(Arg))
 import Data.Tuple
 import Moggi.Err
 import Moggi.Generics (K1(K1))

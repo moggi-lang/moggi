@@ -120,6 +120,7 @@ import Moggi.Err
 import Moggi.Internal.Base
 import Moggi.Internal.Prim
 import Text.Show
+import Data.Functor (Functor(map))
 
 -- ---------------------------------------------------------------------------
 -- Locales

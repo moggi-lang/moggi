@@ -1,40 +1,62 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 -- | A type @a@ is a 'Monoid' if it provides an associative function ('<>')
 -- that lets you combine any two values of type @a@ into one, and a neutral
--- element ('mempty') such that
+-- element (`mempty`) such that
 --
 -- > a <> mempty == mempty <> a == a
 --
--- The class itself, like every other wrapper ('Dual', 'Endo', 'All', 'Any',
--- 'Sum', 'Product', 'First', 'Last', 'Min', 'Max', 'WrappedMonoid', 'Arg'),
--- lives in @Data.Semigroup@ next to 'Semigroup' and is re-exported here.
--- What this module owns is the 'Maybe' wrappers ('First' and 'Last' that
--- skip 'Nothing' — different from @Data.Semigroup@'s unconditional ones)
--- and the 'Alternative'/'Applicative' wrappers 'Alt' and 'Ap'.
+-- A 'Monoid' is a 'Semigroup' with the added requirement of a neutral element.
+-- Thus any 'Monoid' is a 'Semigroup', but not the other way around.
+--
+-- ==== __Examples__
+--
+-- The 'Sum' monoid is defined by the numerical addition operator and `0` as neutral element:
+--
+-- >>> import Data.Int
+-- >>> mempty :: Sum Int
+-- Sum {getSum = 0}
+-- >>> Sum 1 <> Sum 2 <> Sum 3 <> Sum 4 :: Sum Int
+-- Sum {getSum = 10}
+--
+-- We can combine multiple values in a list into a single value using the `mconcat` function.
+-- Note that we have to specify the type here since 'Int' is a monoid under several different
+-- operations:
+--
+-- >>> mconcat [1,2,3,4] :: Sum Int
+-- Sum {getSum = 10}
+-- >>> mconcat [] :: Sum Int
+-- Sum {getSum = 0}
+--
+-- Another valid monoid instance of 'Int' is 'Product' It is defined by multiplication
+-- and `1` as neutral element:
+--
+-- >>> Product 1 <> Product 2 <> Product 3 <> Product 4 :: Product Int
+-- Product {getProduct = 24}
+-- >>> mconcat [1,2,3,4] :: Product Int
+-- Product {getProduct = 24}
+-- >>> mconcat [] :: Product Int
+-- Product {getProduct = 1}
 module Data.Monoid
-  ( Monoid(mempty, mconcat)
-  , (<>)
-  , Dual(Dual)
-  , getDual
-  , Endo(Endo)
-  , appEndo
-  , All(All)
-  , getAll
-  , Any(Any)
-  , getAny
-  , Sum(Sum)
-  , getSum
-  , Product(Product)
-  , getProduct
-  , First(First)
-  , getFirst
-  , Last(Last)
-  , getLast
-  , Alt(Alt)
-  , getAlt
-  , Ap(Ap)
-  , getAp
-  ) where
+    (-- *  'Monoid' typeclass
+     Monoid(..),
+     (<>),
+     Dual(..),
+     Endo(..),
+     -- *  'Bool' wrappers
+     All(..),
+     Any(..),
+     -- *  'Num' wrappers
+     Sum(..),
+     Product(..),
+     -- *  'Maybe' wrappers
+     -- $MaybeExamples
+     First(..),
+     Last(..),
+     -- *  'Alternative' wrapper
+     Alt(..),
+     -- *  'Applicative' wrapper
+     Ap(..)
+     ) where
 
 import Control.Applicative
 import Control.Monad
@@ -46,17 +68,26 @@ import Data.Functor
 import Data.Maybe
 import Data.Num
 import Data.Ord
-import Data.Semigroup
 import Moggi.Internal.Base
-import Text.Show
 import Moggi.Internal.Prim
+import Text.Show
+import Moggi.Internal.Data.Semigroup
+  ( Semigroup(..)
+  , Monoid(..)
+  , Dual(..)
+  , Endo(..)
+  , All(..)
+  , Any(..)
+  , Sum(..)
+  , Product(..)
+  )
 
 -- First / Last: Maybe monoids. 'First' returns the leftmost non-'Nothing'
--- value, 'Last' the rightmost one. Different from @Data.Semigroup@'s
+-- value, 'Last' the rightmost one. Different from the semigroup kernel's
 -- 'First'/'Last', which keep the first/last value unconditionally.
 
 -- | Maybe monoid returning the leftmost non-'Nothing' value.
-data First a = First (Maybe a)
+newtype First a = First { getFirst :: Maybe a }
   deriving (Eq, Ord)
 
 getFirst :: First a -> Maybe a
@@ -84,7 +115,7 @@ instance Functor First where
   map f x = First (mapMaybeF f (getFirst x))
 
 -- | Maybe monoid returning the rightmost non-'Nothing' value.
-data Last a = Last (Maybe a)
+newtype Last a = Last { getLast :: Maybe a }
   deriving (Eq, Ord)
 
 getLast :: Last a -> Maybe a
@@ -113,7 +144,7 @@ instance Functor Last where
 
 -- | A monoid on an 'Alternative' value under its @('<|>')@, with 'empty' as
 -- the neutral element.
-data Alt f a = Alt (f a)
+newtype Alt f a = Alt { getAlt :: f a }
 
 getAlt :: Alt f a -> f a
 getAlt x = case x of
@@ -147,7 +178,7 @@ instance Show (f a) => Show (Alt f a) where
 -- classes (plus the `*`-kinded ones below); the rest are by hand.
 -- Stock Eq/Ord/Show cannot add the `f a` parameter constraint on a two-parameter
 -- newtype, so these three are by hand; Functor newtype-derives fine.
-newtype Ap f a = Ap (f a)
+newtype Ap f a = Ap { getAp :: f a }
   deriving (Functor)
 
 instance Eq (f a) => Eq (Ap f a) where

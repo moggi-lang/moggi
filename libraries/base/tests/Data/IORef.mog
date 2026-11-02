@@ -13,7 +13,7 @@ main = do
   modifyIORef r (\n -> n + 1)
   c <- readIORef r
   putStrLn (show c)
-  modifyIORef' r (\n -> n * 2)
+  modifyIORef r (\n -> n * 2)
   d <- readIORef r
   putStrLn (show d)
   s <- newIORef [1, 2]
@@ -21,7 +21,7 @@ main = do
   e <- readIORef s
   putStrLn (show e)
   f <- newIORef True
-  modifyIORef' f not
+  modifyIORef f not
   g <- readIORef f
   putStrLn (show g)
   h <- newIORef (1 :: Int)

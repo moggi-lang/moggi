@@ -53,9 +53,12 @@ utf8 = "UTF-8"
 
 singleton c = intlChr c
 
-unpack s =
-  let chunkToChar ch = intToChar# (intlOrd ch)
-  in L.map chunkToChar (mbStrSplit s 1 utf8)
+unpack s = chunkChars (mbStrSplit s 1 utf8)
+
+chunkChars :: [String] -> [Char]
+chunkChars chunks = case chunks of
+  [] -> []
+  ch : rest -> intToChar# (intlOrd ch) : chunkChars rest
 
 length s = mbStrLen s utf8
 

@@ -4,7 +4,7 @@
 module IntMapSuite (intMapSuite) where
 
 import Data.IntMap qualified as M
-import Data.Traversable (Identity (MkIdentity), runIdentity)
+import Data.Functor.Identity (Identity(..), runIdentity)
 import Support (assertTrue, expect)
 
 counts :: M.IntMap Int
@@ -37,6 +37,6 @@ intMapSuite = do
   expect "keys" (show (M.keys counts)) "[1,2,3]"
   expect "Functor" (show (M.toList ((* 2) <$> counts))) "[(1,20),(2,40),(3,60)]"
   expect "Foldable" (show (foldr (+) 0 counts)) "60"
-  expect "Traversable" (show (M.toList (runIdentity (traverse (\x -> MkIdentity (x + 1)) counts)))) "[(1,11),(2,21),(3,31)]"
+  expect "Traversable" (show (M.toList (runIdentity (traverse (\x -> Identity (x + 1)) counts)))) "[(1,11),(2,21),(3,31)]"
   assertTrue "Eq" (counts == M.fromList [(1, 10), (2, 20), (3, 30)])
   expect "Show" (show (M.singleton 1 2 :: M.IntMap Int)) "MkIntMap (MkMap [AssocEntry 1 2])"

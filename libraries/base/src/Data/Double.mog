@@ -19,6 +19,7 @@ import Moggi.Err
 import Moggi.Internal.Base
 import Text.Show
 import Moggi.Internal.Prim
+import Data.Functor (Functor(map))
 
 instance Eq Double where
   (==) a b = doubleEq# a b

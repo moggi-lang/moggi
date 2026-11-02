@@ -32,7 +32,7 @@ import Data.Bool
 import Data.Eq
 import Data.Foldable hiding (null)
 import Data.Int
-import Data.List hiding (map, filter, null, singleton, union, insert, find)
+import Data.List hiding (filter, null, singleton, union, insert, find)
 import Data.Monoid (Monoid(mempty))
 import Data.Ord
 import Data.Semigroup (Semigroup((<>)))

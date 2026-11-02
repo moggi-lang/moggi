@@ -69,23 +69,21 @@ import Control.Applicative
 import Control.Monad
 import Data.Bool
 import Data.Eq
-import Moggi.Err
 import Data.Foldable hiding (length, toList, find)
 import Data.Function
 import Data.Functor hiding (unzip)
 import Data.Int
+import Data.List qualified as DL
 import Data.Maybe
 import Data.Num
 import Data.Ord
 import Data.Semigroup
-import Moggi.Internal.Base
-import Text.Show
 import Data.Traversable hiding (mapAccumL, mapAccumR)
 import Data.Tuple
--- Bring List in qualified-only so wrappers can call DL.take etc. after local
--- bindings that would otherwise clash with unqualified List names.
-import Data.List qualified as DL
+import Moggi.Err
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
+import Text.Show
 
 -- 'NonEmpty(..)' and its ':|' fixity live in 'Data.Semigroup' (the 'sconcat'
 -- method names the type, so the class module owns it) and are re-exported
@@ -512,5 +510,6 @@ instance Monad NonEmpty where
 -- 'sconcat' is a 'Semigroup' method (see 'Data.Semigroup'); its default folds
 -- with '(<>)', associating to the right as @base@'s does.
 
-
-
+instance Show a => Show (NonEmpty a) where
+  showsPrec d ne = case ne of
+    a :| as -> showParen (d > 5) (\s -> showsPrec 11 a (showString " :| " (showsPrec 11 as s)))

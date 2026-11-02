@@ -10,7 +10,7 @@ import Data.Bool
 import Moggi.Internal.Base
 import Data.Eq
 import Data.Either
-import Data.List hiding (lookup, map, singleton)
+import Data.List hiding (lookup, singleton)
 import Data.Maybe
 import Data.Semigroup
 import Data.String hiding (length, take, drop, isPrefixOf, isSuffixOf)

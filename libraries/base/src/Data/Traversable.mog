@@ -1,8 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 -- | Visiting every element with an effect: the 'Traversable' class
 -- ('traverse', 'sequenceA', 'mapM', 'sequence'), the 'for'/'forM' and
--- 'mapAccum' family built on it, and the 'Identity' functor they are
--- expressed through.
+-- 'mapAccum' family built on it.
 module Data.Traversable
   ( Traversable(..)
   , for
@@ -13,8 +12,6 @@ module Data.Traversable
   , foldMapDefault
   , mapAccumM
   , forAccumM
-  , Identity(..)
-  , runIdentity
   ) where
 
 import Control.Applicative
@@ -23,6 +20,7 @@ import Data.Bool
 import Data.Eq
 import Data.Foldable
 import Data.Functor
+import Data.Functor.Identity (Identity(..), runIdentity)
 import Data.Ord
 import Text.Show
 import Data.Maybe
@@ -129,30 +127,14 @@ instance Applicative (StateR s) where
         (acc', v) -> case stepF acc' of
           (acc'', g) -> (acc'', g v))
 
-data Identity a = MkIdentity a
-  deriving (Eq, Ord, Show, Foldable, Traversable)
-
-runIdentity (MkIdentity x) = x
+instance Traversable Identity where
+  traverse f (Identity x) = pure Identity <*> f x
 
 fmapDefault :: Traversable t => (a -> b) -> t a -> t b
-fmapDefault f t = runIdentity (traverse (\a -> MkIdentity (f a)) t)
+fmapDefault f t = runIdentity (traverse (\a -> Identity (f a)) t)
 
 foldMapDefault :: (Traversable t, Monoid m) => (a -> m) -> t a -> m
 foldMapDefault f t = foldr (\a acc -> f a <> acc) mempty t
-
-instance Functor Identity where
-  map f i = case i of
-    MkIdentity x -> MkIdentity (f x)
-
-instance Applicative Identity where
-  pure x = MkIdentity x
-  (<*>) fa fb = case fa of
-    MkIdentity f -> case fb of
-      MkIdentity x -> MkIdentity (f x)
-
-instance Monad Identity where
-  (>>=) mx f = case mx of
-    MkIdentity x -> f x
 
 instance Traversable Maybe where
   traverse f mx = case mx of

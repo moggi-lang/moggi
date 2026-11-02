@@ -50,7 +50,7 @@ import Data.List hiding (
   )
 import Data.Maybe
 import Data.Ord
-import Data.Semigroup (NonEmpty((:|)))
+import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.Sequence (Seq, empty, singleton, (<|), (><), fromList, toList, viewl, viewr, ViewL(..), ViewR(..))
 import Data.String (lines, unlines)
 import Data.Traversable hiding (mapAccumL, mapAccumR)

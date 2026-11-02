@@ -16,7 +16,6 @@ module Data.IORef
   , readIORef
   , writeIORef
   , modifyIORef
-  , modifyIORef'
   ) where
 
 import Control.Applicative
@@ -43,15 +42,8 @@ writeIORef r x = writeIORef# r x
 
 -- | Apply a function to the reference's value. Evaluation is strict
 -- throughout Moggi, so this sequences the read, the application and the
--- write with no thunk pile-up; 'modifyIORef'' is the same function under
--- its stricter name.
+-- write with no thunk pile-up.
 modifyIORef :: IORef a -> (a -> a) -> IO ()
 modifyIORef r f = do
   x <- readIORef r
   writeIORef r (f x)
-
--- | Strict 'modifyIORef'. Identical to 'modifyIORef' because Moggi
--- evaluates strictly; kept so code written against both spellings
--- compiles.
-modifyIORef' :: IORef a -> (a -> a) -> IO ()
-modifyIORef' r f = modifyIORef r f

@@ -35,9 +35,12 @@
 -- the compiler parses it as a keyword wherever a kind is expected. It is
 -- re-exported from here all the same, so `Data.Kind` has something to name.
 --
--- Nothing else belongs here: no instance, no function, no class. A type's
--- instances stay with the lower of the type's module and the class's module,
--- exactly as the rest of the library spells out.
+-- The classes the machine's own types are compared with are declared here too
+-- ('Eq', 'Ord') along with the two types their methods answer in ('Bool',
+-- 'Ordering'): a class has to be visible to the module that derives an instance
+-- for a type declared here, and `Data.Eq` sits above every module that compares
+-- an 'Int' or a 'String'. The scalar types' instances stay in the public
+-- modules; 'NonEmpty' is derived here, next to its declaration.
 module Moggi.Internal.Base
   ( Int
   , Int8
@@ -54,6 +57,15 @@ module Moggi.Internal.Base
   , Char
   , String
   , List
+  , NonEmpty(..)
+  , Bool(..)
+  , Ordering(..)
+  , Eq(..)
+  , Ord(..)
+  , (&&)
+  , (||)
+  , not
+  , otherwise
   , Type
   ) where
 
@@ -113,3 +125,100 @@ type String = String#
 
 -- | The list type, whose syntax is `[a]`. Its operations are `Data.List`'s.
 type List = List#
+
+infix 4 ==, /=
+infix 4 <, <=, >, >=
+infixr 5 :|
+
+-- | The type of truth values: 'False' and 'True'. A @case@ on a 'Bool' is
+-- the primitive branch of the language.
+data Bool = False | True
+
+infixr 3 &&
+infixr 2 ||
+
+-- | Conjunction: 'True' only when both operands are 'True'. The right operand
+-- is not evaluated when the left one is 'False'.
+(&&) :: Bool -> Bool -> Bool
+(&&) a b = boolAnd# a b
+
+-- | Disjunction: 'True' when either operand is 'True'. The right operand is not
+-- evaluated when the left one is 'True'.
+(||) :: Bool -> Bool -> Bool
+(||) a b = boolOr# a b
+
+-- | Negation: 'True' becomes 'False' and 'False' becomes 'True'.
+not :: Bool -> Bool
+not b = boolNot# b
+
+-- |'otherwise' is defined as the value 'True'.  It helps to make
+-- guards more readable.  eg.
+--
+-- >  f x | x < 0     = ...
+-- >      | otherwise = ...
+otherwise :: Bool
+otherwise = True
+
+-- | The result of a comparison: 'LT', 'EQ' or 'GT'.
+data Ordering = LT | EQ | GT
+
+-- | The 'Eq' class defines equality ('==') and inequality ('/=').
+-- All the basic datatypes are instances of 'Eq', and 'Eq' may be derived for
+-- any datatype whose constituents are also instances of 'Eq'.
+--
+-- Instances are encouraged to follow these properties:
+--
+-- [__Reflexivity__]: @x == x@ = 'True'
+-- [__Symmetry__]: @x == y@ = @y == x@
+-- [__Transitivity__]: if @x == y && y == z@ = 'True', then @x == z@ = 'True'
+-- [__Extensionality__]: if @x == y@ = 'True' and @f@ is a function
+-- whose return type is an instance of 'Eq', then @f x == f y@ = 'True'
+-- [__Negation__]: @x /= y@ = @not (x == y)@
+class Eq a where
+  {-# MINIMAL (==) | (/=) #-}
+  (==), (/=) :: a -> a -> Bool
+
+  (/=) x y = boolNot# (x == y)
+  (==) x y = boolNot# (x /= y)
+
+-- | The 'Ord' class is used for totally ordered datatypes.
+class Eq a => Ord a where
+  compare :: a -> a -> Ordering
+  (<), (<=), (>), (>=) :: a -> a -> Bool
+  max, min :: a -> a -> a
+
+  compare x y = case x == y of
+    True -> EQ
+    False -> case x <= y of
+      True -> LT
+      False -> GT
+
+  (<=) x y = case compare x y of
+    GT -> False
+    _ -> True
+  (>=) x y = case compare x y of
+    LT -> False
+    _ -> True
+  (>) x y = case compare x y of
+    GT -> True
+    _ -> False
+  (<) x y = case compare x y of
+    LT -> True
+    _ -> False
+
+  -- These two default methods use '<=' rather than 'compare'
+  -- because the latter is often more expensive
+  max x y = case x <= y of
+    True -> y
+    False -> x
+  min x y = case x <= y of
+    True -> x
+    False -> y
+  {-# MINIMAL compare | (<=) #-}
+
+-- | A non-empty list: a head element followed by a possibly empty tail. The
+-- `sconcat` method of 'Semigroup' names it, and the module that declares the
+-- class cannot import the module that implements the type, so the type is
+-- declared here. Its combinators are @Data.List.NonEmpty@'s.
+data NonEmpty a = a :| [a]
+  deriving (Eq, Ord)

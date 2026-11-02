@@ -46,7 +46,7 @@ import Data.Eq
 import Data.Foldable hiding (null)
 import Data.Functor hiding (unzip)
 import Data.Int
-import Data.List hiding (map, filter, null, lookup, singleton, union, find, insert)
+import Data.List hiding (filter, null, lookup, singleton, union, find, insert)
 import Data.Map (Map)
 import Data.Map qualified as M
 import Data.Maybe

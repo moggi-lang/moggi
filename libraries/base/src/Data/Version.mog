@@ -25,7 +25,7 @@ import Data.Bool
 import Data.Char (Char, isDigit, digitToInt)
 import Data.Eq
 import Data.Int (Int)
-import Data.List (map, foldl, sort)
+import Data.List (foldl, sort)
 import Data.Num
 import Data.Ord
 import Data.Semigroup
@@ -34,6 +34,7 @@ import Moggi.Err
 import Moggi.Generics
 import Text.Read
 import Text.Show
+import Data.Functor (Functor(map))
 
 {- |
 A 'Version' represents the version of a software entity.

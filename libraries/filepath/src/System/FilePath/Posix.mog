@@ -66,7 +66,7 @@ import Control.Monad
 import Data.Bool
 import Data.Char (Char, chr)
 import Data.Eq
-import Data.List (filter, foldr, map)
+import Data.List (filter, foldr)
 import Data.Maybe (Maybe(..))
 import Data.Semigroup
 import Data.String (String, isPrefixOf, isSuffixOf, singleton, splitOn)
@@ -75,6 +75,7 @@ import Moggi.Internal.Base
 import System.Environment (getEnv)
 import System.FilePath.Units (dropUnits, takeUnits, unitsLength)
 import System.IO.Base (FilePath, IO)
+import Data.Functor (Functor(map))
 
 infixr 7 <.>, -<.>
 infixr 5 </>

@@ -44,7 +44,7 @@ import Data.Either
 import Data.Eq
 import Data.Int
 import Data.Integer
-import Data.List hiding (lookup, map, singleton)
+import Data.List hiding (lookup, singleton)
 import Data.Maybe
 import Data.Num
 import Data.Ord

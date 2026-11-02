@@ -13,6 +13,7 @@ module Data.Function
 
 import Data.Bool
 import Moggi.Internal.Prim (fix#)
+import Data.Functor (Functor(map))
 
 infixl 0 `on`
 infixl 1 &
