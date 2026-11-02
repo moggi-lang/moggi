@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Ix-Fields.mog:3:37: type error: cannot derive Ix: constructor `At` has fields; only an enumeration or a single-constructor product can be indexed
+
+  3 | data Shape = Dot | At Int deriving (Ix)
+    |                                     ^^

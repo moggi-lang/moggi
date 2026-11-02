@@ -23,6 +23,7 @@ require_once __DIR__ . '/eq.php';
 require_once __DIR__ . '/ord.php';
 require_once __DIR__ . '/enum.php';
 require_once __DIR__ . '/bounded.php';
+require_once __DIR__ . '/ix.php';
 require_once __DIR__ . '/show.php';
 require_once __DIR__ . '/read.php';
 require_once __DIR__ . '/functor.php';
@@ -148,6 +149,7 @@ function stockDeriveClasses(): array
         'Ord' => new StockDerive(deriveOrd(...), 'params'),
         'Enum' => new StockDerive(deriveEnum(...)),
         'Bounded' => new StockDerive(deriveBounded(...)),
+        'Ix' => new StockDerive(deriveIx(...)),
         'Show' => new StockDerive(deriveShow(...), 'params'),
         'Read' => new StockDerive(deriveRead(...)),
         'Functor' => new StockDerive(deriveFunctor(...), 'functorial'),
@@ -410,9 +412,6 @@ function processDeriving(TypeCheckState $state, Ast\DataDecl $decl): array
         $item = resolveAndDerive($state, $decl, $ref);
         $derived[] = $item;
         if ($item->contributesMetadata) {
-            // `Generic` and `Generic1` share one set of metadata instances: the representation's
-            // `M1` tags are the same either way, so a declaration deriving both states each once
-            // instead of colliding with itself.
             foreach (deriveGenericMetadataInstances($state, $decl, $ref) as $meta) {
                 $key = $meta->className . ' ' . Ast\dumpTypeInline($meta->typeHead);
                 if (isset($metadataSeen[$key])) {

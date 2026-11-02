@@ -1,0 +1,3 @@
+import Data.Ix
+
+data Tag a = A | B deriving (Ix)

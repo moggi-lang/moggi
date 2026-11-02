@@ -1,0 +1,34 @@
+import Data.Enum
+import Data.Eq
+import Data.Int
+import Data.Ix
+import Data.Ord
+import System.IO
+import Text.Show
+
+-- An enumeration is indexed by its constructors' `Enum` codes: `range` is `enumFromTo`, the offset
+-- a difference of codes and membership a comparison of them.
+data Color = Red | Green | Blue deriving (Eq, Ord, Show, Enum, Bounded, Ix)
+
+-- The codes come from `Enum`, which is why a derived `Ix` needs one: this type's `succ` is written
+-- by hand, so its positions are what `Ix` has to follow.
+data Weekday = Mon | Tue | Wed deriving (Eq, Ord, Show, Enum, Ix)
+
+-- One constructor is indexed like the tuple of its fields: row-major, the last field varying
+-- fastest, with the last field's stride being the size of its range.
+data Point = Point Int Bool deriving (Eq, Ord, Show, Ix)
+
+main :: IO ()
+main = do
+  putStrLn (show (range (Red, Blue)))
+  putStrLn (show (index (Red, Blue) Green))
+  putStrLn (show (unsafeIndex (Red, Blue) Blue))
+  putStrLn (show (inRange (Red, Green) Blue))
+  putStrLn (show (rangeSize (Red, Blue)))
+  putStrLn (show (index (Blue, Blue) Blue))
+  putStrLn (show (range (Wed, Wed)))
+  putStrLn (show (unsafeRangeSize (Tue, Wed)))
+  putStrLn (show (range (Point 1 False, Point 2 True)))
+  putStrLn (show (index (Point 1 False, Point 2 True) (Point 2 True)))
+  putStrLn (show (inRange (Point 1 False, Point 1 True) (Point 2 False)))
+  putStrLn (show (rangeSize (Point 1 False, Point 2 True)))

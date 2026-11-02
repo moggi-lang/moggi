@@ -41,11 +41,12 @@ classes.
 | `Read` | parses the `Show` form | nullary constructors only |
 | `Enum` | `succ`/`pred`/`toEnum`/`fromEnum` across constructors | nullary constructors only |
 | `Bounded` | `minBound`/`maxBound` are the first and last constructor | nullary constructors only |
+| `Ix` | `range`/`index`/`inRange` over the `Enum` codes of the constructors, or over the fields of one constructor | an `Enum` instance, or one constructor whose fields are `Ix` |
 | `Functor`, `Foldable`, `Traversable` | structure-preserving operations over the last type parameter | last parameter only |
 | `Generic` | the representation used by generic programming | see [Generic programming](types/generics.md) |
 
-`Enum` and `Read` are restricted to enumerations because a value with fields has
-no position in a sequence to enumerate or parse:
+`Enum`, `Ix` and `Read` are restricted to enumerations because a value with
+fields has no position in a sequence to enumerate, index or parse:
 
 ```text
 Main.mog:3:36: type error: cannot derive Enum: constructor `Pair` has fields (only nullary constructors are allowed)
@@ -211,7 +212,9 @@ newtype Total = Total Int
 
 ## Restrictions
 
-* `Enum`, `Read` and `Bounded` need nullary constructors.
+* `Enum`, `Read` and `Bounded` need nullary constructors; `Ix` needs either an
+  enumeration (with the `Enum` instance its offsets come from) or a single
+  constructor whose fields are `Ix`.
 * `Ord` requires `Eq`; derive both.
 * `newtype` deriving needs a `newtype` declaration.
 * `newtype` deriving needs the class parameter to be a bare type variable,

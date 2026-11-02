@@ -12,7 +12,9 @@
 -- The scalar instances ('Char', 'Int' and the fixed widths, 'Word' and its
 -- widths, 'Integer', 'Natural', 'Bool', 'Ordering') enumerate with 'Enum';
 -- the unit, 'Solo', 'Proxy' and tuple instances are written out, exactly as
--- the derived ones would be.
+-- the derived ones would be. 'GeneralCategory' is written out here for the
+-- same reason its 'Read' instance lives in 'Text.Read': 'Data.Char' sits below
+-- this module, so the type cannot derive the instance beside its declaration.
 module Data.Ix
   ( Ix(range, index, unsafeIndex, inRange, rangeSize, unsafeRangeSize)
   , safeRangeSize
@@ -20,7 +22,7 @@ module Data.Ix
   ) where
 
 import Data.Bool
-import Data.Char (Char)
+import Data.Char (Char, GeneralCategory)
 import Data.Enum (Enum(enumFromTo, fromEnum))
 import Data.Eq
 import Data.Foldable (concatMap)
@@ -197,6 +199,15 @@ instance Ix Ordering where
   unsafeIndex = ixUnsafeEnum
   inRange (l, u) i = fromEnum i >= fromEnum l && fromEnum i <= fromEnum u
   index = ixIndex "Ordering" inRange unsafeIndex
+
+-- As derived: 'GeneralCategory' is an enumeration, so its positions are its
+-- 'Enum' codes and the range is 'enumFromTo' over them. The declaration cannot
+-- carry the instance ('Data.Char' sits below this module), so it is written out
+-- here in the shape stock deriving would give it.
+instance Ix GeneralCategory where
+  range (l, u) = enumFromTo l u
+  unsafeIndex (l, _) i = fromEnum i - fromEnum l
+  inRange (l, u) i = fromEnum i >= fromEnum l && fromEnum i <= fromEnum u
 
 instance Ix Void where
   range _ = []

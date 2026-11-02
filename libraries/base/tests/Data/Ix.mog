@@ -1,9 +1,11 @@
 -- Data.Ix: ranges, offsets, membership and sizes across scalars, Solo,
--- Proxy and tuples.
+-- Proxy, tuples and the enumerations whose instances the module carries.
+import Data.Char (GeneralCategory(UppercaseLetter, LowercaseLetter, TitlecaseLetter, ModifierLetter, OtherLetter, Space))
+import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Ix
 import Data.Proxy (Proxy(Proxy))
 import Data.Tuple (Solo(MkSolo))
-import Data.Word (Word)
+import Data.Word (Word, Word8, Word16, Word32, Word64)
 import Numeric.Natural (Natural)
 
 main :: IO ()
@@ -32,3 +34,17 @@ main = do
   putStrLn (show (rangeSize (3, 1)))
   putStrLn (show (unsafeIndex (1, 9) 4))
   putStrLn (show (unsafeRangeSize (1, 9)))
+  putStrLn (show (range (UppercaseLetter, OtherLetter)))
+  putStrLn (show (index (UppercaseLetter, OtherLetter) TitlecaseLetter))
+  putStrLn (show (inRange (UppercaseLetter, OtherLetter) Space))
+  putStrLn (show (rangeSize (UppercaseLetter, OtherLetter)))
+  putStrLn (show (range (1, 3) :: [Int8]))
+  putStrLn (show (range (1, 3) :: [Int16]))
+  putStrLn (show (range (1, 3) :: [Int32]))
+  putStrLn (show (range (1, 3) :: [Int64]))
+  putStrLn (show (range (1, 3) :: [Word8]))
+  putStrLn (show (range (1, 3) :: [Word16]))
+  putStrLn (show (range (1, 3) :: [Word32]))
+  putStrLn (show (range (1, 3) :: [Word64]))
+  putStrLn (show (index ((1, 5) :: (Int16, Int16)) 4))
+  putStrLn (show (inRange ((1, 5) :: (Word32, Word32)) 9))

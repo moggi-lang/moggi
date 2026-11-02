@@ -1,0 +1,3 @@
+import Data.Ix
+
+data Shape = Dot | At Int deriving (Ix)
