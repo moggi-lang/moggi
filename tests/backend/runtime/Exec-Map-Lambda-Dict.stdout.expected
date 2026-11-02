@@ -1,0 +1,6 @@
+["(Const 3,4)","(Const 5,6)"]
+(Const 7,1)
+["(Const 1,1)","(Const 2,2)"]
+["Entry (Const 8,9)"]
+["Just (Const 10)","Nothing"]
+["((Const 12,13),Const 11)"]

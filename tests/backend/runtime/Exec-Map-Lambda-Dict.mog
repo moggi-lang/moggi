@@ -1,0 +1,32 @@
+import Data.Functor.Const (Const(Const))
+import Data.Maybe
+import Text.Show
+
+data Entry = Entry (Const Int Bool, Int) deriving (Show)
+
+showPairs :: [(Const Int Bool, Int)] -> [String]
+showPairs ps = map (\p -> show p) ps
+
+labelled :: Const Int Bool -> String
+labelled c = show (c, 1)
+
+comprehend :: [Int] -> [String]
+comprehend xs = [show (Const x, x) | x <- xs]
+
+-- The lambda also captures the dictionary it shows with, so the closure has to survive with its
+-- captures, not with the dictionary read as a call result.
+showWith :: Show a => a -> [(Const Int Bool, Int)] -> [String]
+showWith x ps = map (\p -> show (p, x)) ps
+
+-- A lambda handed to `map` is a value, and the reference to it survives
+-- specialization as a qualified name. Its body resolves a `Show` dictionary of
+-- its own (`Show (Const Int Bool)` here), so reading that reference as a call
+-- rather than as a closure loses the lambda and with it the dictionary.
+main :: IO ()
+main = do
+  putStrLn (show (showPairs [(Const 3, 4), (Const 5, 6)]))
+  putStrLn (labelled (Const 7))
+  putStrLn (show (comprehend [1, 2]))
+  putStrLn (show (map (\e -> show e) [Entry (Const 8, 9)]))
+  putStrLn (show (map show [Just (Const 10), Nothing]))
+  putStrLn (show (showWith (Const 11) [(Const 12, 13)]))

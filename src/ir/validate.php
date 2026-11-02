@@ -240,6 +240,18 @@ function checkPartial(
 
 function validateFunction(IR\FunctionDecl $function, string $pass): void
 {
+    $seenParams = [];
+    foreach ($function->params as $param) {
+        if (isset($seenParams[$param])) {
+            throw new InvalidIr(
+                "function {$function->name}: parameter `{$param}` is declared twice",
+                $pass,
+                $function->name,
+            );
+        }
+        $seenParams[$param] = true;
+    }
+
     $bound = \array_fill_keys($function->params, true);
     /** @var array<int, true> $temps */
     $temps = [];

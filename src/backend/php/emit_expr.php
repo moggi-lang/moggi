@@ -11,8 +11,9 @@ use function Moggi\Backend\Php\Codegen\isLeafOperand;
 
 function emitOperand(EmitEnv $env, IR\Operand $operand): string
 {
-    if ($operand instanceof IR\FnRef && isset($env->lambdaIndex[$operand->name])) {
-        return emitLambdaReference($operand->name, $env);
+    $lambdaKey = $operand instanceof IR\FnRef ? lambdaKeyFor($operand->name, $env) : null;
+    if ($lambdaKey !== null) {
+        return emitLambdaReference($lambdaKey, $env);
     }
 
     return match ($operand::class) {

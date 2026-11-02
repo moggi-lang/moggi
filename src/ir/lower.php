@@ -391,6 +391,11 @@ function srcLocFromAst(Ast\AstNode $node, string $module, string $function, stri
  * empty. Anything else (a constructor, a tuple, a wildcard) is a slot of its own that binds
  * nothing by that name and is called `_pN`, N being its position.
  *
+ * A parameter spelled `_` binds nothing, and two such parameters in one declaration (`_ <|> _`)
+ * would otherwise publish one slot name twice — which no target can declare (`function f($_, $_)`).
+ * The positional name takes over instead, and a user-written name that is already taken takes the
+ * next free positional one, so every slot stays distinct and a body still reaches its own binder.
+ *
  * @param array<int, Ast\AstNode> $patterns
  * @param CheckedTerms $terms the declaration's published terms
  * @return array<int, string>
@@ -400,7 +405,7 @@ function functionParamSlots(array $patterns, CheckedTerms $terms): array
     $names = [];
     foreach ($patterns as $i => $pattern) {
         $term = $terms->termFor($pattern);
-        if ($term instanceof CheckedPattern && $term->shape === PatternShape::Var) {
+        if ($term instanceof CheckedPattern && $term->shape === PatternShape::Var && $term->name !== '_') {
             $names[] = $term->name
                 ?? throw new \RuntimeException("the parameter pattern at {$term->origin} publishes no name");
 
@@ -408,6 +413,22 @@ function functionParamSlots(array $patterns, CheckedTerms $terms): array
         }
 
         $names[] = '_p' . $i;
+    }
+
+    $used = [];
+    foreach ($names as $i => $name) {
+        if (! isset($used[$name])) {
+            $used[$name] = true;
+
+            continue;
+        }
+
+        $slot = '_p' . $i;
+        while (isset($used[$slot])) {
+            $slot .= '_';
+        }
+        $names[$i] = $slot;
+        $used[$slot] = true;
     }
 
     return $names;

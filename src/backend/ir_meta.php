@@ -258,6 +258,13 @@ function operandCallSrcLoc(?IR\Operand $operand): ?IR\SrcLoc
     if ($operand === null) {
         return null;
     }
+
+    // A call legalization turned into an under-application holds the call site: the statement that
+    // reads it is an assignment to the same temp, and its frame is still the call's source line.
+    if ($operand instanceof IR\Partial && $operand->srcLoc !== null) {
+        return $operand->srcLoc;
+    }
+
     $found = null;
     walkOperand($operand, static function (IR\Operand $op) use (&$found): void {
         if ($found !== null) {

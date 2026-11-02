@@ -47,6 +47,10 @@ function emitStaticCall(EmitEnv $env, string $callee, array $args, ?string $owne
 
     $ctorTag = constructorTag($callee);
     if ($ctorTag !== null) {
+        if (isset($env->newtypeConstructors[$ctorTag]) && \count($args) === 1) {
+            return emitOperand($env, $args[0]);
+        }
+
         if ($ctorTag === $callee && isset($env->phpNames[$ctorTag])) {
             return phpFunctionName($ctorTag, $env->phpNames) . "({$argsCode})";
         }
@@ -198,8 +202,8 @@ function emitCallValue(EmitEnv $env, IR\Call|IR\CallValue $call): string
         return emitPartialValue($env, $callee->fn, $callee->arity, $all);
     }
 
-    if ($callee instanceof IR\FnRef && isset($env->lambdaIndex[$callee->name])) {
-        $lambdaFn = $env->lambdaIndex[$callee->name];
+    if ($callee instanceof IR\FnRef && lambdaKeyFor($callee->name, $env) !== null) {
+        $lambdaFn = $env->lambdaIndex[lambdaKeyFor($callee->name, $env)];
         if ($lambdaFn !== null && canInlineLambdaAsArrow($lambdaFn) && \count($args) === \count($lambdaFn->params)) {
             $arrow = emitLambdaArrow($lambdaFn, $env);
             $callArgs = \array_map(static fn (IR\Operand $arg): string => emitOperand($env, $arg), $args);

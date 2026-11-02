@@ -50,6 +50,32 @@ function emitLambdaArrow(IR\FunctionDecl $lambdaFn, EmitEnv $env): string
     return 'fn(' . \implode(', ', $params) . ') => ' . emitFunctionReturn($ret->value, $env);
 }
 
+/**
+ * The lambda a name denotes, spelled bare or qualified.
+ *
+ * Specialization lifts code out of one module and into another, so a reference to a lambda can
+ * arrive spelled `Module::λN` (see `Optimize\Specialize\qualifySourceModuleCallees`). The lambda is
+ * still emitted as a function of this module, so the reference has to stay a closure: reading a
+ * qualified lambda as a top-level function finds no arity for it and emits a call, which then hands
+ * the enclosing apply the lambda's result instead of the lambda.
+ */
+function lambdaKeyFor(string $name, EmitEnv $env): ?string
+{
+    if (isset($env->lambdaIndex[$name])) {
+        return $name;
+    }
+
+    if (! isQualifiedSymbol($name)) {
+        return null;
+    }
+
+    $member = \str_contains($name, '::')
+        ? \substr($name, \strrpos($name, '::') + 2)
+        : \substr($name, \strrpos($name, '\\') + 1);
+
+    return isset($env->lambdaIndex[$member]) ? $member : null;
+}
+
 function emitLambdaReference(string $name, EmitEnv $env): string
 {
     $lambdaFn = $env->lambdaIndex[$name] ?? null;
@@ -64,6 +90,18 @@ function emitLambdaReference(string $name, EmitEnv $env): string
     return 'fn(' . \implode(', ', $paramArgs) . ') => ' . $mangled . '(' . \implode(', ', $paramArgs) . ')';
 }
 
+/**
+ * A newtype constructor as a value.
+ *
+ * A newtype has one field and no runtime box, so its constructor is the identity on that field and
+ * its value form is an identity closure. Emitting the allocated tag a `data` constructor gets would
+ * hand the field's consumer an array where the field belongs.
+ */
+function emitNewtypeCtorValue(): string
+{
+    return 'fn($__a0) => $__a0';
+}
+
 /** @param array{phpNames: array<string, string>, functionArity?: array<string, int>, externalFns?: array<string, string>, boolConstructors?: array<string, bool>} $env */
 function emitTopLevelFnValue(EmitEnv $env, string $name, int $arity, ?string $ownerModule = null): string
 {
@@ -71,7 +109,16 @@ function emitTopLevelFnValue(EmitEnv $env, string $name, int $arity, ?string $ow
         return $env->boolConstructors[$name] ? 'true' : 'false';
     }
 
+    $lambdaKey = lambdaKeyFor($name, $env);
+    if ($lambdaKey !== null) {
+        return emitLambdaReference($lambdaKey, $env);
+    }
+
     $ctorTag = constructorTag($name);
+    if ($ctorTag !== null && isset($env->newtypeConstructors[$ctorTag])) {
+        return emitNewtypeCtorValue();
+    }
+
     if ($ctorTag !== null && ! ($ctorTag === $name && isset($env->phpNames[$ctorTag]))) {
         return emitConstructorValue(
             $ctorTag,
@@ -105,6 +152,11 @@ function emitTopLevelFnValue(EmitEnv $env, string $name, int $arity, ?string $ow
 /** @param list<IR\Operand> $args */
 function emitPartialValue(EmitEnv $env, string $fn, int $arity, array $args): string
 {
+    $ctorTag = constructorTag($fn);
+    if ($ctorTag !== null && isset($env->newtypeConstructors[$ctorTag])) {
+        return $args === [] ? emitNewtypeCtorValue() : emitOperand($env, $args[0]);
+    }
+
     $callable = emitPartialCallableName($fn, $env);
     $args = \array_map(static fn (IR\Operand $arg): string => emitOperand($env, $arg), $args);
 

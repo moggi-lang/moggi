@@ -122,7 +122,7 @@ function underapplied(IR\Call $call, array $args, ?array $layout): ?IR\Partial
         return null;
     }
 
-    return new IR\Partial($call->callee, $full, $args);
+    return new IR\Partial($call->callee, $full, $args, $call->srcLoc);
 }
 
 /**
@@ -141,6 +141,32 @@ function bindLambdaCapturesStmt(IR\Stmt $stmt, CallableTable $table): IR\Stmt
 {
     if ($stmt instanceof IR\Call) {
         return legalizeCall($stmt, $table);
+    }
+
+    // An `io_assign_action` block is not reachable through `mapStmtNestedBlocks()`, because a pass
+    // that drops local statements would drop the only definition of the temp the statement reads.
+    // Legalization rewrites statements without dropping any, so it descends here itself — a call
+    // left outside the walk would keep its pre-layout argument vector and fail the layout check.
+    if ($stmt instanceof IR\IoAssignAction) {
+        return new IR\IoAssignAction(
+            $stmt->dest,
+            new IR\Block(bindLambdaCapturesItems($stmt->body->items, $table)),
+            $stmt->result,
+            $stmt->srcLoc,
+        );
+    }
+
+    if ($stmt instanceof IR\IoMatch) {
+        return new IR\IoMatch(
+            $stmt->scrutinee,
+            \array_map(
+                static fn (IR\MatchArm $arm): IR\MatchArm => $arm->withBody(
+                    new IR\Block(bindLambdaCapturesItems($arm->body->items, $table)),
+                ),
+                $stmt->arms,
+            ),
+            $stmt->exhaustive,
+        );
     }
 
     $rewrite = static fn (IR\Operand $operand): IR\Operand => bindLambdaCapturesOperand($operand, $table);

@@ -620,6 +620,7 @@ final class Partial implements Operand
         public string $fn,
         public int $arity,
         public array $args,
+        public ?SrcLoc $srcLoc = null,
     ) {
         if ($fn === '') {
             throw new \InvalidArgumentException('a partial must name the callable it holds');
