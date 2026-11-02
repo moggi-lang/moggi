@@ -1,0 +1,37 @@
+-- Data.Array.Byte: allocation, writes, freeze, indexing, the list conversions,
+-- the copies and append, plus Eq/Ord/Show.
+import Control.Applicative
+import Control.Monad
+import Control.Monad.ST
+import Data.Array.Byte
+import Data.Word (Word8)
+
+main :: IO ()
+main = do
+  let ba = byteArrayFromListN 4 [1, 2, 3, 4]
+  putStrLn (show (sizeofByteArray ba))
+  putStrLn (show (indexByteArray ba 2))
+  putStrLn (show (byteArrayToList ba))
+  let m = runST (do
+            marr <- newByteArray 3
+            writeByteArray marr 0 10
+            writeByteArray marr 1 20
+            writeByteArray marr 2 30
+            unsafeFreezeByteArray marr)
+  putStrLn (show m)
+  let copied = runST (do
+                  src <- newByteArray 2
+                  writeByteArray src 0 7
+                  writeByteArray src 1 8
+                  dst <- newByteArray 4
+                  writeByteArray dst 0 5
+                  writeByteArray dst 3 9
+                  unsafeCopyMutableByteArray dst 1 src 0 2
+                  unsafeFreezeByteArray dst)
+  putStrLn (show copied)
+  putStrLn (show (appendByteArray ba m))
+  putStrLn (show (concatByteArray [ba, m, emptyByteArray]))
+  putStrLn (show (ba == byteArrayFromListN 4 [1, 2, 3, 4]))
+  putStrLn (show (compare ba (byteArrayFromListN 5 [1, 2, 3, 4, 5])))
+  putStrLn (show (sizeofByteArray emptyByteArray))
+  putStrLn (show (byteArrayToList (byteArrayFromListN 0 [])))

@@ -99,6 +99,7 @@ function languageRuntime(): array
         'moggi/rt/IO' => buildIOClass(),
         'moggi/rt/ST' => buildSTClass(),
         'moggi/rt/STRef' => buildSTRefClass(),
+        'moggi/rt/IORef' => buildIORefClass(),
         'moggi/rt/ArrHole' => buildArrHoleClass(),
         'moggi/rt/ArrArray' => buildArrArrayClass(),
         'moggi/rt/ArrSTArray' => buildArrSTArrayClass(),
@@ -619,6 +620,39 @@ function buildArrSTArrayClass(): string
 function buildArrIOArrayClass(): string
 {
     return buildArrHolderClass('moggi/rt/ArrIOArray');
+}
+
+/**
+ * The mutable `IO` cell: one value, replaced in place by `writeIORef#`.
+ *
+ * The field is the state, exactly like `STRef`'s, and it is not final: every
+ * write goes through the runtime's own helper, which lives in `RT` rather than
+ * in the cell class, so the JVM has to allow a `putfield` from another class.
+ * What differs from `STRef` is which medium may reach the cell, which the
+ * checker enforces through the type, not the runtime.
+ */
+function buildIORefClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/IORef');
+    $b->addField('v', 'Ljava/lang/Object;', 0x0001);
+
+    $b->addMethod(
+        '<init>',
+        '(Ljava/lang/Object;)V',
+        0x0001,
+        2,
+        ['moggi/rt/IORef', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/IORef', 'v', 'Ljava/lang/Object;'));
+            $c->return_();
+        }
+    );
+
+    return $b->toBytes();
 }
 
 /** Thunk for `newSTArray#`: allocate the mutable array when run. */
@@ -3976,6 +4010,49 @@ function buildRTClass(): string
             $c->aload(0);
             $c->getfield($cp->fieldRef('moggi/rt/ST', 'action', 'Ljava/lang/Object;'));
             $c->invokespecial($cp->methodRef('moggi/rt/IO', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'ioNewRef',
+        '(Ljava/lang/Object;)Lmoggi/rt/IORef;',
+        0x0009,
+        2,
+        ['java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('moggi/rt/IORef'));
+            $c->dup();
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('moggi/rt/IORef', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'ioReadRef',
+        '(Lmoggi/rt/IORef;)Ljava/lang/Object;',
+        0x0009,
+        1,
+        ['moggi/rt/IORef'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/IORef', 'v', 'Ljava/lang/Object;'));
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'ioWriteRef',
+        '(Lmoggi/rt/IORef;Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0009,
+        3,
+        ['moggi/rt/IORef', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/IORef', 'v', 'Ljava/lang/Object;'));
+            $c->aconst_null();
             $c->areturn();
         }
     );

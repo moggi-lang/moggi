@@ -1,0 +1,15 @@
+module System.Clock.PHP
+  ( monotonicNanos
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import System.IO.Base (IO)
+
+-- `hrtime(true)` is PHP's monotonic clock, in nanoseconds.
+foreign php function rawHrtime "hrtime" :: Bool -> IO Int
+
+monotonicNanos :: IO Int
+monotonicNanos = rawHrtime True

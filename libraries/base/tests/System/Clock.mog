@@ -1,0 +1,22 @@
+-- System.Clock: the monotonic counter only moves forward, and a busy interval
+-- reads longer than the empty interval around it.
+import Data.Ord
+import Data.Word (Word64)
+import System.Clock
+
+burn :: Int -> Int -> Int
+burn n acc = case n of
+  0 -> acc
+  _ -> burn (n - 1) (acc + n)
+
+main :: IO ()
+main = do
+  t1 <- getMonotonicTimeNSec
+  t2 <- getMonotonicTimeNSec
+  putStrLn (show (t2 >= t1))
+  putStrLn (show (burn 200000 0 == 20000100000))
+  t3 <- getMonotonicTimeNSec
+  putStrLn (show (t3 >= t2))
+  putStrLn (show (t3 > t2))
+  t4 <- getMonotonicTimeNSec
+  putStrLn (show (t4 >= t3))

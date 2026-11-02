@@ -1,0 +1,4 @@
+tests/semantics/Bad-ByteArray-Escape.mog:8:1: type error: ST values are forbidden outside an ST-returning function
+
+   8 | bad :: MutableByteArray s
+     | ^^^

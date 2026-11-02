@@ -1,0 +1,24 @@
+module System.Clock.DotNet
+  ( monotonicNanos
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Num
+import Data.Real
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import System.IO.Base (IO)
+
+foreign dotnet function stopwatchTimestamp "System.Diagnostics.Stopwatch:GetTimestamp" :: IO Int
+-- `Frequency` is a static field of the stopwatch, not a property.
+foreign dotnet const stopwatchFrequency "System.Diagnostics.Stopwatch:Frequency" :: Int
+
+-- `Stopwatch` counts its own ticks; the frequency is what turns them into
+-- nanoseconds. The division is written in `Integer` so a long-running process
+-- cannot overflow the product before it is scaled.
+monotonicNanos :: IO Int
+monotonicNanos = do
+  ticks <- stopwatchTimestamp
+  let freq = stopwatchFrequency
+  pure (fromInteger (div (toInteger ticks * 1000000000) (toInteger freq)))

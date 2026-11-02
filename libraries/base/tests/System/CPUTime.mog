@@ -1,0 +1,25 @@
+-- System.CPUTime: the unit a reading is counted in, and the two properties a
+-- CPU clock has to have -- it never runs backwards and it accounts for work the
+-- process actually did.
+import Data.Ord
+import System.CPUTime
+
+-- A strict accumulator loop: the result is observable, so the work is real
+-- rather than something an optimizer can drop.
+burn :: Int -> Int -> Int
+burn n acc = case n of
+  0 -> acc
+  _ -> burn (n - 1) (acc + n)
+
+main :: IO ()
+main = do
+  putStrLn (show cpuTimePrecision)
+  start <- getCPUTime
+  putStrLn (show (start >= 0))
+  putStrLn (show (burn 200000 0))
+  mid <- getCPUTime
+  putStrLn (show (mid >= start))
+  putStrLn (show (mid > start))
+  putStrLn (show (burn 200000 0))
+  end <- getCPUTime
+  putStrLn (show (end >= mid))

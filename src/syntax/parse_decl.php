@@ -1943,6 +1943,17 @@ function parseConstructorAlt(ParserState $state): Ast\ConstructorDecl
     }
 
     if (isAt($state, TokenKind::ConId)) {
+        if (isAt($state, TokenKind::Op, 1) && isConstructorOperator(peek($state, 1)->lexeme)) {
+            $nameToken = advance($state);
+
+            return parseInfixConstructorAlt($state, new Ast\TypeCon(
+                $nameToken->lexeme,
+                $nameToken->line,
+                $nameToken->col,
+                $nameToken->col + \max(0, \strlen($nameToken->lexeme) - 1),
+            ));
+        }
+
         return parsePrefixConstructorIdAlt($state);
     }
 
@@ -2014,9 +2025,9 @@ function parsePrefixConstructorOpAlt(ParserState $state): Ast\ConstructorDecl
  *
  * @return Ast\ConstructorDecl
  */
-function parseInfixConstructorAlt(ParserState $state): Ast\ConstructorDecl
+function parseInfixConstructorAlt(ParserState $state, ?Ast\TypeNode $left = null): Ast\ConstructorDecl
 {
-    $left = parseTypeAtom($state);
+    $left ??= parseTypeAtom($state);
     if (! isAt($state, TokenKind::Op)) {
         throw unexpected($state, 'constructor');
     }

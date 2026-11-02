@@ -159,6 +159,14 @@ final class StRef
     }
 }
 
+/** An `IORef`: one value an `IO` action can replace. */
+final class IORef
+{
+    public function __construct(public mixed $v)
+    {
+    }
+}
+
 /**
  * ST actions are re-executable descriptions: `['__st', thunk]`, the same
  * shape as IO's `['__io', thunk]` under a distinct tag so the two media
@@ -396,6 +404,26 @@ function stThawArray(ArrArray $a, bool $copy): array
     return ['__st', static function () use ($a, $copy): mixed {
         return new ArrSTArray($a->bounds, $a->n, $copy ? clone $a->elems : $a->elems);
     }];
+}
+
+/** A cell holding the value; allocated when the `IO` action runs. */
+function ioNewRef(mixed $x): IORef
+{
+    return new IORef($x);
+}
+
+/** The cell's current value. */
+function ioReadRef(IORef $r): mixed
+{
+    return $r->v;
+}
+
+/** Replace the cell's value; the action answers Unit. */
+function ioWriteRef(IORef $r, mixed $x): mixed
+{
+    $r->v = $x;
+
+    return null;
 }
 
 /** @param array{string, mixed, mixed} $bounds */

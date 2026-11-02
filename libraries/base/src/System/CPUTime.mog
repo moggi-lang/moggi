@@ -1,0 +1,45 @@
+{-# BACKEND
+  php = System.CPUTime.PHP
+  jvm = System.CPUTime.JVM
+  dotnet = System.CPUTime.DotNet
+#-}
+-- |
+-- Processor time: how much CPU the process has used, which is not the same
+-- quantity as elapsed wall-clock time. A program that waits on input burns
+-- almost none of it, and a program that computes for a second may use several
+-- seconds of it on a multi-core machine.
+--
+-- 'getCPUTime' counts nanoseconds, so a second of processor time is
+-- 'cpuTimePrecision' units. The backends differ in what they can measure: PHP
+-- adds the user and system time of the whole process at microsecond
+-- resolution, the JVM reports this thread's CPU time at nanosecond
+-- resolution, and .NET reports the whole process at whatever resolution
+-- 'System.Diagnostics.Process.TotalProcessorTime' has, in 100 ns ticks. Every
+-- one of them is genuine CPU accounting, never wall-clock time standing in for
+-- it, and none of them is more precise than the host can be.
+module System.CPUTime
+  ( getCPUTime
+  , cpuTimePrecision
+  ) where
+
+import Data.Integer
+import Data.Real
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+
+-- The backend's reading, in nanoseconds. Backends report the widest CPU
+-- quantity their host exposes (process or thread), so this facade is the one
+-- place that names the unit.
+cpuTimeNanos :: IO Integer
+
+-- | The processor time this process has used so far, in nanoseconds. Use
+-- differences of two readings; the origin is the moment the process started
+-- and is not otherwise meaningful.
+getCPUTime :: IO Integer
+getCPUTime = cpuTimeNanos
+
+-- | One second in the units 'getCPUTime' counts: @1000000000@. A reading is
+-- only as fine-grained as the host, so consecutive calls may return the same
+-- value.
+cpuTimePrecision :: Integer
+cpuTimePrecision = 1000000000

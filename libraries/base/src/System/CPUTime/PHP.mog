@@ -1,0 +1,36 @@
+module System.CPUTime.PHP
+  ( cpuTimeNanos
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Real
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import System.IO.Base (IO)
+
+-- `getrusage` hands back an array whose entries are themselves arrays, so it
+-- arrives as the same foreign array type `System.IO` uses for `fstat`.
+foreign php type StatArray "array"
+
+foreign php function rawGetrusage "getrusage" :: Int -> IO StatArray
+foreign php function rawArrayFlip "array_flip" :: [String] -> StatArray
+foreign php function rawArrayIntersectKey "array_intersect_key" :: StatArray -> StatArray -> StatArray
+foreign php function rawArrayValues "array_values" :: StatArray -> [StatArray]
+foreign php function rawIntval "intval" :: StatArray -> Int
+
+-- One named counter out of the usage array, or 0 when the host omits it. The
+-- key selects exactly one entry, so the single remaining value is the one
+-- asked for and the array's own ordering never matters.
+ruField :: StatArray -> String -> Int
+ruField usage key = case rawArrayValues (rawArrayIntersectKey usage (rawArrayFlip [key])) of
+  v : _ -> rawIntval v
+  [] -> 0
+
+-- RUSAGE_SELF: this process, including its system time. PHP reports it in
+-- whole microseconds.
+cpuTimeNanos :: IO Integer
+cpuTimeNanos = do
+  usage <- rawGetrusage 0
+  pure (toInteger (ruField usage "ru_utime.tv_sec" + ruField usage "ru_stime.tv_sec") * 1000000000
+        + toInteger (ruField usage "ru_utime.tv_usec" + ruField usage "ru_stime.tv_usec") * 1000)

@@ -1,0 +1,37 @@
+{-# BACKEND
+  php = System.Clock.PHP
+  jvm = System.Clock.JVM
+  dotnet = System.Clock.DotNet
+#-}
+-- |
+-- Monotonic elapsed time: a clock that only moves forward, for measuring how
+-- long something took. Unlike wall-clock time it does not jump when the host
+-- adjusts its clock, so differences of two readings are trustworthy even across
+-- a daylight-saving change or an NTP correction.
+--
+-- The origin is unspecified and may be the machine's boot; only differences
+-- between readings are meaningful, and the counter is allowed to wrap. Each
+-- backend reads its host's own monotonic source: @hrtime@ on PHP,
+-- @System.nanoTime@ on the JVM, and the @Stopwatch@ timestamp on .NET, which is
+-- scaled by its frequency to nanoseconds.
+module System.Clock
+  ( getMonotonicTimeNSec
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Real
+import Data.Word (Word64)
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+
+-- The backend's reading, in nanoseconds, from an unspecified origin.
+monotonicNanos :: IO Int
+
+-- | Nanoseconds from an unspecified, monotonic origin. Take differences:
+-- @end - start@ is a duration in nanoseconds. Reading the counter directly and
+-- printing it gives a number that means nothing on its own.
+getMonotonicTimeNSec :: IO Word64
+getMonotonicTimeNSec = do
+  n <- monotonicNanos
+  pure (fromIntegral n)

@@ -1,0 +1,9 @@
+[(1,10),(2,20)]
+[4,6]
+([1,2],['a','b'])
+Just (1,2)
+Nothing
+(Just 1,Just 2)
+MkSolo (1,2)
+(MkSolo 1,MkSolo 2)
+Proxy

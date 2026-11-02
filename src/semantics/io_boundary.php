@@ -38,12 +38,29 @@ function validateItem(Ast\AstNode $item, string $source, string $filename): void
 
 function validateTypeSynonym(Ast\TypeSynonymDecl $item, string $source, string $filename): void
 {
-    if ($item->type instanceof Ast\TypeCon
-        && canonicalTypeConName($item->type->name) === $item->name) {
+    $head = synonymHead($item->type);
+    if ($head !== null && canonicalTypeConName($head) === $item->name) {
         return;
     }
 
     validateTypeNoIo($item->type, $item, $source, $filename);
+}
+
+/**
+ * The head constructor of a synonym RHS (`IORef#` for `type IORef a = IORef# a`).
+ *
+ * A synonym that *is* its primop's public spelling — the name is the kernel id
+ * under the readable spelling — is exempt: confinement applies at use sites
+ * through the name itself, exactly as for the transparent newtype wrapper
+ * below. A synonym that hides a cell under an unrelated name stays rejected.
+ */
+function synonymHead(Ast\TypeNode $type): ?string
+{
+    while ($type instanceof Ast\TypeApp && $type->con instanceof Ast\TypeNode) {
+        $type = $type->con;
+    }
+
+    return $type instanceof Ast\TypeCon ? $type->name : null;
 }
 
 function validateFunction(Ast\FunctionDecl $fn, string $source, string $filename): void
@@ -230,6 +247,17 @@ function isIoArrayTypeConName(string $name): bool
     return $name === 'IOArray#' || $name === canonicalTypeConName('IOArray#');
 }
 
+/**
+ * The mutable `IO` cell type constructor: the kernel id `IORef#`, or the name
+ * the library publishes it under. A cell is IO state exactly like a mutable
+ * array: `ST` functions cannot take one, and neither `ST` nor pure results
+ * may mention it.
+ */
+function isIoRefTypeConName(string $name): bool
+{
+    return $name === 'IORef#' || $name === canonicalTypeConName('IORef#');
+}
+
 function isIoType(Ast\TypeNode $type): bool
 {
     return $type instanceof Ast\TypeApp
@@ -272,7 +300,9 @@ function isNestedIoCheckedType(Type $type): bool
 function typeMentionsIo(Ast\TypeNode $type): bool
 {
     return ($type instanceof Ast\TypeCon
-            && (isIoTypeConName($type->name) || isIoArrayTypeConName($type->name)))
+            && (isIoTypeConName($type->name)
+                || isIoArrayTypeConName($type->name)
+                || isIoRefTypeConName($type->name)))
         || ($type instanceof Ast\TypeApp
             && (typeMentionsIo($type->con)
                 || \array_any($type->args, static fn (Ast\TypeNode $arg): bool => typeMentionsIo($arg))))

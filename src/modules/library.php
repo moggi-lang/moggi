@@ -504,13 +504,20 @@ function isModuleUnderLibraryRoot(string $path): bool
 }
 
 /**
- * Memoized `module name => path` index for a library root, plus the newest
- * mtime under it. The mtime doubles as the index's validity stamp, so an edit
- * anywhere in the root rebuilds it.
+ * Memoized `module name => path` index for a library root, plus the identity of
+ * the tree it was built from.
+ *
+ * The identity is a stamp over *every* source file the root offers — its
+ * relative path, mtime and size — not just the newest mtime. A deletion or a
+ * rename moves no mtime forward (it can even leave the newest one untouched),
+ * so the newest mtime alone would answer a later build with an index that still
+ * names the file that is gone, and that build would fail on a module the tree
+ * no longer contains. The same stamp keys the cached artifact, so an entry
+ * written for one tree is never read for another.
  */
 final class LibraryModuleIndex
 {
-    /** @var array<string, array{mtime: int, index: array<string, string>}> */
+    /** @var array<string, array{stamp: string, moduleIndex: array<string, string>}> */
     private static array $indexes = [];
 
     /** @var array<string, int> */
@@ -519,10 +526,6 @@ final class LibraryModuleIndex
     public static function maxMtime(string $root): int
     {
         $key = self::key($root);
-        if (isset(self::$indexes[$key])) {
-            return self::$indexes[$key]['mtime'];
-        }
-
         if (isset(self::$mtimes[$key])) {
             return self::$mtimes[$key];
         }
@@ -541,32 +544,53 @@ final class LibraryModuleIndex
     public static function index(string $root): array
     {
         $key = self::key($root);
-        $mtime = self::maxMtime($root);
+        $stamp = self::stamp($root);
 
         $cached = self::$indexes[$key] ?? null;
-        if ($cached !== null && $cached['mtime'] === $mtime) {
+        if ($cached !== null && $cached['stamp'] === $stamp) {
             return $cached['moduleIndex'];
         }
 
         if (Cache\cacheEnabled()) {
-            $diskKey = 'stdlib-index:' . Cache\hashContent($key . ':' . $mtime);
+            $diskKey = 'stdlib-index:' . Cache\hashContent($key . ':' . $stamp);
             $fromDisk = Cache\artifactGet($diskKey);
             if (\is_array($fromDisk)) {
-                self::$indexes[$key] = ['mtime' => $mtime, 'moduleIndex' => $fromDisk];
+                self::$indexes[$key] = ['stamp' => $stamp, 'moduleIndex' => $fromDisk];
 
                 return $fromDisk;
             }
         }
 
         $index = moduleIndexFromPaths(findMogFilesUnder($root));
-        self::$indexes[$key] = ['mtime' => $mtime, 'moduleIndex' => $index];
+        self::$indexes[$key] = ['stamp' => $stamp, 'moduleIndex' => $index];
 
         if (Cache\cacheEnabled()) {
-            $diskKey = 'stdlib-index:' . Cache\hashContent($key . ':' . $mtime);
+            $diskKey = 'stdlib-index:' . Cache\hashContent($key . ':' . $stamp);
             Cache\artifactPut($diskKey, $index);
         }
 
         return $index;
+    }
+
+    /**
+     * The identity of the root's file set: a hash over every source file's
+     * relative path, mtime and size.
+     *
+     * A directory listing is enough — no file is read — and it is what a
+     * deletion or a rename moves, where the newest mtime does not move at all.
+     */
+    private static function stamp(string $root): string
+    {
+        $base = \rtrim($root, '/') . '/';
+        $entries = [];
+        foreach (findMogFilesUnder($root) as $path) {
+            $relative = \str_starts_with($path, $base) ? \substr($path, \strlen($base)) : $path;
+            $entries[] = $relative . ':' . (\filemtime($path) ?: 0) . ':' . (\filesize($path) ?: 0);
+        }
+
+        \sort($entries);
+
+        return \hash('xxh128', \implode("\n", $entries));
     }
 
     private static function key(string $root): string

@@ -11,11 +11,10 @@ use function Moggi\Semantics\Types\typeFail;
  * Stock `deriving Ix`: an enumeration, or the one constructor whose fields are
  * themselves `Ix`.
  *
- * Both shapes are the ones the reference implementation accepts. An enumeration
- * has positions to index by itself, and a single constructor is indexed exactly
- * like the tuple of its fields (row-major, the last field varying fastest), so
- * the derived bodies are the tuple instances of `Data.Ix` with the constructor
- * wrapped around the components:
+ * An enumeration has positions to index by itself, and a single constructor is
+ * indexed exactly like the tuple of its fields (row-major, the last field
+ * varying fastest), so the derived bodies are the tuple instances of `Data.Ix`
+ * with the constructor wrapped around the components:
  *
  *   - `range` is the cartesian product of the field ranges, in order;
  *   - `unsafeIndex` is the tuple offset, its last component's stride being the

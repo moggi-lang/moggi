@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "assemblies": {
+    "System.Runtime": {
+      "types": {
+        "System.TimeSpan": { "valueType": true }
+      }
+    },
+    "System.Diagnostics.Process": {
+      "types": {
+        "System.Diagnostics.Process": {}
+      }
+    }
+  }
+}

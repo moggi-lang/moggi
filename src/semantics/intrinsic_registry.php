@@ -313,6 +313,21 @@ function typeSchemes(): array
             ),
             ['s', 'a'],
         ),
+        'newIORef#' => scheme(
+            new TArrow($a, new TCon('IO', [new TCon('IORef', [$a])])),
+            ['a'],
+        ),
+        'readIORef#' => scheme(
+            new TArrow(new TCon('IORef', [$a]), new TCon('IO', [$a])),
+            ['a'],
+        ),
+        'writeIORef#' => scheme(
+            new TArrow(
+                new TCon('IORef', [$a]),
+                new TArrow($a, new TCon('IO', [new TUnit()])),
+            ),
+            ['a'],
+        ),
         'arrayNew#' => scheme(
             new TArrow(
                 new TCon('Tuple2', [new TVar('i'), new TVar('i')]),
@@ -554,6 +569,9 @@ function ioPrimopRoles(): array
         'exceptionThrowIo#' => 'io-throw',
         'exceptionCatch#' => 'io-catch',
         'exceptionFinally#' => 'io-finally',
+        'newIORef#' => 'io-action',
+        'readIORef#' => 'io-action',
+        'writeIORef#' => 'io-action',
         'newIOArray#' => 'io-action',
         'readIOArray#' => 'io-action',
         'writeIOArray#' => 'io-action',
@@ -905,6 +923,7 @@ function ioTypeTable(): array
     return $table ??= [
         'IO#' => ['params' => ['a'], 'kindArity' => 1],
         'IOArray#' => ['params' => ['i', 'e'], 'kindArity' => 2],
+        'IORef#' => ['params' => ['a'], 'kindArity' => 1],
     ];
 }
 
