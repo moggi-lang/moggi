@@ -4927,11 +4927,34 @@ function platformRuntime(): string
 IL,
         platformSetArgsIl(),
         platformArgvIl(),
+        platformArchitectureIl(),
         <<<'IL'
 }
 
 IL,
     ]);
+}
+
+/**
+ * The host's architecture as a string.
+ *
+ * `RuntimeInformation.OSArchitecture` is an enum, which the foreign layer does
+ * not marshal; the runtime turns it into its member name (`X64`, `Arm64`, …) so
+ * `System.Info.arch` can fold it onto the spelling the rest of the table uses.
+ */
+function platformArchitectureIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static string Architecture() cil managed
+  {
+    .maxstack 8
+    call valuetype [System.Private.CoreLib]System.Runtime.InteropServices.Architecture [System.Runtime]System.Runtime.InteropServices.RuntimeInformation::get_OSArchitecture()
+    box [System.Private.CoreLib]System.Runtime.InteropServices.Architecture
+    callvirt instance string [System.Runtime]System.Object::ToString()
+    ret
+  }
+
+IL;
 }
 
 function platformSetArgsIl(): string

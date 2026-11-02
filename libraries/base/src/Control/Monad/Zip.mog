@@ -18,7 +18,7 @@ import Data.List.NonEmpty
 import Data.Maybe
 import Data.Ord
 import Data.Proxy
-import Data.Traversable (Identity(MkIdentity))
+import Data.Functor.Identity (Identity(..))
 import Data.Tuple (Solo(MkSolo), fst, snd)
 import Moggi.Internal.Base
 import Moggi.Internal.Prim
@@ -67,8 +67,8 @@ instance MonadZip Solo where
 instance MonadZip Identity where
   mzipWith f ma mb = liftM2 f ma mb
   munzip mp = case mp of
-    MkIdentity p -> case p of
-      (a, b) -> (MkIdentity a, MkIdentity b)
+    Identity p -> case p of
+      (a, b) -> (Identity a, Identity b)
 
 instance MonadZip Proxy where
   mzipWith _ _ _ = Proxy

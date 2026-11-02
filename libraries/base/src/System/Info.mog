@@ -3,19 +3,31 @@
   jvm = System.Info.JVM
   dotnet = System.Info.DotNet
 #-}
--- | The operating system the program runs on — answered at run time.
+-- | Facts about the host the program runs on — answered at run time.
 --
 -- A Moggi program compiles once per backend and the artifact runs anywhere
 -- that backend runs (a JVM jar built on Linux runs on Windows), so the
--- operating system is never a compile-time fact. There is no @OS@ pragma and
--- no CPP: portable code branches on 'os' (or 'isWindows') at run time, and
--- both are plain values with one definition per backend behind this facade.
+-- operating system and the machine architecture are never compile-time facts.
+-- There is no @OS@ pragma and no CPP: portable code branches on 'os' or
+-- 'arch' (or 'isWindows') at run time, and each is a plain value with one
+-- definition per backend behind this facade.
+--
+-- 'compilerName' and the two version values are build facts rather than
+-- probes: they name the compiler whose standard library a program was built
+-- against.
 module System.Info
   ( os
+  , arch
+  , compilerName
+  , compilerVersion
+  , fullCompilerVersion
   , isWindows
   ) where
 
 import Data.Eq
+import Data.Num
+import Data.String (String)
+import Data.Version (Version(Version))
 
 -- | The operating system, in GHC's `System.Info.os` spelling: @"mingw32"@ on
 -- Windows, @"darwin"@ on macOS, @"linux"@ on Linux, @"freebsd"@ on FreeBSD,
@@ -23,8 +35,24 @@ import Data.Eq
 -- name from outside that table.
 os :: String
 
+-- | The machine architecture, in the same spelling: @"x86_64"@, @"aarch64"@,
+-- @"i386"@, @"arm"@, @"riscv64"@, `"powerpc64le"` and so on.
+arch :: String
+
 -- | Whether the program runs on Windows. This is how portable code picks the
--- Windows behaviour (drive letters, @\\@ separators, @.exe@ suffixes) at run
+-- Windows behaviour (drive letters, @\\\\@ separators, @.exe@ suffixes) at run
 -- time; matching on 'os' directly is the general form.
 isWindows :: Bool
 isWindows = os == "mingw32"
+
+-- | The implementation a program is built with.
+compilerName :: String
+compilerName = "moggi"
+
+-- | The major and minor version of 'compilerName'.
+compilerVersion :: Version
+compilerVersion = Version [0, 2] []
+
+-- | The full version of 'compilerName', down to the patch level.
+fullCompilerVersion :: Version
+fullCompilerVersion = Version [0, 2, 0] []

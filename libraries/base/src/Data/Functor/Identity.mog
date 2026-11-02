@@ -1,0 +1,75 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The identity functor and monad: 'Identity' holds one value, and every
+-- functor, applicative and monadic operation works on that value directly.
+--
+-- It serves two purposes: it can be passed to a function that is parameterised
+-- by a functor or monad, and it can be the base monad of a stack of monad
+-- transformers.
+module Data.Functor.Identity
+    (Identity(..)
+     ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool (Bool(..))
+import Data.Bounded (Bounded)
+import Data.Enum (Enum)
+import Data.Eq (Eq)
+import Data.Foldable (Foldable)
+import Data.Functor (Functor(..))
+import Data.Ord (Ord)
+import Data.Semigroup (Semigroup)
+import Data.Monoid (Monoid)
+import Data.Num (Num(..))
+import Data.Real (Floating(..), Fractional(..), Integral(..))
+import Text.Show (Show(..), showParen, showString)
+
+-- | Identity functor and monad.
+newtype Identity a = Identity { runIdentity :: a }
+    deriving newtype ( Bounded
+                     , Enum
+                     , Eq
+                     , Floating
+                     , Fractional
+                     , Semigroup
+                     , Monoid
+                     , Num
+                     , Ord
+                     )
+
+-- 'quotRem' and 'divMod' answer a pair, which a coercion cannot lift: the pair
+-- holds the wrapper, not the wrapped value, so they are written out.
+instance Integral a => Integral (Identity a) where
+  quot (Identity a) (Identity b) = Identity (quot a b)
+  rem (Identity a) (Identity b) = Identity (rem a b)
+  div (Identity a) (Identity b) = Identity (div a b)
+  mod (Identity a) (Identity b) = Identity (mod a b)
+  quotRem (Identity a) (Identity b) = case quotRem a b of
+    (q, r) -> (Identity q, Identity r)
+  divMod (Identity a) (Identity b) = case divMod a b of
+    (q, r) -> (Identity q, Identity r)
+  toInteger (Identity a) = toInteger a
+
+-- The wrapper is part of what a value shows and reads as: `Identity 3`, not
+-- the `3` a coercion through the field would print.
+instance Show a => Show (Identity a) where
+  showsPrec _ (Identity x) = \s -> showString "Identity " (showsPrec 11 x s)
+
+instance Foldable Identity where
+  foldMap f (Identity x) = f x
+  foldr f z (Identity x) = f x z
+  elem x (Identity y) = x == y
+  length _ = 1
+  null _ = False
+  toList (Identity x) = [x]
+
+instance Functor Identity where
+  map f (Identity x) = Identity (f x)
+
+instance Applicative Identity where
+  pure = Identity
+  (<*>) (Identity f) (Identity x) = Identity (f x)
+  liftA2 f (Identity x) (Identity y) = Identity (f x y)
+
+instance Monad Identity where
+  (>>=) (Identity x) k = k x

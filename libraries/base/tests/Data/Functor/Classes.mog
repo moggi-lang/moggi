@@ -1,0 +1,70 @@
+-- Data.Functor.Classes: the lifted comparisons, renderer and reader follow the
+-- ordinary instances of the type constructor they lift.
+import Data.Either (Either(Left, Right))
+import Data.Functor.Classes
+import Data.Functor.Const (Const(Const))
+import Data.List.NonEmpty (NonEmpty((:|)))
+import Data.Maybe
+import Data.Ord
+import Data.Proxy (Proxy(Proxy))
+import Data.Functor.Identity (Identity(..))
+import Data.Tuple (Solo(MkSolo))
+import Text.Read
+import Text.Show
+
+-- The obsolete `readsUnary1`/`readsBinary1` are given a constructor of the
+-- *outer* type, whose fields are themselves lifted.
+data Lifted a = Lifted (Maybe a)
+  deriving (Show)
+
+data Binary a = Binary (Maybe a) (Either Int a)
+  deriving (Show)
+
+main :: IO ()
+main = do
+  putStrLn (show (1 == 2))
+  putStrLn (show (eq1 (Just 1) (Just 2)))
+  putStrLn (show (eq1 [1, 2] [1, 2]))
+  putStrLn (show (compare1 (Just 1) (Just 2)))
+  putStrLn (show (compare1 [1] [1]))
+  putStrLn (showsPrec1 0 (Just 3) "")
+  putStrLn (showsPrec1 0 [1, 2] "")
+  putStrLn (showsPrec1 0 (Left 1 :: Either Int Int) "")
+  putStrLn (showsPrec1 0 (1, 2) "")
+  putStrLn (show (compare1 (1, 2) (1, 3)))
+  putStrLn (show (eq2 ((1, 2) :: (Int, Int)) (1, 3)))
+  putStrLn (show (eq2 ((Just 1, 2) :: (Maybe Int, Int)) (Just 1, 2)))
+  putStrLn (show (compare2 ((1, 2) :: (Int, Int)) (1, 3)))
+  putStrLn (show (compare2 ((1, True, 2) :: (Int, Bool, Int)) (1, True, 3)))
+  putStrLn (show (compare2 ((1, True, 2, 3) :: (Int, Bool, Int, Int)) (1, True, 2, 4)))
+  putStrLn (showsPrec2 0 ((1, 2) :: (Int, Int)) "")
+  putStrLn (showsPrec2 0 ((1, True, 2) :: (Int, Bool, Int)) "")
+  putStrLn (showsPrec2 0 ((1, True, 2, 3) :: (Int, Bool, Int, Int)) "")
+  putStrLn (showsPrec2 0 (Left 1 :: Either Int Int) "")
+  putStrLn (showsPrec2 0 (Const 3 :: Const Int Bool) "")
+  putStrLn (show (firstValues (readsPrec2 0 "(1,2)" :: [((Int, Int), String)])))
+  putStrLn (show (firstValues (readsPrec2 0 "Right 3" :: [(Either Int Int, String)])))
+  putStrLn (show (eq2 (firstValue (readsPrec2 0 "Const 3" :: [(Const Int Bool, String)])) (Const 3)))
+  putStrLn (show (firstValue (readsPrec1 0 "Just 3" :: [(Maybe Int, String)])))
+  putStrLn (show (firstValue (readsPrec1 0 "Nothing" :: [(Maybe Int, String)])))
+  putStrLn (show (firstValue (readsPrec1 0 "MkSolo 4" :: [(Solo Int, String)])))
+  putStrLn (show (firstValue (readsPrec1 0 "Identity 5" :: [(Identity Int, String)])))
+  putStrLn (show (firstValue (readsPrec1 0 "Proxy" :: [(Proxy Int, String)])))
+  putStrLn (show (firstValue (readsPrec1 0 "Down 6" :: [(Down Int, String)])))
+  putStrLn (show (firstValue (readsPrec1 0 "1 :| [2,3]" :: [(NonEmpty Int, String)])))
+  putStrLn (show (firstValue (readsData (readsUnary1 "Lifted" Lifted) 0 "Lifted (Just 3)" :: [(Lifted Int, String)])))
+  putStrLn
+    (show
+      (firstValue
+        (readsData (readsBinary1 "Binary" Binary) 0 "Binary (Just 1) (Right 2)"
+          :: [(Binary Int, String)])))
+
+firstValues :: [(a, String)] -> [a]
+firstValues pairs = case pairs of
+  [] -> []
+  (x, _) : rest -> x : firstValues rest
+
+firstValue :: [(a, String)] -> a
+firstValue pairs = case pairs of
+  [] -> error "Data.Functor.Classes: no parse"
+  (x, _) : _ -> x

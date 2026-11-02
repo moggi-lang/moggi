@@ -1,0 +1,86 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Composition of functors: @Compose f g a@ is @f@ of @g@ of @a@. The
+-- composition of applicative functors is always applicative, but the
+-- composition of monads is not always a monad, so there is no 'Monad'
+-- instance here.
+--
+-- >>> map (subtract 1) (Compose (Just [1, 2, 3]))
+-- Compose (Just [0,1,2])
+--
+-- >>> Compose (Just [1, 2, 3]) <> Compose Nothing
+-- Compose (Just [1,2,3])
+module Data.Functor.Compose (
+    Compose(..),
+  ) where
+
+import Control.Applicative
+import Data.Bool
+import Data.Foldable (Foldable(foldl, foldMap, foldr))
+import Data.Functor (Functor(map))
+import Data.Functor.Classes
+import Data.List ((++))
+import Data.Monoid (Monoid(mempty))
+import Data.Semigroup (Semigroup((<>)))
+import Data.Traversable (Traversable(traverse))
+import Moggi.Internal.Base
+import Text.Read (Read, ReadS, lex, readParen)
+import Text.Show
+
+-- | Right-to-left composition of functors.
+newtype Compose f g a = Compose (f (g a))
+
+getCompose :: Compose f g a -> f (g a)
+getCompose (Compose x) = x
+
+instance Eq (f (g a)) => Eq (Compose f g a) where
+  (==) (Compose x) (Compose y) = x == y
+  (/=) (Compose x) (Compose y) = x /= y
+
+instance Ord (f (g a)) => Ord (Compose f g a) where
+  compare (Compose x) (Compose y) = compare x y
+
+instance Read (f (g a)) => Read (Compose f g a) where
+  readsPrec = readsCompose readsPrec
+
+readsCompose :: (Int -> ReadS (f (g a))) -> Int -> ReadS (Compose f g a)
+readsCompose rp d = readsData (readsUnaryWith rp "Compose" Compose) d
+
+instance Show (f (g a)) => Show (Compose f g a) where
+  showsPrec = showsCompose showsPrec
+
+showsCompose :: (Int -> f (g a) -> ShowS) -> Int -> Compose f g a -> ShowS
+showsCompose sp d (Compose x) = showsUnaryWith sp "Compose" d x
+
+instance (Functor f, Functor g) => Functor (Compose f g) where
+  map f (Compose x) = Compose (map (map f) x)
+
+instance (Foldable f, Foldable g) => Foldable (Compose f g) where
+  foldMap f (Compose t) = foldMap (foldMap f) t
+  foldr f z (Compose t) = foldr (\ga acc -> foldr f acc ga) z t
+  foldl f z (Compose t) = foldl (\acc ga -> foldl f acc ga) z t
+
+instance (Traversable f, Traversable g) => Traversable (Compose f g) where
+  traverse f (Compose t) = map Compose (traverse (traverse f) t)
+
+instance (Applicative f, Applicative g) => Applicative (Compose f g) where
+  pure x = Compose (pure (pure x))
+  (<*>) pf px = case pf of
+    Compose f -> case px of
+      Compose x -> Compose (liftA2 (<*>) f x)
+  liftA2 f pa pb = case pa of
+    Compose x -> case pb of
+      Compose y -> Compose (liftA2 (liftA2 f) x y)
+
+instance (Alternative f, Applicative g) => Alternative (Compose f g) where
+  empty = Compose empty
+  (<|>) pa pb = case pa of
+    Compose x -> case pb of
+      Compose y -> Compose (x <|> y)
+
+instance Semigroup (f (g a)) => Semigroup (Compose f g a) where
+  (<>) pa pb = case pa of
+    Compose x -> case pb of
+      Compose y -> Compose (x <> y)
+
+instance Monoid (f (g a)) => Monoid (Compose f g a) where
+  mempty = Compose mempty

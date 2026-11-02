@@ -1,0 +1,32 @@
+False
+False
+True
+LT
+EQ
+Just 3
+[1,2]
+Left 1
+(1,2)
+LT
+False
+True
+LT
+LT
+LT
+(1,2)
+(1,True,2)
+(1,True,2,3)
+Left 1
+Const 3
+[(1,2)]
+[Right 3]
+True
+Just 3
+Nothing
+MkSolo 4
+Identity 5
+Proxy
+Down 6
+1 :| [2,3]
+Lifted (Just 3)
+Binary (Just 1) (Right 2)

@@ -62,6 +62,14 @@ function verifyDotNetForeignImport(
         return null;
     }
 
+    // The runtime ABI is emitted into the assembly being built, so it is not in
+    // the reference set the inspector reads. Its members are the compiler's own
+    // definitions and ilasm resolves a reference into the same assembly, which
+    // rejects a misspelled one at assembly time — nothing for this check to add.
+    if (\str_starts_with($classPath, 'Moggi.Rt.')) {
+        return null;
+    }
+
     $dotnet = resolveDotnetExecutable();
     if ($dotnet === null) {
         throw new VerificationUnavailable(

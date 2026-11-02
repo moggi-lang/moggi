@@ -22,7 +22,7 @@ function runLoop(State $state, $input = null, bool $quiet = false): int
     $echoPrompt = \stream_isatty($in);
 
     while (true) {
-        $prompt = $state->buffer === '' ? '> ' : '| ';
+        $prompt = $state->buffer === '' ? 'λ ' : '| ';
         $line = readLineFrom($in, $prompt, $echoPrompt);
         if ($line === false) {
             if (! $quiet) {

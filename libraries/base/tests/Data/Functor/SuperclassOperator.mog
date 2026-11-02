@@ -1,0 +1,9 @@
+-- Importing Data.Bifunctor, whose Bifunctor class has the quantified
+-- superclass (forall a. Functor (p a)), must not make an unrelated class method
+-- such as (==) ambiguous.
+import Data.Bifunctor
+
+main :: IO ()
+main = do
+  putStrLn (show (1 == 2))
+  putStrLn (show (bimap (+ 1) (* 2) (2, 3)))

@@ -1,0 +1,14 @@
+-- Data.Functor.Identity: the identity functor's constructor, its accessor and
+-- the instances a newtype over that field carries.
+import Data.Functor.Identity
+
+double :: Identity Int -> Identity Int
+double m = case m of
+  Identity x -> Identity (x * 2)
+
+main :: IO ()
+main = do
+  putStrLn (show (runIdentity (double (Identity 21))))
+  putStrLn (show (map (+ 1) (Identity 1)))
+  putStrLn (show (runIdentity (Identity 2 + Identity 3)))
+  putStrLn (runIdentity (Identity "ab" <> Identity "cd"))

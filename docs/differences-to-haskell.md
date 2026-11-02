@@ -217,13 +217,28 @@ where you import it — there is no separate `.cabal` package tree to learn.
 Honest gaps — listed here so nobody mistakes them for design choices:
 
 - `Float`, `Data.Ratio`, `Data.Complex`, `Data.Fixed`, and `Numeric`.
-- Most of `Text.Read`: the class and `read` exist, but not `reads`,
-  `readMaybe`, `readEither`, or `lex`, and only a handful of instances.
+- `Text.Read`'s precedence-builder layer: `ReadPrec`, `readPrec`, `step`, `prec`,
+  `parens`, `expectP`, and the helpers built on them — `readData`, `readPrec1`,
+  `readPrec2`, `readUnaryWith`, `readBinaryWith`, `liftReadListPrecDefault`,
+  `liftReadListPrec2Default`, `readsSingleFieldRecordWith`,
+  `showsSingleFieldRecordWith`. `reads`, `read`, `readMaybe`, `readEither`,
+  `lex`, `readParen`, `readsData`/`readsUnaryWith`/`readsBinaryWith` and the
+  `Show`-side helpers `showsUnaryWith`/`showsBinaryWith` are implemented, as is
+  stock `deriving (Read)`.
 - `CallStack`/`SrcLoc`, and exception tags synthesized by the compiler.
 - `Control.Applicative`'s `ZipList` (its `pure` needs an infinite list, which
   strict Moggi cannot build) and `WrappedArrow` (needs an `Arrow` class, which
   does not exist yet). `WrappedMonad` lives in `Control.Monad` and `Const` in
   `Data.Functor.Const`.
+- `System.IO.Unsafe.unsafeFixIO`: it reads a reference before it is written
+  (interleaved IO), which strict evaluation cannot do — the same reason
+  `unsafeInterleaveIO` is absent. `unsafePerformIO` is implemented;
+  `unsafeDupablePerformIO` arrives with the threading model, where the
+  duplicate barrier it omits has something to omit.
+- Infinite producers: `Data.List`'s `repeat`, `iterate` and `cycle` and
+  `Data.List.NonEmpty`'s `repeat`, `iterate` and `cycle`. A list here is a
+  finite, eagerly built value, so nothing can build an unbounded spine;
+  `replicate`, `unfoldr` and `fromList` cover the bounded shapes.
 - `Control.Monad.Reader` and `Control.Monad.State` (the `ST` monad itself is
   implemented in `Control.Monad.ST`).
 - `Data.Char`'s `lexLitChar` and `readLitChar` (the rest of `Data.Char`,

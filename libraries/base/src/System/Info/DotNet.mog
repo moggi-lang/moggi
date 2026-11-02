@@ -1,10 +1,15 @@
 module System.Info.DotNet
   ( os
+  , arch
   ) where
 
 import Data.String (isPrefixOf)
 
 foreign dotnet function rawOsDescription "System.Runtime.InteropServices.RuntimeInformation:get_OSDescription" :: String
+
+-- | The CLR reports the architecture as an enum member; the runtime turns it
+-- into its member name so a Moggi program can read it as a string.
+foreign dotnet function rawProcessArchitecture "Moggi.Rt.Platform:Architecture" :: String
 
 -- | `RuntimeInformation.OSDescription` in GHC's `System.Info.os` spelling
 -- (`Microsoft Windows 10.0.…`, `Linux …`, `Darwin …`), matched on prefixes;
@@ -20,3 +25,20 @@ normaliseOs n
   | isPrefixOf "FreeBSD" n = "freebsd"
   | isPrefixOf "SunOS" n = "solaris"
   | otherwise = "unknown"
+
+-- | `RuntimeInformation.ProcessArchitecture` in GHC's `System.Info.arch`
+-- spelling. The CLR reports an enum member name (`X64`, `Arm64`, `X86`,
+-- `Arm`), which is folded onto the spelling the rest of the table uses.
+arch :: String
+arch = normaliseArch rawProcessArchitecture
+
+normaliseArch :: String -> String
+normaliseArch a = case a of
+  "X64" -> "x86_64"
+  "Arm64" -> "aarch64"
+  "X86" -> "i386"
+  "Arm" -> "arm"
+  "Ppc64le" -> "powerpc64le"
+  "S390x" -> "s390x"
+  "RiscV64" -> "riscv64"
+  _ -> "unknown"

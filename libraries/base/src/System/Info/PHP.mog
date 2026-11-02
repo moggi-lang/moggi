@@ -1,8 +1,11 @@
 module System.Info.PHP
   ( os
+  , arch
   ) where
+import Data.Functor (Functor(map))
 
 foreign php const rawOsFamily "PHP:PHP_OS_FAMILY" :: String
+foreign php function rawMachineType "php_uname" :: String -> String
 
 -- | `PHP_OS_FAMILY` in GHC's `System.Info.os` spelling. The family names are
 -- coarse (`BSD` covers every BSD), so the rarer members map to the common
@@ -15,3 +18,26 @@ os = case rawOsFamily of
   "BSD" -> "freebsd"
   "Solaris" -> "solaris"
   _ -> "unknown"
+
+-- | `php_uname('m')` in GHC's `System.Info.arch` spelling: the kernel's own
+-- machine name (`arm64` on Apple silicon, `amd64` on some BSDs) is folded onto
+-- the spelling the rest of the table uses.
+arch :: String
+arch = normaliseArch (rawMachineType "m")
+
+normaliseArch :: String -> String
+normaliseArch a = case a of
+  "x86_64" -> "x86_64"
+  "amd64" -> "x86_64"
+  "aarch64" -> "aarch64"
+  "arm64" -> "aarch64"
+  "i386" -> "i386"
+  "i486" -> "i386"
+  "i586" -> "i386"
+  "i686" -> "i386"
+  "x86" -> "i386"
+  "armv7l" -> "arm"
+  "armv6l" -> "arm"
+  "ppc64" -> "powerpc64"
+  "ppc64le" -> "powerpc64le"
+  _ -> a

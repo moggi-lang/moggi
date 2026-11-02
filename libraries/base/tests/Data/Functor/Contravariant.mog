@@ -1,0 +1,13 @@
+-- Data.Functor.Contravariant: contramap precomposes on the input, and the
+-- Predicate/Comparison/Equivalence/Op wrappers build on it.
+import Data.Functor.Contravariant
+import Data.Num
+import Data.Ord
+import Text.Show
+
+main :: IO ()
+main = do
+  putStrLn (show (getPredicate (contramap (+ 1) (Predicate (> 3))) 5))
+  putStrLn (show (getPredicate (contramap (+ 1) (Predicate (> 3))) 1))
+  putStrLn (show (getEquivalence (comparisonEquivalence defaultComparison) 4 4))
+  putStrLn (show (getOp (contramap (+ 1) (Op show)) 41))

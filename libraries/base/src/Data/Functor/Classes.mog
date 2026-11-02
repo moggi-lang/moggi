@@ -1,0 +1,595 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Lifting a class through a type constructor.
+--
+-- A lifted instance compares or renders its argument through the function it is
+-- given, so a caller can pass a different instance down than the canonical one.
+-- The standard function recovers the ordinary class: @'eq1' = 'liftEq' ('==')@,
+-- @'compare1' = 'liftCompare' 'compare'@,
+-- @'showsPrec1' = 'liftShowsPrec' 'showsPrec' 'showList'@. The @*With@ helpers
+-- write a constructor's instance in one line.
+module Data.Functor.Classes (
+    -- * Liftings of Prelude classes
+    -- ** For unary constructors
+    Eq1(..), eq1,
+    Ord1(..), compare1,
+    Read1(..), readsPrec1,
+    liftReadListDefault,
+    Show1(..), showsPrec1,
+    -- ** For binary constructors
+    Eq2(..), eq2,
+    Ord2(..), compare2,
+    Read2(..), readsPrec2,
+    liftReadList2Default,
+    Show2(..), showsPrec2,
+    -- * Helper functions
+    -- $example
+    readsData,
+    readsUnaryWith,
+    readsBinaryWith,
+    showsUnaryWith,
+    showsBinaryWith,
+    -- ** Obsolete helpers
+    readsUnary,
+    readsUnary1,
+    readsBinary1,
+    showsUnary,
+    showsUnary1,
+    showsBinary1,
+  ) where
+
+import Data.Bool
+import Data.Either (Either(Left, Right))
+import Data.Eq
+import Data.Function ((.))
+import Data.Functor.Const (Const(Const))
+import Data.List.NonEmpty (NonEmpty((:|)))
+import Data.Maybe
+import Data.Ord
+import Data.Proxy (Proxy(Proxy))
+import Data.Functor.Identity (Identity(..))
+import Data.Tuple (Solo(MkSolo), Tuple2, Tuple3, Tuple4)
+import Text.Read (Read, ReadS, lex, readParen, readListDefault, readsPrec)
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import Text.Show (Show, ShowS, showChar, showList, showListWith, showParen, showString, showsPrec)
+
+-- | Equality lifted through a type constructor; @'liftEq' (==)@ is the ordinary
+-- equality of @f a@.
+class (forall a. Eq a => Eq (f a)) => Eq1 f where
+  liftEq :: (a -> b -> Bool) -> f a -> f b -> Bool
+
+-- | The standard equality of a lifted type constructor.
+eq1 :: (Eq1 f, Eq a) => f a -> f a -> Bool
+eq1 = liftEq (==)
+
+-- | Ordering lifted through a type constructor; @'liftCompare' compare@ is the
+-- ordinary ordering of @f a@.
+class (Eq1 f, forall a. Ord a => Ord (f a)) => Ord1 f where
+  liftCompare :: (a -> b -> Ordering) -> f a -> f b -> Ordering
+
+-- | The standard ordering of a lifted type constructor.
+compare1 :: (Ord1 f, Ord a) => f a -> f a -> Ordering
+compare1 = liftCompare compare
+
+-- | Reading lifted through a type constructor: the element parsers are the
+-- arguments, so a field is read by whichever instance the caller supplies.
+class (forall a. Read a => Read (f a)) => Read1 f where
+  liftReadsPrec :: (Int -> ReadS a) -> ReadS [a] -> Int -> ReadS (f a)
+
+  liftReadList :: (Int -> ReadS a) -> ReadS [a] -> ReadS [f a]
+  liftReadList rp rl = readListParses (liftReadsPrec rp rl 0)
+
+-- | The standard reader of a lifted type constructor.
+readsPrec1 :: (Read1 f, Read a) => Int -> ReadS (f a)
+readsPrec1 prec = liftReadsPrec (\d s -> readsPrec d s) readListDefault prec
+
+-- | The list reader built from a lifted element reader.
+liftReadListDefault :: Read1 f => (Int -> ReadS a) -> ReadS [a] -> ReadS [f a]
+liftReadListDefault rp rl = readListParses (liftReadsPrec rp rl 0)
+
+-- | Showing lifted through a type constructor: the argument renders both the
+-- elements and the list form, so a field is shown by the caller's instance.
+class (forall a. Show a => Show (f a)) => Show1 f where
+  liftShowsPrec :: (Int -> a -> ShowS) -> ([a] -> ShowS) -> Int -> f a -> ShowS
+
+  liftShowList :: (Int -> a -> ShowS) -> ([a] -> ShowS) -> [f a] -> ShowS
+  liftShowList sp sl = showListWith (liftShowsPrec sp sl 0)
+
+-- | The standard renderer of a lifted type constructor.
+showsPrec1 :: (Show1 f, Show a) => Int -> f a -> ShowS
+showsPrec1 prec value =
+  liftShowsPrec (\d v -> showsPrec d v) (showListWith (\v -> showsPrec 0 v)) prec value
+
+-- | Equality lifted through a binary type constructor; @'liftEq2' (==) (==)@ is
+-- the ordinary equality of @f a b@.
+class (forall a. Eq a => Eq1 (f a)) => Eq2 f where
+  liftEq2 :: (a -> b -> Bool) -> (c -> d -> Bool) -> f a c -> f b d -> Bool
+
+-- | The standard equality of a lifted binary type constructor.
+eq2 :: (Eq2 f, Eq a, Eq b) => f a b -> f a b -> Bool
+eq2 = liftEq2 (==) (==)
+
+-- | Ordering lifted through a binary type constructor; @'liftCompare2' compare
+-- compare@ is the ordinary ordering of @f a b@.
+class (Eq2 f, forall a. Ord a => Ord1 (f a)) => Ord2 f where
+  liftCompare2 :: (a -> b -> Ordering) -> (c -> d -> Ordering) -> f a c -> f b d -> Ordering
+
+-- | The standard ordering of a lifted binary type constructor.
+compare2 :: (Ord2 f, Ord a, Ord b) => f a b -> f a b -> Ordering
+compare2 = liftCompare2 compare compare
+
+-- | Reading lifted through a binary type constructor: one element parser per
+-- parameter, so each of the two fields is read by the caller's instance.
+class (forall a. Read a => Read1 (f a)) => Read2 f where
+  liftReadsPrec2 :: (Int -> ReadS a) -> ReadS [a] -> (Int -> ReadS b) -> ReadS [b] -> Int -> ReadS (f a b)
+
+  liftReadList2 :: (Int -> ReadS a) -> ReadS [a] -> (Int -> ReadS b) -> ReadS [b] -> ReadS [f a b]
+  liftReadList2 rp1 rl1 rp2 rl2 = readListParses (liftReadsPrec2 rp1 rl1 rp2 rl2 0)
+
+-- | The standard reader of a lifted binary type constructor.
+readsPrec2 :: (Read2 f, Read a, Read b) => Int -> ReadS (f a b)
+readsPrec2 prec =
+  liftReadsPrec2 (\d s -> readsPrec d s) readListDefault (\d s -> readsPrec d s) readListDefault prec
+
+-- | The list reader built from a lifted element reader.
+liftReadList2Default :: Read2 f
+  => (Int -> ReadS a) -> ReadS [a] -> (Int -> ReadS b) -> ReadS [b] -> ReadS [f a b]
+liftReadList2Default rp1 rl1 rp2 rl2 = readListParses (liftReadsPrec2 rp1 rl1 rp2 rl2 0)
+
+-- | Showing lifted through a binary type constructor: one renderer per
+-- parameter, so each field is shown by the caller's instance.
+class (forall a. Show a => Show1 (f a)) => Show2 f where
+  liftShowsPrec2 :: (Int -> a -> ShowS) -> ([a] -> ShowS) -> (Int -> b -> ShowS) -> ([b] -> ShowS) -> Int -> f a b -> ShowS
+
+  liftShowList2 :: (Int -> a -> ShowS) -> ([a] -> ShowS) -> (Int -> b -> ShowS) -> ([b] -> ShowS) -> [f a b] -> ShowS
+  liftShowList2 sp1 sl1 sp2 sl2 = showListWith (liftShowsPrec2 sp1 sl1 sp2 sl2 0)
+
+-- | The standard renderer of a lifted binary type constructor.
+showsPrec2 :: (Show2 f, Show a, Show b) => Int -> f a b -> ShowS
+showsPrec2 prec value =
+  liftShowsPrec2 (\d v -> showsPrec d v) (showListWith (\v -> showsPrec 0 v))
+    (\d v -> showsPrec d v) (showListWith (\v -> showsPrec 0 v)) prec value
+
+-- | Parse one constructor name, then hand it to that constructor's field reader.
+readsData :: (String -> ReadS a) -> Int -> ReadS a
+readsData reader d = readParen (d > 10) (readsDataWith reader)
+
+-- | A unary constructor: its name, then one field at the application context.
+readsUnaryWith :: (Int -> ReadS a) -> String -> (a -> t) -> String -> ReadS t
+readsUnaryWith rp name cons kw s = case kw == name of
+  True -> consEach cons (rp 11 s)
+  False -> []
+
+-- | A binary constructor: its name, then two fields at the application context.
+readsBinaryWith :: (Int -> ReadS a) -> (Int -> ReadS b) -> String -> (a -> b -> t) -> String -> ReadS t
+readsBinaryWith rp1 rp2 name cons kw s = case kw == name of
+  True -> binaryEach cons (rp1 11 s) rp2
+  False -> []
+
+-- | A unary constructor whose field is read by 'readsPrec'.
+readsUnary :: Read a => String -> (a -> t) -> String -> ReadS t
+readsUnary name cons kw s = case kw == name of
+  True -> consEach cons (readsPrec 11 s)
+  False -> []
+
+-- | A unary constructor whose field is read by 'readsPrec1'.
+readsUnary1 :: (Read1 f, Read a) => String -> (f a -> t) -> String -> ReadS t
+readsUnary1 name cons kw s = case kw == name of
+  True -> consEach cons (readsPrec1 11 s)
+  False -> []
+
+-- | A binary constructor whose fields are read by 'readsPrec1'.
+readsBinary1 :: (Read1 f, Read1 g, Read a) => String -> (f a -> g a -> t) -> String -> ReadS t
+readsBinary1 name cons kw s = case kw == name of
+  True -> binaryEach cons (readsPrec1 11 s) (\n v -> readsPrec1 n v)
+  False -> []
+
+readsDataWith :: (String -> ReadS a) -> ReadS a
+readsDataWith reader r = case lex r of
+  (kw, s) : _ -> reader kw s
+  [] -> []
+
+consEach :: (a -> t) -> [(a, String)] -> [(t, String)]
+consEach cons pairs = case pairs of
+  [] -> []
+  (x, s) : rest -> (cons x, s) : consEach cons rest
+
+binaryEach :: (a -> b -> t) -> [(a, String)] -> (Int -> ReadS b) -> [(t, String)]
+binaryEach cons pairs rp2 = case pairs of
+  [] -> []
+  (x, s) : rest -> case rp2 11 s of
+    [] -> binaryEach cons rest rp2
+    (y, u) : _ -> (cons x y, u) : binaryEach cons rest rp2
+
+readListParses :: ReadS a -> ReadS [a]
+readListParses p s = case lex s of
+  ("[", r) : _ -> readListElems p r
+  _ -> []
+
+readListElems :: ReadS a -> ReadS [a]
+readListElems p r = case p r of
+  [] -> []
+  (x, t) : _ -> case lex t of
+    (",", u) : _ -> consFirst x (readListElems p u)
+    ("]", u) : _ -> [([x], u)]
+    _ -> []
+
+consFirst :: a -> [([a], String)] -> [([a], String)]
+consFirst x pairs = case pairs of
+  [] -> []
+  (xs, u) : rest -> (x : xs, u) : consFirst x rest
+
+-- | A unary constructor rendered as @Name field@.
+showsUnaryWith :: (Int -> a -> ShowS) -> String -> Int -> a -> ShowS
+showsUnaryWith sp name d x = showParen (d > 10) (showString name . showChar ' ' . sp 11 x)
+
+-- | A binary constructor rendered as @Name field1 field2@.
+showsBinaryWith :: (Int -> a -> ShowS) -> (Int -> b -> ShowS) -> String -> Int -> a -> b -> ShowS
+showsBinaryWith sp1 sp2 name d x y =
+  showParen (d > 10) (showString name . showChar ' ' . sp1 11 x . showChar ' ' . sp2 11 y)
+
+-- | A unary constructor rendered with 'showsPrec'.
+showsUnary :: Show a => String -> Int -> a -> ShowS
+showsUnary name d x = showParen (d > 10) (showString name . showChar ' ' . showsPrec 11 x)
+
+-- | A unary constructor rendered with 'showsPrec1'.
+showsUnary1 :: (Show1 f, Show a) => String -> Int -> f a -> ShowS
+showsUnary1 name d x = showParen (d > 10) (showString name . showChar ' ' . showsPrec1 11 x)
+
+-- | A binary constructor rendered with 'showsPrec1' on both fields.
+showsBinary1 :: (Show1 f, Show1 g, Show a) => String -> Int -> f a -> g a -> ShowS
+showsBinary1 name d x y =
+  showParen (d > 10) (showString name . showChar ' ' . showsPrec1 11 x . showChar ' ' . showsPrec1 11 y)
+
+instance Eq a => Eq1 (Tuple2 a) where
+  liftEq = liftEq2 (==)
+
+instance Ord a => Ord1 (Tuple2 a) where
+  liftCompare = liftCompare2 compare
+
+instance Read a => Read1 (Tuple2 a) where
+  liftReadsPrec rp _ _ = afterOpen (pairFieldsWith (\n v -> readsPrec n v) rp)
+
+instance Show a => Show1 (Tuple2 a) where
+  liftShowsPrec sp sl = liftShowsPrec2 (\d v -> showsPrec d v) (showListWith (\v -> showsPrec 0 v)) sp sl
+
+instance Eq1 Maybe where
+  liftEq _ Nothing Nothing = True
+  liftEq _ Nothing (Just _) = False
+  liftEq _ (Just _) Nothing = False
+  liftEq eq (Just x) (Just y) = eq x y
+
+instance Ord1 Maybe where
+  liftCompare _ Nothing Nothing = EQ
+  liftCompare _ Nothing (Just _) = LT
+  liftCompare _ (Just _) Nothing = GT
+  liftCompare comp (Just x) (Just y) = comp x y
+
+instance Show1 Maybe where
+  liftShowsPrec _ _ _ Nothing = showString "Nothing"
+  liftShowsPrec sp _ d (Just x) = showsUnaryWith sp "Just" d x
+
+instance Eq1 List where
+  liftEq _ [] [] = True
+  liftEq _ [] (_ : _) = False
+  liftEq _ (_ : _) [] = False
+  liftEq eq (x : xs) (y : ys) = eq x y && liftEq eq xs ys
+
+instance Ord1 List where
+  liftCompare _ [] [] = EQ
+  liftCompare _ [] (_ : _) = LT
+  liftCompare _ (_ : _) [] = GT
+  liftCompare comp (x : xs) (y : ys) = case comp x y of
+    EQ -> liftCompare comp xs ys
+    other -> other
+
+instance Read1 List where
+  liftReadsPrec _ rl _ = rl
+
+instance Show1 List where
+  liftShowsPrec _ sl _ = sl
+
+instance Read1 Maybe where
+  liftReadsPrec rp _ d = readsData (maybeFields rp) d
+
+maybeFields :: (Int -> ReadS a) -> String -> ReadS (Maybe a)
+maybeFields rp kw s = case kw == "Nothing" of
+  True -> [(Nothing, s)]
+  False -> case kw == "Just" of
+    True -> consEach Just (rp 11 s)
+    False -> []
+
+instance Eq1 NonEmpty where
+  liftEq eq (a :| arest) (b :| brest) = eq a b && liftEq eq arest brest
+
+instance Ord1 NonEmpty where
+  liftCompare comp (a :| arest) (b :| brest) = case comp a b of
+    EQ -> liftCompare comp arest brest
+    other -> other
+
+instance Read1 NonEmpty where
+  liftReadsPrec rp rl d = readParen (d > 5) (nonEmptyFields rp rl)
+
+nonEmptyFields :: (Int -> ReadS a) -> ReadS [a] -> ReadS (NonEmpty a)
+nonEmptyFields rp rl s = case rp 6 s of
+  [] -> []
+  (x, t) : _ -> case lex t of
+    (":|", u) : _ -> nonEmptyRest x (rl u)
+    _ -> []
+
+nonEmptyRest :: a -> [([a], String)] -> [(NonEmpty a, String)]
+nonEmptyRest x pairs = case pairs of
+  [] -> []
+  (xs, u) : rest -> (x :| xs, u) : nonEmptyRest x rest
+
+instance Show1 NonEmpty where
+  liftShowsPrec sp sl d (a :| arest) =
+    showParen (d > 5) (sp 6 a . showString " :| " . sl arest)
+
+instance Eq1 Solo where
+  liftEq eq (MkSolo a) (MkSolo b) = eq a b
+
+instance Ord1 Solo where
+  liftCompare comp (MkSolo a) (MkSolo b) = comp a b
+
+instance Read1 Solo where
+  liftReadsPrec rp _ d = readsData (soloFields rp) d
+
+soloFields :: (Int -> ReadS a) -> String -> ReadS (Solo a)
+soloFields rp kw s = case kw == "MkSolo" of
+  True -> consEach (\x -> MkSolo x) (rp 11 s)
+  False -> []
+
+instance Show1 Solo where
+  liftShowsPrec sp _ d (MkSolo x) = showsUnaryWith sp "MkSolo" d x
+
+instance Eq1 Identity where
+  liftEq eq (Identity a) (Identity b) = eq a b
+
+instance Ord1 Identity where
+  liftCompare comp (Identity a) (Identity b) = comp a b
+
+instance Read1 Identity where
+  liftReadsPrec rp _ d = readsData (identityFields rp) d
+
+identityFields :: (Int -> ReadS a) -> String -> ReadS (Identity a)
+identityFields rp kw s = case kw == "Identity" of
+  True -> consEach (\x -> Identity x) (rp 11 s)
+  False -> []
+
+instance Show1 Identity where
+  liftShowsPrec sp _ d (Identity x) = showsUnaryWith sp "Identity" d x
+
+instance Eq1 Proxy where
+  liftEq _ _ _ = True
+
+instance Ord1 Proxy where
+  liftCompare _ _ _ = EQ
+
+instance Read1 Proxy where
+  liftReadsPrec _ _ d s = readParen (d > 10) (\r -> case lex r of
+    ("Proxy", u) : _ -> [(Proxy, u)]
+    _ -> []) s
+
+instance Show1 Proxy where
+  liftShowsPrec _ _ _ _ = showString "Proxy"
+
+instance Eq1 Down where
+  liftEq eq (Down a) (Down b) = eq a b
+
+instance Ord1 Down where
+  liftCompare comp (Down a) (Down b) = invertOrdering (comp a b)
+
+instance Read1 Down where
+  liftReadsPrec rp _ d = readsData (downFields rp) d
+
+downFields :: (Int -> ReadS a) -> String -> ReadS (Down a)
+downFields rp kw s = case kw == "Down" of
+  True -> consEach Down (rp 11 s)
+  False -> []
+
+instance Show1 Down where
+  liftShowsPrec sp _ d (Down x) = showsUnaryWith sp "Down" d x
+
+invertOrdering :: Ordering -> Ordering
+invertOrdering o = case o of
+  LT -> GT
+  EQ -> EQ
+  GT -> LT
+
+instance Eq a => Eq1 (Either a) where
+  liftEq = liftEq2 (==)
+
+instance Ord a => Ord1 (Either a) where
+  liftCompare = liftCompare2 compare
+
+instance Read a => Read1 (Either a) where
+  liftReadsPrec rp rl = liftReadsPrec2 (\n v -> readsPrec n v) readListDefault rp rl
+
+instance Show a => Show1 (Either a) where
+  liftShowsPrec sp sl = liftShowsPrec2 showsPrec showList sp sl
+
+instance (Eq a, Eq b) => Eq1 (Tuple3 a b) where
+  liftEq = liftEq2 (==)
+
+instance (Ord a, Ord b) => Ord1 (Tuple3 a b) where
+  liftCompare = liftCompare2 compare
+
+instance (Read a, Read b) => Read1 (Tuple3 a b) where
+  liftReadsPrec rp _ _ = afterOpen (tripleFields rp)
+
+instance (Show a, Show b) => Show1 (Tuple3 a b) where
+  liftShowsPrec sp sl = liftShowsPrec2 showsPrec showList sp sl
+
+instance (Eq a, Eq b, Eq c) => Eq1 (Tuple4 a b c) where
+  liftEq = liftEq2 (==)
+
+instance (Ord a, Ord b, Ord c) => Ord1 (Tuple4 a b c) where
+  liftCompare = liftCompare2 compare
+
+instance (Read a, Read b, Read c) => Read1 (Tuple4 a b c) where
+  liftReadsPrec rp _ _ = afterOpen (quadFields rp)
+
+instance (Show a, Show b, Show c) => Show1 (Tuple4 a b c) where
+  liftShowsPrec sp sl = liftShowsPrec2 showsPrec showList sp sl
+
+instance Eq a => Eq1 (Const a) where
+  liftEq = liftEq2 (==)
+
+instance Ord a => Ord1 (Const a) where
+  liftCompare = liftCompare2 compare
+
+instance Read a => Read1 (Const a) where
+  liftReadsPrec rp rl = liftReadsPrec2 (\n v -> readsPrec n v) readListDefault rp rl
+
+instance Show a => Show1 (Const a) where
+  liftShowsPrec sp sl = liftShowsPrec2 showsPrec showList sp sl
+
+instance Eq2 Tuple2 where
+  liftEq2 e1 e2 (x1, y1) (x2, y2) = e1 x1 x2 && e2 y1 y2
+
+instance Ord2 Tuple2 where
+  liftCompare2 c1 c2 (x1, y1) (x2, y2) = case c1 x1 x2 of
+    EQ -> c2 y1 y2
+    other -> other
+
+instance Read2 Tuple2 where
+  liftReadsPrec2 rp1 _ rp2 _ _ = afterOpen (pairFieldsWith rp1 rp2)
+
+instance Show2 Tuple2 where
+  liftShowsPrec2 sp1 _ sp2 _ _ (x, y) =
+    showChar '(' . sp1 0 x . showChar ',' . sp2 0 y . showChar ')'
+
+instance Eq2 Either where
+  liftEq2 e1 _ (Left x) (Left y) = e1 x y
+  liftEq2 _ _ (Left _) (Right _) = False
+  liftEq2 _ _ (Right _) (Left _) = False
+  liftEq2 _ e2 (Right x) (Right y) = e2 x y
+
+instance Ord2 Either where
+  liftCompare2 c1 _ (Left x) (Left y) = c1 x y
+  liftCompare2 _ _ (Left _) (Right _) = LT
+  liftCompare2 _ _ (Right _) (Left _) = GT
+  liftCompare2 _ c2 (Right x) (Right y) = c2 x y
+
+instance Read2 Either where
+  liftReadsPrec2 rp1 _ rp2 _ d = readParen (d > 10) (eitherFields rp1 rp2)
+
+instance Show2 Either where
+  liftShowsPrec2 sp1 _ _ _ d (Left x) = showsUnaryWith sp1 "Left" d x
+  liftShowsPrec2 _ _ sp2 _ d (Right x) = showsUnaryWith sp2 "Right" d x
+
+instance Eq2 Const where
+  liftEq2 eq _ (Const x) (Const y) = eq x y
+
+instance Ord2 Const where
+  liftCompare2 comp _ (Const x) (Const y) = comp x y
+
+instance Read2 Const where
+  liftReadsPrec2 rp _ _ _ d = readParen (d > 10) (constFields rp)
+
+instance Show2 Const where
+  liftShowsPrec2 sp _ _ _ d (Const x) = showsUnaryWith sp "Const" d x
+
+instance Eq a => Eq2 (Tuple3 a) where
+  liftEq2 e1 e2 (u1, x1, y1) (v1, x2, y2) = u1 == v1 && e1 x1 x2 && e2 y1 y2
+
+instance Ord a => Ord2 (Tuple3 a) where
+  liftCompare2 c1 c2 (u1, x1, y1) (v1, x2, y2) = case compare u1 v1 of
+    EQ -> case c1 x1 x2 of
+      EQ -> c2 y1 y2
+      other -> other
+    other -> other
+
+instance Read a => Read2 (Tuple3 a) where
+  liftReadsPrec2 rp1 _ rp2 _ _ = afterOpen (tripleFieldsWith rp1 rp2)
+
+instance Show a => Show2 (Tuple3 a) where
+  liftShowsPrec2 sp1 _ sp2 _ _ (u1, x1, y1) =
+    showChar '(' . showsPrec 0 u1 . showChar ',' . sp1 0 x1 . showChar ',' . sp2 0 y1 . showChar ')'
+
+instance (Eq a, Eq b) => Eq2 (Tuple4 a b) where
+  liftEq2 e1 e2 (u1, u2, x1, y1) (v1, v2, x2, y2) =
+    u1 == v1 && u2 == v2 && e1 x1 x2 && e2 y1 y2
+
+instance (Ord a, Ord b) => Ord2 (Tuple4 a b) where
+  liftCompare2 c1 c2 (u1, u2, x1, y1) (v1, v2, x2, y2) = case compare u1 v1 of
+    EQ -> case compare u2 v2 of
+      EQ -> case c1 x1 x2 of
+        EQ -> c2 y1 y2
+        other -> other
+      other -> other
+    other -> other
+
+instance (Read a, Read b) => Read2 (Tuple4 a b) where
+  liftReadsPrec2 rp1 _ rp2 _ _ = afterOpen (quadFieldsWith rp1 rp2)
+
+instance (Show a, Show b) => Show2 (Tuple4 a b) where
+  liftShowsPrec2 sp1 _ sp2 _ _ (u1, u2, x1, y1) =
+    showChar '(' . showsPrec 0 u1 . showChar ',' . showsPrec 0 u2
+      . showChar ',' . sp1 0 x1 . showChar ',' . sp2 0 y1 . showChar ')'
+
+-- | Read the input after an opening parenthesis.
+afterOpen :: (String -> [(t, String)]) -> String -> [(t, String)]
+afterOpen p s = case lex s of
+  ("(", r) : _ -> p r
+  _ -> []
+
+-- | Read one field, then hand the rest of the input to the continuation.
+firstField :: (String -> [(a, String)]) -> (a -> String -> [(t, String)]) -> String -> [(t, String)]
+firstField p k s = case p s of
+  [] -> []
+  (x, t) : _ -> k x t
+
+-- | Read the input after a separating comma.
+afterComma :: (String -> [(a, String)]) -> String -> [(a, String)]
+afterComma p s = case lex s of
+  (",", r) : _ -> p r
+  _ -> []
+
+-- | A tuple's last field, then the closing parenthesis.
+closeField :: String -> t -> [(t, String)]
+closeField s x = case lex s of
+  (")", rest) : _ -> [(x, rest)]
+  _ -> []
+
+pairFieldsWith :: (Int -> ReadS a) -> (Int -> ReadS b) -> String -> [(Tuple2 a b, String)]
+pairFieldsWith rp1 rp2 =
+  firstField (rp1 0) (\x t -> firstField (afterComma (rp2 0)) (\y u -> closeField u (x, y)) t)
+
+tripleFieldsWith :: Read c => (Int -> ReadS a) -> (Int -> ReadS b) -> String -> [(Tuple3 c a b, String)]
+tripleFieldsWith rp1 rp2 =
+  firstField (readsPrec 0) (\x0 t0 ->
+    firstField (afterComma (rp1 0)) (\x1 t1 ->
+      firstField (afterComma (rp2 0)) (\x2 t2 -> closeField t2 (x0, x1, x2)) t1) t0)
+
+quadFieldsWith :: (Read c, Read d) => (Int -> ReadS a) -> (Int -> ReadS b) -> String -> [(Tuple4 c d a b, String)]
+quadFieldsWith rp1 rp2 =
+  firstField (readsPrec 0) (\x0 t0 ->
+    firstField (afterComma (readsPrec 0)) (\x1 t1 ->
+      firstField (afterComma (rp1 0)) (\x2 t2 ->
+        firstField (afterComma (rp2 0)) (\x3 t3 -> closeField t3 (x0, x1, x2, x3)) t2) t1) t0)
+
+tripleFields :: (Read b, Read c) => (Int -> ReadS a) -> String -> [(Tuple3 b c a, String)]
+tripleFields rp =
+  firstField (readsPrec 0) (\x0 t0 ->
+    firstField (afterComma (readsPrec 0)) (\x1 t1 ->
+      firstField (afterComma (rp 0)) (\x2 t2 -> closeField t2 (x0, x1, x2)) t1) t0)
+
+quadFields :: (Read b, Read c, Read d) => (Int -> ReadS a) -> String -> [(Tuple4 b c d a, String)]
+quadFields rp =
+  firstField (readsPrec 0) (\x0 t0 ->
+    firstField (afterComma (readsPrec 0)) (\x1 t1 ->
+      firstField (afterComma (readsPrec 0)) (\x2 t2 ->
+        firstField (afterComma (rp 0)) (\x3 t3 -> closeField t3 (x0, x1, x2, x3)) t2) t1) t0)
+
+eitherFields :: (Int -> ReadS a) -> (Int -> ReadS b) -> String -> [(Either a b, String)]
+eitherFields rp1 rp2 s = case lex s of
+  ("Left", r) : _ -> consEach Left (rp1 11 r)
+  ("Right", r) : _ -> consEach Right (rp2 11 r)
+  _ -> []
+
+constFields :: (Int -> ReadS a) -> String -> [(Const a b, String)]
+constFields rp s = case lex s of
+  ("Const", r) : _ -> consEach (\x -> Const x) (rp 11 r)
+  _ -> []

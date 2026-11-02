@@ -1,0 +1,14 @@
+-- Control.Monad.IO.Class: liftIO embeds an IO action at the monad that asked
+-- for it, both at IO and in a block written against the class alone.
+import Control.Monad.IO.Class
+
+wrapped :: MonadIO m => m ()
+wrapped = do
+  liftIO (putStrLn "before")
+  liftIO (putStrLn "after")
+
+main :: IO ()
+main = do
+  liftIO (putStrLn "lifted")
+  wrapped
+  liftIO (putStrLn (show (1 + 1)))

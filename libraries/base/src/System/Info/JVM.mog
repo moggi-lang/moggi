@@ -1,5 +1,6 @@
 module System.Info.JVM
   ( os
+  , arch
   ) where
 
 import Data.String (isPrefixOf)
@@ -23,3 +24,24 @@ normaliseOs n
   | isPrefixOf "FreeBSD" n = "freebsd"
   | isPrefixOf "SunOS" n = "solaris"
   | otherwise = "unknown"
+
+-- | `os.arch` in GHC's `System.Info.arch` spelling. The JVM reports the
+-- hardware's own name (`amd64`, `aarch64`, `x86`), which is folded onto the
+-- spelling the rest of the table uses.
+arch :: String
+arch = normaliseArch (rawGetProperty "os.arch")
+
+normaliseArch :: String -> String
+normaliseArch a = case a of
+  "amd64" -> "x86_64"
+  "x86_64" -> "x86_64"
+  "aarch64" -> "aarch64"
+  "arm64" -> "aarch64"
+  "x86" -> "i386"
+  "i386" -> "i386"
+  "i686" -> "i386"
+  "ppc64le" -> "powerpc64le"
+  "ppc64" -> "powerpc64"
+  "riscv64" -> "riscv64"
+  "s390x" -> "s390x"
+  _ -> a

@@ -19,6 +19,10 @@ module Text.Read
 import Data.Bool
 import Data.Char
 import Data.Either (Either(Left, Right))
+import Data.Functor.Const (Const(Const))
+import Data.List.NonEmpty (NonEmpty((:|)))
+import Data.Functor.Identity (Identity(..))
+import Data.Tuple (Solo(MkSolo))
 import Data.Eq
 import Data.Maybe (Maybe(Nothing, Just))
 import Data.Num
@@ -325,6 +329,154 @@ categoryParse s = case lex s of
     Just c -> [(c, rest)]
     Nothing -> []
   [] -> []
+
+-- | Read one field, then hand the rest of the input to the continuation.
+readThen :: (String -> [(a, String)]) -> (a -> String -> [(t, String)]) -> String -> [(t, String)]
+readThen p k s = case p s of
+  [] -> []
+  (x, t) : _ -> k x t
+
+-- | Read the input after a separating comma.
+skipComma :: (String -> [(a, String)]) -> String -> [(a, String)]
+skipComma p s = case lex s of
+  (",", r) : _ -> p r
+  _ -> []
+
+-- | Read the input after an opening parenthesis.
+afterOpen :: (String -> [(t, String)]) -> String -> [(t, String)]
+afterOpen p s = case lex s of
+  ("(", r) : _ -> p r
+  _ -> []
+
+-- | A tuple's last field, then the closing parenthesis.
+closeParsed :: String -> t -> [(t, String)]
+closeParsed s x = case lex s of
+  (")", rest) : _ -> [(x, rest)]
+  _ -> []
+
+-- | Reads what 'Show' writes for a pair: two values between parentheses,
+-- separated by a comma.
+instance (Read a, Read b) => Read (a, b) where
+  readsPrec _ = afterOpen pairFields
+
+pairFields :: (Read a, Read b) => String -> [((a, b), String)]
+pairFields =
+  readThen reads (\x t -> readThen (skipComma reads) (\y u -> closeParsed u (x, y)) t)
+
+-- | Reads what 'Show' writes for a triple.
+instance (Read a, Read b, Read c) => Read (a, b, c) where
+  readsPrec _ = afterOpen tripleFields
+
+tripleFields :: (Read a, Read b, Read c) => String -> [((a, b, c), String)]
+tripleFields =
+  readThen reads (\x t ->
+    readThen (skipComma reads) (\y u ->
+      readThen (skipComma reads) (\z v -> closeParsed v (x, y, z)) u) t)
+
+-- | Reads what 'Show' writes for a 4-tuple.
+instance (Read a, Read b, Read c, Read d) => Read (a, b, c, d) where
+  readsPrec _ = afterOpen quadFields
+
+quadFields :: (Read a, Read b, Read c, Read d) => String -> [((a, b, c, d), String)]
+quadFields =
+  readThen reads (\x t ->
+    readThen (skipComma reads) (\y u ->
+      readThen (skipComma reads) (\z v ->
+        readThen (skipComma reads) (\w r -> closeParsed r (x, y, z, w)) v) u) t)
+
+-- | Reads what 'Show' writes: @Left x@ or @Right y@.
+instance (Read a, Read b) => Read (Either a b) where
+  readsPrec d = readParen (d > 10) eitherParses
+
+eitherParses :: (Read a, Read b) => ReadS (Either a b)
+eitherParses s = case lex s of
+  ("Left", r) : _ -> leftParses (readsPrec 11 r)
+  ("Right", r) : _ -> rightParses (readsPrec 11 r)
+  _ -> []
+
+leftParses :: [(a, String)] -> [(Either a b, String)]
+leftParses pairs = case pairs of
+  [] -> []
+  (x, t) : rest -> (Left x, t) : leftParses rest
+
+rightParses :: [(b, String)] -> [(Either a b, String)]
+rightParses pairs = case pairs of
+  [] -> []
+  (x, t) : rest -> (Right x, t) : rightParses rest
+
+-- | Reads what 'Show' writes: @Const x@.
+instance Read a => Read (Const a b) where
+  readsPrec d = readParen (d > 10) constParses
+
+constParses :: Read a => ReadS (Const a b)
+constParses s = case lex s of
+  ("Const", r) : _ -> constEach (readsPrec 11 r)
+  _ -> []
+
+constEach :: [(a, String)] -> [(Const a b, String)]
+constEach pairs = case pairs of
+  [] -> []
+  (x, t) : rest -> (Const x, t) : constEach rest
+
+-- | Reads what 'Show' writes: @Nothing@ or @Just x@.
+instance Read a => Read (Maybe a) where
+  readsPrec d s = readParen (d > 10) maybeParses s
+
+maybeParses :: Read a => ReadS (Maybe a)
+maybeParses s = case lex s of
+  ("Nothing", r) : _ -> [(Nothing, r)]
+  ("Just", r) : _ -> justEach (readsPrec 11 r)
+  _ -> []
+
+justEach :: [(a, String)] -> [(Maybe a, String)]
+justEach pairs = case pairs of
+  [] -> []
+  (x, t) : rest -> (Just x, t) : justEach rest
+
+-- | Reads what 'Show' writes: @1 :| [2,3]@. The tail is a list, so it is read
+-- by the list instance rather than one element at a time.
+instance Read a => Read (NonEmpty a) where
+  readsPrec d = readParen (d > 5) nonEmptyParses
+
+nonEmptyParses :: Read a => ReadS (NonEmpty a)
+nonEmptyParses s = case readsPrec 6 s of
+  [] -> []
+  (x, t) : _ -> case lex t of
+    (":|", u) : _ -> nonEmptyTail x (reads u)
+    _ -> []
+
+nonEmptyTail :: a -> [([a], String)] -> [(NonEmpty a, String)]
+nonEmptyTail x pairs = case pairs of
+  [] -> []
+  (xs, u) : rest -> (x :| xs, u) : nonEmptyTail x rest
+
+-- | Reads what 'Show' writes: @MkSolo x@.
+instance Read a => Read (Solo a) where
+  readsPrec d s = readParen (d > 10) soloParses s
+
+soloParses :: Read a => ReadS (Solo a)
+soloParses s = case lex s of
+  ("MkSolo", r) : _ -> soloEach (readsPrec 11 r)
+  _ -> []
+
+soloEach :: [(a, String)] -> [(Solo a, String)]
+soloEach pairs = case pairs of
+  [] -> []
+  (x, t) : rest -> (MkSolo x, t) : soloEach rest
+
+-- | Reads what 'Show' writes: @Identity x@.
+instance Read a => Read (Identity a) where
+  readsPrec d s = readParen (d > 10) identityParses s
+
+identityParses :: Read a => ReadS (Identity a)
+identityParses s = case lex s of
+  ("Identity", r) : _ -> identityEach (readsPrec 11 r)
+  _ -> []
+
+identityEach :: [(a, String)] -> [(Identity a, String)]
+identityEach pairs = case pairs of
+  [] -> []
+  (x, t) : rest -> (Identity x, t) : identityEach rest
 
 categoryNamed :: String -> Maybe GeneralCategory
 categoryNamed tok = case tok of
