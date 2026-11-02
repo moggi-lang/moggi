@@ -8,7 +8,8 @@
 --   that never bottoms out diverges instead of producing a value.
 -- * No 'MonadFix' \/ 'MonadZip' instances (neither class exists in 'base'),
 --   and none of the 'Eq1' \/ 'Ord1' \/ 'Show1' \/ 'Read1' \/ 'NFData' \/
---   'Generic' machinery.
+--   'Generic' machinery. 'Generic1' is derived, so a caller can walk the tree
+--   through its representation.
 -- * 'levels' recurses instead of iterating ('iterate' does not exist), and
 --   the ASCII drawing shifts lines explicitly ('repeat' does not exist).
 -- * There is no 'Forest' synonym: a forest is '[Tree a]', because a type
@@ -55,6 +56,7 @@ import Data.String (lines, unlines)
 import Data.Traversable hiding (mapAccumL, mapAccumR)
 import Data.Word (Word)
 import Moggi.Err
+import Moggi.Generics
 import Moggi.Internal.Base
 import Moggi.Internal.Prim
 import Text.Show
@@ -64,7 +66,7 @@ data Tree a = Node
   { rootLabel :: a
   , subForest :: [Tree a]
   }
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Generic1)
 
 -- | Post-order traversal wrapper: folding a 'PostOrder' visits children
 -- before their parent.

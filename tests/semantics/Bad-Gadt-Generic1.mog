@@ -1,0 +1,8 @@
+import Moggi.Generics
+
+-- A constructor that fixes its index is not a case of `f a`, so there is no single representation
+-- over the parameter for either class to state — `Generic1` refuses with the same diagnostic.
+data Expr a where
+  Lit :: Int -> Expr Int
+  Truth :: Expr Bool
+  deriving (Generic1)
