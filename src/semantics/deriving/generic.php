@@ -239,8 +239,6 @@ function representationEquationParts(
     string $className,
 ): array {
     if ($className === 'Generic1') {
-        // A declaration with no parameter has nothing to abstract over, which the check refuses;
-        // the stub phase still records the declaration's own head so it never has to invent one.
         return [
             'lhsArgs' => [$decl->params === [] ? dataDeclHeadAst($decl) : functorialHeadAst($decl)],
             'rhs' => synthesizeRep1Type($state, $decl),

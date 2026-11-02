@@ -1,0 +1,28 @@
+module Main where
+
+import Data.Int
+import Data.Tree (Tree(..))
+import Moggi.Generics
+import Moggi.Internal.Base
+
+-- The containers library's rose tree, walked through the `Generic1` derived beside its declaration:
+-- a `Par1` for the label and a `Rec1 List :.: Rec1 Tree` composition for the child forest, which
+-- is the shape a plain self-recursive constructor cannot express.
+
+sample :: Tree Int
+sample = Node 1 [Node 2 [], Node 3 [Node 4 []]]
+
+total :: Tree Int -> Int
+total t = case from1 t of
+  M1 (M1 (M1 (Par1 n) :*: M1 (Comp1 (Rec1 kids)))) -> n + forestTotal kids
+
+forestTotal :: List (Rec1 Tree Int) -> Int
+forestTotal ks = case ks of
+  [] -> 0
+  k : rest -> (case k of Rec1 kid -> total kid) + forestTotal rest
+
+main :: IO ()
+main = do
+  putStrLn (show (total sample))
+  putStrLn (show (total (Node 5 [])))
+  putStrLn (show (to1 (from1 sample) == sample))

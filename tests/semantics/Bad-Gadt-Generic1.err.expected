@@ -1,0 +1,4 @@
+tests/semantics/Bad-Gadt-Generic1.mog:8:13: type error: cannot derive Generic1: constructor `Lit` is GADT-style, which has no single representation over the type parameter
+
+  8 |   deriving (Generic1)
+    |             ^^^^^^^^
