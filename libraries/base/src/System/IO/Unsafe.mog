@@ -1,0 +1,23 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Running an 'IO' action from code that has no 'IO' in its type.
+--
+-- The prefix says what the type no longer promises: a function that uses these
+-- can perform effects, so its type is not a description of what it does.
+module System.IO.Unsafe
+  ( unsafePerformIO
+  ) where
+
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import System.IO.Base (IO)
+
+-- | Run an 'IO' action and answer its result. The action runs when the
+-- expression is evaluated: inside a function body that is on every call, in a
+-- top-level binding when the binding is initialised.
+--
+-- Reach for it only where the effect is invisible to the rest of the program or
+-- happens once by construction — a memo table, an identifier supply, a counter
+-- that pure code reads. It does not make the effect pure, and nothing sequences
+-- it with the rest of the program except the demand for its result.
+unsafePerformIO :: IO a -> a
+unsafePerformIO action = unsafePerformIO# action

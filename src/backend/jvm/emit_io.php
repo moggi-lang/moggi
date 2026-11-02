@@ -323,6 +323,15 @@ function emitIntrinsicState(EmitEnv $env, IR\Intrinsic $op): bool
             );
 
             return true;
+        case 'unsafePerformIO#':
+            emitOperand($env, $args[0]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'ioRun', '(Ljava/lang/Object;)Ljava/lang/Object;'),
+                1,
+                true,
+            );
+
+            return true;
         case 'arrayNew#':
             emitOperand($env, $args[0]);
             emitOperand($env, $args[1]);

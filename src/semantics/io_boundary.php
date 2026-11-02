@@ -13,6 +13,7 @@ use Moggi\Syntax\Ast;
 use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
 use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
 use function Moggi\Semantics\IntrinsicRegistry\primopArity;
+use function Moggi\Semantics\IntrinsicRegistry\primopParameterTypes;
 use function Moggi\Semantics\Kernel\bindRole;
 use function Moggi\Semantics\Kinds\canonicalTypeConName;
 
@@ -63,13 +64,58 @@ function synonymHead(Ast\TypeNode $type): ?string
     return $type instanceof Ast\TypeCon ? $type->name : null;
 }
 
+/**
+ * The primop a declaration's body applies, when the whole body is a call of one.
+ *
+ * The declaration that runs an action is written once, as a thin binding over the
+ * primop that does it (`unsafePerformIO action = unsafePerformIO# action`), and
+ * that shape is what the surface rule below has to be able to recognise.
+ */
+function bodyPrimopName(Ast\AstNode $body): ?string
+{
+    $head = $body;
+    while ($head instanceof Ast\Apply) {
+        $head = $head->function;
+    }
+
+    return match ($head::class) {
+        Ast\IntrinsicCall::class, Ast\Variable::class => $head->name,
+        default => null,
+    };
+}
+
+/**
+ * A declaration whose signature takes an action because that is its whole job.
+ *
+ * A run of an action (`unsafePerformIO# :: IO a -> a`) names `IO` in parameter
+ * position on purpose, so it is the one place the surface rule cannot apply: the
+ * crossing happens here, spelled out, and every other declaration keeps the
+ * guarantee that a pure signature cannot perform effects. The test is the
+ * primop's own scheme, not a declaration's name.
+ */
+function isActionRunDeclaration(Ast\FunctionDecl $fn): bool
+{
+    $name = bodyPrimopName($fn->body);
+    if ($name === null) {
+        return false;
+    }
+
+    foreach (primopParameterTypes($name) as $parameterType) {
+        if (isIoCheckedType($parameterType)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function validateFunction(Ast\FunctionDecl $fn, string $source, string $filename): void
 {
     if ($fn->signatureOnly) {
         return;
     }
 
-    if ($fn->type !== null) {
+    if ($fn->type !== null && ! isActionRunDeclaration($fn)) {
         validateFunctionTypeIoSurface($fn->type, $source, $filename);
     }
 
@@ -595,11 +641,54 @@ function validateInfix(Ast\Infix $expr, string $source, string $filename): void
     validatePureExpr($expr->right, $source, $filename);
 }
 
+/**
+ * The value-argument types of a flattened application's head, in order, up to
+ * `$count`.
+ *
+ * A class method carries an arrow per constraint it needs before its value
+ * arguments; those arrows are dictionary plumbing and say nothing about what a
+ * written argument is passed at, so they are skipped. What is left lines up with
+ * the arguments as they were written.
+ *
+ * @return list<Type>
+ */
+function calleeArgumentTypes(Ast\AstNode $function, int $count): array
+{
+    $type = $function->inferredInternalType ?? null;
+    $types = [];
+    while ($type instanceof TArrow && \count($types) < $count) {
+        $from = $type->from;
+        if ($from instanceof TCon && \str_starts_with($from->name, '__Dict_')) {
+            $type = $type->to;
+            continue;
+        }
+        $types[] = $from;
+        $type = $type->to;
+    }
+
+    return $types;
+}
+
+/**
+ * An application in value position.
+ *
+ * An argument whose type is IO is refused here — a pure expression may not hold
+ * an action — unless the callee's own parameter is that IO type: `liftIO` and a
+ * run of an action both take one, and what they do with it is the point of the
+ * call. The parameter type is what decides, never the callee's name.
+ */
 function validateApply(Ast\Apply $expr, string $source, string $filename): void
 {
     $parts = flattenApply($expr);
     validatePureExpr($parts['function'], $source, $filename);
-    foreach ($parts['args'] as $arg) {
+    $argumentTypes = calleeArgumentTypes($parts['function'], \count($parts['args']));
+    foreach ($parts['args'] as $index => $arg) {
+        $parameterType = $argumentTypes[$index] ?? null;
+        if (exprReturnsIo($arg) && $parameterType !== null && isIoCheckedType($parameterType)) {
+            validateIoBuildExpr($arg, $source, $filename);
+
+            continue;
+        }
         validatePureExpr($arg, $source, $filename);
     }
 }
@@ -628,9 +717,23 @@ function validatePureCase(Ast\CaseExpr $expr, string $source, string $filename):
     }
 }
 
+/**
+ * A primop call in value position.
+ *
+ * The primop's own parameter types decide where an action may be passed: the
+ * primop that runs one (`unsafePerformIO#`) takes the `IO` type there, and every
+ * other argument of every other primop stays a pure expression.
+ */
 function validateIntrinsic(Ast\IntrinsicCall $expr, string $source, string $filename): void
 {
-    foreach ($expr->args as $arg) {
+    $parameterTypes = primopParameterTypes($expr->name);
+    foreach ($expr->args as $index => $arg) {
+        $parameterType = $parameterTypes[$index] ?? null;
+        if (exprReturnsIo($arg) && $parameterType !== null && isIoCheckedType($parameterType)) {
+            validateIoBuildExpr($arg, $source, $filename);
+
+            continue;
+        }
         validatePureExpr($arg, $source, $filename);
     }
 }

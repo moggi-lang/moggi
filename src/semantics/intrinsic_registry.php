@@ -328,6 +328,10 @@ function typeSchemes(): array
             ),
             ['a'],
         ),
+        'unsafePerformIO#' => scheme(
+            new TArrow(new TCon('IO', [$a]), $a),
+            ['a'],
+        ),
         'arrayNew#' => scheme(
             new TArrow(
                 new TCon('Tuple2', [new TVar('i'), new TVar('i')]),
@@ -593,6 +597,36 @@ function ioPrimopRole(string $name): ?string
 function isIoIntrinsic(string $name): bool
 {
     return isset(ioPrimopRoles()[$name]);
+}
+
+/**
+ * The value parameters a primop takes, in order.
+ *
+ * A primop's scheme is the only place its parameter types are written down, so
+ * a reader that has to know what an argument is passed at — the boundary, when
+ * an action is handed to the call that runs it — reads them here rather than
+ * restating them at the use site.
+ *
+ * @return list<Type>
+ */
+function primopParameterTypes(string $name): array
+{
+    $scheme = typeSchemes()[$name] ?? null;
+    if ($scheme === null) {
+        return [];
+    }
+
+    $types = [];
+    $type = $scheme->type;
+    while ($type instanceof TArrow) {
+        $from = $type->from;
+        if (! ($from instanceof TCon && \str_starts_with($from->name, '__Dict_'))) {
+            $types[] = $from;
+        }
+        $type = $type->to;
+    }
+
+    return $types;
 }
 
 /**

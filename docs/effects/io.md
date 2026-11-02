@@ -92,9 +92,42 @@ Main.mog:1:13: type error: IO values are forbidden outside an IO-returning funct
 ```
 
 The rule is what keeps "pure" meaningful: a function whose signature has no
-`IO` cannot perform effects, directly or by unpacking one. There is no
-`unsafePerformIO`, no way to run an action from pure code, and no `IO` value to
-pattern-match on.
+`IO` cannot perform effects, directly or by unpacking one, and there is no `IO`
+value to pattern-match on. The one way across the line is `unsafePerformIO`,
+whose name is the warning.
+
+### Running an action from pure code
+
+```moggi
+import System.IO.Unsafe
+
+answer :: Int -> Int
+answer n = unsafePerformIO (pure (n + n))
+```
+
+`unsafePerformIO :: IO a -> a` runs the action and answers its result. The action
+runs when the expression is evaluated: inside a function body that is on every
+call, and in a top-level binding when the binding is initialised.
+
+Use it only where the effect is invisible to the rest of the program or happens
+once by construction: a memo table, an identifier supply, a counter that pure
+code reads. It does not make the effect pure, and the type of a function that
+uses it no longer describes what that function does. Four consequences to plan
+for:
+
+- **Nothing sequences the action** with the rest of the program except the demand
+  for its result: it runs where the value is needed, not where the call is
+  written.
+- **It can run more than once** — once per evaluation — so a call written in a
+  function body is not a once-per-program hook.
+- **Its exceptions surface where the value is forced**, which can be far from the
+  `unsafePerformIO` itself.
+- **Code that assumes purity breaks**: a function handed to `map`, `sort` or a
+  `Foldable` must not change state through it, because how often it is called is
+  the compiler's business, not the caller's.
+
+When the effect is local, `ST` says so in the type and needs no promise; when it
+is not local, the code belongs in `IO`.
 
 In a foreign declaration, `IO` may appear only outermost in the result
 ([FFI](../ffi.md)).

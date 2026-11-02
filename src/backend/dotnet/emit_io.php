@@ -258,6 +258,11 @@ function emitIntrinsicState(EmitEnv $env, IR\Intrinsic $op): bool
             $env->m->emit('call object Moggi.Rt.RT::IoWriteRef(class Moggi.Rt.IORef, object)');
 
             return true;
+        case 'unsafePerformIO#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('call object Moggi.Rt.RT::IoRun(object)');
+
+            return true;
         case 'arrayNew#':
             emitOperand($env, $args[0]);
             emitOperand($env, $args[1]);

@@ -1,0 +1,17 @@
+-- System.IO.Unsafe: the action behind unsafePerformIO runs where its value is
+-- demanded, and its effect lands before the output that demanded it.
+import Control.Applicative
+import System.IO.Unsafe
+
+answer :: Int -> Int
+answer n = unsafePerformIO (pure (n + n))
+
+noisy :: Int -> Int
+noisy n = unsafePerformIO (do
+  putStrLn "ran"
+  pure n)
+
+main :: IO ()
+main = do
+  putStrLn (show (answer 21))
+  putStrLn (show (noisy 7))
