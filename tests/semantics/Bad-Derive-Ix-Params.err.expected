@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Ix-Params.mog:3:30: type error: cannot derive Ix: type has parameters (an enumeration requires a nullary type)
+
+  3 | data Tag a = A | B deriving (Ix)
+    |                              ^^
