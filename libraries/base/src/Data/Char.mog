@@ -4,22 +4,46 @@
   jvm = Data.Char.JVM
   dotnet = Data.Char.DotNet
 #-}
+-- | The 'Char' type and associated operations.
+--
+-- Unicode characters are divided into letters, numbers, marks, punctuation,
+-- symbols, separators (including spaces) and others (including control
+-- characters), which is what the classifiers below ask about.
+--
+-- 'lexLitChar' and 'readLitChar' read a character out of a 'String', so they
+-- need the string primitives ('unpack', 'take', 'drop') that this module sits
+-- below; they live in 'Data.String' with them.
 module Data.Char
-  ( Char
+  (
+    Char
+
+  -- * Character classification
+  , isControl, isSpace
+  , isLower, isLowerCase, isUpper, isUpperCase, isAlpha, isAlphaNum, isPrint
+  , isDigit, isOctDigit, isHexDigit
+  , isLetter, isMark, isNumber, isPunctuation, isSymbol, isSeparator
+
+  -- ** Subranges
+  , isAscii, isLatin1
+  , isAsciiUpper, isAsciiLower
+
+  -- ** Unicode general categories
+  , GeneralCategory(..), generalCategory
+
+  -- * Case conversion
+  , toUpper, toLower, toTitle
+
+  -- * Single digit characters
+  , digitToInt
+  , intToDigit
+
+  -- * Numeric representations
   , ord
   , chr
-  , isControl
-  , isSpace
-  , isLower
-  , isUpper
-  , isAlpha
-  , isLetter
-  , isAlphaNum
-  , isPrint
-  , isDigit
-  , isOctDigit
-  , isHexDigit
-  , isNumber  , isPunctuation   , isSymbol   , isSeparator   , isMark   , isAscii   , isLatin1   , isAsciiUpper   , isAsciiLower   , GeneralCategory(..)   , generalCategory   , isLowerCase   , isUpperCase   , toUpper   , toLower   , toTitle   , digitToInt   , intToDigit   , showLitChar   ) where
+
+  -- * String representations
+  , showLitChar
+  ) where
 
 import Data.Bool
 import Data.Bounded
