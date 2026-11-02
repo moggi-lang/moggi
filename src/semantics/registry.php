@@ -62,6 +62,7 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, ImportC
 
     foreach ($interface->data() as $name => $info) {
         $state->data[$name] = $info;
+        $state->data[$name]['imported'] = true;
         Kinds\registerTypeKind($state, $name, Kinds\kindFromDataInfo($info));
         Kinds\installPromotedFromDataInfo($state, $name, $info);
     }
@@ -106,6 +107,7 @@ function registerTypeDeclarations(TypeCheckState $state, Ast\Program $program): 
 {
     foreach ($program->items as $item) {
         if ($item instanceof Ast\DataDecl) {
+            shadowImportedType($state, $item->name);
             registerData($state, $item);
             registerSurfaceConstructorAlias($state, $item, $program->exports);
         }
@@ -125,6 +127,42 @@ function registerTypeDeclarations(TypeCheckState $state, Ast\Program $program): 
             registerClassMethodExportSchemes($state, $item);
         }
     }
+}
+
+/**
+ * Drop the declaration an import put under a name this module declares itself.
+ *
+ * A spelling denotes one declaration per module, so `Data.Monoid` declares
+ * `First` while `Data.Semigroup` exports a different `First`, and the module's
+ * own declaration has to take the name over. Registration then judges a
+ * duplicate against this module's own declarations only.
+ */
+function shadowImportedType(TypeCheckState $state, string $name): void
+{
+    $info = $state->data[$name] ?? null;
+    if (! \is_array($info)) {
+        return;
+    }
+
+    $here = $state->currentModule ?? $state->module ?? null;
+    $declaredIn = $info['declaringModule'] ?? null;
+    $fromElsewhere = \is_string($declaredIn) && $declaredIn !== ''
+        && $declaredIn !== $here;
+
+    if (($info['imported'] ?? false) !== true && ! $fromElsewhere) {
+        return;
+    }
+
+    foreach (\array_keys($info['constructors'] ?? []) as $ctor) {
+        unset(
+            $state->env[$ctor],
+            $state->constructorRenames[$ctor],
+            $state->promoted[$ctor],
+        );
+    }
+
+    $canonical = Kinds\canonicalTypeConName($name);
+    unset($state->data[$name], $state->kindEnv[$canonical], $state->kindEnvByArity[$canonical]);
 }
 
 /**
@@ -214,6 +252,7 @@ function projectInstancesFromProgram(
     ClassDeriveFacts $facts,
     ?string $moduleName = null,
     array $dataDecls = [],
+    array $dataModules = [],
 ): array
 {
     $instances = [];
@@ -247,6 +286,33 @@ function projectInstancesFromProgram(
         }
     }
 
+    // The head names a type by spelling; the module the type is declared in is
+    // what makes that spelling an identity, so two modules may each declare a
+    // `First` and an instance for it.
+    foreach ($instances as $index => $record) {
+        if (isset($record['headModule'])) {
+            continue;
+        }
+        $name = instanceHeadSpelling($record['instanceHead'] ?? null);
+        if ($name !== null) {
+            $instances[$index]['headModule'] = $dataModules[$mod . '::' . $name] ?? $mod;
+        }
+    }
+
     return $instances;
+}
+
+/** The type constructor an instance head is spelled with, or null when it is not a name. */
+function instanceHeadSpelling(mixed $head): ?string
+{
+    if ($head instanceof Ast\TypeCon || $head instanceof Ast\TypePromoted) {
+        return $head->name;
+    }
+
+    if ($head instanceof Ast\TypeApp) {
+        return instanceHeadSpelling($head->con);
+    }
+
+    return null;
 }
 

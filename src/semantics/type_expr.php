@@ -101,9 +101,19 @@ final class TVarApp implements Type
 
 final class TCon implements Type
 {
-    /** @param array<int, Type> $args */
-    public function __construct(public readonly string $name, public readonly array $args = [])
-    {
+    /**
+     * @param array<int, Type> $args
+     * @param ?string $module the module that declares the type, when the head knows it: a
+     *        spelling denotes one declaration per module, so `A.T` and `B.T` are two types
+     *        and an instance for one must not answer for the other. Null where inference
+     *        built the head rather than a declaration or an interface (`List`, `Bool`,
+     *        `__Dict_C`), and an unknown module matches any (see `typeConModulesMatch`).
+     */
+    public function __construct(
+        public readonly string $name,
+        public readonly array $args = [],
+        public readonly ?string $module = null,
+    ) {
     }
 }
 

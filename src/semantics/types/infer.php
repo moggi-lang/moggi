@@ -187,6 +187,38 @@ function inferTypeAsc(TypeCheckState $state, Ast\TypeAsc $expr, array $env): Typ
     return prune($state, $annotType);
 }
 
+/**
+ * True when a method name ambiguous between dictionaries is still resolvable by
+ * name: every candidate is the same class's method, so the reference can go
+ * through that class's own scheme and leave the wanted constraint to ordinary
+ * solving. Candidates of different classes are a name clash no context settles.
+ */
+function methodAmbiguityResolvedByName(TypeCheckState $state, string $name): bool
+{
+    $candidates = $state->constraintMethodCandidates[$name] ?? [];
+    if ($candidates === [] || ! isset($state->env[$name])) {
+        return false;
+    }
+
+    $class = null;
+    foreach ($candidates as $candidate) {
+        $candidateClass = $candidate['class'] ?? null;
+        if (! \is_string($candidateClass)) {
+            return false;
+        }
+        if ($class === null) {
+            $class = $candidateClass;
+
+            continue;
+        }
+        if ($class !== $candidateClass) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 {
     if (! $expr instanceof Ast\Variable) {
@@ -194,7 +226,11 @@ function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): T
     }
 
     if (isset($state->constraintMethodAmbiguities[$expr->name])) {
-        throw typeFail($state, "ambiguous class method `{$expr->name}`", $expr);
+        if (! methodAmbiguityResolvedByName($state, $expr->name)) {
+            throw typeFail($state, "ambiguous class method `{$expr->name}`", $expr);
+        }
+
+        $env[$expr->name] = $state->env[$expr->name];
     }
 
     if (isset($state->constraintMethods[$expr->name])) {
@@ -208,7 +244,9 @@ function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): T
         throw typeFail($state, \sprintf('ambiguous class method `%s`', $expr->name), $expr);
     }
 
-    if (isset($state->ambiguousImports[$expr->name])) {
+    if (isset($state->ambiguousImports[$expr->name])
+        && ! isset($state->localDeclNames[$expr->name])
+    ) {
         throw typeFail($state, ambiguousImportMessage($expr->name, $state->ambiguousImports[$expr->name]), $expr);
     }
 
@@ -261,7 +299,11 @@ function inferOperatorRef(TypeCheckState $state, Ast\AstNode &$expr, array $env)
     }
 
     if (isset($state->constraintMethodAmbiguities[$expr->name])) {
-        throw typeFail($state, "ambiguous class method `{$expr->name}`", $expr);
+        if (! methodAmbiguityResolvedByName($state, $expr->name)) {
+            throw typeFail($state, "ambiguous class method `{$expr->name}`", $expr);
+        }
+
+        $env[$expr->name] = $state->env[$expr->name];
     }
 
     if (isset($state->constraintMethods[$expr->name])) {
@@ -275,7 +317,9 @@ function inferOperatorRef(TypeCheckState $state, Ast\AstNode &$expr, array $env)
         throw typeFail($state, "ambiguous class method `{$expr->name}`", $expr);
     }
 
-    if (isset($state->ambiguousImports[$expr->name])) {
+    if (isset($state->ambiguousImports[$expr->name])
+        && ! isset($state->localDeclNames[$expr->name])
+    ) {
         throw typeFail($state, ambiguousImportMessage($expr->name, $state->ambiguousImports[$expr->name]), $expr);
     }
 
@@ -856,8 +900,11 @@ function inferCase(TypeCheckState $state, Ast\CaseExpr $expr, array $env, ?Type 
         }
     }
 
-    checkCaseExhaustiveness($state, $expr, $scrutineeType);
-    $expr->exhaustive = caseExhaustivenessProven($state, $expr, $scrutineeType);
+    if ($expr->exhaustiveCheck) {
+        checkCaseExhaustiveness($state, $expr, $scrutineeType);
+    }
+    $expr->exhaustive = $expr->exhaustiveCheck
+        && caseExhaustivenessProven($state, $expr, $scrutineeType);
 
     foreach ($expr->alts as $i => $alt) {
         gadtPatternRestore($state, $altGadt[$i]);

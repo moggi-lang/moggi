@@ -11,7 +11,10 @@ use function Moggi\Semantics\Types\astType;
 use function Moggi\Semantics\Types\checkInstance;
 use function Moggi\Semantics\Types\evidenceFunctionName;
 use function Moggi\Semantics\Types\friendlyTypeVarNames;
+use function Moggi\Semantics\Types\instanceHeadDeclaringModule;
 use function Moggi\Semantics\Types\instanceHeadIndexKeyFromAst;
+use function Moggi\Semantics\Types\instanceHeadIndexKeyFromType;
+use function Moggi\Semantics\Types\instanceHeadNamesAnotherDeclaration;
 use function Moggi\Semantics\Types\instanceHeadsMatch;
 use function Moggi\Semantics\Types\newState;
 use function Moggi\Semantics\Types\typeFail;
@@ -724,6 +727,10 @@ function validateNoDuplicateDerivedInstance(
             continue;
         }
 
+        if (instanceHeadNamesAnotherDeclaration($state, instanceHeadIndexKeyFromType($headType), $instance)) {
+            continue;
+        }
+
         if (instanceHeadsMatch($state, $headType, $instance['instanceHead'])) {
             throw typeFail(
                 $state,
@@ -735,6 +742,10 @@ function validateNoDuplicateDerivedInstance(
 
     foreach ($state->projectInstancesByClass[$decl->class] ?? [] as $instance) {
         if (($instance['fromDeriving'] ?? false) === true) {
+            continue;
+        }
+
+        if (instanceHeadNamesAnotherDeclaration($state, instanceHeadIndexKeyFromType($headType), $instance)) {
             continue;
         }
 
@@ -773,6 +784,8 @@ function commitProjectInstance(TypeCheckState $state, Ast\InstanceDecl $decl): v
         }
     }
 
+    $headKey = instanceHeadIndexKeyFromAst($decl->head);
+    $headModule = instanceHeadDeclaringModule($state, $headKey) ?? $module;
     $record = [
         'module' => $module,
         'class' => $decl->class,
@@ -780,10 +793,11 @@ function commitProjectInstance(TypeCheckState $state, Ast\InstanceDecl $decl): v
         'constraints' => $decl->constraints,
         'associatedEquations' => associatedEquationsMapFromDecl($decl),
         'fromDeriving' => true,
+        'headModule' => $headModule,
     ];
     $state->projectInstancesByClass[$decl->class][] = $record;
-    $headKey = instanceHeadIndexKeyFromAst($decl->head);
     $state->projectInstancesByClassHead[$decl->class][$headKey][] = $record;
+    $state->projectInstancesByClassHead[$decl->class][$headModule . '::' . $headKey][] = $record;
     installAssociatedEquationsFromDecl($state, $decl, $module);
     $state->instanceLookupCache = [];
     $state->instanceMappingCache = [];

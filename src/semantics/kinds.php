@@ -654,9 +654,12 @@ function kindOfAppliedTypeCon(TypeCheckState $state, TCon $type, array $varKinds
 
 function kindOfTypeCon(TypeCheckState $state, string $name, int $appliedArgs): Kind
 {
-    $full = $state->kindEnv[canonicalTypeConName($name)] ?? new KType();
+    $canonical = canonicalTypeConName($name);
+    $full = $state->kindEnvByArity[$canonical][$appliedArgs]
+        ?? $state->kindEnv[$canonical]
+        ?? new KType();
 
-    return peelKind($full, $appliedArgs);
+    return kindArity($full) >= $appliedArgs ? peelKind($full, $appliedArgs) : new KType();
 }
 
 /**
@@ -853,8 +856,11 @@ function typeKindRequirements(TypeCheckState $facts, Type $type): array
             return;
         }
 
+        $canonical = $node instanceof TCon ? canonicalTypeConName($node->name) : null;
         $kind = $node instanceof TCon
-            ? ($facts->kindEnv[canonicalTypeConName($node->name)] ?? null)
+            ? ($facts->kindEnvByArity[$canonical][\count($node->args)]
+                ?? $facts->kindEnv[$canonical]
+                ?? null)
             : (isset($facts->promoted[$node->name])
                 ? promotedConstructorKind($facts->promoted[$node->name])
                 : null);
@@ -944,7 +950,21 @@ function signatureKindErrors(TypeCheckState $facts, Type $type, array $parameter
  */
 function registerTypeKind(TypeCheckState $state, string $name, Kind $kind): void
 {
-    $state->kindEnv[canonicalTypeConName($name)] = $kind;
+    $canonical = canonicalTypeConName($name);
+    $state->kindEnv[$canonical] = $kind;
+    $state->kindEnvByArity[$canonical][kindArity($kind)] ??= $kind;
+}
+
+/** How many arguments a constructor of this kind takes before the result is a type. */
+function kindArity(Kind $kind): int
+{
+    $arity = 0;
+    while ($kind instanceof KArrow) {
+        ++$arity;
+        $kind = $kind->to;
+    }
+
+    return $arity;
 }
 
 /**
@@ -1042,6 +1062,10 @@ function bootstrapKindEnv(TypeCheckState $state): void
     }
 
     $state->kindEnv = $table;
+    $state->kindEnvByArity = [];
+    foreach ($table as $name => $kind) {
+        registerTypeKind($state, $name, $kind);
+    }
 }
 
 /** @param array{name: string, kind?: Kind|Ast\KindNode, resolvedKind?: Kind} $param */

@@ -332,7 +332,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
     $headType = $registration['headType'];
     $mapping = $registration['mapping'];
     $state->varKinds = [...$state->varKinds, ...Kinds\typeKindRequirements($state, $headType)['vars']];
-    validateInstance($state, $decl, $headType, $mapping);
+    validateInstance($state, $decl, $headType);
 
     $className = $decl->class;
     $classInfo = $state->classes[$className];
@@ -744,9 +744,9 @@ function collectPatternBoundNames(Ast\AstNode $pattern, array &$bound): void
     };
 }
 
-function validateInstance(TypeCheckState $state, Ast\InstanceDecl $decl, Type $headType, array $mapping): void
+function validateInstance(TypeCheckState $state, Ast\InstanceDecl $decl, Type $headType): void
 {
-    validateInstanceSuperclasses($state, $decl, $mapping);
+    validateInstanceSuperclasses($state, $decl);
     validateNoDuplicateInstance($state, $decl, $headType);
     validateAssociatedTypeEquations($state, $decl);
 }
@@ -803,25 +803,57 @@ function validateAssociatedTypeEquations(TypeCheckState $state, Ast\InstanceDecl
     }
 }
 
-function validateInstanceSuperclasses(TypeCheckState $state, Ast\InstanceDecl $decl, array $mapping): void
+function validateInstanceSuperclasses(TypeCheckState $state, Ast\InstanceDecl $decl): void
 {
     $classInfo = $state->classes[$decl->class] ?? null;
     if ($classInfo === null) {
         return;
     }
 
+    $mapping = instanceParamMapping($state, $classInfo['params'], astType($state, $decl->head), $decl);
+
     foreach ($classInfo['superclasses'] as $super) {
+        $implication = implicationSuperclass($state, $super, $mapping, $decl);
+        if ($implication !== null) {
+            [$head, $givens] = $implication;
+            $headInfo = $state->classes[$head->class]
+                ?? throw typeFail($state, "unknown superclass `{$head->class}`", $decl);
+            $headType = instanceHeadFromConstraintArgs($state, $headInfo['params'], $head->args, $decl);
+
+            if (peerInstanceCoversGiven($state, $head->class, $headType, $givens, $decl)) {
+                continue;
+            }
+
+            throw typeFail(
+                $state,
+                "missing superclass instance: `{$head->class} "
+                    . typeToString($headType, friendlyTypeVarNames([$headType])) . '`',
+                $decl,
+            );
+        }
+
         if (superclassName($super) === null) {
             throw typeFail($state, 'class superclass must be a type class application', $decl);
         }
 
         if ($super instanceof Ast\TypeForall) {
-            $constraint = constraintFromSuperclassAst($state, $super, $mapping);
+            $implication = implicationSuperclass($state, $super, $mapping, $decl);
+            $contextGivens = [];
+            if ($implication !== null) {
+                [$superHeadConstraint, $contextConstraints] = $implication;
+                $constraint = $superHeadConstraint;
+                foreach ($contextConstraints as $contextGiven) {
+                    $contextGivens[] = ['class' => $contextGiven->class, 'args' => $contextGiven->args];
+                }
+            } else {
+                $constraint = constraintFromSuperclassAst($state, $super, $mapping);
+            }
+
             $quantifiedInfo = $state->classes[$constraint->class]
                 ?? throw typeFail($state, "unknown superclass `{$constraint->class}`", $decl);
             $quantifiedHead = instanceHeadFromConstraintArgs($state, $quantifiedInfo['params'], $constraint->args, $decl);
 
-            if (peerInstanceCoversSuperclass($state, $constraint->class, $quantifiedHead, $decl)) {
+            if (peerInstanceCoversSuperclass($state, $constraint->class, $quantifiedHead, $decl, null, $contextGivens)) {
                 continue;
             }
 
@@ -880,33 +912,307 @@ function validateInstanceSuperclasses(TypeCheckState $state, Ast\InstanceDecl $d
 /**
  * True when some project instance of $superClass matches $superHead and each of
  * its constraints appears (by class + args) among $decl->constraints.
+ *
+ * The peer's constraints are read through the instance head's own variables,
+ * the way {@see peerInstanceCoversGiven} reads a quantified superclass's:
+ * `instanceMappingForUse()` publishes the match in `__headVars`, so what is
+ * compared is the type each constraint becomes at `$superHead`, not the
+ * variable names the two declarations happened to choose. Without that, a peer
+ * instance's `Eq (f a)` could not be lined up with a declaration that spells the
+ * same constraint differently, and could not be substituted at all.
+ *
+ * The mapping is the structural one `instanceMappingForUse()` publishes as
+ * `__headVars`, asked for directly: a superclass check must not unify, because a
+ * probe whose head merely came close would leave bindings behind, and it must
+ * not record a mapping miss for a head that later becomes more specific.
  */
 function peerInstanceCoversSuperclass(
     TypeCheckState $state,
     string $superClass,
     Type $superHead,
     Ast\InstanceDecl $decl,
+    ?array $available = null,
+    array $extraGivens = [],
 ): bool {
-    if ($decl->constraints === []) {
+    $given = constraintGivensFromAsts($state, $available ?? $decl->constraints);
+    $given = [...$given, ...$extraGivens];
+    if ($given === []) {
         return false;
     }
 
-    $headKey = instanceHeadIndexKeyFromType($superHead);
-    $candidates = $headKey !== '*'
-        ? ($state->projectInstancesByClassHead[$superClass][$headKey] ?? [])
-        : ($state->projectInstancesByClass[$superClass] ?? []);
+    return constraintProvableFrom($state, $superClass, $superHead, $given);
+}
 
-    foreach ($candidates as $instance) {
-        if (! instanceHeadsMatch($state, $superHead, $instance['instanceHead'])) {
+/**
+ * Match a class application written as AST against a checked class head.
+ *
+ * The head's argument is one type (`Eq (f a)` is `Eq` applied to `f a`), so the
+ * pattern's arguments are matched one by one. Matching the whole application at
+ * once would read `Eq (f a)` as `Eq` applied to two arguments and reject every
+ * head whose argument is itself an application.
+ *
+ * @return array<string, Type>|null
+ */
+function matchConstraintPattern(TypeCheckState $state, Ast\TypeNode $pattern, Type $head): ?array
+{
+    if (! $pattern instanceof Ast\TypeApp || ! $pattern->con instanceof Ast\TypeCon) {
+        return matchInstanceHeadVars($state, $pattern, $head);
+    }
+
+    if (! $head instanceof TCon || $head->name !== $pattern->con->name) {
+        return null;
+    }
+
+    if (\count($pattern->args) !== \count($head->args)) {
+        return null;
+    }
+
+    $bindings = [];
+    foreach ($pattern->args as $i => $argPattern) {
+        $matched = matchInstanceHeadVars($state, $argPattern, $head->args[$i]);
+        if ($matched === null) {
+            return null;
+        }
+        $bindings = [...$bindings, ...$matched];
+    }
+
+    return $bindings;
+}
+
+/**
+ * The givens of a declaration, as class applications over checked types.
+ *
+ * @param list<Ast\TypeNode> $constraints
+ * @return list<array{class: string, args: list<Type>}>
+ */
+function constraintGivensFromAsts(TypeCheckState $state, array $constraints): array
+{
+    $givens = [];
+    foreach ($constraints as $constraint) {
+        if (! $constraint instanceof Ast\TypeNode) {
+            continue;
+        }
+        if ($constraint instanceof Ast\TypeConstrained) {
+            $givens = \array_merge($givens, constraintGivensFromAsts($state, $constraint->constraints));
+            $constraint = $constraint->body;
+        }
+        if (! $constraint instanceof Ast\TypeApp || ! $constraint->con instanceof Ast\TypeCon) {
             continue;
         }
 
-        $peerConstraints = $instance['constraints'] ?? [];
-        if ($peerConstraints === []) {
-            return true;
+        $args = [];
+        foreach ($constraint->args as $argAst) {
+            $args[] = prune($state, astType($state, $argAst));
+        }
+        $givens[] = ['class' => $constraint->con->name, 'args' => $args];
+    }
+
+    return $givens;
+}
+
+/**
+ * Prove `C t` from the declaration's givens.
+ *
+ * A given proves what its class's superclasses say it proves: `Ord a` gives
+ * `Eq a`, and a quantified superclass gives one instance per type its context
+ * proves -- `Eq1 f` gives `Eq (f a)` for every `a` with `Eq a`, which is what a
+ * derived `Eq (Sum f g a)` asks for. A project instance's head proves its class
+ * only when each of its own constraints is provable in turn, so a proof may take
+ * two steps (`Eq1 g` then `Eq1 f` for `Eq (f (g a))`).
+ *
+ * @param list<array{class: string, args: list<Type>}> $givens
+ */
+function constraintProvableFrom(
+    TypeCheckState $state,
+    string $className,
+    Type $head,
+    array $givens,
+    int $depth = 0,
+): bool {
+    if ($depth > 8) {
+        return false;
+    }
+
+    if (\getenv('MOGGI_DEBUG_PROOF') !== false) {
+        \fwrite(STDERR, "[proof] want {$className} " . typeToString($head)
+            . ' depth=' . $depth . ' givens=' . \count($givens) . "\n");
+        foreach ($givens as $g) {
+            \fwrite(STDERR, '[proof]   given ' . $g['class'] . '(' . constraintArgsKey($g['args']) . ")\n");
+        }
+    }
+
+    $available = $givens;
+    $givenKeys = [];
+    $queue = $givens;
+    while ($queue !== []) {
+        $given = \array_pop($queue);
+        $key = $given['class'] . ':' . constraintArgsKey($given['args']);
+        if (isset($givenKeys[$key])) {
+            continue;
+        }
+        $givenKeys[$key] = true;
+
+        $classInfo = $state->classes[$given['class']] ?? null;
+        if ($classInfo === null) {
+            continue;
         }
 
-        if (instanceConstraintsCoveredByDecl($state, $peerConstraints, $decl->constraints)) {
+        $mapping = [];
+        foreach ($classInfo['params'] as $i => $param) {
+            if (isset($given['args'][$i])) {
+                $mapping[$param['name']] = $given['args'][$i];
+            }
+        }
+
+        foreach ($classInfo['superclasses'] as $super) {
+            if ($super instanceof Ast\TypeForall || ! $super instanceof Ast\TypeApp) {
+                continue;
+            }
+            $substituted = substituteInstanceTypeAst($super, $mapping);
+            if (! $substituted instanceof Ast\TypeApp || ! $substituted->con instanceof Ast\TypeCon) {
+                continue;
+            }
+            $args = [];
+            foreach ($substituted->args as $argAst) {
+                $args[] = prune($state, astType($state, $argAst));
+            }
+            $expanded = ['class' => $substituted->con->name, 'args' => $args];
+            $available[] = $expanded;
+            $queue[] = $expanded;
+        }
+    }
+
+    if (isset($givenKeys[$className . ':' . constraintArgsKey([prune($state, $head)])])) {
+        return true;
+    }
+
+    foreach ($available as $given) {
+        $classInfo = $state->classes[$given['class']] ?? null;
+        if ($classInfo === null) {
+            continue;
+        }
+
+        $mapping = [];
+        foreach ($classInfo['params'] as $i => $param) {
+            if (isset($given['args'][$i])) {
+                $mapping[$param['name']] = $given['args'][$i];
+            }
+        }
+
+        foreach ($classInfo['superclasses'] as $super) {
+            $node = $super;
+            $contextConstraints = [];
+            while (true) {
+                if ($node instanceof Ast\TypeForall) {
+                    $node = $node->body;
+
+                    continue;
+                }
+                if ($node instanceof Ast\TypeConstrained) {
+                    $contextConstraints = [...$contextConstraints, ...$node->constraints];
+                    $node = $node->body;
+
+                    continue;
+                }
+
+                break;
+            }
+
+            if (\getenv('MOGGI_DEBUG_PROOF') !== false) {
+                \fwrite(STDERR, '[proof]   super of ' . $given['class'] . ' node=' . $node::class
+                    . ' ctx=' . \count($contextConstraints) . "\n");
+            }
+
+            if ($contextConstraints === []) {
+                continue;
+            }
+
+            $headPattern = substituteInstanceTypeAst($node, $mapping);
+            if (! $headPattern instanceof Ast\TypeApp || ! $headPattern->con instanceof Ast\TypeCon) {
+                continue;
+            }
+            if ($headPattern->con->name !== $className) {
+                continue;
+            }
+
+            $bindings = matchConstraintPattern($state, $headPattern, $head);
+            if ($bindings === null) {
+                continue;
+            }
+
+            $proved = true;
+            foreach ($contextConstraints as $context) {
+                $instantiated = substituteInstanceTypeAst(substituteInstanceTypeAst($context, $mapping), $bindings);
+                if (! $instantiated instanceof Ast\TypeApp || ! $instantiated->con instanceof Ast\TypeCon) {
+                    $proved = false;
+
+                    break;
+                }
+                $args = [];
+                foreach ($instantiated->args as $argAst) {
+                    $args[] = prune($state, astType($state, $argAst));
+                }
+                $contextClass = $instantiated->con->name;
+                $contextInfo = $state->classes[$contextClass] ?? null;
+                if ($contextInfo === null || ! constraintProvableFrom(
+                    $state,
+                    $contextClass,
+                    instanceHeadFromConstraintArgs($state, $contextInfo['params'], $args, null),
+                    $available,
+                    $depth + 1,
+                )) {
+                    $proved = false;
+
+                    break;
+                }
+            }
+
+            if ($proved) {
+                return true;
+            }
+        }
+    }
+
+    foreach ($state->projectInstancesByClass[$className] ?? [] as $instance) {
+        $headVars = matchConstraintPattern($state, $instance['instanceHead'], $head);
+        if ($headVars === null) {
+            continue;
+        }
+
+        $proved = true;
+        foreach ($instance['constraints'] ?? [] as $need) {
+            if (! $need instanceof Ast\TypeNode) {
+                $proved = false;
+
+                break;
+            }
+
+            $instantiated = substituteInstanceTypeAst($need, $headVars);
+            if (! $instantiated instanceof Ast\TypeApp || ! $instantiated->con instanceof Ast\TypeCon) {
+                $proved = false;
+
+                break;
+            }
+            $args = [];
+            foreach ($instantiated->args as $argAst) {
+                $args[] = prune($state, astType($state, $argAst));
+            }
+            $contextClass = $instantiated->con->name;
+            $contextInfo = $state->classes[$contextClass] ?? null;
+            if ($contextInfo === null || ! constraintProvableFrom(
+                $state,
+                $contextClass,
+                instanceHeadFromConstraintArgs($state, $contextInfo['params'], $args, null),
+                $available,
+                $depth + 1,
+            )) {
+                $proved = false;
+
+                break;
+            }
+        }
+
+        if ($proved) {
             return true;
         }
     }
@@ -915,28 +1221,33 @@ function peerInstanceCoversSuperclass(
 }
 
 /**
- * @param list<Ast\AstNode> $needed
- * @param list<Ast\AstNode> $available
+ * True when a project instance of `$superClass` at `$superHead` asks for nothing
+ * beyond what a quantified superclass's context already gives.
+ *
+ * `forall a. Ord a => Ord (f a)` is proved by finding the `Ord (f a)` instance and
+ * showing that its own constraints, instantiated at the matched head, are among
+ * the `Ord a` givens. Reading the match is what lets the comparison see through
+ * the two declarations' different variable names.
+ *
+ * @param list<Ast\PendingConstraint> $givens
  */
-function instanceConstraintsCoveredByDecl(TypeCheckState $state, array $needed, array $available): bool
-{
-    $availableKeys = [];
-    foreach (expandConstraintsWithImpliedSuperclasses($state, $available) as $have) {
-        if ($have instanceof Ast\TypeApp && $have->con instanceof Ast\TypeCon) {
-            $availableKeys[typeAstKey($have)] = true;
-        }
+function peerInstanceCoversGiven(
+    TypeCheckState $state,
+    string $superClass,
+    Type $superHead,
+    array $givens,
+    Ast\InstanceDecl $decl,
+): bool {
+    $available = constraintGivensFromAsts($state, $decl->constraints);
+    foreach ($givens as $given) {
+        $available[] = ['class' => $given->class, 'args' => $given->args];
     }
 
-    foreach ($needed as $need) {
-        if (! $need instanceof Ast\TypeApp || ! $need->con instanceof Ast\TypeCon) {
-            return false;
-        }
-        if (! isset($availableKeys[typeAstKey($need)])) {
-            return false;
-        }
+    if ($available === []) {
+        return false;
     }
 
-    return true;
+    return constraintProvableFrom($state, $superClass, $superHead, $available);
 }
 
 /**
@@ -1037,6 +1348,9 @@ function validateNoDuplicateInstance(TypeCheckState $state, Ast\InstanceDecl $de
         if (instanceHeadIndexKeyFromType($instance['instanceHead']) !== $headKey) {
             continue;
         }
+        if (instanceHeadNamesAnotherDeclaration($state, $headKey, $instance)) {
+            continue;
+        }
 
         if (freshenStableTypeKey(prune($state, $headType))
             === freshenStableTypeKey(prune($state, $instance['instanceHead']))) {
@@ -1054,6 +1368,10 @@ function validateNoDuplicateInstance(TypeCheckState $state, Ast\InstanceDecl $de
 
     foreach ($candidates as $instance) {
         if ($instance['module'] === ($state->currentModule ?? '')) {
+            continue;
+        }
+
+        if (instanceHeadNamesAnotherDeclaration($state, $headKey, $instance)) {
             continue;
         }
 
@@ -1139,7 +1457,7 @@ function instanceIntrinsicMethods(Ast\InstanceDecl $decl): array
 function instanceHeadIndexKeyFromType(Type $head): string
 {
     if ($head instanceof TCon) {
-        return $head->name;
+        return $head->module === null ? $head->name : $head->module . '::' . $head->name;
     }
     if ($head instanceof TUnit) {
         return '()';
@@ -1191,10 +1509,56 @@ function normalizedInstanceHead(TypeCheckState $state, Type $head): Type
 function projectInstanceCandidates(TypeCheckState $state, string $className, Type $head): array
 {
     $headKey = instanceHeadIndexKeyFromType($head);
+    if ($headKey === '*') {
+        return $state->projectInstancesByClass[$className] ?? [];
+    }
 
-    return $headKey !== '*'
-        ? ($state->projectInstancesByClassHead[$className][$headKey] ?? [])
-        : ($state->projectInstancesByClass[$className] ?? []);
+    $module = instanceHeadDeclaringModule($state, $headKey);
+    if ($module !== null) {
+        $qualified = $state->projectInstancesByClassHead[$className][$module . '::' . $headKey] ?? [];
+        if ($qualified !== []) {
+            return $qualified;
+        }
+    }
+
+    return $state->projectInstancesByClassHead[$className][$headKey] ?? [];
+}
+
+
+
+
+
+/**
+ * The module a type constructor the current module can name is declared in.
+ *
+ * A spelling denotes one declaration per module, not one per project, so this
+ * is what keeps `Data.Monoid.First` and `Data.Semigroup.First` apart when an
+ * instance is selected or a duplicate is refused.
+ */
+function instanceHeadDeclaringModule(TypeCheckState $state, string $headKey): ?string
+{
+    $info = $state->data[$headKey] ?? null;
+    $module = \is_array($info) ? ($info['declaringModule'] ?? null) : null;
+
+    return \is_string($module) && $module !== '' ? $module : null;
+}
+
+/**
+ * True when a recorded instance's head names a *different* declaration than the
+ * head being checked, both spelled the same way.
+ *
+ * @param array<string, mixed> $instance
+ */
+function instanceHeadNamesAnotherDeclaration(TypeCheckState $state, string $headKey, array $instance): bool
+{
+    $theirs = $instance['headModule'] ?? null;
+    if (! \is_string($theirs) || $theirs === '') {
+        return false;
+    }
+
+    $mine = instanceHeadDeclaringModule($state, $headKey) ?? $state->currentModule;
+
+    return \is_string($mine) && $mine !== '' && $mine !== $theirs;
 }
 
 /**
@@ -1320,7 +1684,8 @@ function freshenStableTypeKeyRec(Type $type, array &$rename, int &$n): string
 
     return match ($type::class) {
         TArrow::class => '(' . $keys[0] . ')->(' . $keys[1] . ')',
-        TCon::class => $keys === [] ? $type->name : $type->name . '(' . \implode(',', $keys) . ')',
+        TCon::class => ($type->module === null ? '' : $type->module . '::')
+            . $type->name . ($keys === [] ? '' : '(' . \implode(',', $keys) . ')'),
         default => "'" . $type->name . ($keys === [] ? '' : '(' . \implode(',', $keys) . ')'),
     };
 }

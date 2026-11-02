@@ -154,6 +154,7 @@ function checkRaw(
 
     Registry\applyImportContext($state, $program, $importContext);
     Registry\registerTypeDeclarations($state, $program);
+    shadowLocalFunctionNames($state, $program);
     Registry\registerFunctionSchemesFromProgram($state, $program);
     $checkedInferred = inferInferredDeclarations($state, inferredFunctionDecls($program));
 
@@ -165,6 +166,13 @@ function checkRaw(
     ];
 
     $state->declSpan = ['line' => 0, 'col' => 0, 'endCol' => 0];
+
+    $declaredFunctionNames = [];
+    foreach ($program->items as $declared) {
+        if ($declared instanceof Ast\FunctionDecl && ! $declared->instanceMethod && ! $declared->signatureOnly) {
+            $declaredFunctionNames[$declared->name] = true;
+        }
+    }
 
     $items = [];
     $seenData = [];
@@ -210,12 +218,15 @@ function checkRaw(
             Ast\FunctionDecl::class => $items[] = $item->signatureOnly
                 ? $item
                 : ($checkedInferred[\spl_object_id($item)] ?? checkFunction($state, $item)),
-            Ast\DataDecl::class => (function () use ($state, $item, &$items, &$seenData): void {
+            Ast\DataDecl::class => (function () use ($state, $item, &$items, &$seenData, $declaredFunctionNames): void {
                 if (isset($seenData[$item->name])) {
                     throw typeFail($state, "duplicate data type `{$item->name}`", $item);
                 }
                 $seenData[$item->name] = true;
                 $items[] = $item;
+                foreach (recordFieldSelectorDecls($state, $item, $declaredFunctionNames) as $selector) {
+                    $items[] = checkFunction($state, $selector);
+                }
                 foreach (processDeriving($state, $item) as $fn) {
                     $items[] = $fn;
                 }
@@ -318,4 +329,31 @@ function newState(string $source, string $filename = ''): TypeCheckState
     Kinds\bootstrapKindEnv($state);
 
     return $state;
+}
+
+/**
+ * A module's own declarations shadow what its imports bind.
+ *
+ * Two imports that both export `getFirst` make the name ambiguous only in a
+ * module that declares neither: `Data.Monoid` keeps its own `getFirst` while
+ * importing the one `Data.Semigroup` exports, and its declaration decides the
+ * name.
+ */
+function shadowLocalFunctionNames(TypeCheckState $state, Ast\Program $program): void
+{
+    if ($state->ambiguousImports === []) {
+        return;
+    }
+
+    foreach ($program->items as $item) {
+        if ($item instanceof Ast\FunctionDecl || $item instanceof Ast\ForeignImportDecl) {
+            unset($state->ambiguousImports[$item->name]);
+        }
+
+        if ($item instanceof Ast\DataDecl) {
+            foreach ($item->constructors as $ctor) {
+                unset($state->ambiguousImports[$ctor->name]);
+            }
+        }
+    }
 }

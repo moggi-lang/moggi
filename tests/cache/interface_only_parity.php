@@ -91,7 +91,7 @@ MOGGI;
     $assert(($checkedAll['exitCode'] ?? 0) === 0, 'cold compile failed: ' . \trim((string) ($checkedAll['stderr'] ?? '')));
     $cold = (string) $checkedAll['stdout'];
     $assert(
-        \str_contains($cold, '__ev_Show_Pair(@__ev_Show_Int)') && \str_contains($cold, 'call renderOne('),
+        \str_contains($cold, '__ev_Show_Pair_1(@__ev_Show_Int)') && \str_contains($cold, 'call renderOne('),
         "the consumer's IR lost the provider's inferred dictionary:\n" . $cold,
     );
 

@@ -403,7 +403,7 @@ program
     constructor Id
       field  :: a
     deriving (Functor)
-  function map :: t809 -> t807 -> Id t809 -> Id t807
+  function map :: t80 -> t78 -> Id t80 -> Id t78
     pat_var __f
     pat_var __x
     case
@@ -847,24 +847,154 @@ program
     constructor_ref Red
   function maxBound :: Color
     constructor_ref Green
-  function read :: String -> Color
+  function readsPrec :: Int -> String -> [Tuple2 Color String]
+    pat_var __d
     pat_var __s
+    apply
+      apply
+        operator_ref ++
+        apply
+          apply
+            apply
+              variable readParen
+              apply
+                apply
+                  evidence_method Ord.> evidence= nullary=0
+                    instance Int
+                  variable __d
+                integer 10
+            lambda
+              pat_var __r
+              case
+                apply
+                  variable lex
+                  variable __r
+                alt
+                  pat_cons
+                    pat_tuple
+                      pat_var __kc0n
+                      pat_var __tc0n
+                    pat_wild _
+                  case
+                    variable __kc0n
+                    alt
+                      pat_lit "Red"
+                      list
+                        tuple
+                          constructor_ref Red
+                          variable __tc0n
+                    alt
+                      pat_wild _
+                      list
+                alt
+                  pat_nil
+                  list
+          variable __s
+      apply
+        apply
+          operator_ref ++
+          apply
+            apply
+              apply
+                variable readParen
+                apply
+                  apply
+                    evidence_method Ord.> evidence= nullary=0
+                      instance Int
+                    variable __d
+                  integer 10
+              lambda
+                pat_var __r
+                case
+                  apply
+                    variable lex
+                    variable __r
+                  alt
+                    pat_cons
+                      pat_tuple
+                        pat_var __kc1n
+                        pat_var __tc1n
+                      pat_wild _
+                    case
+                      variable __kc1n
+                      alt
+                        pat_lit "Blue"
+                        list
+                          tuple
+                            constructor_ref Blue
+                            variable __tc1n
+                      alt
+                        pat_wild _
+                        list
+                  alt
+                    pat_nil
+                    list
+            variable __s
+        apply
+          apply
+            apply
+              variable readParen
+              apply
+                apply
+                  evidence_method Ord.> evidence= nullary=0
+                    instance Int
+                  variable __d
+                integer 10
+            lambda
+              pat_var __r
+              case
+                apply
+                  variable lex
+                  variable __r
+                alt
+                  pat_cons
+                    pat_tuple
+                      pat_var __kc2n
+                      pat_var __tc2n
+                    pat_wild _
+                  case
+                    variable __kc2n
+                    alt
+                      pat_lit "Green"
+                      list
+                        tuple
+                          constructor_ref Green
+                          variable __tc2n
+                    alt
+                      pat_wild _
+                      list
+                alt
+                  pat_nil
+                  list
+          variable __s
+  function readList :: String -> [Tuple2 [Color] String]
+    pat_var s
+    apply
+      apply
+        variable readListDefault
+        evidence_ref Read Color
+      variable s
+  function read :: String -> Color
+    pat_var s
     case
-      variable __s
+      apply
+        apply
+          evidence_method Read.readsPrec evidence= nullary=0
+            instance Color
+          integer 0
+        variable s
       alt
-        pat_lit "Red"
-        constructor_ref Red
-      alt
-        pat_lit "Blue"
-        constructor_ref Blue
-      alt
-        pat_lit "Green"
-        constructor_ref Green
-      alt
-        pat_wild _
+        pat_nil
         apply
           variable error
-          string "Read.read: no parse"
+          string "Prelude.read: no parse"
+      alt
+        pat_cons
+          pat_tuple
+            pat_var x
+            pat_wild _
+          pat_wild _
+        variable x
   function cmp :: Ordering
     apply
       apply

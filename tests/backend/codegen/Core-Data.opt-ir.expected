@@ -7,16 +7,24 @@ module
             ret a
         arm Nothing
             ret d
+  function name(__record)
+      match_return __record
+        arm User __value _
+            ret __value
+  function age(__record)
+      match_return __record
+        arm User _ __value
+            ret __value
   function makeUser()
-      t2 = call User(1, 30)
-      ret t2
+      t8 = call User(1, 30)
+      ret t8
   function getAge(user)
-      t3 = call __field1(user)
-      ret t3
+      t9 = call __field1(user)
+      ret t9
   function showUser(_p0)
-      t4 = call __field0(_p0)
-      t5 = call __field1(_p0)
-      ret intrinsic intAdd#(t4, t5)
+      t10 = call __field0(_p0)
+      t11 = call __field1(_p0)
+      ret intrinsic intAdd#(t10, t11)
   function ageOf(_p0)
-      t7 = call __field1(_p0)
-      ret t7
+      t13 = call __field1(_p0)
+      ret t13

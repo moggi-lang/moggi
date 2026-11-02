@@ -3,6 +3,24 @@ program
     constructor Person
       field name :: String
       field age :: Int
+  function name :: Person -> String
+    pat_var __record
+    case
+      variable __record
+      alt
+        pat_con Person
+          pat_var __value
+          pat_wild _
+        variable __value
+  function age :: Person -> Int
+    pat_var __record
+    case
+      variable __record
+      alt
+        pat_con Person
+          pat_wild _
+          pat_var __value
+        variable __value
   function greet :: Person -> String
     pat_con Person
       pat_var name
@@ -14,6 +32,32 @@ program
     constructor Rectangle
       field w :: Int
       field h :: Int
+  function r :: Shape -> Int
+    pat_var __record
+    case
+      variable __record
+      alt
+        pat_con Circle
+          pat_var __value
+        variable __value
+  function w :: Shape -> Int
+    pat_var __record
+    case
+      variable __record
+      alt
+        pat_con Rectangle
+          pat_var __value
+          pat_wild _
+        variable __value
+  function h :: Shape -> Int
+    pat_var __record
+    case
+      variable __record
+      alt
+        pat_con Rectangle
+          pat_wild _
+          pat_var __value
+        variable __value
   function area :: Shape -> Int
     pat_var _p0
     case
@@ -53,6 +97,23 @@ program
     constructor Add
       field l :: Expr
       field r :: Expr
+  function n :: Expr -> Int
+    pat_var __record
+    case
+      variable __record
+      alt
+        pat_con Lit
+          pat_var __value
+        variable __value
+  function l :: Expr -> Expr
+    pat_var __record
+    case
+      variable __record
+      alt
+        pat_con Add
+          pat_var __value
+          pat_wild _
+        variable __value
   function eval :: Expr -> Int
     pat_var _p0
     case

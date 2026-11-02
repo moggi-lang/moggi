@@ -334,9 +334,20 @@ function planEmission(
     \ksort($requireByModule, SORT_STRING);
     $requireLines = \array_values(\array_unique($requireByModule));
 
+    $localEvidenceNames = [];
+    foreach ($ir->instanceEvidence ?? [] as $evidence) {
+        $localEvidenceNames[$evidence->evidenceName] = true;
+        foreach ($evidence->methods as $method) {
+            $localEvidenceNames[$method] = true;
+        }
+    }
+
     $functionUseLines = [];
     foreach ($externalFns as $local => $resolved) {
-        if (isConstructorName($local) || isset($localFnNames[$local])) {
+        if (isConstructorName($local)
+            || isset($localFnNames[$local])
+            || isset($localEvidenceNames[$local])
+        ) {
             continue;
         }
 

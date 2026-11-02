@@ -60,7 +60,9 @@ function updateProjectClassesForModule(
 
     foreach ($unit['program']->items as $item) {
         if ($item instanceof Ast\DataDecl) {
+            \Moggi\Semantics\Registry\shadowImportedType($state, $item->name);
             Types\registerData($state, $item);
+            $state->data[$item->name]['declaringModule'] = $moduleName;
         }
 
         if ($item instanceof Ast\ForeignTypeDecl) {
@@ -90,9 +92,24 @@ function mergeExportedTypes(Types\TypeCheckState $state, array $unit, array $uni
     if (isset($unit['localTypes'])) {
         $exports = $unit['exports'] ?? collectExports($unit['program'], $unit['localTypes'], $units, $unit['program']->module);
         foreach ($exports['data'] as $name => $info) {
+            $declaredIn = \is_array($info) ? ($info['declaringModule'] ?? null) : null;
+            $seenIn = $state->data[$name]['declaringModule'] ?? null;
+            if (\is_string($declaredIn) && $declaredIn !== ''
+                && \is_string($seenIn) && $seenIn !== ''
+                && $declaredIn !== $seenIn
+            ) {
+                throw new Types\TypeError(
+                    "`{$name}` names two declarations in this module's imports: "
+                        . "`{$seenIn}::{$name}` and `{$declaredIn}::{$name}`; "
+                        . 'import one of those modules qualified',
+                );
+            }
+
             if (! isset($state->data[$name])) {
                 $state->data[$name] = $info;
+                $state->data[$name]['imported'] = true;
             }
+            $state->data[$name]['declaringModule'] ??= $unit['program']->module;
             Kinds\registerTypeKind($state, $name, Kinds\kindFromDataInfo($info));
             Kinds\installPromotedFromDataInfo($state, $name, $info);
         }
@@ -112,6 +129,7 @@ function mergeExportedTypes(Types\TypeCheckState $state, array $unit, array $uni
         if ($item instanceof Ast\DataDecl && isset($exportedTypes[$item->name])) {
             if (! isset($state->data[$item->name])) {
                 Types\registerData($state, $item);
+                $state->data[$item->name]['imported'] = true;
             } else {
                 Kinds\installPromotedFromDataInfo(
                     $state,
@@ -119,6 +137,8 @@ function mergeExportedTypes(Types\TypeCheckState $state, array $unit, array $uni
                     $state->data[$item->name],
                 );
             }
+
+            $state->data[$item->name]['declaringModule'] ??= $unit['program']->module;
         }
 
         if ($item instanceof Ast\TypeSynonymDecl && isset($exportedTypes[$item->name])) {
@@ -208,6 +228,10 @@ function classModuleScopes(
             foreach (classScopeConstructorRefs($scoped) as $name => $_) {
                 $referenced[$module][$name] = true;
             }
+
+            foreach (classScopeOperatorRefs($scoped) as $name => $_) {
+                $referenced[$module][$name] = true;
+            }
         }
     }
 
@@ -267,6 +291,46 @@ function classModuleScopes(
     }
 
     return $scopes;
+}
+
+/**
+ * Operator names a default body mentions (`(*>)`'s body calls `<$`).
+ *
+ * A default body is re-checked in the instance's module, so an operator the
+ * class module imported is not in that module's scope; naming it here is what
+ * lets the check carry the declaring module's symbol along.
+ *
+ * @return array<string, true>
+ */
+function classScopeOperatorRefs(Ast\AstWalkable $expr): array
+{
+    $names = [];
+    $walk = static function (mixed $node) use (&$walk, &$names): void {
+        if ($node instanceof Ast\OperatorRef) {
+            $names[$node->name] = true;
+        }
+
+        if ($node instanceof Ast\Infix) {
+            $names[$node->operator] = true;
+        }
+
+        if ($node instanceof Ast\AstWalkable) {
+            foreach ($node->childValues() as $child) {
+                $walk($child);
+            }
+
+            return;
+        }
+
+        if (\is_array($node)) {
+            foreach ($node as $child) {
+                $walk($child);
+            }
+        }
+    };
+    $walk($expr);
+
+    return $names;
 }
 
 /**
@@ -659,6 +723,36 @@ function projectClassDeclarations(array $units): array
  * @param array<string, array<string, mixed>> $units
  * @return array<string, Ast\DataDecl>
  */
+/**
+ * The module each declared type constructor comes from.
+ *
+ * An instance head names a type by spelling, and one spelling denotes one
+ * declaration per module -- not one per project. Records carry the declaring
+ * module of their head so two `First`s (say) are two types to the instance
+ * index, not one.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @return array<string, string>
+ */
+function projectDataModules(array $units): array
+{
+    $modules = [];
+    foreach (canonicalModuleOrder($units) as $moduleName) {
+        $program = $units[$moduleName]['program'] ?? null;
+        if (! $program instanceof Ast\Program) {
+            continue;
+        }
+        foreach ($program->items as $item) {
+            if ($item instanceof Ast\DataDecl) {
+                $modules[$item->name] ??= $moduleName;
+                $modules[$moduleName . '::' . $item->name] = $moduleName;
+            }
+        }
+    }
+
+    return $modules;
+}
+
 function projectDataDeclarations(array $units): array
 {
     $declarations = [];
@@ -698,6 +792,7 @@ function collectProjectInstances(array $units, ?array $onlyModules = null): arra
 {
     $facts = ClassDeriveFacts::fromClassDeclarations(projectClassDeclarations($units));
     $dataDecls = projectDataDeclarations($units);
+    $dataModules = projectDataModules($units);
 
     $instances = [];
     foreach (canonicalModuleOrder($units, $onlyModules) as $moduleName) {
@@ -708,7 +803,7 @@ function collectProjectInstances(array $units, ?array $onlyModules = null): arra
             );
         }
 
-        foreach (projectInstancesFromProgram($unit['program'], $facts, $moduleName, $dataDecls) as $record) {
+        foreach (projectInstancesFromProgram($unit['program'], $facts, $moduleName, $dataDecls, $dataModules) as $record) {
             $instances[] = $record;
         }
     }
@@ -751,6 +846,15 @@ function indexProjectInstances(array $projectInstances): array
 
         $byClass[$className][] = $instance;
         $byClassHead[$className][$headKey][] = $instance;
+
+        // A type name is only unique inside one module: `Data.Monoid.First` and
+        // `Data.Semigroup.First` are two declarations. The bare key keeps the
+        // project-wide candidates a caller that cannot resolve a name needs,
+        // and the qualified key is what a caller that can resolve it looks up.
+        $headModule = $instance['headModule'] ?? null;
+        if ($headModule !== null && $headModule !== '') {
+            $byClassHead[$className][$headModule . '::' . $headKey][] = $instance;
+        }
         $module = $instance['module'] ?? '';
         foreach ($instance['associatedEquations'] ?? [] as $famName => $eq) {
             $associatedEquations[$className][$famName][] = [
@@ -766,6 +870,65 @@ function indexProjectInstances(array $projectInstances): array
         'byClassHead' => $byClassHead,
         'associatedEquations' => $associatedEquations,
     ];
+}
+
+/**
+ * The type names the project's declarations spell more than once.
+ *
+ * @param array<string, string> $dataModules {@see projectDataModules()}
+ * @return list<string>
+ */
+function ambiguousTypeNames(array $dataModules): array
+{
+    /** @var array<string, array<string, true>> $modules */
+    $modules = [];
+    foreach ($dataModules as $key => $module) {
+        $separator = \strrpos((string) $key, '::');
+        if ($separator === false) {
+            continue;
+        }
+
+        $modules[\substr((string) $key, $separator + 2)][$module] = true;
+    }
+
+    $ambiguous = [];
+    foreach ($modules as $name => $declaring) {
+        if (\count($declaring) > 1) {
+            $ambiguous[] = (string) $name;
+        }
+    }
+
+    return $ambiguous;
+}
+
+/**
+ * The type names a record set spells from more than one module.
+ *
+ * @param list<array<string, mixed>> $projectInstances
+ * @return list<string>
+ */
+function ambiguousTypeNamesFromRecords(array $projectInstances): array
+{
+    /** @var array<string, array<string, true>> $modules */
+    $modules = [];
+    foreach ($projectInstances as $instance) {
+        $name = \Moggi\Semantics\Registry\instanceHeadSpelling($instance['instanceHead'] ?? null);
+        $headModule = $instance['headModule'] ?? null;
+        if ($name === null || ! \is_string($headModule) || $headModule === '') {
+            continue;
+        }
+
+        $modules[$name][$headModule] = true;
+    }
+
+    $ambiguous = [];
+    foreach ($modules as $name => $declaring) {
+        if (\count($declaring) > 1) {
+            $ambiguous[] = (string) $name;
+        }
+    }
+
+    return $ambiguous;
 }
 
 /**

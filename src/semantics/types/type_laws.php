@@ -113,7 +113,7 @@ function mapTypeChildren(Type $type, callable $map): Type
                 $changed = $changed || $mapped !== $arg;
             }
 
-            return $changed ? new TCon($type->name, $args) : $type;
+            return $changed ? new TCon($type->name, $args, $type->module) : $type;
         })(),
         TPromoted::class => (static function () use ($type, $map): Type {
             $args = [];

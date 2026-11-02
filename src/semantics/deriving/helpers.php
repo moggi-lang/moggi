@@ -129,8 +129,9 @@ function functorialHeadAst(Ast\DataDecl $decl): Ast\TypeNode
 }
 
 /**
- * Context constraints `C p` for each data param (except optionally the last)
- * that appears free in fields and needs class `C`.
+ * The context `C t` a derived instance of `$className` needs for each type `t`
+ * its fields constrain: a bare parameter stays a variable, a parameter the
+ * field applies keeps its arguments.
  *
  * @param array<string, true>|null $onlyParams restrict to these param names
  * @return list<Ast\TypeNode>
@@ -145,33 +146,78 @@ function paramClassConstraints(
         $paramNames[$param->name] = true;
     }
 
-    $needed = [];
+    $constraints = [];
+    $seen = [];
     foreach ($decl->constructors as $ctor) {
         foreach (constructorDeriveFields($ctor) as $field) {
-            foreach (typeNodeFreeVars($field->type) as $var => $_) {
-                if (! isset($paramNames[$var])) {
+            foreach (constrainedTypesIn($field->type, $paramNames, $onlyParams) as $type) {
+                $key = \serialize($type);
+                if (isset($seen[$key])) {
                     continue;
                 }
-                if ($onlyParams !== null && ! isset($onlyParams[$var])) {
-                    continue;
-                }
-                $needed[$var] = true;
+                $seen[$key] = true;
+                $constraints[] = new Ast\TypeApp(
+                    new Ast\TypeCon($className),
+                    [$type],
+                );
             }
         }
     }
 
-    $constraints = [];
-    foreach ($decl->params as $param) {
-        if (! isset($needed[$param->name])) {
-            continue;
+    return $constraints;
+}
+
+/**
+ * The types one field type constrains, in source order.
+ *
+ * A field that *is* a parameter constrains that variable (`T a = T (Maybe a)`
+ * gives `Eq a`), and a parameter the field applies constrains the whole
+ * application (`T f a = T (f a)` gives `Eq (f a)`) -- the parameter alone is a
+ * constructor of kind `Type -> Type` there and has no instance of its own.
+ *
+ * @param array<string, true> $paramNames
+ * @param array<string, true>|null $onlyParams
+ * @return list<Ast\TypeNode>
+ */
+function constrainedTypesIn(Ast\TypeNode $type, array $paramNames, ?array $onlyParams): array
+{
+    $wanted = static fn (string $name): bool => isset($paramNames[$name])
+        && ($onlyParams === null || isset($onlyParams[$name]));
+
+    if ($type instanceof Ast\TypeVar) {
+        return $wanted($type->name) ? [$type] : [];
+    }
+
+    if ($type instanceof Ast\TypeApp) {
+        if ($type->con instanceof Ast\TypeVar && isset($paramNames[$type->con->name])) {
+            return $wanted($type->con->name) ? [$type] : [];
         }
-        $constraints[] = new Ast\TypeApp(
-            new Ast\TypeCon($className),
-            [new Ast\TypeVar($param->name)],
+
+        $found = constrainedTypesIn($type->con, $paramNames, $onlyParams);
+        foreach ($type->args as $arg) {
+            $found = \array_merge($found, constrainedTypesIn($arg, $paramNames, $onlyParams));
+        }
+
+        return $found;
+    }
+
+    if ($type instanceof Ast\TypeArrow) {
+        return \array_merge(
+            constrainedTypesIn($type->from, $paramNames, $onlyParams),
+            constrainedTypesIn($type->to, $paramNames, $onlyParams),
         );
     }
 
-    return $constraints;
+    if ($type instanceof Ast\TypeConstrained) {
+        $found = constrainedTypesIn($type->body, $paramNames, $onlyParams);
+        foreach ($type->constraints as $constraint) {
+            $found = \array_merge($found, constrainedTypesIn($constraint, $paramNames, $onlyParams));
+        }
+
+        return $found;
+    }
+
+    return [];
 }
 
 /** @return list<Ast\PatVar> */

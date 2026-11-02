@@ -179,7 +179,6 @@ function keyword(string $lexeme): array
         'import' => ['kind' => TokenKind::KwImport, 'lexeme' => $lexeme],
         'qualified' => ['kind' => TokenKind::KwQualified, 'lexeme' => $lexeme],
         'hiding' => ['kind' => TokenKind::KwHiding, 'lexeme' => $lexeme],
-        'as' => ['kind' => TokenKind::KwAs, 'lexeme' => $lexeme],
         'infix' => ['kind' => TokenKind::KwInfix, 'lexeme' => $lexeme],
         'infixl' => ['kind' => TokenKind::KwInfixl, 'lexeme' => $lexeme],
         'infixr' => ['kind' => TokenKind::KwInfixr, 'lexeme' => $lexeme],

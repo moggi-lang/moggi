@@ -1,0 +1,26 @@
+program
+  class Showish a
+    method render :: a -> String
+  class Pretty a
+    method pretty :: a -> String
+  data Box a
+    constructor Box
+      field  :: a
+  function __ev_Showish_Int_render :: Int -> String
+    pat_var x
+    string "int"
+  function __ev_Showish_h_969e58c6891f6b23_render :: __Dict_Showish -> Box Maybe t2 -> String
+    pat_var __ev_Showish
+    pat_var b
+    case
+      variable b
+      alt
+        pat_con Box
+          pat_var v
+        apply
+          evidence_method Showish.render evidence=__ev_Showish nullary=0
+          variable v
+  function pretty :: __Dict_Showish -> Box Maybe Int -> String
+    pat_var __ev_Showish
+    pat_wild _
+    string "pretty"

@@ -932,6 +932,19 @@ function substituteCon(TCon $type, array $mapping): Type
     };
 }
 
+/**
+ * Whether two constant-type heads name the same declaration.
+ *
+ * A head read from a declaration or an interface knows the module that declares it; one
+ * built by inference (`List`, `Bool`, `__Dict_C`) does not, and an unknown module matches
+ * any. Two known modules have to agree: `A.T` and `B.T` are two types however they are
+ * spelled, and unifying them would let one module's instance answer for the other.
+ */
+function typeConModulesMatch(TCon $left, TCon $right): bool
+{
+    return $left->module === null || $right->module === null || $left->module === $right->module;
+}
+
 function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at = null): void
 {
     $left = prune($state, $left);
@@ -1119,7 +1132,7 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
         throw typeFail($state, formatUnifyError($state, $left, $right), $at, 'unify');
     }
 
-    if ($left->name === $right->name) {
+    if ($left->name === $right->name && typeConModulesMatch($left, $right)) {
         if (\count($left->args) !== \count($right->args)) {
             throw typeFail($state, 'type arity mismatch on `' . $left->name . '`', $at);
         }

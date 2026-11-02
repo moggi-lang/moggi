@@ -533,6 +533,93 @@ function constraintArgKey(Type $arg): string
  *
  * @param array<string, Type> $mapping class parameter name => the instance's type
  */
+/**
+ * The head and the givens of a quantified superclass that carries a context.
+ *
+ * `forall a. C a => D (f a)` states a conditional: `D (f a)` holds whenever
+ * `C a` does. Its binders are opened as rigid variables — a claim about every `a`
+ * is proved for a type nothing outside may choose — and its context becomes what
+ * an instance is allowed to assume while proving the head.
+ *
+ * A quantifier without a context is not an implication: it is the plain
+ * `forall a. D (f a)` the older path already reads, so this answers null.
+ *
+ * @param array<string, Type> $mapping the class parameter → instance head mapping
+ * @return array{0: Ast\PendingConstraint, 1: list<Ast\PendingConstraint>}|null
+ */
+function implicationSuperclass(
+    TypeCheckState $state,
+    Ast\TypeNode $super,
+    array $mapping,
+    ?AstNode $at = null,
+): ?array {
+    $node = $super;
+    $binderMapping = [];
+    $index = 0;
+    $sawForall = false;
+    while ($node instanceof Ast\TypeForall) {
+        $sawForall = true;
+        foreach ($node->binders as $binder) {
+            $bound = quantifiedVar($binder, $index);
+            $state->rigidVars[$bound->name] = true;
+            $binderMapping[$binder] = $bound;
+            ++$index;
+        }
+        $node = $node->body;
+    }
+
+    if (! $sawForall || ! $node instanceof Ast\TypeConstrained) {
+        return null;
+    }
+
+    $givens = [];
+    foreach ($node->constraints as $written) {
+        $givens[] = superclassConstraintFromAst($state, $written, $binderMapping, $mapping, $at, 'context');
+    }
+
+    return [
+        superclassConstraintFromAst($state, $node->body, $binderMapping, $mapping, $at, 'head'),
+        $givens,
+    ];
+}
+
+/**
+ * One written constraint of an implication superclass, opened at the instance head.
+ *
+ * @param array<string, Type> $binderMapping
+ * @param array<string, Type> $mapping
+ */
+function superclassConstraintFromAst(
+    TypeCheckState $state,
+    Ast\TypeNode $written,
+    array $binderMapping,
+    array $mapping,
+    ?AstNode $at,
+    string $role,
+): Ast\PendingConstraint {
+    $node = substituteInstanceTypeAst(substituteInstanceTypeAst($written, $binderMapping), $mapping);
+    if (! $node instanceof Ast\TypeApp || ! $node->con instanceof Ast\TypeCon) {
+        throw typeFail(
+            $state,
+            'class superclass must be a type class application',
+            $at,
+        );
+    }
+
+    $className = $node->con->name;
+    $classInfo = $state->classes[$className]
+        ?? throw typeFail($state, "unknown class `{$className}` in superclass {$role}", $at);
+
+    $args = [];
+    foreach ($classInfo['params'] as $j => $_) {
+        $argAst = $node->args[$j]
+            ?? throw typeFail($state, "class `{$className}` applied to too few arguments", $at);
+        $args[] = astType($state, $argAst);
+    }
+
+    return new Ast\PendingConstraint($className, $args);
+}
+
 function constraintFromSuperclassAst(TypeCheckState $state, Ast\TypeNode $super, array $mapping): Ast\PendingConstraint
 {
     $node = $super;

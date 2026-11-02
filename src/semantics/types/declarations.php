@@ -89,6 +89,30 @@ function assertNotInstanceHeadMarkerName(
     }
 }
 
+/**
+ * True when the name in scope is a declaration from another module, not this
+ * module's own — an import in the same module view that a local declaration may
+ * still take over.
+ *
+ * A spelling denotes one declaration per module, so `Data.Monoid` may declare a
+ * `First` while importing `Data.Semigroup`'s `First`. Only a second local
+ * declaration, or one the current module already registered, is a duplicate.
+ */
+function declaresAnotherModule(TypeCheckState $state, string $name): bool
+{
+    $info = $state->data[$name] ?? null;
+    if (! \is_array($info)) {
+        return false;
+    }
+
+    $declaredIn = $info['declaringModule'] ?? null;
+    $here = $state->currentModule ?? $state->module ?? null;
+
+    return \is_string($declaredIn) && $declaredIn !== ''
+        && \is_string($here) && $here !== ''
+        && $declaredIn !== $here;
+}
+
 function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
 {
     assertNotInstanceHeadMarkerName($state, $decl->name, $decl, 'data type');
@@ -122,7 +146,7 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
         }
     }
 
-    if (isset($state->data[$decl->name])) {
+    if (isset($state->data[$decl->name]) && ! declaresAnotherModule($state, $decl->name)) {
         throw typeFail($state, "duplicate data type `{$decl->name}`", $decl);
     }
 
@@ -132,7 +156,7 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
 
     $params = \array_map(static fn (Ast\DataParam $p): string => $p->name, $decl->params);
     $paramTypes = \array_map(static fn (string $p): Type => new TVar($p), $params);
-    $result = new TCon($decl->name, $paramTypes);
+    $result = new TCon($decl->name, $paramTypes, $state->currentModule ?? $state->module);
 
     $state->data[$decl->name] = [
         'params' => $params,
@@ -214,6 +238,8 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
     } finally {
         Kinds\restoreKindScope($state, $kindScope);
     }
+
+    registerRecordFieldSelectors($state, $decl);
 }
 
 /**
@@ -1147,7 +1173,7 @@ function registerFunctionScheme(TypeCheckState $state, Ast\FunctionDecl $fn): vo
 
 function registerForeignType(TypeCheckState $state, Ast\ForeignTypeDecl $decl): void
 {
-    if (isset($state->data[$decl->name])) {
+    if (isset($state->data[$decl->name]) && empty($state->data[$decl->name]['imported'])) {
         throw typeFail($state, "duplicate type `{$decl->name}`", $decl);
     }
 
@@ -1162,7 +1188,7 @@ function registerForeignType(TypeCheckState $state, Ast\ForeignTypeDecl $decl): 
     $state->data[$decl->name] = [
         'params' => [],
         'paramKinds' => [],
-        'result' => new TCon($decl->name),
+        'result' => new TCon($decl->name, [], $state->currentModule ?? $state->module),
         'constructors' => [],
         'newtype' => false,
         'foreign' => ['backend' => $decl->backend, 'hostType' => $decl->hostType],

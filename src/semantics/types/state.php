@@ -207,6 +207,17 @@ final class TypeCheckState
     public array $kindEnv = [];
 
     /**
+     * The same table cut by applied arity: `kindEnvByArity[name][n]` is the
+     * kind of `Name` applied to `n` arguments, or null where no declaration
+     * says. Two types may share a name and differ in arity (`Product a` and
+     * `Product f g`), and the flat table can hold only one of them; a use site
+     * always knows how many arguments it applies, so it can ask the right one.
+     *
+     * @var array<string, array<int, \Moggi\Semantics\Kinds\Kind>>
+     */
+    public array $kindEnvByArity = [];
+
+    /**
      * DataKinds: promoted data constructors keyed by name.
      * - Nullary: `{data: string}` — kind is the parent datatype.
      * - With fields: `{data: string, argKinds: list<Kind>}` — unsaturated kind is

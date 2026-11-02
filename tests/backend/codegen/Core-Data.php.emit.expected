@@ -2,7 +2,7 @@
 
 namespace Main;
 
-const __MOGGI_MAP = [[24 => 1, 28 => 2], ['Main\\fromMaybe' => 0, 'Main\\makeUser' => 1, 'Main\\getAge' => 2, 'Main\\showUser' => 3, 'Main\\ageOf' => 4], [], [], [[0, 0, 2, 18], [1, 0, 8, 12], [2, 0, 10, 15], [3, 0, 12, 39], [4, 0, 14, 26]], ['Main.fromMaybe', 'Main.makeUser', 'Main.getAge', 'Main.showUser', 'Main.ageOf'], ['tests/backend/codegen/Core-Data.mog']];
+const __MOGGI_MAP = [[36 => 3, 40 => 4], ['Main\\fromMaybe' => 0, 'Main\\name' => 1, 'Main\\age' => 2, 'Main\\makeUser' => 3, 'Main\\getAge' => 4, 'Main\\showUser' => 5, 'Main\\ageOf' => 6], [], [], [[0, 0, 2, 18], [1, 0, 6, 6], [2, 0, 6, 6], [3, 0, 8, 12], [4, 0, 10, 15], [5, 0, 12, 39], [6, 0, 14, 26]], ['Main.fromMaybe', 'Main.name', 'Main.age', 'Main.makeUser', 'Main.getAge', 'Main.showUser', 'Main.ageOf'], ['tests/backend/codegen/Core-Data.mog']];
 
 function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
 function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
@@ -20,6 +20,18 @@ function fromMaybe($d, $mx) {
     };
 }
 
+function name($__record) {
+    return match ((($__record)[0] ?? null)) {
+        'User' => $__record[1],
+    };
+}
+
+function age($__record) {
+    return match ((($__record)[0] ?? null)) {
+        'User' => $__record[2],
+    };
+}
+
 function makeUser() {
     return User(1, 30);
 }
@@ -29,9 +41,9 @@ function getAge($user) {
 }
 
 function showUser($_p0) {
-    $__t4 = $_p0[1];
-    $__t5 = $_p0[2];
-    return (\is_int($__m64 = $__t4 + $__t5) ? $__m64 : moggi_u64_add($__t4, $__t5));
+    $__t10 = $_p0[1];
+    $__t11 = $_p0[2];
+    return (\is_int($__m64 = $__t10 + $__t11) ? $__m64 : moggi_u64_add($__t10, $__t11));
 }
 
 function ageOf($_p0) {

@@ -42,7 +42,7 @@ function evidenceHeadSuffix(Ast\TypeNode $head): string
 
     if (isSimpleEvidenceHead($head)) {
         if ($head instanceof Ast\TypeApp && $head->con instanceof Ast\TypeCon) {
-            return $head->con->name;
+            return $head->con->name . '_' . \count($head->args);
         }
 
         return $head->name;

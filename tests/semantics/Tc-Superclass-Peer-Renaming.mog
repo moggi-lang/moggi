@@ -1,0 +1,40 @@
+module Main
+
+import Data.Maybe (Maybe(Just, Nothing))
+
+-- A superclass proved through a peer instance whose context renames — and
+-- substitutes — its head variables.
+--
+-- `instance Showish (Maybe Int) => Pretty (Box (Maybe Int))` owes
+-- `Showish (Box (Maybe Int))`. The only instance at that head is
+-- `instance Showish (Maybe x) => Showish (Box (Maybe x))`, and its
+-- `Showish (Maybe x)` is the declaration's own `Showish (Maybe Int)` only after
+-- the head mapping sends `x` to `Int`. Reading the peer through its head's
+-- variables is what turns the requirement into the given; compared by spelling
+-- alone, `Showish (Maybe x)` is a second, unrelated constraint.
+--
+-- No fallback rescues the declaration either: the peer's requirement becomes
+-- available only through the substitution, and `Showish (Maybe Int)` is not
+-- itself a project instance for `findProjectInstance` to resolve. So this
+-- module typechecks only when the head mapping is what proves the superclass.
+--
+-- The method body deliberately draws nothing from the superclass dictionary: the
+-- subject here is the proof of the superclass, not the evidence that uses it.
+
+class Showish a where
+  render :: a -> String
+
+class Showish a => Pretty a where
+  pretty :: a -> String
+
+data Box a = Box a
+
+instance Showish Int where
+  render x = "int"
+
+instance Showish (Maybe x) => Showish (Box (Maybe x)) where
+  render b = case b of
+    Box v -> render v
+
+instance Showish (Maybe Int) => Pretty (Box (Maybe Int)) where
+  pretty _ = "pretty"

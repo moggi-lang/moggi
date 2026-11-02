@@ -341,7 +341,7 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
 
     applyTypeAppKinds($state, $resolvedHead->name, $args, $argAsts, $con, isVarHead: false);
 
-    return new TCon($resolvedHead->name, $args);
+    return new TCon($resolvedHead->name, $args, $resolvedHead->module);
 }
 
 /**
@@ -517,7 +517,7 @@ function applyTypeHeadToArgAsts(
 
     applyTypeAppKinds($state, $headType->name, $allArgs, $allAsts, $at, isVarHead: false);
 
-    return new TCon($headType->name, $allArgs);
+    return new TCon($headType->name, $allArgs, $headType->module);
 }
 
 /**
