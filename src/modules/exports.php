@@ -260,6 +260,22 @@ function exposeDataType(
             $available['origins'][$ctorName] = exportOrigin($moduleName, $namespace, $ctorName);
         }
     }
+
+    $fields = [];
+    foreach ($decl->constructors as $ctor) {
+        foreach ($ctor->fields as $field) {
+            if ($field->name !== null && $field->name !== '' && ! \str_starts_with($field->name, '$')) {
+                $fields[$field->name] = true;
+            }
+        }
+    }
+    foreach ([...\array_keys($fields), ...\array_keys($localTypes['data'][$name]['fieldSelectors'] ?? [])] as $fieldName) {
+        if (! isset($localTypes['env'][$fieldName])) {
+            continue;
+        }
+        $available['env'][$fieldName] = $localTypes['env'][$fieldName];
+        $available['origins'][$fieldName] = exportOrigin($moduleName, $namespace, $fieldName);
+    }
 }
 
 /**
@@ -776,6 +792,13 @@ function addExportedValue(
     }
 
     if (isset($exports['env'][$name])) {
+        if (exportOriginsMatch(
+            $exports['origins'][$name] ?? null,
+            $available['origins'][$name] ?? null,
+        )) {
+            return;
+        }
+
         throw exportError("duplicate export `{$name}` in module `{$moduleName}`", $item, $unit);
     }
 
@@ -817,7 +840,13 @@ function addExportedType(
                 $exports['constructorRenames'][$childName] = $ctor['aliasOf'];
             }
         }
-        $exports['data'][$name] = $available['data'][$name];
+        $info = $available['data'][$name];
+        foreach (recordFieldLabelsForExport($program, $name) as $label) {
+            if (isset($exports['env'][$label])) {
+                $info['fieldSelectors'][$label] = true;
+            }
+        }
+        $exports['data'][$name] = $info;
 
         return;
     }
@@ -932,7 +961,18 @@ function exportItemChildren(Ast\Program $program, array $available, array $item,
         throw new TypeError("module `{$moduleName}` cannot export constructors for unknown data type `{$item['name']}`");
     }
 
-    return exportItemChildNames($item, $constructors);
+    $boundFields = [];
+    foreach (recordFieldLabelsForExport($program, $item['name']) as $label) {
+        if (isset($available['env'][$label])) {
+            $boundFields[$label] = true;
+        }
+    }
+
+    return exportItemChildNames($item, [
+        ...$constructors,
+        ...\array_keys($available['data'][$item['name']]['fieldSelectors'] ?? []),
+        ...\array_keys($boundFields),
+    ]);
 }
 
 /** @param list<string> $all @return list<string> */
@@ -959,6 +999,32 @@ function exportItemChildNames(array $item, array $all): array
     }
 
     return $children['names'];
+}
+
+/**
+ * The field labels a record declaration names, which `T(..)` exports beside the
+ * constructors.
+ *
+ * @return list<string>
+ */
+function recordFieldLabelsForExport(Ast\Program $program, string $typeName): array
+{
+    $names = [];
+    foreach ($program->items as $item) {
+        if (! $item instanceof Ast\DataDecl || $item->name !== $typeName) {
+            continue;
+        }
+
+        foreach ($item->constructors as $ctor) {
+            foreach ($ctor->fields as $field) {
+                if ($field->name !== null && $field->name !== '' && ! \str_starts_with($field->name, '$')) {
+                    $names[$field->name] = true;
+                }
+            }
+        }
+    }
+
+    return \array_keys($names);
 }
 
 /** @return list<string>|null */
@@ -1233,15 +1299,18 @@ function selectImportedNames(Ast\ImportDecl $import, array $exports): array
                 $matched = true;
             }
 
-            $constructors = isset($exports['data'][$name]['constructors'])
-                ? \array_keys($exports['data'][$name]['constructors'])
-                : null;
-            if ($constructors !== null && $item->methods !== null) {
+            $children = [
+                ...(isset($exports['data'][$name]['constructors'])
+                    ? \array_keys($exports['data'][$name]['constructors'])
+                    : []),
+                ...\array_keys($exports['data'][$name]['fieldSelectors'] ?? []),
+            ];
+            if ($children !== [] && $item->methods !== null) {
                 selectImportedChildren(
                     $selected,
                     $exports,
-                    $constructors,
-                    $item->methods === 'every' ? $constructors : $item->methods,
+                    $children,
+                    $item->methods === 'every' ? $children : $item->methods,
                     "`{$name}` has no constructor",
                 );
             }

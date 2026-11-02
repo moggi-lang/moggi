@@ -1,0 +1,22 @@
+-- Every named field of a record gets an ordinary accessor function, including
+-- the field of a `newtype` (`theLabel`, `getProduct`, `unwrapMonoid`), which can
+-- be passed around first class. Overloaded record-dot access still resolves the
+-- field from the receiver's type.
+import Data.Monoid
+import Data.Semigroup
+
+newtype Label a = Label { theLabel :: a }
+
+data Pair = Pair { leftValue :: Int, rightValue :: Int }
+
+sumPair :: Pair -> Int
+sumPair p = leftValue p + rightValue p
+
+main :: IO ()
+main = do
+  putStrLn (show (theLabel (Label 7)))
+  putStrLn (show (sumPair (Pair { leftValue = 2, rightValue = 3 })))
+  putStrLn (show (map theLabel [Label 1, Label 2]))
+  putStrLn (show (getProduct (Product 6)))
+  putStrLn (show (unwrapMonoid (WrapMonoid "x")))
+  putStrLn (show ((Pair { leftValue = 1, rightValue = 2 }).rightValue))

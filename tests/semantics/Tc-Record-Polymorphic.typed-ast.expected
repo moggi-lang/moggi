@@ -2,6 +2,14 @@ program
   data Box a
     constructor Box
       field value :: a
+  function value :: Box a -> a
+    pat_var __record
+    case
+      variable __record
+      alt
+        pat_con Box
+          pat_var __value
+        variable __value
   function both :: Tuple2 Box Int Box String
     tuple
       record_con Box

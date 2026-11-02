@@ -1256,6 +1256,15 @@ final class CaseExpr extends AstNode
 {
     public bool $exhaustive = false;
 
+    /**
+     * Whether the checker proves this `case` total. A generated record selector
+     * takes its receiver apart by the constructor the field belongs to and is
+     * partial when the type has other constructors, so its case opts out: the
+     * receiver of the wrong shape is a match failure at run time, not a
+     * compile error in a declaration the user did not write.
+     */
+    public bool $exhaustiveCheck = true;
+
     /** @param array<int, Alt> $alts */
     public function __construct(
         public AstNode $scrutinee,

@@ -3,6 +3,24 @@ program
     constructor Big
       field s :: Int -> String
       field n :: Int
+  function s :: Big -> Int -> String
+    pat_var __record
+    case
+      variable __record
+      alt
+        pat_con Big
+          pat_var __value
+          pat_wild _
+        variable __value
+  function n :: Big -> Int
+    pat_var __record
+    case
+      variable __record
+      alt
+        pat_con Big
+          pat_wild _
+          pat_var __value
+        variable __value
   function useBig :: Big
     record_con Big
       s =

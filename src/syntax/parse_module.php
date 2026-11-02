@@ -283,7 +283,7 @@ function parseImportDecl(ParserState $state): ImportDecl
         $qualifiedOnly = true;
     }
 
-    if (isAt($state, TokenKind::KwAs)) {
+    if (isAt($state, TokenKind::KwAs) || isAt($state, TokenKind::VarId, 0, 'as')) {
         advance($state);
         $asName = expectImportName($state);
         if ($kind === 'qualified') {
@@ -400,7 +400,7 @@ function parseImportItem(ParserState $state): Ast\ImportItem
         expect($state, TokenKind::RParen);
     }
 
-    if (isAt($state, TokenKind::KwAs)) {
+    if (isAt($state, TokenKind::KwAs) || isAt($state, TokenKind::VarId, 0, 'as')) {
         advance($state);
         $asName = expectImportName($state);
     }
