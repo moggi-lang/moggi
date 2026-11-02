@@ -1,11 +1,32 @@
+import Data.Bool
+import Data.Char (Char)
+import Data.Either (Either(Left, Right))
+import Data.Eq
+import Data.Int
+import Data.Maybe
+import Data.String (String)
 import System.IO
 import Text.Read
 import Text.Show
-import Data.Eq
 
+-- Enumerations, fields, records and list fields all parse back from their
+-- `Show` rendering, which is what makes `read . show` the identity on them.
 data Color = Red | Blue | Green deriving (Eq, Show, Read)
+
+data Pair = Pair Int Bool deriving (Eq, Show, Read)
+
+data Rec = Rec { width :: Int, height :: Bool } deriving (Eq, Show, Read)
+
+data Boxes = Boxes [Int] (Pair) deriving (Eq, Show, Read)
 
 main :: IO ()
 main = do
   putStrLn (show ((read "Green") :: Color))
   putStrLn (show (((read "Red") :: Color) == Red))
+  putStrLn (show ((read "Pair 3 True") == Pair 3 True))
+  putStrLn (show ((read "Pair -2 False") == Pair (-2) False))
+  putStrLn (show ((read "Rec { width = 4, height = False }") == Rec { width = 4, height = False }))
+  putStrLn (show ((read "Boxes [1,2] (Pair 3 True)") == Boxes [1, 2] (Pair 3 True)))
+  putStrLn (show ((reads "Pair 3 True" :: [(Pair, String)]) == [(Pair 3 True, "")]))
+  putStrLn (show ((readMaybe "Pair 3" :: Maybe Pair) == Nothing))
+  putStrLn (show ((readEither "Nope" :: Either String Pair) == Left "Prelude.read: no parse"))

@@ -1,0 +1,262 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Byte arrays: fixed-size rows of 'Word8' with an 'Int' offset, split into
+-- the immutable 'ByteArray' and the mutable 'MutableByteArray' that lives in
+-- an 'ST' thread and is frozen once it is complete.
+--
+-- A byte array is the machine's array — the same storage, the same bounds
+-- discipline, the same freeze — seen through the index type 'Int' and the
+-- element type 'Word8'. That is why 'MutableByteArray' is a wrapper over
+-- @STArray# s Int Word8@: nothing about a byte array is a second kind of
+-- mutable state, and the confinement rules that keep an 'ST' array from
+-- escaping its thread keep a byte array in it too.
+--
+-- The offset-taking operations ('indexByteArray', 'writeByteArray', the
+-- copies) are the unchecked ones: the caller supplies an offset inside the
+-- array. The list conversions and 'appendByteArray' size and fill an array
+-- exactly, so they never leave a slot unwritten — a slot that was never
+-- written raises when read, as every array slot in Moggi does.
+module Data.Array.Byte
+  ( ByteArray(ByteArray)
+  , MutableByteArray(MutableByteArray)
+  , newByteArray
+  , readByteArray
+  , writeByteArray
+  , unsafeFreezeByteArray
+  , sizeofByteArray
+  , indexByteArray
+  , byteArrayToList
+  , byteArrayFromListN
+  , unsafeCopyByteArray
+  , unsafeCopyMutableByteArray
+  , appendByteArray
+  , concatByteArray
+  , emptyByteArray
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Control.Monad.ST (ST, runST)
+import Data.Bool
+import Data.Char (intToDigit)
+import Data.Eq
+import Data.Int (Int)
+import Data.Maybe
+import Data.Monoid
+import Data.Num
+import Data.Ord
+import Data.Semigroup
+import Data.String (singleton)
+import Data.Word (Word8)
+import Moggi.Err (error)
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import Moggi.Internal.ST
+import Text.Show
+
+-- | An immutable row of bytes, indexed from @0@ to @'sizeofByteArray' - 1@.
+newtype ByteArray = ByteArray (Array# Int Word8)
+
+-- | A mutable row of bytes in thread @s@. It is the machine's mutable array
+-- over @Int@ indices and @Word8@ elements, so the thread variable confines it
+-- exactly like an 'Data.Array.ST.STArray'.
+newtype MutableByteArray s = MutableByteArray (STArray# s Int Word8)
+
+-- | Allocate a row of @n@ bytes. Every slot starts out unwritten, so reading
+-- one before writing it raises; 'newByteArray' does not zero-fill.
+newByteArray :: Int -> ST s (MutableByteArray s)
+newByteArray n = do
+  marr <- newSTArray# (0, n - 1) n
+  pure (MutableByteArray marr)
+
+-- | Read a byte.
+readByteArray :: MutableByteArray s -> Int -> ST s Word8
+readByteArray (MutableByteArray marr) off = readSTArray# marr off
+
+-- | Write a byte.
+writeByteArray :: MutableByteArray s -> Int -> Word8 -> ST s ()
+writeByteArray (MutableByteArray marr) off w = writeSTArray# marr off w
+
+-- | Turn the mutable row into an immutable one without copying. Afterwards the
+-- mutable row must never be read or written again: it /is/ the frozen array
+-- now, so a later write would rewrite history.
+unsafeFreezeByteArray :: MutableByteArray s -> ST s ByteArray
+unsafeFreezeByteArray (MutableByteArray marr) = do
+  arr <- unsafeFreezeSTArray# marr
+  pure (ByteArray arr)
+
+-- | The number of bytes.
+sizeofByteArray :: ByteArray -> Int
+sizeofByteArray (ByteArray arr) = arraySize# arr
+
+-- | Read a byte by offset, without a range check: only for an offset the
+-- caller knows is inside the array.
+indexByteArray :: ByteArray -> Int -> Word8
+indexByteArray (ByteArray arr) off = arrayRead# arr off
+
+-- | Every byte, left to right.
+byteArrayToList :: ByteArray -> [Word8]
+byteArrayToList arr = byteArrayToListFrom arr 0
+
+byteArrayToListFrom :: ByteArray -> Int -> [Word8]
+byteArrayToListFrom arr i = case i < sizeofByteArray arr of
+  True -> indexByteArray arr i : byteArrayToListFrom arr (i + 1)
+  False -> []
+
+-- | A byte array of exactly @n@ bytes holding the list. A list shorter or
+-- longer than @n@ is an error, so the result never carries an unwritten slot.
+byteArrayFromListN :: Int -> [Word8] -> ByteArray
+byteArrayFromListN n ys = case n < 0 of
+  True -> error "Data.Array.Byte.byteArrayFromListN: specified size is negative"
+  False -> runST (do
+    marr <- newByteArray n
+    fillByteArray marr n 0 ys
+    unsafeFreezeByteArray marr)
+
+fillByteArray :: MutableByteArray s -> Int -> Int -> [Word8] -> ST s ()
+fillByteArray marr n i ys = case ys of
+  [] -> case i == n of
+    True -> pure ()
+    False -> error "Data.Array.Byte.byteArrayFromListN: list length less than specified size"
+  x : xs -> case i < n of
+    True -> do
+      writeByteArray marr i x
+      fillByteArray marr n (i + 1) xs
+    False -> error "Data.Array.Byte.byteArrayFromListN: list length greater than specified size"
+
+-- | Copy a slice of an immutable array into a mutable one, without a bounds or
+-- overlap check.
+unsafeCopyByteArray :: MutableByteArray s -> Int -> ByteArray -> Int -> Int -> ST s ()
+unsafeCopyByteArray (MutableByteArray dst) doff (ByteArray src) soff sz =
+  copyByteArrayFrom dst doff src soff sz 0
+
+copyByteArrayFrom :: STArray# s Int Word8 -> Int -> Array# Int Word8 -> Int -> Int -> Int -> ST s ()
+copyByteArrayFrom dst doff src soff sz i = case i < sz of
+  True -> do
+    writeSTArray# dst (doff + i) (arrayRead# src (soff + i))
+    copyByteArrayFrom dst doff src soff sz (i + 1)
+  False -> pure ()
+
+-- | Copy a slice from one mutable array to another, without a bounds check.
+-- The copy runs left to right, so a destination that overlaps the source above
+-- it is overwritten as the copy proceeds; copy through an intermediate array
+-- when that matters.
+unsafeCopyMutableByteArray :: MutableByteArray s -> Int -> MutableByteArray s -> Int -> Int -> ST s ()
+unsafeCopyMutableByteArray (MutableByteArray dst) doff (MutableByteArray src) soff sz =
+  copyMutableByteArrayFrom dst doff src soff sz 0
+
+copyMutableByteArrayFrom :: STArray# s Int Word8 -> Int -> STArray# s Int Word8 -> Int -> Int -> Int -> ST s ()
+copyMutableByteArrayFrom dst doff src soff sz i = case i < sz of
+  True -> do
+    x <- readSTArray# src (soff + i)
+    writeSTArray# dst (doff + i) x
+    copyMutableByteArrayFrom dst doff src soff sz (i + 1)
+  False -> pure ()
+
+-- | The bytes of the first array followed by the bytes of the second.
+appendByteArray :: ByteArray -> ByteArray -> ByteArray
+appendByteArray ba1 ba2 = case checkedByteSizeAdd (sizeofByteArray ba1) (sizeofByteArray ba2) of
+  Just total -> runST (do
+    marr <- newByteArray total
+    unsafeCopyByteArray marr 0 ba1 0 (sizeofByteArray ba1)
+    unsafeCopyByteArray marr (sizeofByteArray ba1) ba2 0 (sizeofByteArray ba2)
+    unsafeFreezeByteArray marr)
+  Nothing -> error "Data.Array.Byte.appendByteArray: size overflow"
+
+-- | Add two sizes, answering 'Nothing' when the sum wrapped. Both sizes are
+-- non-negative, so a result below the left operand is the wrap.
+checkedByteSizeAdd :: Int -> Int -> Maybe Int
+checkedByteSizeAdd a b = case a + b < a of
+  True -> Nothing
+  False -> Just (a + b)
+
+-- | Every array's bytes, in order.
+concatByteArray :: [ByteArray] -> ByteArray
+concatByteArray arrs = case checkedTotalByteArraySize arrs of
+  Nothing -> error "Data.Array.Byte.concatByteArray: size overflow"
+  Just total -> runST (do
+    marr <- newByteArray total
+    pasteByteArrays marr 0 arrs
+    unsafeFreezeByteArray marr)
+
+checkedTotalByteArraySize :: [ByteArray] -> Maybe Int
+checkedTotalByteArraySize arrs = case arrs of
+  [] -> Just 0
+  x : xs -> case checkedTotalByteArraySize xs of
+    Nothing -> Nothing
+    Just rest -> checkedByteSizeAdd (sizeofByteArray x) rest
+
+pasteByteArrays :: MutableByteArray s -> Int -> [ByteArray] -> ST s ()
+pasteByteArrays marr ix arrs = case arrs of
+  [] -> pure ()
+  x : xs -> do
+    unsafeCopyByteArray marr ix x 0 (sizeofByteArray x)
+    pasteByteArrays marr (ix + sizeofByteArray x) xs
+
+-- | The array of no bytes.
+emptyByteArray :: ByteArray
+emptyByteArray = runST (do
+  marr <- newByteArray 0
+  unsafeFreezeByteArray marr)
+
+-- | Equality compares sizes first — two empty arrays are equal — then the
+-- bytes in order.
+instance Eq ByteArray where
+  (==) a b = case sizeofByteArray a == sizeofByteArray b of
+    False -> False
+    True -> byteArrayEqAt a b 0
+
+byteArrayEqAt :: ByteArray -> ByteArray -> Int -> Bool
+byteArrayEqAt a b i = case i < sizeofByteArray a of
+  True -> case indexByteArray a i == indexByteArray b i of
+    True -> byteArrayEqAt a b (i + 1)
+    False -> False
+  False -> True
+
+-- | Two mutable rows are equal exactly when they are the same row, never
+-- because their contents happen to match.
+instance Eq (MutableByteArray s) where
+  (==) (MutableByteArray a) (MutableByteArray b) = sameSTArray# a b
+
+-- | Ordering compares the lengths first and the bytes lexicographically when
+-- the lengths are equal.
+instance Ord ByteArray where
+  compare a b = case compare (sizeofByteArray a) (sizeofByteArray b) of
+    EQ -> compareByteArraysAt a b 0
+    other -> other
+
+compareByteArraysAt :: ByteArray -> ByteArray -> Int -> Ordering
+compareByteArraysAt a b i = case compare (indexByteArray a i) (indexByteArray b i) of
+  EQ -> compareByteArraysAt a b (i + 1)
+  other -> other
+
+instance Semigroup ByteArray where
+  (<>) a b = appendByteArray a b
+
+instance Monoid ByteArray where
+  mempty = emptyByteArray
+  mconcat arrs = concatByteArray arrs
+
+-- | Shows as a bracketed list of two-digit lower-case hex bytes:
+-- @[0x01, 0xff]@.
+instance Show ByteArray where
+  show arr = showByteArrayAt arr 0
+
+showByteArrayAt :: ByteArray -> Int -> String
+showByteArrayAt arr i = case i < sizeofByteArray arr of
+  False -> "]"
+  True -> stringAppend# (showByteArraySeparator i)
+    (stringAppend# (showHexByte (indexByteArray arr i)) (showByteArrayAt arr (i + 1)))
+
+showByteArraySeparator :: Int -> String
+showByteArraySeparator i = case i == 0 of
+  True -> "["
+  False -> ", "
+
+showHexByte :: Word8 -> String
+showHexByte w = stringAppend# "0x" (showHexPair (word8ToInt# w))
+
+showHexPair :: Int -> String
+showHexPair n = stringAppend# (singleton (intToDigit high)) (singleton (intToDigit low))
+  where
+    high = intDiv# n 16
+    low = intSub# n (intMul# high 16)

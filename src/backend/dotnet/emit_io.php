@@ -240,6 +240,24 @@ function emitIntrinsicState(EmitEnv $env, IR\Intrinsic $op): bool
             $env->m->emit('call class Moggi.Rt.ST Moggi.Rt.RT::StWriteRef(class Moggi.Rt.STRef, object)');
 
             return true;
+        case 'newIORef#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('call class Moggi.Rt.IORef Moggi.Rt.RT::IoNewRef(object)');
+
+            return true;
+        case 'readIORef#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.IORef');
+            $env->m->emit('call object Moggi.Rt.RT::IoReadRef(class Moggi.Rt.IORef)');
+
+            return true;
+        case 'writeIORef#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.IORef');
+            emitOperand($env, $args[1]);
+            $env->m->emit('call object Moggi.Rt.RT::IoWriteRef(class Moggi.Rt.IORef, object)');
+
+            return true;
         case 'arrayNew#':
             emitOperand($env, $args[0]);
             emitOperand($env, $args[1]);

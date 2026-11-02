@@ -1,0 +1,32 @@
+-- Data.IORef: allocation, reads, writes and the modify helpers, each
+-- sequenced in bind order, plus the independence of two references.
+import Data.IORef
+
+main :: IO ()
+main = do
+  r <- newIORef (10 :: Int)
+  a <- readIORef r
+  putStrLn (show a)
+  writeIORef r 20
+  b <- readIORef r
+  putStrLn (show b)
+  modifyIORef r (\n -> n + 1)
+  c <- readIORef r
+  putStrLn (show c)
+  modifyIORef' r (\n -> n * 2)
+  d <- readIORef r
+  putStrLn (show d)
+  s <- newIORef [1, 2]
+  modifyIORef s (\xs -> 0 : xs)
+  e <- readIORef s
+  putStrLn (show e)
+  f <- newIORef True
+  modifyIORef' f not
+  g <- readIORef f
+  putStrLn (show g)
+  h <- newIORef (1 :: Int)
+  i <- newIORef (2 :: Int)
+  modifyIORef h (\n -> n + 10)
+  hv <- readIORef h
+  iv <- readIORef i
+  putStrLn (show (hv, iv))

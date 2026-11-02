@@ -96,6 +96,7 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
     if (isMagicHashName($decl->name)
         || $decl->name === Kinds\canonicalTypeConName('IO#')
         || $decl->name === Kinds\canonicalTypeConName('IOArray#')
+        || $decl->name === Kinds\canonicalTypeConName('IORef#')
         || $decl->name === Kinds\canonicalTypeConName('ST#')
         || $decl->name === Kinds\canonicalTypeConName('STRef#')
         || $decl->name === Kinds\canonicalTypeConName('STArray#')

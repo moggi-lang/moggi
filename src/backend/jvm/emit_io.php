@@ -293,6 +293,36 @@ function emitIntrinsicState(EmitEnv $env, IR\Intrinsic $op): bool
             );
 
             return true;
+        case 'newIORef#':
+            emitOperand($env, $args[0]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'ioNewRef', '(Ljava/lang/Object;)Lmoggi/rt/IORef;'),
+                1,
+                true,
+            );
+
+            return true;
+        case 'readIORef#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/IORef'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'ioReadRef', '(Lmoggi/rt/IORef;)Ljava/lang/Object;'),
+                1,
+                true,
+            );
+
+            return true;
+        case 'writeIORef#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/IORef'));
+            emitOperand($env, $args[1]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'ioWriteRef', '(Lmoggi/rt/IORef;Ljava/lang/Object;)Ljava/lang/Object;'),
+                2,
+                true,
+            );
+
+            return true;
         case 'arrayNew#':
             emitOperand($env, $args[0]);
             emitOperand($env, $args[1]);

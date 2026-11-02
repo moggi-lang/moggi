@@ -1,0 +1,21 @@
+-- Data.Bifoldable1: the semigroup-only folds over Either, pairs, 3- to
+-- 5-tuples, Const and Arg, through both 'bifold1' and 'bifoldMap1'.
+import Data.Bifoldable1
+import Data.Either (Either(Left, Right))
+import Data.Functor.Const (Const(Const))
+import Data.Semigroup (Arg(Arg))
+
+main :: IO ()
+main = do
+  putStrLn (show (bifold1 ("ab", "cd")))
+  putStrLn (show (bifold1 (Left "ab" :: Either String String)))
+  putStrLn (show (bifold1 (Right "cd" :: Either String String)))
+  putStrLn (show (bifoldMap1 (\x -> [x]) (\x -> [x + 10]) (Right 5 :: Either Int Int)))
+  putStrLn (show (bifoldMap1 (\x -> [x]) (\x -> [x + 10]) (Left 5 :: Either Int Int)))
+  putStrLn (show (bifold1 (0, "ab", "cd")))
+  putStrLn (show (bifold1 (0, 0, "ab", "cd")))
+  putStrLn (show (bifold1 (0, 0, 0, "ab", "cd")))
+  putStrLn (show (bifold1 (Const ["a"] :: Const [String] [String])))
+  putStrLn (show (bifold1 (Arg ["a"] ["b"] :: Arg [String] [String])))
+  -- 'bifold1' is the default method: it maps both sides through 'id'.
+  putStrLn (show (bifoldMap1 id id ("ab", "cd") :: String))

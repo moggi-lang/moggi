@@ -1,0 +1,10 @@
+import Control.Monad.Fail
+
+softFail :: MonadFail m => m Int
+softFail = fail "nope"
+
+main :: IO ()
+main = do
+  putStrLn (show (softFail :: Maybe Int))
+  putStrLn (show (softFail :: [Int]))
+  putStrLn (show (fail "nope" :: Maybe Int))

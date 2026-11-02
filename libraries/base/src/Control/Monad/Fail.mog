@@ -1,4 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+-- | 'MonadFail': the 'fail' an action runs when a pattern match does not
+-- match, or when the action decides to give up.
 module Control.Monad.Fail
   ( MonadFail(fail)
   ) where
@@ -12,8 +14,12 @@ import Moggi.Internal.Base
 import Moggi.Internal.Prim
 import System.IO.Base (IO)
 
+-- | Actions with a failure of their own. 'fail' is a method so a monad can
+-- answer its own empty value; the default raises, as a monad with no empty
+-- value does.
 class Monad m => MonadFail m where
   fail :: String -> m a
+  fail s = errorWithoutStackTrace s
 
 instance MonadFail Maybe where
   fail _ = Nothing
@@ -21,8 +27,7 @@ instance MonadFail Maybe where
 instance MonadFail List where
   fail _ = []
 
--- | A failed pattern match, or an explicit 'fail', in the 'IO' monad is an
--- 'IOError' of type 'userErrorType': a program error rather than a native
--- failure, caught by 'tryIOError' like any other 'IOError'.
+-- | A failure in 'IO' is a user 'IOError', caught by 'tryIOError' like any
+-- other.
 instance MonadFail IO where
   fail msg = ioError (userError msg)

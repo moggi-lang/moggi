@@ -1,0 +1,9 @@
+module Bad.ByteArray.Escape
+
+import Control.Applicative
+import Control.Monad
+import Control.Monad.ST
+import Data.Array.Byte
+
+bad :: MutableByteArray s
+bad = runST (newByteArray 0)

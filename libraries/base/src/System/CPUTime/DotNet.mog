@@ -1,0 +1,26 @@
+module System.CPUTime.DotNet
+  ( cpuTimeNanos
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Real
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import System.IO.Base (IO)
+
+-- `Process` lives outside the System.Runtime facade, so its assembly is
+-- named here; `TimeSpan` is a core value type.
+foreign dotnet type Process "class [System.Diagnostics.Process]System.Diagnostics.Process"
+foreign dotnet type TimeSpan "valuetype [System.Runtime]System.TimeSpan"
+
+foreign dotnet function currentProcess "System.Diagnostics.Process:GetCurrentProcess" :: IO Process
+foreign dotnet function totalProcessorTime "System.Diagnostics.Process.get_TotalProcessorTime" :: Process -> TimeSpan
+foreign dotnet function timeSpanTicks "System.TimeSpan.get_Ticks" :: TimeSpan -> Int
+
+-- The CLR reports CPU time as a `TimeSpan` counted in 100 ns ticks, for the
+-- whole process.
+cpuTimeNanos :: IO Integer
+cpuTimeNanos = do
+  proc <- currentProcess
+  pure (toInteger (timeSpanTicks (totalProcessorTime proc)) * 100)

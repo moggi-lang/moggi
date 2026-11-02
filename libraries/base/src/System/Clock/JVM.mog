@@ -1,0 +1,15 @@
+module System.Clock.JVM
+  ( monotonicNanos
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import System.IO.Base (IO)
+
+-- The JVM's monotonic clock, already in nanoseconds.
+foreign jvm function systemNanoTime "java.lang.System:nanoTime" :: IO Int
+
+monotonicNanos :: IO Int
+monotonicNanos = systemNanoTime

@@ -1,0 +1,47 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+
+-- | Folding a structure whose last two parameters are both foldable, where at
+-- least one of them is present: 'bifold1' needs a 'Semigroup' so the two sides
+-- can meet in a single result.
+module Data.Bifoldable1 where
+
+import Data.Bifoldable (Bifoldable(..))
+import Data.Function (id)
+import Data.Functor.Const (Const(Const))
+import Data.Semigroup (Arg(Arg), Semigroup(..))
+import Data.Tuple (Tuple2, Tuple3, Tuple4, Tuple5)
+import Data.Either (Either(Left, Right))
+
+class Bifoldable t => Bifoldable1 t where
+  {-# MINIMAL bifoldMap1 #-}
+
+  -- | Fold the last two parameters of the structure into one value. Unlike
+  -- 'bifold', this uses the structure's own combining operation, so it needs no
+  -- monoidal identity and no empty case.
+  bifold1 :: Semigroup m => t m m -> m
+  bifold1 = bifoldMap1 id id
+
+  -- | Map both parameters into one 'Semigroup' and combine them.
+  bifoldMap1 :: Semigroup m => (a -> m) -> (b -> m) -> t a b -> m
+
+instance Bifoldable1 Arg where
+  bifoldMap1 f g (Arg a b) = f a <> g b
+
+instance Bifoldable1 Either where
+  bifoldMap1 f _ (Left a) = f a
+  bifoldMap1 _ g (Right b) = g b
+
+instance Bifoldable1 Tuple2 where
+  bifoldMap1 f g (a, b) = f a <> g b
+
+instance Bifoldable1 (Tuple3 x) where
+  bifoldMap1 f g (_, a, b) = f a <> g b
+
+instance Bifoldable1 (Tuple4 x y) where
+  bifoldMap1 f g (_, _, a, b) = f a <> g b
+
+instance Bifoldable1 (Tuple5 x y z) where
+  bifoldMap1 f g (_, _, _, a, b) = f a <> g b
+
+instance Bifoldable1 Const where
+  bifoldMap1 f _ (Const a) = f a

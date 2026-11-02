@@ -87,6 +87,12 @@ function validateData(Ast\DataDecl $item, string $source, string $filename): voi
  * hiding — confinement applies at use sites through the name itself — so
  * it is exempt. Anything else (`newtype Sneaky = MkSneaky (STRef# s a)`)
  * stays rejected: that would smuggle a cell behind an innocent name.
+ *
+ * A library may also publish a *second* spelling of a machine type under a
+ * name of its own ({@see transparentPrimopAliases}): the newtype that carries
+ * that name is the same transparent wrapper, one field over the primop type,
+ * so it costs nothing at run time and is confined exactly like the type it
+ * names.
  */
 function isTransparentPrimopWrapper(Ast\DataDecl $item): bool
 {
@@ -100,8 +106,38 @@ function isTransparentPrimopWrapper(Ast\DataDecl $item): bool
     }
 
     $head = synonymHead($fields[0]->type);
+    if ($head === null) {
+        return false;
+    }
 
-    return $head !== null && canonicalTypeConName($head) === $item->name;
+    $canonical = canonicalTypeConName($head);
+    if ($canonical === $item->name) {
+        return true;
+    }
+
+    return (transparentPrimopAliases()[$item->name] ?? null) === $canonical;
+}
+
+/**
+ * The library's secondary spellings of a confined machine type: a public name
+ * and the primop type it is a one-field wrapper over.
+ *
+ * `Data.Array.Byte` names the machine's mutable array of bytes
+ * `MutableByteArray`: a byte array *is* a mutable array seen through the index
+ * type `Int` and the element type `Word8`, so the wrapper is over `STArray# s
+ * Int Word8` and not over an id of its own. Registering the name here is what
+ * makes the wrapper transparent, and {@see typeMentionsSt} confines it exactly
+ * like the id it wraps.
+ *
+ * @return array<string, string> public name → canonical primop type name
+ */
+function transparentPrimopAliases(): array
+{
+    static $table = null;
+
+    return $table ??= [
+        'MutableByteArray' => canonicalTypeConName('STArray#'),
+    ];
 }
 
 function validateForeign(Ast\ForeignImportDecl $item, string $source, string $filename): void
@@ -207,6 +243,7 @@ function typeMentionsSt(Ast\TypeNode $type): bool
         return isStTypeConName($type->name)
             || isStRefTypeConName($type->name)
             || isStArrayTypeConName($type->name)
+            || isset(transparentPrimopAliases()[$type->name])
             || isRealWorldTypeConName($type->name);
     }
 

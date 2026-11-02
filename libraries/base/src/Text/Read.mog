@@ -1,74 +1,361 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- | Converting strings to values: the 'Read' class and its functions.
+-- | Converting strings to values: the 'Read' class and the functions around it.
+--
+-- The class methods are 'readsPrec' and 'readList', and 'reads', 'read',
+-- 'readParen' and 'lex' are the functions written over them. The
+-- precedence-parameterised parser monad some libraries add beside them is not
+-- part of this one.
 module Text.Read
   ( Read(..)
+  , ReadS
+  , reads
+  , readParen
+  , lex
+  , readListDefault
+  , readEither
+  , readMaybe
   ) where
+
 import Data.Bool
 import Data.Char
-import Data.Ord (Down(Down))
-import Data.String (drop, isPrefixOf)
+import Data.Either (Either(Left, Right))
+import Data.Eq
+import Data.Maybe (Maybe(Nothing, Just))
+import Data.Num
+import Data.Ord
+import Data.String (ReadS, isPrefixOf, lexLitChar, pack, readLitChar, singleton, unpack)
 import Moggi.Err
 import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
--- Minimal Read matching Moggi's thin Show (single method). Stock deriving
--- supports nullary enumerations; generalized newtype deriving reuses the
--- underlying Read instance.
+-- | Parsing a value out of the front of a string.
+--
+-- 'readsPrec' takes a precedence context, as 'showsPrec' does, so a field of a
+-- compound value is parsed at the context its rendering was written in. An
+-- instance may instead give only 'read', which consumes the whole string; that
+-- is what the instances written before 'readsPrec' existed do, and the default
+-- below keeps them working.
 class Read a where
+  {-# MINIMAL readsPrec | read #-}
+
+  -- | Parse a value at the given precedence, with the input that follows it.
+  readsPrec :: Int -> ReadS a
+
+  -- | Parse a list of values, which is the rendering 'Text.Show.showList'
+  -- produces.
+  readList :: ReadS [a]
+
+  -- | Parse a value out of a string, failing unless the string is one.
   read :: String -> a
+
+  readsPrec _ s = [(read s, "")]
+
+  readList s = readListDefault s
+
+  read s = case readsPrec 0 s of
+    [] -> error "Prelude.read: no parse"
+    (x, _) : _ -> x
+
+-- | 'readsPrec' at precedence zero.
+reads :: Read a => ReadS a
+reads s = readsPrec 0 s
+
+-- | Parse a value surrounded by parentheses when the precedence asks for them,
+-- and without them otherwise.
+readParen :: Bool -> ReadS a -> ReadS a
+readParen b g s = case b of
+  True -> readParenMandatory g s
+  False -> appendLists (g s) (readParenMandatory g s)
+
+readParenMandatory :: ReadS a -> ReadS a
+readParenMandatory g r = case lex r of
+  ("(", s) : _ -> closeParses (appendLists (g s) (readParenMandatory g s))
+  _ -> []
+
+-- Keep the parses that are followed by the closing parenthesis.
+closeParses :: [(a, String)] -> [(a, String)]
+closeParses pairs = case pairs of
+  [] -> []
+  (x, t) : rest -> case lex t of
+    (")", u) : _ -> (x, u) : closeParses rest
+    _ -> closeParses rest
+
+-- | The lexemes of a string: its leading token and whatever follows. Spaces are
+-- skipped; names, numbers and quoted character or string literals come back
+-- whole; any other character is a token of its own.
+lex :: ReadS String
+lex s = lexChars (skipSpaces (unpack s))
+
+lexChars :: [Char] -> [(String, String)]
+lexChars cs = case cs of
+  [] -> []
+  c : _ -> case isIdentifierStart c of
+    True -> [(pack (takeWhileChars isIdentifierChar cs), pack (dropWhileChars isIdentifierChar cs))]
+    False -> case isDigit c of
+      True -> [(pack (takeWhileChars isDigit cs), pack (dropWhileChars isDigit cs))]
+      False -> case isSymbolChar c of
+        True -> [(pack (takeWhileChars isSymbolChar cs), pack (dropWhileChars isSymbolChar cs))]
+        False -> lexCharsQuoted c cs
+
+-- A quoted literal is a single token, quotes included.
+lexCharsQuoted :: Char -> [Char] -> [(String, String)]
+lexCharsQuoted c cs = case c == '\'' || c == '"' of
+  True -> quotedToken c cs
+  False -> [(singleton c, pack (dropChars 1 cs))]
+
+quotedToken :: Char -> [Char] -> [(String, String)]
+quotedToken q cs = case lexLitChar (pack (dropChars 1 cs)) of
+  (body, after) : _ -> case unpack after of
+    close : rest -> case close == q of
+      True -> [(stringAppend# (singleton q) (stringAppend# body (singleton q)), pack rest)]
+      False -> []
+    [] -> []
+  [] -> []
+
+-- | What 'readList' does by default: the @[a,b]@ form the 'Show' instance for
+-- lists renders.
+readListDefault :: Read a => ReadS [a]
+readListDefault s = case lex s of
+  ("[", r) : _ -> readListElems r
+  _ -> []
+
+readListElems :: Read a => String -> [([a], String)]
+readListElems r = case reads r of
+  [] -> []
+  (x, t) : _ -> case lex t of
+    (",", u) : _ -> consEach x (readListElems u)
+    ("]", u) : _ -> [([x], u)]
+    _ -> []
+
+consEach :: a -> [([a], String)] -> [([a], String)]
+consEach x pairs = case pairs of
+  [] -> []
+  (xs, u) : rest -> (x : xs, u) : consEach x rest
+
+-- | The value a string denotes, when the whole of it is that value up to
+-- spaces.
+readMaybe :: Read a => String -> Maybe a
+readMaybe s = case wholeParses (reads s) of
+  [] -> Nothing
+  x : _ -> Just x
+
+wholeParses :: [(a, String)] -> [a]
+wholeParses pairs = case pairs of
+  [] -> []
+  (x, t) : rest -> case allSpaces (unpack t) of
+    True -> x : wholeParses rest
+    False -> wholeParses rest
+
+-- | 'readMaybe' with the failure as 'Left'.
+readEither :: Read a => String -> Either String a
+readEither s = case readMaybe s of
+  Just x -> Right x
+  Nothing -> Left "Prelude.read: no parse"
+
+appendLists :: [a] -> [a] -> [a]
+appendLists xs ys = case xs of
+  [] -> ys
+  x : rest -> x : appendLists rest ys
+
+skipSpaces :: [Char] -> [Char]
+skipSpaces cs = case cs of
+  [] -> []
+  c : rest -> case isSpace c of
+    True -> skipSpaces rest
+    False -> cs
+
+allSpaces :: [Char] -> Bool
+allSpaces cs = case cs of
+  [] -> True
+  c : rest -> case isSpace c of
+    True -> allSpaces rest
+    False -> False
+
+isIdentifierStart :: Char -> Bool
+isIdentifierStart c = isAlpha c || c == '_'
+
+isIdentifierChar :: Char -> Bool
+isIdentifierChar c = isAlpha c || isDigit c || c == '_' || c == '\''
+
+-- Symbols are one lexeme however many are written together, so an operator
+-- constructor comes back whole.
+isSymbolChar :: Char -> Bool
+isSymbolChar c =
+  c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '*'
+  || c == '+' || c == '.' || c == '/' || c == '<' || c == '=' || c == '>'
+  || c == '?' || c == '@' || c == '^' || c == '|' || c == '~' || c == ':'
+  || c == '-' || c == '\\'
+
+takeWhileChars :: (Char -> Bool) -> [Char] -> [Char]
+takeWhileChars p cs = case cs of
+  [] -> []
+  c : rest -> case p c of
+    True -> c : takeWhileChars p rest
+    False -> []
+
+dropWhileChars :: (Char -> Bool) -> [Char] -> [Char]
+dropWhileChars p cs = case cs of
+  [] -> []
+  c : rest -> case p c of
+    True -> dropWhileChars p rest
+    False -> cs
+
+dropChars :: Int -> [Char] -> [Char]
+dropChars n cs = case n > 0 of
+  True -> case cs of
+    [] -> []
+    _ : rest -> dropChars (n - 1) rest
+  False -> cs
+
+-- | Reads a decimal 'Int': an optional minus sign, then digits.
+instance Read Int where
+  readsPrec _ s = case lex s of
+    ("-", r) : _ -> case lex r of
+      (tok, rest) : _ -> case digitsOnly tok of
+        Nothing -> []
+        Just n -> [(negate n, rest)]
+      [] -> []
+    (tok, rest) : _ -> case digitsOnly tok of
+      Nothing -> []
+      Just n -> [(n, rest)]
+    [] -> []
+
+digitsOnly :: String -> Maybe Int
+digitsOnly tok = case unpack tok of
+  [] -> Nothing
+  ds -> case allDigits ds of
+    False -> Nothing
+    True -> Just (foldDigits ds 0)
+
+allDigits :: [Char] -> Bool
+allDigits cs = case cs of
+  [] -> True
+  c : rest -> case isDigit c of
+    True -> allDigits rest
+    False -> False
+
+foldDigits :: [Char] -> Int -> Int
+foldDigits cs acc = case cs of
+  [] -> acc
+  d : rest -> foldDigits rest (acc * 10 + digitToInt d)
+
+-- | Reads a list, which is the rendering the 'Show' instance for lists
+-- produces: the elements between brackets, separated by commas.
+instance Read a => Read [a] where
+  readsPrec _ s = readListDefault s
+  readList = readListDefault
+
+-- | Reads a character literal, quotes and escapes included.
+instance Read Char where
+  readsPrec _ s = case lex s of
+    (tok, rest) : _ -> case unpack tok of
+      q : body -> case q == '\'' of
+        True -> charParses (readLitChar (pack body)) rest
+        False -> []
+      [] -> []
+    [] -> []
+
+charParses :: [(Char, String)] -> String -> [(Char, String)]
+charParses parses rest = case parses of
+  [] -> []
+  (c, after) : _ -> case unpack after of
+    q : _ -> case q == '\'' of
+      True -> [(c, rest)]
+      False -> []
+    [] -> []
+
+-- | Reads a string literal, quotes and escapes included.
+instance Read String where
+  readsPrec _ s = case lex s of
+    (tok, rest) : _ -> case stringBody (pack (dropChars 1 (unpack tok))) of
+      Nothing -> []
+      Just text -> [(text, rest)]
+    [] -> []
+
+stringBody :: String -> Maybe String
+stringBody s = case readLitChar s of
+  [] -> Nothing
+  (c, after) : _ -> case unpack after of
+    q : _ -> case q == '"' of
+      True -> Just (singleton c)
+      False -> case stringBody after of
+        Nothing -> Nothing
+        Just text -> Just (stringAppend# (singleton c) text)
+    [] -> Nothing
 
 -- | Reads what 'Show' writes: @"True"@ and @"False"@. Lives here (where
 -- 'Read' is defined) rather than in 'Data.Bool', which sits below
 -- 'Data.String'.
 instance Read Bool where
-  read s = case s of
-    "True" -> True
-    "False" -> False
-    _ -> error "Read Bool: expected \"True\" or \"False\""
+  readsPrec d s = readParen (d > 10) boolParse s
+
+boolParse :: ReadS Bool
+boolParse s = case lex s of
+  ("True", r) : _ -> [(True, r)]
+  ("False", r) : _ -> [(False, r)]
+  _ -> []
 
 -- | Reads what 'Show' writes: @"Down 5"@. Lives here (where 'Read' is
 -- defined) rather than in 'Data.Ord', which sits below 'Data.String'.
 instance Read a => Read (Down a) where
-  read s = case isPrefixOf "Down " s of
-    True -> Down (read (drop 5 s))
-    False -> error "Read Down: expected \"Down <value>\""
+  readsPrec d s = readParen (d > 10) downParse s
+
+downParse :: Read a => ReadS (Down a)
+downParse s = case lex s of
+  ("Down", r) : _ -> downEach (readsPrec 11 r)
+  _ -> []
+
+downEach :: [(a, String)] -> [(Down a, String)]
+downEach pairs = case pairs of
+  [] -> []
+  (x, t) : rest -> (Down x, t) : downEach rest
 
 -- 'GeneralCategory' is declared in 'Data.Char', which sits below
--- 'Data.String' and so cannot import this module for its own deriving
--- clause; its 'Read' instance lives here instead, where both the class and
--- the type are in scope. It matches what stock deriving would generate
--- ('read "Ctor" = Ctor', error otherwise), written out because standalone
--- deriving is not collected into the cross-module instance index.
+-- 'Data.String' and so cannot import this module for its own deriving clause;
+-- its 'Read' instance lives here instead, where both the class and the type are
+-- in scope. It matches what stock deriving would generate ('read "Ctor" =
+-- Ctor', error otherwise), written out because standalone deriving is not
+-- collected into the cross-module instance index.
 instance Read GeneralCategory where
-  read s = case s of
-    "UppercaseLetter" -> UppercaseLetter
-    "LowercaseLetter" -> LowercaseLetter
-    "TitlecaseLetter" -> TitlecaseLetter
-    "ModifierLetter" -> ModifierLetter
-    "OtherLetter" -> OtherLetter
-    "NonSpacingMark" -> NonSpacingMark
-    "SpacingCombiningMark" -> SpacingCombiningMark
-    "EnclosingMark" -> EnclosingMark
-    "DecimalNumber" -> DecimalNumber
-    "LetterNumber" -> LetterNumber
-    "OtherNumber" -> OtherNumber
-    "ConnectorPunctuation" -> ConnectorPunctuation
-    "DashPunctuation" -> DashPunctuation
-    "OpenPunctuation" -> OpenPunctuation
-    "ClosePunctuation" -> ClosePunctuation
-    "InitialQuote" -> InitialQuote
-    "FinalQuote" -> FinalQuote
-    "OtherPunctuation" -> OtherPunctuation
-    "MathSymbol" -> MathSymbol
-    "CurrencySymbol" -> CurrencySymbol
-    "ModifierSymbol" -> ModifierSymbol
-    "OtherSymbol" -> OtherSymbol
-    "Space" -> Space
-    "LineSeparator" -> LineSeparator
-    "ParagraphSeparator" -> ParagraphSeparator
-    "Control" -> Control
-    "Format" -> Format
-    "Surrogate" -> Surrogate
-    "PrivateUse" -> PrivateUse
-    "NotAssigned" -> NotAssigned
-    _ -> error "Read.read: no parse"
+  readsPrec d s = readParen (d > 10) categoryParse s
+
+categoryParse :: ReadS GeneralCategory
+categoryParse s = case lex s of
+  (tok, rest) : _ -> case categoryNamed tok of
+    Just c -> [(c, rest)]
+    Nothing -> []
+  [] -> []
+
+categoryNamed :: String -> Maybe GeneralCategory
+categoryNamed tok = case tok of
+  "UppercaseLetter" -> Just UppercaseLetter
+  "LowercaseLetter" -> Just LowercaseLetter
+  "TitlecaseLetter" -> Just TitlecaseLetter
+  "ModifierLetter" -> Just ModifierLetter
+  "OtherLetter" -> Just OtherLetter
+  "NonSpacingMark" -> Just NonSpacingMark
+  "SpacingCombiningMark" -> Just SpacingCombiningMark
+  "EnclosingMark" -> Just EnclosingMark
+  "DecimalNumber" -> Just DecimalNumber
+  "LetterNumber" -> Just LetterNumber
+  "OtherNumber" -> Just OtherNumber
+  "ConnectorPunctuation" -> Just ConnectorPunctuation
+  "DashPunctuation" -> Just DashPunctuation
+  "OpenPunctuation" -> Just OpenPunctuation
+  "ClosePunctuation" -> Just ClosePunctuation
+  "InitialQuote" -> Just InitialQuote
+  "FinalQuote" -> Just FinalQuote
+  "OtherPunctuation" -> Just OtherPunctuation
+  "MathSymbol" -> Just MathSymbol
+  "CurrencySymbol" -> Just CurrencySymbol
+  "ModifierSymbol" -> Just ModifierSymbol
+  "OtherSymbol" -> Just OtherSymbol
+  "Space" -> Just Space
+  "LineSeparator" -> Just LineSeparator
+  "ParagraphSeparator" -> Just ParagraphSeparator
+  "Control" -> Just Control
+  "Format" -> Just Format
+  "Surrogate" -> Just Surrogate
+  "PrivateUse" -> Just PrivateUse
+  "NotAssigned" -> Just NotAssigned
+  _ -> Nothing

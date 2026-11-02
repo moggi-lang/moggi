@@ -1,0 +1,25 @@
+module System.CPUTime.JVM
+  ( cpuTimeNanos
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Real
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import System.IO.Base (IO)
+
+-- The JVM's thread bean is an interface: the compiler emits invokeinterface
+-- for a host type declared as one.
+foreign jvm type ThreadMXBean "interface:java.lang.management.ThreadMXBean"
+
+foreign jvm function threadMXBean "java.lang.management.ManagementFactory:getThreadMXBean" :: IO ThreadMXBean
+foreign jvm function currentThreadCpuTime "java.lang.management.ThreadMXBean.getCurrentThreadCpuTime" :: ThreadMXBean -> Int
+
+-- Nanoseconds of CPU this thread has used. The JVM measures it at nanosecond
+-- resolution and answers -1 when the measurement is disabled; a disabled
+-- measurement is reported as it is rather than replaced with the wall clock.
+cpuTimeNanos :: IO Integer
+cpuTimeNanos = do
+  bean <- threadMXBean
+  pure (toInteger (currentThreadCpuTime bean))

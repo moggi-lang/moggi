@@ -91,6 +91,7 @@ function languageRuntime(): string
         ioClassIl(),
         stClassIl(),
         stRefClassIl(),
+        ioRefClassIl(),
         stBindFnClassIl(),
         stNewRefFnClassIl(),
         stReadRefFnClassIl(),
@@ -481,6 +482,37 @@ function stWriteRefFnClassIl(): string
     ldfld object Moggi.Rt.WriteRefFn::x
     stfld object Moggi.Rt.STRef::v
     ldnull
+    ret
+  }
+}
+
+IL;
+}
+
+/**
+ * The mutable `IO` cell: one value, replaced in place by `writeIORef#`.
+ *
+ * The field is the state, exactly like `STRef`'s; what differs is which medium
+ * may reach the cell, which the checker enforces through the type, not the
+ * runtime.
+ */
+function ioRefClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.IORef
+       extends [System.Runtime]System.Object
+{
+  .field public object v
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(object v) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.1
+    stfld object Moggi.Rt.IORef::v
     ret
   }
 }
@@ -1220,6 +1252,7 @@ function rtClassIl(): string
         rtStFreezeArrayIl(),
         rtStThawDirectIl(),
         rtStThawArrayIl(),
+        rtIoNewRefIl(),
         rtIoNewArrayIl(),
         rtIoReadArrayIl(),
         rtIoWriteArrayIl(),
@@ -4608,6 +4641,39 @@ function rtStThawArrayIl(): string
     ldarg.1
     newobj instance void Moggi.Rt.ThawArrayFn::.ctor(class Moggi.Rt.ArrArray, bool)
     newobj instance void Moggi.Rt.ST::.ctor(object)
+    ret
+  }
+
+IL;
+}
+
+/** The `IO` cell's primops: allocate one, read it, replace its value. */
+function rtIoNewRefIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.IORef IoNewRef(object x) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    newobj instance void Moggi.Rt.IORef::.ctor(object)
+    ret
+  }
+
+  .method public hidebysig static object IoReadRef(class Moggi.Rt.IORef r) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld object Moggi.Rt.IORef::v
+    ret
+  }
+
+  .method public hidebysig static object IoWriteRef(class Moggi.Rt.IORef r, object x) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldarg.1
+    stfld object Moggi.Rt.IORef::v
+    ldnull
     ret
   }
 
