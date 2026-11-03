@@ -100,6 +100,8 @@ function languageRuntime(): array
         'moggi/rt/ST' => buildSTClass(),
         'moggi/rt/STRef' => buildSTRefClass(),
         'moggi/rt/IORef' => buildIORefClass(),
+        'moggi/rt/StableName' => buildStableNameClass(),
+        'moggi/rt/Weak' => buildWeakClass(),
         'moggi/rt/ArrHole' => buildArrHoleClass(),
         'moggi/rt/ArrArray' => buildArrArrayClass(),
         'moggi/rt/ArrSTArray' => buildArrSTArrayClass(),
@@ -631,6 +633,88 @@ function buildArrIOArrayClass(): string
  * What differs from `STRef` is which medium may reach the cell, which the
  * checker enforces through the type, not the runtime.
  */
+function buildStableNameClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/StableName');
+    $b->addField('id', 'J', 0x0011);
+
+    $b->addMethod(
+        '<init>',
+        '(J)V',
+        0x0001,
+        3,
+        ['moggi/rt/StableName', 'long'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->lload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/StableName', 'id', 'J'), 2);
+            $c->return_();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/**
+ * One weak pointer. The key lives only through a host `WeakReference`; the
+ * value is strong, and `self`/`pair` say how to rebuild the dereference result
+ * without retaining the key in the common `mkWeakPtr` and `mkWeakPair` shapes.
+ * `next` threads the runtime registry that finalizer polling walks. `value`,
+ * `finalizer`, `finalized` and `next` are mutable because `Platform` writes
+ * them after construction: the JVM only lets a class write a final field it
+ * declares.
+ */
+function buildWeakClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/Weak');
+    $b->addField('key', 'Ljava/lang/ref/WeakReference;', 0x0011);
+    $b->addField('value', 'Ljava/lang/Object;', 0x0001);
+    $b->addField('finalizer', 'Ljava/lang/Object;', 0x0001);
+    $b->addField('self', 'Z', 0x0011);
+    $b->addField('pair', 'Z', 0x0011);
+    $b->addField('finalized', 'Z', 0x0001);
+    $b->addField('next', 'Lmoggi/rt/Weak;', 0x0001);
+
+    $b->addMethod(
+        '<init>',
+        '(Ljava/lang/ref/WeakReference;Ljava/lang/Object;Ljava/lang/Object;ZZ)V',
+        0x0001,
+        6,
+        ['moggi/rt/Weak', 'java/lang/ref/WeakReference', 'java/lang/Object', 'java/lang/Object', 'int', 'int'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/Weak', 'key', 'Ljava/lang/ref/WeakReference;'));
+            $c->aload(0);
+            $c->aload(2);
+            $c->putfield($cp->fieldRef('moggi/rt/Weak', 'value', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->aload(3);
+            $c->putfield($cp->fieldRef('moggi/rt/Weak', 'finalizer', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->iload(4);
+            $c->putfield($cp->fieldRef('moggi/rt/Weak', 'self', 'Z'));
+            $c->aload(0);
+            $c->iload(5);
+            $c->putfield($cp->fieldRef('moggi/rt/Weak', 'pair', 'Z'));
+            $c->iload(4);
+            $c->ifeq('keepValue');
+            $c->aload(0);
+            $c->aconst_null();
+            $c->putfield($cp->fieldRef('moggi/rt/Weak', 'value', 'Ljava/lang/Object;'));
+            $c->label('keepValue');
+            $c->noteFrame(['moggi/rt/Weak', 'java/lang/ref/WeakReference', 'java/lang/Object', 'java/lang/Object', 'int', 'int']);
+            $c->return_();
+        }
+    );
+
+    return $b->toBytes();
+}
+
 function buildIORefClass(): string
 {
     $b = new ClassBuilder('moggi/rt/IORef');
@@ -5071,6 +5155,10 @@ function buildPlatformClass(): string
 
     $b->addField('stdin', 'Ljava/io/BufferedReader;', 0x000a);
 
+    $b->addField('stableCounter', 'J', 0x000a);
+
+    $b->addField('weakHead', 'Lmoggi/rt/Weak;', 0x000a);
+
     $b->addMethod(
         'stdin',
         '()Ljava/lang/Object;',
@@ -5391,6 +5479,311 @@ function buildPlatformClass(): string
             $c->ldc($cp->string_('java'));
             $c->invokevirtual($cp->methodRef('java/util/Optional', 'orElse', '(Ljava/lang/Object;)Ljava/lang/Object;'), 2, true);
             $c->checkcast($cp->class_('java/lang/String'));
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'performGC',
+        '()Ljava/lang/Object;',
+        0x0009,
+        0,
+        [],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->invokestatic($cp->methodRef('java/lang/System', 'gc', '()V'), 0, false);
+            $c->aconst_null();
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'performMajorGC',
+        '()Ljava/lang/Object;',
+        0x0009,
+        0,
+        [],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->invokestatic($cp->methodRef('java/lang/System', 'gc', '()V'), 0, false);
+            $c->aconst_null();
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'makeStableName',
+        '(Ljava/lang/Object;)Lmoggi/rt/StableName;',
+        0x0009,
+        3,
+        ['java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->getstatic($cp->fieldRef('moggi/rt/Platform', 'stableCounter', 'J'), 2);
+            $c->lconst(1);
+            $c->ladd();
+            $c->dup2();
+            $c->putstatic($cp->fieldRef('moggi/rt/Platform', 'stableCounter', 'J'), 2);
+            $c->lstore(1);
+            $c->new_($cp->class_('moggi/rt/StableName'));
+            $c->dup();
+            $c->lload(1);
+            $c->invokespecial($cp->methodRef('moggi/rt/StableName', '<init>', '(J)V'), 1, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'hashStableName',
+        '(Lmoggi/rt/StableName;)J',
+        0x0009,
+        1,
+        ['moggi/rt/StableName'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/StableName', 'id', 'J'), 2);
+            $c->lreturn();
+        }
+    );
+
+    $b->addMethod(
+        'eqStableName',
+        '(Lmoggi/rt/StableName;Lmoggi/rt/StableName;)Z',
+        0x0009,
+        2,
+        ['moggi/rt/StableName', 'moggi/rt/StableName'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/StableName', 'id', 'J'), 2);
+            $c->aload(1);
+            $c->getfield($cp->fieldRef('moggi/rt/StableName', 'id', 'J'), 2);
+            $c->lcmp();
+            $c->ifne('notEqual');
+            $c->iconst(1);
+            $c->ireturn();
+            $c->label('notEqual');
+            $c->noteFrame(['moggi/rt/StableName', 'moggi/rt/StableName']);
+            $c->iconst(0);
+            $c->ireturn();
+        }
+    );
+
+    $b->addMethod(
+        'mkWeak',
+        '(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Z)Lmoggi/rt/Weak;',
+        0x0009,
+        6,
+        ['java/lang/Object', 'java/lang/Object', 'java/lang/Object', 'int'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->aload(1);
+            $c->if_acmpne('notSelf');
+            $c->iconst(1);
+            $c->goto_('selfDone');
+            $c->label('notSelf');
+            $c->noteFrame(['java/lang/Object', 'java/lang/Object', 'java/lang/Object', 'int']);
+            $c->iconst(0);
+            $c->label('selfDone');
+            $c->noteFrame(['java/lang/Object', 'java/lang/Object', 'java/lang/Object', 'int'], ['int']);
+            $c->iload(3);
+            $c->iconst(1);
+            $c->isub();
+            $c->imul();
+            $c->istore(4);
+
+            $c->new_($cp->class_('moggi/rt/Weak'));
+            $c->dup();
+            $c->new_($cp->class_('java/lang/ref/WeakReference'));
+            $c->dup();
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/ref/WeakReference', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->aload(1);
+            $c->aload(2);
+            $c->iload(4);
+            $c->iload(3);
+            $c->invokespecial($cp->methodRef('moggi/rt/Weak', '<init>', '(Ljava/lang/ref/WeakReference;Ljava/lang/Object;Ljava/lang/Object;ZZ)V'), 5, false);
+            $c->astore(5);
+            $c->aload(5);
+            $c->getstatic($cp->fieldRef('moggi/rt/Platform', 'weakHead', 'Lmoggi/rt/Weak;'));
+            $c->putfield($cp->fieldRef('moggi/rt/Weak', 'next', 'Lmoggi/rt/Weak;'));
+            $c->aload(5);
+            $c->putstatic($cp->fieldRef('moggi/rt/Platform', 'weakHead', 'Lmoggi/rt/Weak;'));
+            $c->aload(5);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'memNothing',
+        '()Lmoggi/rt/Con;',
+        0x0009,
+        2,
+        [],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('moggi/rt/Con'));
+            $c->dup();
+            $c->ldc($cp->string_('Nothing'));
+            $c->iconst(0);
+            $c->anewarray($cp->class_('java/lang/Object'));
+            $c->invokespecial($cp->methodRef('moggi/rt/Con', '<init>', '(Ljava/lang/String;[Ljava/lang/Object;)V'), 2, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'memJust',
+        '(Ljava/lang/Object;)Lmoggi/rt/Con;',
+        0x0009,
+        1,
+        ['java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('moggi/rt/Con'));
+            $c->dup();
+            $c->ldc($cp->string_('Just'));
+            $c->iconst(1);
+            $c->anewarray($cp->class_('java/lang/Object'));
+            $c->dup();
+            $c->iconst(0);
+            $c->aload(0);
+            $c->aastore();
+            $c->invokespecial($cp->methodRef('moggi/rt/Con', '<init>', '(Ljava/lang/String;[Ljava/lang/Object;)V'), 2, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'runFinalizer',
+        '(Lmoggi/rt/Weak;)V',
+        0x0009,
+        2,
+        ['moggi/rt/Weak'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aconst_null();
+            $c->astore(1);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/Weak', 'finalized', 'Z'));
+            $c->ifne('done');
+            $c->aload(0);
+            $c->iconst(1);
+            $c->putfield($cp->fieldRef('moggi/rt/Weak', 'finalized', 'Z'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/Weak', 'finalizer', 'Ljava/lang/Object;'));
+            $c->astore(1);
+            $c->aload(0);
+            $c->aconst_null();
+            $c->putfield($cp->fieldRef('moggi/rt/Weak', 'finalizer', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->aconst_null();
+            $c->putfield($cp->fieldRef('moggi/rt/Weak', 'value', 'Ljava/lang/Object;'));
+            $c->aload(1);
+            $c->ifnull('done');
+            $c->aload(1);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'ioRun', '(Ljava/lang/Object;)Ljava/lang/Object;'), 1, true);
+            $c->pop_();
+            $c->label('done');
+            $c->noteFrame(['moggi/rt/Weak', 'java/lang/Object']);
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'runWeakFinalizers',
+        '()V',
+        0x0009,
+        1,
+        [],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->getstatic($cp->fieldRef('moggi/rt/Platform', 'weakHead', 'Lmoggi/rt/Weak;'));
+            $c->astore(0);
+            $c->label('loop');
+            $c->noteFrame(['moggi/rt/Weak']);
+            $c->aload(0);
+            $c->ifnull('done');
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/Weak', 'finalized', 'Z'));
+            $c->ifne('next');
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/Weak', 'key', 'Ljava/lang/ref/WeakReference;'));
+            $c->invokevirtual($cp->methodRef('java/lang/ref/WeakReference', 'get', '()Ljava/lang/Object;'), 0, true);
+            $c->ifnonnull('next');
+            $c->aload(0);
+            $c->invokestatic($cp->methodRef('moggi/rt/Platform', 'runFinalizer', '(Lmoggi/rt/Weak;)V'), 1, false);
+            $c->label('next');
+            $c->noteFrame(['moggi/rt/Weak']);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/Weak', 'next', 'Lmoggi/rt/Weak;'));
+            $c->astore(0);
+            $c->goto_('loop');
+            $c->label('done');
+            $c->noteFrame(['moggi/rt/Weak']);
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'deRefWeak',
+        '(Lmoggi/rt/Weak;)Ljava/lang/Object;',
+        0x0009,
+        2,
+        ['moggi/rt/Weak'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aconst_null();
+            $c->astore(1);
+            $c->invokestatic($cp->methodRef('moggi/rt/Platform', 'runWeakFinalizers', '()V'), 0, false);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/Weak', 'finalized', 'Z'));
+            $c->ifne('nothing');
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/Weak', 'key', 'Ljava/lang/ref/WeakReference;'));
+            $c->invokevirtual($cp->methodRef('java/lang/ref/WeakReference', 'get', '()Ljava/lang/Object;'), 0, true);
+            $c->astore(1);
+            $c->aload(1);
+            $c->ifnull('nothing');
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/Weak', 'pair', 'Z'));
+            $c->ifeq('single');
+            $c->iconst(2);
+            $c->anewarray($cp->class_('java/lang/Object'));
+            $c->dup();
+            $c->iconst(0);
+            $c->aload(1);
+            $c->aastore();
+            $c->dup();
+            $c->iconst(1);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/Weak', 'value', 'Ljava/lang/Object;'));
+            $c->aastore();
+            $c->invokestatic($cp->methodRef('moggi/rt/Platform', 'memJust', '(Ljava/lang/Object;)Lmoggi/rt/Con;'), 1, true);
+            $c->areturn();
+            $c->label('single');
+            $c->noteFrame(['moggi/rt/Weak', 'java/lang/Object']);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/Weak', 'self', 'Z'));
+            $c->ifeq('value');
+            $c->aload(1);
+            $c->invokestatic($cp->methodRef('moggi/rt/Platform', 'memJust', '(Ljava/lang/Object;)Lmoggi/rt/Con;'), 1, true);
+            $c->areturn();
+            $c->label('value');
+            $c->noteFrame(['moggi/rt/Weak', 'java/lang/Object']);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/Weak', 'value', 'Ljava/lang/Object;'));
+            $c->invokestatic($cp->methodRef('moggi/rt/Platform', 'memJust', '(Ljava/lang/Object;)Lmoggi/rt/Con;'), 1, true);
+            $c->areturn();
+            $c->label('nothing');
+            $c->noteFrame(['moggi/rt/Weak', 'java/lang/Object']);
+            $c->invokestatic($cp->methodRef('moggi/rt/Platform', 'memNothing', '()Lmoggi/rt/Con;'), 0, true);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'finalizeWeak',
+        '(Lmoggi/rt/Weak;)Ljava/lang/Object;',
+        0x0009,
+        1,
+        ['moggi/rt/Weak'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->invokestatic($cp->methodRef('moggi/rt/Platform', 'runWeakFinalizers', '()V'), 0, false);
+            $c->aload(0);
+            $c->invokestatic($cp->methodRef('moggi/rt/Platform', 'runFinalizer', '(Lmoggi/rt/Weak;)V'), 1, false);
+            $c->aconst_null();
             $c->areturn();
         }
     );

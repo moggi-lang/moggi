@@ -429,6 +429,16 @@ function validateIoIntrinsic(Ast\IntrinsicCall $expr, string $source, string $fi
     }
 
     if ($role === 'io-action') {
+        if ($expr->name === 'mkWeak#' || $expr->name === 'mkWeakPair#') {
+            validatePureExpr($expr->args[0], $source, $filename);
+            validatePureExpr($expr->args[1], $source, $filename);
+            if (! exprReturnsIo($expr->args[2])) {
+                fail('weak finalizer must return IO', $expr->args[2], $source, $filename);
+            }
+            validateIoBuildExpr($expr->args[2], $source, $filename);
+
+            return;
+        }
         foreach ($expr->args as $arg) {
             validatePureExpr($arg, $source, $filename);
         }

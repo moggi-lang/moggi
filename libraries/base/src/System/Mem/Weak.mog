@@ -1,0 +1,131 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- Weak pointers.
+--
+-- A weak pointer refers to a key without keeping it alive. The pointer can be
+-- dereferenced while the key is reachable, and it carries a value that is kept
+-- alive together with the pointer. When the key becomes unreachable, the
+-- pointer is finalized: later dereferences answer 'Nothing', and the
+-- programmer-supplied finalizer runs once.
+--
+-- Weak pointers are the basis of memo tables and caches. The table holds a weak
+-- pointer to the key and a strong reference to the value; the value can contain
+-- the key without keeping it alive only through 'mkWeakPair', whose key and
+-- value are treated as one unit.
+--
+-- Finalizers run at the collector's discretion. A program must not rely on a
+-- finalizer running at a particular point, or at all at process exit. An
+-- exception thrown by a finalizer is caught and passed to the global handler
+-- installed with 'setFinalizerExceptionHandler'; an exception from that handler
+-- is ignored.
+module System.Mem.Weak
+  ( Weak
+  , mkWeak
+  , deRefWeak
+  , finalize
+  , mkWeakPtr
+  , addFinalizer
+  , mkWeakPair
+  , setFinalizerExceptionHandler
+  , getFinalizerExceptionHandler
+  , printToHandleFinalizerExceptionHandler
+  ) where
+
+import Control.Applicative
+import Control.Exception (SomeException, catch)
+import Control.Monad
+import Data.IORef
+import Data.Maybe
+import Data.Semigroup
+import Moggi.Internal.Base
+import Moggi.Internal.IO
+import System.IO (Handle, hPutStrLn)
+import System.IO.Base (IO)
+import System.IO.Unsafe (unsafePerformIO)
+import Text.Show
+
+-- | A weak pointer to a value of type @v@. The pointer is abstract: it is
+-- created with 'mkWeak' or one of its specialised forms.
+type Weak v = Weak# v
+
+-- | Make a weak pointer.
+--
+-- @mkWeak key value finalizer@ refers to @key@ weakly and keeps @value@ alive
+-- while @key@ is alive. The optional finalizer runs once, after @key@ becomes
+-- unreachable or after 'finalize' is called. The finalizer may itself refer to
+-- @key@ only through the weak pointer, never directly, or the key would stay
+-- alive.
+mkWeak :: k -> v -> Maybe (IO ()) -> IO (Weak v)
+mkWeak key value finalizer = mkWeak# key value (wrapFinalizer (fromMaybe (pure ()) finalizer))
+
+-- | Dereference a weak pointer: 'Just' the value while the key is alive, and
+-- 'Nothing' once the pointer has been finalized.
+deRefWeak :: Weak v -> IO (Maybe v)
+deRefWeak w = deRefWeak# w
+
+-- | Finalize a weak pointer now. The finalizer runs at most once; a second
+-- call does nothing. After this call 'deRefWeak' answers 'Nothing'.
+finalize :: Weak v -> IO ()
+finalize w = finalizeWeak# w
+
+-- | A weak pointer whose key and value are the same object.
+--
+-- @mkWeakPtr key finalizer = mkWeak key key finalizer@; the value is not stored
+-- separately, so the pointer does not keep its own key alive.
+mkWeakPtr :: k -> Maybe (IO ()) -> IO (Weak k)
+mkWeakPtr key finalizer = mkWeak key key finalizer
+
+-- | Attach a finalizer to a key, discarding the weak pointer that carries it.
+--
+-- The finalizer is remembered by the collector and runs when the key becomes
+-- unreachable. There is no way to detach it afterwards.
+addFinalizer :: key -> IO () -> IO ()
+addFinalizer key finalizer = do
+  _ <- mkWeakPtr key (Just finalizer)
+  pure ()
+
+-- | A weak pointer whose value is the pair of the key and a value.
+--
+-- @mkWeakPair key value finalizer@ behaves like @mkWeak key (key, value)
+-- finalizer@, except that the key can be recovered from 'deRefWeak' without
+-- being kept alive by the stored value. This is the form to use when the value
+-- may itself refer to the key.
+mkWeakPair :: k -> v -> Maybe (IO ()) -> IO (Weak (k, v))
+mkWeakPair key value finalizer = mkWeakPair# key value (wrapFinalizer (fromMaybe (pure ()) finalizer))
+
+-- The global handler receives exceptions thrown by finalizers.
+--
+-- It is initialised to a handler that ignores the exception, matching the
+-- behaviour of finalization everywhere else: a finalizer cannot report a
+-- failure by aborting the program.
+finalizerExceptionHandler :: IORef (SomeException -> IO ())
+finalizerExceptionHandler = unsafePerformIO (newIORef ignoreFinalizerException)
+
+ignoreFinalizerException :: SomeException -> IO ()
+ignoreFinalizerException _ = pure ()
+
+-- | Read the global finalizer exception handler.
+getFinalizerExceptionHandler :: IO (SomeException -> IO ())
+getFinalizerExceptionHandler = readIORef finalizerExceptionHandler
+
+-- | Install the global finalizer exception handler. Exceptions thrown by the
+-- handler itself are ignored.
+setFinalizerExceptionHandler :: (SomeException -> IO ()) -> IO ()
+setFinalizerExceptionHandler handler = writeIORef finalizerExceptionHandler handler
+
+-- | A finalizer exception handler that prints the exception to a handle.
+--
+-- The message names the exception and is written once; a failure to write it is
+-- ignored, because a finalizer exception must not escape finalization.
+printToHandleFinalizerExceptionHandler :: Handle -> SomeException -> IO ()
+printToHandleFinalizerExceptionHandler handle exception =
+  hPutStrLn handle ("Exception during weak pointer finalization (ignored): " <> show exception)
+    `catch` ignoreFinalizerException
+
+-- Run a finalizer with the current global handler in force. The handler is
+-- looked up when the finalizer runs, not when the pointer is created, so a
+-- handler installed later sees finalizers created earlier.
+wrapFinalizer :: IO () -> IO ()
+wrapFinalizer action = do
+  handler <- readIORef finalizerExceptionHandler
+  action `catch` handler

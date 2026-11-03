@@ -21,6 +21,9 @@ final class ClassIlBuilder
     /** @var list<string> */
     private array $methods = [];
 
+    /** @var list<string> */
+    private array $fields = [];
+
     public function __construct(private readonly string $typeName)
     {
     }
@@ -30,10 +33,18 @@ final class ClassIlBuilder
         $this->methods[] = $text;
     }
 
+    public function addField(string $text): void
+    {
+        $this->fields[] = $text;
+    }
+
     public function toIl(): string
     {
         $out = ".class public abstract auto ansi sealed beforefieldinit {$this->typeName}\n";
         $out .= "       extends [System.Runtime]System.Object\n{\n";
+        foreach ($this->fields as $field) {
+            $out .= $field;
+        }
         foreach ($this->methods as $method) {
             $out .= $method;
         }

@@ -1,0 +1,31 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- Garbage collection control.
+--
+-- The actions here ask the host to reclaim unreachable heap objects now. They
+-- are hints, not guarantees: a collector may ignore a request, and a run may
+-- still reclaim nothing. Programs must not depend on a collection happening at
+-- a particular point; use a weak pointer when the question is whether an object
+-- has become unreachable.
+module System.Mem
+  ( performGC
+  , performMajorGC
+  ) where
+
+import Moggi.Internal.Base
+import Moggi.Internal.IO
+import System.IO.Base (IO)
+
+-- | Request a garbage collection.
+--
+-- On the JVM this is @System.gc()@, on .NET @GC.Collect()@, and on PHP the
+-- cyclic collector. The request is advisory on every host.
+performGC :: IO ()
+performGC = performGC#
+
+-- | Request a full garbage collection.
+--
+-- A major collection considers every generation the host collector maintains.
+-- Like 'performGC', this is a request the host may decline.
+performMajorGC :: IO ()
+performMajorGC = performMajorGC#
