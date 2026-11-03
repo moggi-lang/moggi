@@ -96,6 +96,14 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
                 return lowerActionValueToBox($expr, $ctx);
             }
 
+            if ($intrinsic === 'unsafePerformIO#') {
+                return new Intrinsic(
+                    $intrinsic,
+                    [lowerActionValueToBox($expr->args[0], $ctx)],
+                    srcLocFromAst($expr, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile),
+                );
+            }
+
             return lowerIntrinsic($expr, $intrinsic, $ctx);
         })(),
         Ast\ForeignCall::class => lowerForeignCall($expr, $ctx),
@@ -726,7 +734,7 @@ function lowerDictMethodPartial(Ast\Apply $expr, CheckedApplication $term, Lower
         static function (LowerCtx $fnCtx) use ($callee, $argNodes, $paramNames): Operand {
             $args = [];
             foreach ($argNodes as $argNode) {
-                $args[] = lowerExpr($argNode, $fnCtx);
+                $args[] = lowerIoValueExpr($argNode, $fnCtx);
             }
             foreach ($paramNames as $param) {
                 $args[] = new Local($param);
@@ -782,7 +790,7 @@ function lowerIntrinsicValue(string $name, array $astArgs, Ast\AstNode $node, Lo
     if ($missing <= 0) {
         $args = [];
         foreach ($astArgs as $arg) {
-            $args[] = lowerExpr($arg, $ctx);
+            $args[] = lowerIoValueExpr($arg, $ctx);
         }
 
         return new Intrinsic(
@@ -810,7 +818,7 @@ function lowerIntrinsicValue(string $name, array $astArgs, Ast\AstNode $node, Lo
         static function (LowerCtx $fnCtx) use ($name, $astArgs, $paramNames, $node, $ctx): Operand {
             $args = [];
             foreach ($astArgs as $arg) {
-                $args[] = lowerExpr($arg, $fnCtx);
+                $args[] = lowerIoValueExpr($arg, $fnCtx);
             }
             foreach ($paramNames as $param) {
                 $args[] = new Local($param);
@@ -894,7 +902,7 @@ function lowerApply(Ast\Apply $expr, LowerCtx $ctx): Operand
 
     $args = [];
     foreach ($argNodes as $argNode) {
-        $args[] = lowerExpr($argNode, $ctx);
+        $args[] = lowerIoValueExpr($argNode, $ctx);
     }
 
     return lowerApplySpine($callee, $args, $ctx);
@@ -1187,8 +1195,11 @@ function lambdaBody(CheckedLambda $term): callable
         $body = $term->body ?? throw new \LogicException(
             "the checked lambda at {$term->origin} names no body",
         );
+        $body = materializeTermId($body, $fnCtx);
 
-        return lowerExpr(materializeTermId($body, $fnCtx), $fnCtx);
+        return astExprReturnsIo($body)
+            ? lowerActionValueToBox($body, $fnCtx)
+            : lowerExpr($body, $fnCtx);
     };
 }
 

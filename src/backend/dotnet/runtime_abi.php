@@ -110,6 +110,8 @@ function languageRuntime(): string
         constFnClassIl(),
         recClassIl(),
         topLevelFnClassIl(),
+        stableNameClassIl(),
+        weakClassIl(),
         rtClassIl(),
         word64ClassIl(),
         platformRuntime(),
@@ -5071,6 +5073,81 @@ function platformExecutablePathIl(): string
 IL;
 }
 
+function stableNameClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.StableName
+       extends [System.Runtime]System.Object
+{
+  .field public int64 id
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(int64 id) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.1
+    stfld int64 Moggi.Rt.StableName::id
+    ret
+  }
+}
+
+IL;
+}
+
+/** One weak pointer; `next` threads the runtime-owned registry. */
+function weakClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.Weak
+       extends [System.Runtime]System.Object
+{
+  .field public class [System.Runtime]System.WeakReference key
+  .field public object val
+  .field public object finalizer
+  .field public bool self
+  .field public bool pair
+  .field public bool finalized
+  .field public class Moggi.Rt.Weak next
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(class [System.Runtime]System.WeakReference key,
+                              object v, object finalizer, bool self, bool pair) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.1
+    stfld class [System.Runtime]System.WeakReference Moggi.Rt.Weak::key
+    ldarg.0
+    ldarg.2
+    stfld object Moggi.Rt.Weak::val
+    ldarg.0
+    ldarg.3
+    stfld object Moggi.Rt.Weak::finalizer
+    ldarg.0
+    ldarg.s self
+    stfld bool Moggi.Rt.Weak::self
+    ldarg.0
+    ldarg.s pair
+    stfld bool Moggi.Rt.Weak::pair
+    ldarg.s self
+    brfalse KeepValue
+    ldarg.0
+    ldnull
+    stfld object Moggi.Rt.Weak::val
+
+    KeepValue:
+    ret
+  }
+}
+
+IL;
+}
+
 function platformRuntime(): string
 {
     return \implode("\n", [
@@ -5084,6 +5161,10 @@ function platformRuntime(): string
 
   .field private static class Moggi.Rt.MList envOverrides
 
+  .field private static int64 stableCounter
+
+  .field private static class Moggi.Rt.Weak weakHead
+
 IL,
         platformSetArgsIl(),
         platformArgvIl(),
@@ -5096,6 +5177,7 @@ IL,
         platformSetenvIl(),
         platformUnsetenvIl(),
         platformExecutablePathIl(),
+        platformMemMethodsIl(),
         <<<'IL'
 }
 
@@ -5110,6 +5192,245 @@ IL,
  * not marshal; the runtime turns it into its member name (`X64`, `Arm64`, …) so
  * `System.Info.arch` can fold it onto the spelling the rest of the table uses.
  */
+function platformMemMethodsIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object PerformGC() cil managed
+  {
+    .maxstack 8
+    call void [System.Runtime]System.GC::Collect()
+    ldnull
+    ret
+  }
+
+  .method public hidebysig static object PerformMajorGC() cil managed
+  {
+    .maxstack 8
+    call void [System.Runtime]System.GC::Collect()
+    ldnull
+    ret
+  }
+
+  .method public hidebysig static class Moggi.Rt.StableName MakeStableName(object x) cil managed
+  {
+    .maxstack 8
+    .locals init (int64 id)
+
+    ldsfld int64 Moggi.Rt.Platform::stableCounter
+    ldc.i4.1
+    conv.i8
+    add
+    dup
+    stsfld int64 Moggi.Rt.Platform::stableCounter
+    stloc id
+    ldloc id
+    newobj instance void Moggi.Rt.StableName::.ctor(int64)
+    ret
+  }
+
+  .method public hidebysig static int64 HashStableName(class Moggi.Rt.StableName name) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld int64 Moggi.Rt.StableName::id
+    ret
+  }
+
+  .method public hidebysig static bool EqStableName(class Moggi.Rt.StableName a, class Moggi.Rt.StableName b) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld int64 Moggi.Rt.StableName::id
+    ldarg.1
+    ldfld int64 Moggi.Rt.StableName::id
+    ceq
+    ret
+  }
+
+  .method public hidebysig static class Moggi.Rt.Weak MkWeak(object key, object v, object finalizer, bool pair) cil managed
+  {
+    .maxstack 8
+    .locals init (class Moggi.Rt.Weak w, bool self)
+
+    ldarg.3
+    brtrue PairFlag
+    ldarg.0
+    ldarg.1
+    ceq
+    br SelfDone
+
+    PairFlag:
+    ldc.i4.0
+
+    SelfDone:
+    stloc self
+    ldarg.0
+    newobj instance void [System.Runtime]System.WeakReference::.ctor(object)
+    ldarg.1
+    ldarg.2
+    ldloc self
+    ldarg.3
+    newobj instance void Moggi.Rt.Weak::.ctor(class [System.Runtime]System.WeakReference, object, object, bool, bool)
+    stloc w
+    ldloc w
+    ldsfld class Moggi.Rt.Weak Moggi.Rt.Platform::weakHead
+    stfld class Moggi.Rt.Weak Moggi.Rt.Weak::next
+    ldloc w
+    stsfld class Moggi.Rt.Weak Moggi.Rt.Platform::weakHead
+    ldloc w
+    ret
+  }
+
+  .method public hidebysig static class Moggi.Rt.Con MaybeNothing() cil managed
+  {
+    .maxstack 8
+    ldstr "Nothing"
+    ldc.i4.0
+    newarr object
+    call class Moggi.Rt.Con Moggi.Rt.RT::Con(string, object[])
+    ret
+  }
+
+  .method public hidebysig static class Moggi.Rt.Con MaybeJust(object x) cil managed
+  {
+    .maxstack 8
+    ldstr "Just"
+    ldc.i4.1
+    newarr object
+    dup
+    ldc.i4.0
+    ldarg.0
+    stelem.ref
+    call class Moggi.Rt.Con Moggi.Rt.RT::Con(string, object[])
+    ret
+  }
+
+  .method public hidebysig static void FinalizeOne(class Moggi.Rt.Weak w) cil managed
+  {
+    .maxstack 8
+    .locals init (object f)
+
+    ldarg.0
+    ldfld bool Moggi.Rt.Weak::finalized
+    brtrue Done
+    ldarg.0
+    ldc.i4.1
+    stfld bool Moggi.Rt.Weak::finalized
+    ldarg.0
+    ldfld object Moggi.Rt.Weak::finalizer
+    stloc f
+    ldarg.0
+    ldnull
+    stfld object Moggi.Rt.Weak::finalizer
+    ldarg.0
+    ldnull
+    stfld object Moggi.Rt.Weak::val
+    ldloc f
+    brfalse Done
+    ldloc f
+    call object Moggi.Rt.RT::IoRun(object)
+    pop
+
+    Done:
+    ret
+  }
+
+  .method public hidebysig static void RunWeakFinalizers() cil managed
+  {
+    .maxstack 8
+    .locals init (class Moggi.Rt.Weak w)
+
+    ldsfld class Moggi.Rt.Weak Moggi.Rt.Platform::weakHead
+    stloc w
+    br Check
+
+    Loop:
+    ldloc w
+    ldfld bool Moggi.Rt.Weak::finalized
+    brtrue Next
+    ldloc w
+    ldfld class [System.Runtime]System.WeakReference Moggi.Rt.Weak::key
+    callvirt instance object [System.Runtime]System.WeakReference::get_Target()
+    brtrue Next
+    ldloc w
+    call void Moggi.Rt.Platform::FinalizeOne(class Moggi.Rt.Weak)
+
+    Next:
+    ldloc w
+    ldfld class Moggi.Rt.Weak Moggi.Rt.Weak::next
+    stloc w
+
+    Check:
+    ldloc w
+    brtrue Loop
+    ret
+  }
+
+  .method public hidebysig static object DeRefWeak(class Moggi.Rt.Weak w) cil managed
+  {
+    .maxstack 8
+    .locals init (object key)
+
+    call void Moggi.Rt.Platform::RunWeakFinalizers()
+    ldarg.0
+    ldfld bool Moggi.Rt.Weak::finalized
+    brtrue Nothing
+    ldarg.0
+    ldfld class [System.Runtime]System.WeakReference Moggi.Rt.Weak::key
+    callvirt instance object [System.Runtime]System.WeakReference::get_Target()
+    stloc key
+    ldloc key
+    brfalse Nothing
+    ldarg.0
+    ldfld bool Moggi.Rt.Weak::pair
+    brfalse Single
+    ldc.i4.2
+    newarr object
+    dup
+    ldc.i4.0
+    ldloc key
+    stelem.ref
+    dup
+    ldc.i4.1
+    ldarg.0
+    ldfld object Moggi.Rt.Weak::val
+    stelem.ref
+    call class Moggi.Rt.Con Moggi.Rt.Platform::MaybeJust(object)
+    ret
+
+    Single:
+    ldarg.0
+    ldfld bool Moggi.Rt.Weak::self
+    brfalse Value
+    ldloc key
+    call class Moggi.Rt.Con Moggi.Rt.Platform::MaybeJust(object)
+    ret
+
+    Value:
+    ldarg.0
+    ldfld object Moggi.Rt.Weak::val
+    call class Moggi.Rt.Con Moggi.Rt.Platform::MaybeJust(object)
+    ret
+
+    Nothing:
+    call class Moggi.Rt.Con Moggi.Rt.Platform::MaybeNothing()
+    ret
+  }
+
+  .method public hidebysig static object FinalizeWeak(class Moggi.Rt.Weak w) cil managed
+  {
+    .maxstack 8
+
+    call void Moggi.Rt.Platform::RunWeakFinalizers()
+    ldarg.0
+    call void Moggi.Rt.Platform::FinalizeOne(class Moggi.Rt.Weak)
+    ldnull
+    ret
+  }
+
+IL;
+}
+
 function platformArchitectureIl(): string
 {
     return <<<'IL'

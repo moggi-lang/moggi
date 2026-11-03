@@ -297,6 +297,56 @@ function emitIntrinsicState(EmitEnv $env, IR\Intrinsic $op): bool
             $env->m->emit('call string Moggi.Rt.Platform::ExecutablePath()');
 
             return true;
+        case 'performGC#':
+            $env->m->emit('call object Moggi.Rt.Platform::PerformGC()');
+
+            return true;
+        case 'performMajorGC#':
+            $env->m->emit('call object Moggi.Rt.Platform::PerformMajorGC()');
+
+            return true;
+        case 'makeStableName#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('call class Moggi.Rt.StableName Moggi.Rt.Platform::MakeStableName(object)');
+
+            return true;
+        case 'hashStableName#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.StableName');
+            $env->m->emit('call int64 Moggi.Rt.Platform::HashStableName(class Moggi.Rt.StableName)');
+            $env->m->emit('box int64');
+
+            return true;
+        case 'eqStableName#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.StableName');
+            emitOperand($env, $args[1]);
+            $env->m->emit('castclass Moggi.Rt.StableName');
+            $env->m->emit('call bool Moggi.Rt.Platform::EqStableName(class Moggi.Rt.StableName, class Moggi.Rt.StableName)');
+            $env->m->emit('box bool');
+
+            return true;
+        case 'mkWeak#':
+        case 'mkWeakPair#':
+            emitOperand($env, $args[0]);
+            emitOperand($env, $args[1]);
+            emitOperand($env, $args[2]);
+            $env->m->emit($op->name === 'mkWeakPair#' ? 'ldc.i4.1' : 'ldc.i4.0');
+            $env->m->emit('call class Moggi.Rt.Weak Moggi.Rt.Platform::MkWeak(object, object, object, bool)');
+
+            return true;
+        case 'deRefWeak#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.Weak');
+            $env->m->emit('call object Moggi.Rt.Platform::DeRefWeak(class Moggi.Rt.Weak)');
+
+            return true;
+        case 'finalizeWeak#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.Weak');
+            $env->m->emit('call object Moggi.Rt.Platform::FinalizeWeak(class Moggi.Rt.Weak)');
+
+            return true;
         case 'unsafePerformIO#':
             emitOperand($env, $args[0]);
             $env->m->emit('call object Moggi.Rt.RT::IoRun(object)');

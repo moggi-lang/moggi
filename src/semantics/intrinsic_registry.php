@@ -332,6 +332,60 @@ function typeSchemes(): array
             new TArrow(new TCon('IO', [$a]), $a),
             ['a'],
         ),
+        'performGC#' => scheme(new TCon('IO', [new TUnit()]), []),
+        'performMajorGC#' => scheme(new TCon('IO', [new TUnit()]), []),
+        'makeStableName#' => scheme(
+            new TArrow($a, new TCon('IO', [new TCon('StableName', [$a])])),
+            ['a'],
+        ),
+        'hashStableName#' => scheme(
+            new TArrow(new TCon('StableName', [$a]), $int),
+            ['a'],
+        ),
+        'eqStableName#' => scheme(
+            new TArrow(
+                new TCon('StableName', [$a]),
+                new TArrow(new TCon('StableName', [$b]), $bool),
+            ),
+            ['a', 'b'],
+        ),
+        'mkWeak#' => scheme(
+            new TArrow(
+                new TVar('k'),
+                new TArrow(
+                    new TVar('v'),
+                    new TArrow(
+                        new TCon('IO', [new TUnit()]),
+                        new TCon('IO', [new TCon('Weak', [new TVar('v')])]),
+                    ),
+                ),
+            ),
+            ['k', 'v'],
+        ),
+        'mkWeakPair#' => scheme(
+            new TArrow(
+                new TVar('k'),
+                new TArrow(
+                    new TVar('v'),
+                    new TArrow(
+                        new TCon('IO', [new TUnit()]),
+                        new TCon('IO', [new TCon('Weak', [new TCon('Tuple2', [new TVar('k'), new TVar('v')])])]),
+                    ),
+                ),
+            ),
+            ['k', 'v'],
+        ),
+        'deRefWeak#' => scheme(
+            new TArrow(
+                new TCon('Weak', [$a]),
+                new TCon('IO', [new TCon('Maybe', [$a])]),
+            ),
+            ['a'],
+        ),
+        'finalizeWeak#' => scheme(
+            new TArrow(new TCon('Weak', [$a]), new TCon('IO', [new TUnit()])),
+            ['a'],
+        ),
         'arrayNew#' => scheme(
             new TArrow(
                 new TCon('Tuple2', [new TVar('i'), new TVar('i')]),
@@ -601,6 +655,13 @@ function ioPrimopRoles(): array
         'thawIOArray#' => 'io-action',
         'unsafeFreezeIOArray#' => 'io-action',
         'unsafeThawIOArray#' => 'io-action',
+        'performGC#' => 'io-action',
+        'performMajorGC#' => 'io-action',
+        'makeStableName#' => 'io-action',
+        'mkWeak#' => 'io-action',
+        'mkWeakPair#' => 'io-action',
+        'deRefWeak#' => 'io-action',
+        'finalizeWeak#' => 'io-action',
     ];
 }
 
@@ -974,6 +1035,8 @@ function ioTypeTable(): array
         'IO#' => ['params' => ['a'], 'kindArity' => 1],
         'IOArray#' => ['params' => ['i', 'e'], 'kindArity' => 2],
         'IORef#' => ['params' => ['a'], 'kindArity' => 1],
+        'Weak#' => ['params' => ['v'], 'kindArity' => 1],
+        'StableName#' => ['params' => ['a'], 'kindArity' => 1],
     ];
 }
 

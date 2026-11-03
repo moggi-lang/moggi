@@ -143,10 +143,6 @@ function bindLambdaCapturesStmt(IR\Stmt $stmt, CallableTable $table): IR\Stmt
         return legalizeCall($stmt, $table);
     }
 
-    // An `io_assign_action` block is not reachable through `mapStmtNestedBlocks()`, because a pass
-    // that drops local statements would drop the only definition of the temp the statement reads.
-    // Legalization rewrites statements without dropping any, so it descends here itself — a call
-    // left outside the walk would keep its pre-layout argument vector and fail the layout check.
     if ($stmt instanceof IR\IoAssignAction) {
         return new IR\IoAssignAction(
             $stmt->dest,

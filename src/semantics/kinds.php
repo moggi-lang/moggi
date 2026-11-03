@@ -689,6 +689,8 @@ function canonicalTypeConName(string $name): string
         'IO#' => 'IO',
         'IOArray#' => 'IOArray',
         'IORef#' => 'IORef',
+        'Weak#' => 'Weak',
+        'StableName#' => 'StableName',
         'ST#' => 'ST',
         'STRef#' => 'STRef',
         'STArray#' => 'STArray',

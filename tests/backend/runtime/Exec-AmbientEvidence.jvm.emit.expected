@@ -365,7 +365,7 @@ public class moggi.Main {
        115: invokestatic  #143                // Method moggi/Data/Int.__ev_Show_Int:()Ljava/lang/Object;
        118: astore        13
        120: aload         13
-       122: invokestatic  #146                // Method moggi/Data/List.__ev_Show_List:(Ljava/lang/Object;)Ljava/lang/Object;
+       122: invokestatic  #146                // Method moggi/Data/List.__ev_Show_List_1:(Ljava/lang/Object;)Ljava/lang/Object;
        125: astore        14
        127: aload         14
        129: ldc           #124                // String show

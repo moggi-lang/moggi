@@ -33,6 +33,7 @@ use function Moggi\Backend\DotNet\Naming\symbolName;
 use function Moggi\Backend\Managed\managedModuleFacts;
 use function Moggi\Backend\Meta\constructorArityMap;
 use function Moggi\Backend\Meta\constructorArityMapFromRegistry;
+use function Moggi\Backend\Meta\functionIsCaf;
 use function Moggi\Backend\Meta\newtypeConstructorMap;
 use function Moggi\Backend\Meta\newtypeConstructorMapFromRegistry;
 use function Moggi\Debug\normalizeDisplayPath;
@@ -159,7 +160,32 @@ function emitFunction(
     $m->emit('ldnull');
     emitFunctionReturn($env);
 
-    $b->addMethod($m->render($name, \array_fill(0, $arity, 'object'), 'object', false, $sourceMap, $owner));
+    $caf = functionIsCaf($fn);
+    $implName = $caf ? '__caf_' . \substr(\sha1($fn->name), 0, 12) : $name;
+    $b->addMethod($m->render($implName, \array_fill(0, $arity, 'object'), 'object', false, $sourceMap, $owner));
+    if (! $caf) {
+        return;
+    }
+
+    $suffix = \substr(\sha1($fn->name), 0, 12);
+    $field = 'caf_' . $suffix;
+    $flag = $field . '_set';
+    $b->addField("  .field private static object {$field}\n");
+    $b->addField("  .field private static bool {$flag}\n");
+
+    $w = new MethodIl();
+    $w->emit("ldsfld bool {$owner}::{$flag}");
+    $w->emit('brfalse CAF_COMPUTE');
+    $w->emit("ldsfld object {$owner}::{$field}");
+    $w->emit('ret');
+    $w->emit('CAF_COMPUTE:');
+    $w->emit("call object {$owner}::{$implName}()");
+    $w->emit('dup');
+    $w->emit("stsfld object {$owner}::{$field}");
+    $w->emit('ldc.i4.1');
+    $w->emit("stsfld bool {$owner}::{$flag}");
+    $w->emit('ret');
+    $b->addMethod($w->render($name, [], 'object', false, $sourceMap, $owner));
 }
 
 /**

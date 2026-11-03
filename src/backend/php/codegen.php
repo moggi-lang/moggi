@@ -30,6 +30,7 @@ use function Moggi\Backend\Meta\boolConstructorMap;
 use function Moggi\Backend\Meta\boolConstructorMapFromRegistry;
 use function Moggi\Backend\Meta\constructorArityMap;
 use function Moggi\Backend\Meta\constructorArityMapFromRegistry;
+use function Moggi\Backend\Meta\functionIsCaf;
 use function Moggi\Backend\Meta\newtypeConstructorMap;
 use function Moggi\Backend\Meta\newtypeConstructorMapFromRegistry;
 use function Moggi\Backend\Meta\tempReadCounts;
@@ -326,6 +327,18 @@ function emitFunction(IR\FunctionDecl $function, EmitEnv $env): string
     $fnEnv->frameFunction = $generated;
     $fnEnv->tempReads = tempReadCounts($function->body);
     $body = emitBlock($fnEnv, $function->body, 1);
+    if (functionIsCaf($function)) {
+        $body = "    static \$__moggiCafSet = false;\n"
+            . "    static \$__moggiCaf = null;\n"
+            . "    if (\$__moggiCafSet) {\n"
+            . "        return \$__moggiCaf;\n"
+            . "    }\n"
+            . "    \$__moggiCaf = (function () {\n"
+            . $body
+            . "    })();\n"
+            . "    \$__moggiCafSet = true;\n"
+            . "    return \$__moggiCaf;\n";
+    }
 
     return "function {$name}({$paramsCode}) {\n"
         . $body

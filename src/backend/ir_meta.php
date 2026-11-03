@@ -61,6 +61,34 @@ function tempReadsForFunction(?array &$cache, IR\Block $body): array
 }
 
 /**
+ * Whether a top-level binding is a call-once value: a nullary declaration whose
+ * body contains `unsafePerformIO#`. The effect it names must happen once, when
+ * the binding is first demanded, and every later reference must read that one
+ * result; a backend that re-entered the body would give each reference its own
+ * `IORef` and no state would be shared.
+ */
+function functionIsCaf(IR\FunctionDecl $function): bool
+{
+    if ($function->params !== []) {
+        return false;
+    }
+
+    $found = false;
+    walkBlock(
+        $function->body,
+        static function (IR\Stmt $stmt): void {
+        },
+        static function (IR\Operand $operand) use (&$found): void {
+            if ($operand instanceof IR\Intrinsic && $operand->name === 'unsafePerformIO#') {
+                $found = true;
+            }
+        },
+    );
+
+    return $found;
+}
+
+/**
  * The call to emit as a direct return, when the statement after it returns exactly the temp it
  * defines and nothing else reads that temp.
  *
@@ -259,8 +287,6 @@ function operandCallSrcLoc(?IR\Operand $operand): ?IR\SrcLoc
         return null;
     }
 
-    // A call legalization turned into an under-application holds the call site: the statement that
-    // reads it is an assignment to the same temp, and its frame is still the call's source line.
     if ($operand instanceof IR\Partial && $operand->srcLoc !== null) {
         return $operand->srcLoc;
     }

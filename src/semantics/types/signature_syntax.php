@@ -67,11 +67,6 @@ function inferredSignatureAst(
 function signatureTypeAst(Type $type, array $known, array $subst = []): Ast\TypeNode
 {
     if ($type instanceof TCon) {
-        // Type constructors start with an uppercase letter; only a lowercase
-        // name can be a higher-kinded parameter the checker carries as a
-        // `TCon` (`Foldable f`). A constructor reached through a synonym's
-        // right-hand side need not be imported at the use site, so it is not
-        // in `$known` -- but it is still a constructor and must stay one.
         $head = isset($known[$type->name])
             || isInternalTypeConName($type->name)
             || ($type->name !== '' && \ctype_upper($type->name[0]))

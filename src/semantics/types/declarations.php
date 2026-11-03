@@ -121,6 +121,8 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
         || $decl->name === Kinds\canonicalTypeConName('IO#')
         || $decl->name === Kinds\canonicalTypeConName('IOArray#')
         || $decl->name === Kinds\canonicalTypeConName('IORef#')
+        || $decl->name === Kinds\canonicalTypeConName('Weak#')
+        || $decl->name === Kinds\canonicalTypeConName('StableName#')
         || $decl->name === Kinds\canonicalTypeConName('ST#')
         || $decl->name === Kinds\canonicalTypeConName('STRef#')
         || $decl->name === Kinds\canonicalTypeConName('STArray#')

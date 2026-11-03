@@ -895,8 +895,10 @@ function ioActionCall(Ast\AstNode $expr, LowerCtx $ctx): Intrinsic|IoCall|null
         }
 
         $args = [];
-        foreach ($expr->args as $arg) {
-            $args[] = lowerExpr($arg, $ctx);
+        foreach ($expr->args as $i => $arg) {
+            $args[] = ($i === 2 && ($expr->name === 'mkWeak#' || $expr->name === 'mkWeakPair#'))
+                ? lowerActionValueToBox($arg, $ctx)
+                : lowerExpr($arg, $ctx);
         }
 
         return new Intrinsic(

@@ -373,7 +373,7 @@ match_end_V0:
   stloc.s 8
   .line 50, 50 : 3, 3 'tests/backend/runtime/Exec-AmbientEvidence.mog'
   call object Moggi.Data.Int::'__ev_Show_Int'()
-  call object Moggi.Data.List::'__ev_Show_List'(object)
+  call object Moggi.Data.List::'__ev_Show_List_1'(object)
   stloc.s 9
   .line 50, 50 : 3, 3 'tests/backend/runtime/Exec-AmbientEvidence.mog'
   ldloc.s 9

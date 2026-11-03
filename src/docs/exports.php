@@ -119,8 +119,6 @@ function isExportedValue(DocExportFilter $filter, Ast\Program $program, string $
             continue;
         }
 
-        // A data type's `(..)` exports its constructors and its record field
-        // selectors, which are ordinary values declared beside the type.
         $constructors = constructorsForExport($program, $typeName);
         if ($constructors === null) {
             continue;
