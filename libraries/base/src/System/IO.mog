@@ -41,7 +41,6 @@ module System.IO
   , hFileSize
   , hSetFileSize
   , readFile
-  , readFile'
   , writeFile
   , appendFile
   , putStr
@@ -146,9 +145,6 @@ readFile p = do
   s <- hGetContents h
   hClose h
   pure s
-
-readFile' :: FilePath -> IO String
-readFile' p = readFile p
 
 writeFile :: FilePath -> String -> IO ()
 writeFile p s = do

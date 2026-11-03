@@ -390,6 +390,88 @@ function emitIntrinsicState(EmitEnv $env, IR\Intrinsic $op): bool
             );
 
             return true;
+        case 'performGC#':
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/Platform', 'performGC', '()Ljava/lang/Object;'),
+                0,
+                true,
+            );
+
+            return true;
+        case 'performMajorGC#':
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/Platform', 'performMajorGC', '()Ljava/lang/Object;'),
+                0,
+                true,
+            );
+
+            return true;
+        case 'makeStableName#':
+            emitOperand($env, $args[0]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/Platform', 'makeStableName', '(Ljava/lang/Object;)Lmoggi/rt/StableName;'),
+                1,
+                true,
+            );
+
+            return true;
+        case 'hashStableName#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/StableName'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/Platform', 'hashStableName', '(Lmoggi/rt/StableName;)J'),
+                1,
+                true,
+            );
+            $env->c->invokestatic($env->cp->methodRef('java/lang/Long', 'valueOf', '(J)Ljava/lang/Long;'), 2, true);
+
+            return true;
+        case 'eqStableName#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/StableName'));
+            emitOperand($env, $args[1]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/StableName'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/Platform', 'eqStableName', '(Lmoggi/rt/StableName;Lmoggi/rt/StableName;)Z'),
+                2,
+                true,
+            );
+            $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+
+            return true;
+        case 'mkWeak#':
+        case 'mkWeakPair#':
+            emitOperand($env, $args[0]);
+            emitOperand($env, $args[1]);
+            emitOperand($env, $args[2]);
+            $env->c->iconst($op->name === 'mkWeakPair#' ? 1 : 0);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/Platform', 'mkWeak', '(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Z)Lmoggi/rt/Weak;'),
+                4,
+                true,
+            );
+
+            return true;
+        case 'deRefWeak#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/Weak'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/Platform', 'deRefWeak', '(Lmoggi/rt/Weak;)Ljava/lang/Object;'),
+                1,
+                true,
+            );
+
+            return true;
+        case 'finalizeWeak#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/Weak'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/Platform', 'finalizeWeak', '(Lmoggi/rt/Weak;)Ljava/lang/Object;'),
+                1,
+                true,
+            );
+
+            return true;
         case 'unsafePerformIO#':
             emitOperand($env, $args[0]);
             $env->c->invokestatic(

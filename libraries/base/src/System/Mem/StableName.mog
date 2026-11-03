@@ -1,0 +1,51 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- Stable names: identities for heap objects that can be compared and hashed.
+--
+-- A stable name is an ordinary value. It remains valid while the object it
+-- names is alive; once that object is unreachable the name may still be
+-- compared and hashed, but it no longer identifies a live object. Two names are
+-- equal when they were produced from the same object, and unequal when they
+-- identify different objects. A name's hash is stable for the life of the name.
+--
+-- A stable name is not a weak pointer: it does not keep its object alive, and
+-- it does not report whether the object is still reachable. Use
+-- 'System.Mem.Weak.Weak' for that.
+module System.Mem.StableName
+  ( StableName
+  , makeStableName
+  , hashStableName
+  , eqStableName
+  ) where
+
+import Data.Eq
+import Moggi.Internal.Base
+import Moggi.Internal.IO
+import Moggi.Internal.Prim
+import System.IO.Base (IO)
+
+-- | A stable name for a value of type @a@.
+type StableName a = StableName# a
+
+-- | Make a stable name for a value.
+--
+-- The value itself is not examined: the name identifies the object the value
+-- denotes, not its contents. Calling 'makeStableName' twice on the same live
+-- object may answer either the same name or two equal names; the identity
+-- guarantee is that names for the same object compare equal and names for
+-- different objects compare unequal.
+makeStableName :: a -> IO (StableName a)
+makeStableName x = makeStableName# x
+
+-- | The hash of a stable name. Equal names have equal hashes.
+hashStableName :: StableName a -> Int
+hashStableName sn = hashStableName# sn
+
+-- | Whether two stable names identify the same object.
+--
+-- The two names may have been made for values of different types.
+eqStableName :: StableName a -> StableName b -> Bool
+eqStableName a b = eqStableName# a b
+
+instance Eq (StableName a) where
+  (==) = eqStableName

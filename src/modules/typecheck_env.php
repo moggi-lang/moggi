@@ -847,10 +847,6 @@ function indexProjectInstances(array $projectInstances): array
         $byClass[$className][] = $instance;
         $byClassHead[$className][$headKey][] = $instance;
 
-        // A type name is only unique inside one module: `Data.Monoid.First` and
-        // `Data.Semigroup.First` are two declarations. The bare key keeps the
-        // project-wide candidates a caller that cannot resolve a name needs,
-        // and the qualified key is what a caller that can resolve it looks up.
         $headModule = $instance['headModule'] ?? null;
         if ($headModule !== null && $headModule !== '') {
             $byClassHead[$className][$headModule . '::' . $headKey][] = $instance;

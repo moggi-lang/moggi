@@ -286,9 +286,6 @@ function projectInstancesFromProgram(
         }
     }
 
-    // The head names a type by spelling; the module the type is declared in is
-    // what makes that spelling an identity, so two modules may each declare a
-    // `First` and an instance for it.
     foreach ($instances as $index => $record) {
         if (isset($record['headModule'])) {
             continue;

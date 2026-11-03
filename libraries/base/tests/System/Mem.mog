@@ -1,0 +1,73 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- System.Mem, System.Mem.StableName and System.Mem.Weak: collection requests,
+-- stable-name identity and hashing, weak-pointer dereference, explicit
+-- finalization, pair pointers, and the global finalizer exception handler.
+import Control.Monad
+import Data.IORef
+import Data.Maybe
+import Data.Semigroup
+import Data.String (String)
+import Moggi.Internal.Base
+import System.IO
+import System.IO.Error (ioError, userError)
+import System.Mem
+import System.Mem.StableName
+import System.Mem.Weak
+import Text.Show
+
+main :: IO ()
+main = do
+  sn1 <- makeStableName (1 :: Int)
+  sn2 <- makeStableName (2 :: Int)
+  putStrLn (show (eqStableName sn1 sn1))
+  putStrLn (show (eqStableName sn1 sn2))
+  putStrLn (show (hashStableName sn1 == hashStableName sn1))
+
+  performGC
+  performMajorGC
+  putStrLn "gc"
+
+  flag <- newIORef (0 :: Int)
+  key <- newIORef (7 :: Int)
+  w <- mkWeakPtr key (Just (writeIORef flag 1))
+  ptr <- deRefWeak w
+  case ptr of
+    Nothing -> putStrLn "ptr-nothing"
+    Just k -> do
+      value <- readIORef k
+      putStrLn ("ptr-" <> show value)
+  finalize w
+  after <- deRefWeak w
+  case after of
+    Nothing -> putStrLn "ptr-finalized"
+    Just _ -> putStrLn "ptr-still-live"
+  fin1 <- readIORef flag
+  putStrLn ("fin-" <> show fin1)
+  finalize w
+  fin2 <- readIORef flag
+  putStrLn ("fin2-" <> show fin2)
+
+  wv <- mkWeak "key" "value" Nothing
+  mv <- deRefWeak wv
+  case mv of
+    Nothing -> putStrLn "value-nothing"
+    Just v -> putStrLn v
+
+  wp <- mkWeakPair "pk" "pv" Nothing
+  mp <- deRefWeak wp
+  case mp of
+    Nothing -> putStrLn "pair-nothing"
+    Just pair -> case pair of
+      (k, v) -> putStrLn (k <> ":" <> v)
+
+  seen <- newIORef (0 :: Int)
+  setFinalizerExceptionHandler (\_ -> writeIORef seen 1)
+  wb <- mkWeak "hk" "hv" (Just (ioError (userError "finalizer boom") :: IO ()))
+  finalize wb
+  handled <- readIORef seen
+  putStrLn ("handler-" <> show handled)
+
+  af <- newIORef (0 :: Int)
+  akey <- newIORef (1 :: Int)
+  addFinalizer akey (writeIORef af 2)
+  putStrLn "add-finalizer"

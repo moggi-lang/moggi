@@ -254,7 +254,7 @@ match_end_V0:
   stloc.3
   .line 19, 19 : 3, 3 'tests/backend/runtime/Exec-Closure-Captures.mog'
   call object Moggi.Data.Int::'__ev_Show_Int'()
-  call object Moggi.Data.Maybe::'__ev_Show_Maybe'(object)
+  call object Moggi.Data.Maybe::'__ev_Show_Maybe_1'(object)
   stloc.s 4
   .line 19, 19 : 3, 3 'tests/backend/runtime/Exec-Closure-Captures.mog'
   ldloc.s 4
@@ -297,7 +297,7 @@ match_end_V0:
   stloc.s 8
   .line 20, 20 : 3, 3 'tests/backend/runtime/Exec-Closure-Captures.mog'
   call object Moggi.Data.Int::'__ev_Show_Int'()
-  call object Moggi.Data.Maybe::'__ev_Show_Maybe'(object)
+  call object Moggi.Data.Maybe::'__ev_Show_Maybe_1'(object)
   stloc.s 9
   .line 20, 20 : 3, 3 'tests/backend/runtime/Exec-Closure-Captures.mog'
   ldloc.s 9

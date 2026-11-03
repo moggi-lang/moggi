@@ -433,6 +433,12 @@ final class CodeBuilder
         $this->opcode(0x59, 1);
     }
 
+    /** Duplicate the top two stack slots as a pair (`dup2`). */
+    public function dup2(): void
+    {
+        $this->opcode(0x5c, 2);
+    }
+
     public function pop_(): void
     {
         $this->opcode(0x57, -1);
@@ -453,21 +459,21 @@ final class CodeBuilder
         $this->code .= u2($fieldRef);
     }
 
-    public function putstatic(int $fieldRef): void
+    public function putstatic(int $fieldRef, int $slots = 1): void
     {
-        $this->opcode(0xb3, -1);
+        $this->opcode(0xb3, -$slots);
         $this->code .= u2($fieldRef);
     }
 
-    public function getfield(int $fieldRef): void
+    public function getfield(int $fieldRef, int $slots = 1): void
     {
-        $this->opcode(0xb4, 0);
+        $this->opcode(0xb4, -1 + $slots);
         $this->code .= u2($fieldRef);
     }
 
-    public function putfield(int $fieldRef): void
+    public function putfield(int $fieldRef, int $slots = 1): void
     {
-        $this->opcode(0xb5, -2);
+        $this->opcode(0xb5, -1 - $slots);
         $this->code .= u2($fieldRef);
     }
 

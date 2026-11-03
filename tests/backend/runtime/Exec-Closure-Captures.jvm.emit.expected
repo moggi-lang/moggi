@@ -252,7 +252,7 @@ public class moggi.Main {
         72: invokestatic  #118                // Method moggi/Data/Int.__ev_Show_Int:()Ljava/lang/Object;
         75: astore        8
         77: aload         8
-        79: invokestatic  #123                // Method moggi/Data/Maybe.__ev_Show_Maybe:(Ljava/lang/Object;)Ljava/lang/Object;
+        79: invokestatic  #123                // Method moggi/Data/Maybe.__ev_Show_Maybe_1:(Ljava/lang/Object;)Ljava/lang/Object;
         82: astore        9
         84: aload         9
         86: ldc           #125                // String show
@@ -301,7 +301,7 @@ public class moggi.Main {
        171: invokestatic  #118                // Method moggi/Data/Int.__ev_Show_Int:()Ljava/lang/Object;
        174: astore        17
        176: aload         17
-       178: invokestatic  #123                // Method moggi/Data/Maybe.__ev_Show_Maybe:(Ljava/lang/Object;)Ljava/lang/Object;
+       178: invokestatic  #123                // Method moggi/Data/Maybe.__ev_Show_Maybe_1:(Ljava/lang/Object;)Ljava/lang/Object;
        181: astore        18
        183: aload         18
        185: ldc           #125                // String show

@@ -1686,6 +1686,8 @@ function primitiveTypeRepresentation(string $magicHashId): ?Type
         'IO#' => primitiveTypeCon('IO#'),
         'IOArray#' => primitiveTypeCon('IOArray#'),
         'IORef#' => primitiveTypeCon('IORef#'),
+        'Weak#' => primitiveTypeCon('Weak#'),
+        'StableName#' => primitiveTypeCon('StableName#'),
         'ST#' => primitiveTypeCon('ST#'),
         'STRef#' => primitiveTypeCon('STRef#'),
         'STArray#' => primitiveTypeCon('STArray#'),

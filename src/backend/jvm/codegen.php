@@ -34,6 +34,7 @@ use function Moggi\Backend\Jvm\Naming\symbolName;
 use function Moggi\Backend\Managed\managedModuleFacts;
 use function Moggi\Backend\Meta\constructorArityMap;
 use function Moggi\Backend\Meta\constructorArityMapFromRegistry;
+use function Moggi\Backend\Meta\functionIsCaf;
 use function Moggi\Backend\Meta\newtypeConstructorMap;
 use function Moggi\Backend\Meta\newtypeConstructorMapFromRegistry;
 use function Moggi\Debug\normalizeDisplayPath;
@@ -137,11 +138,19 @@ function emitFunction(
     $desc = '(' . \str_repeat('Ljava/lang/Object;', $arity) . ')Ljava/lang/Object;';
     $maxLocals = \max($arity + 32, 16);
     $paramV = \array_fill(0, $arity, 'java/lang/Object');
+    $caf = functionIsCaf($fn);
+    $implName = $caf ? '__caf_' . \substr(\sha1($fn->name), 0, 12) : $name;
+    $cafField = $caf ? 'caf_' . \substr(\sha1($fn->name), 0, 12) : '';
+    $cafFlag = $caf ? $cafField . '_set' : '';
+    if ($caf) {
+        $b->addField($cafField, 'Ljava/lang/Object;', 0x000A);
+        $b->addField($cafFlag, 'Z', 0x000A);
+    }
 
     $b->addMethod(
-        $name,
+        $implName,
         $desc,
-        0x0009,
+        $caf ? 0x000A : 0x0009,
         $maxLocals,
         $paramV,
         static function (CodeBuilder $c, ConstantPool $cp) use ($fn, $name, $owner, $functionArity, $externalFns, $lambdaMeta, $params, $arity, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables, $foreignInterfaces): void {
@@ -175,6 +184,30 @@ function emitFunction(
             }
         }
     );
+
+    if ($caf) {
+        $b->addMethod(
+            $name,
+            '()Ljava/lang/Object;',
+            0x0009,
+            2,
+            [],
+            static function (CodeBuilder $c, ConstantPool $cp) use ($owner, $implName, $cafField, $cafFlag): void {
+                $c->getstatic($cp->fieldRef($owner, $cafFlag, 'Z'));
+                $c->ifeq('compute');
+                $c->getstatic($cp->fieldRef($owner, $cafField, 'Ljava/lang/Object;'));
+                $c->areturn();
+                $c->label('compute');
+                $c->noteFrame([], []);
+                $c->invokestatic($cp->methodRef($owner, $implName, '()Ljava/lang/Object;'), 0, true);
+                $c->dup();
+                $c->putstatic($cp->fieldRef($owner, $cafField, 'Ljava/lang/Object;'));
+                $c->iconst(1);
+                $c->putstatic($cp->fieldRef($owner, $cafFlag, 'Z'));
+                $c->areturn();
+            }
+        );
+    }
 }
 
 function emitEvidence(

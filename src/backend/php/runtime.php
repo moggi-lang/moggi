@@ -503,6 +503,164 @@ function platformExecutablePath(): string
     return $real === false ? $script : $real;
 }
 
+/**
+ * One weak pointer: the key is held weakly (when it is an object), the value and
+ * finalizer strongly. `self` means the value is the key itself and is therefore
+ * not stored twice; `pair` means dereferencing rebuilds the `(key, value)` pair.
+ * `immortal` marks keys PHP cannot make weak (scalars and arrays), which behave
+ * as if they are never collected.
+ */
+final class WeakRef
+{
+    public ?\WeakReference $key = null;
+
+    public mixed $value = null;
+
+    public mixed $finalizer = null;
+
+    public bool $immortal = false;
+
+    public bool $self = false;
+
+    public bool $pair = false;
+
+    public bool $finalized = false;
+
+    public mixed $strongKey = null;
+
+    public ?WeakRef $next = null;
+}
+
+/** Request a collection; the action answers Unit. */
+function platformPerformGC(): mixed
+{
+    \gc_collect_cycles();
+
+    return null;
+}
+
+/** Request a full collection; the action answers Unit. */
+function platformPerformMajorGC(): mixed
+{
+    \gc_collect_cycles();
+
+    return null;
+}
+
+/** A fresh stable name. Two names are equal exactly when they are the same name. */
+function platformMakeStableName(mixed $x): object
+{
+    $counter = ($GLOBALS['__moggiStableCounter'] ?? 0) + 1;
+    $GLOBALS['__moggiStableCounter'] = $counter;
+
+    return new class ($counter) {
+        public function __construct(public int $id)
+        {
+        }
+    };
+}
+
+function platformHashStableName(object $name): int
+{
+    return $name->id;
+}
+
+function platformEqStableName(object $left, object $right): bool
+{
+    return $left === $right;
+}
+
+/** Build a weak pointer; `$pair` selects the key/value pair dereference. */
+function platformMkWeak(mixed $key, mixed $value, mixed $finalizer, bool $pair): WeakRef
+{
+    $weak = new WeakRef();
+    $weak->pair = $pair;
+    $weak->finalizer = $finalizer;
+    if (\is_object($key)) {
+        $weak->key = \WeakReference::create($key);
+        $weak->self = ! $pair && $value === $key;
+        if (! $weak->self) {
+            $weak->value = $value;
+        }
+    } else {
+        $weak->immortal = true;
+        $weak->strongKey = $key;
+        $weak->value = $value;
+    }
+    $weak->next = $GLOBALS['__moggiWeakHead'] ?? null;
+    $GLOBALS['__moggiWeakHead'] = $weak;
+
+    return $weak;
+}
+
+/** Dereference a weak pointer, running any finalizers whose key has died. */
+function platformDeRefWeak(WeakRef $weak): array
+{
+    platformRunWeakFinalizers();
+    if ($weak->finalized) {
+        return ['Nothing'];
+    }
+    if ($weak->immortal) {
+        return $weak->pair
+            ? ['Just', [$weak->strongKey, $weak->value]]
+            : ['Just', $weak->value];
+    }
+
+    $key = $weak->key?->get();
+    if ($key === null) {
+        return ['Nothing'];
+    }
+    if ($weak->pair) {
+        return ['Just', [$key, $weak->value]];
+    }
+
+    return ['Just', $weak->self ? $key : $weak->value];
+}
+
+/** Finalize now, whether or not the key is still alive; the action answers Unit. */
+function platformFinalizeWeak(WeakRef $weak): mixed
+{
+    platformRunWeakFinalizers();
+    platformRunWeakFinalizer($weak);
+
+    return null;
+}
+
+/** Run the finalizers of dead keys once. */
+function platformRunWeakFinalizers(): void
+{
+    if (($GLOBALS['__moggiWeakFinalizersRunning'] ?? false) === true) {
+        return;
+    }
+    $GLOBALS['__moggiWeakFinalizersRunning'] = true;
+    try {
+        $weak = $GLOBALS['__moggiWeakHead'] ?? null;
+        while ($weak !== null) {
+            $next = $weak->next;
+            if (! $weak->finalized && ! $weak->immortal && $weak->key?->get() === null) {
+                platformRunWeakFinalizer($weak);
+            }
+            $weak = $next;
+        }
+    } finally {
+        $GLOBALS['__moggiWeakFinalizersRunning'] = false;
+    }
+}
+
+function platformRunWeakFinalizer(WeakRef $weak): void
+{
+    if ($weak->finalized) {
+        return;
+    }
+    $weak->finalized = true;
+    $action = $weak->finalizer;
+    $weak->finalizer = null;
+    $weak->value = null;
+    if (\is_array($action) && ($action[0] ?? null) === '__io') {
+        ($action[1])();
+    }
+}
+
 /** A cell holding the value; allocated when the `IO` action runs. */
 function ioNewRef(mixed $x): IORef
 {
