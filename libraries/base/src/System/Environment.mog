@@ -1,40 +1,228 @@
-{-# BACKEND
-  php = System.Environment.PHP
-  jvm = System.Environment.JVM
-  dotnet = System.Environment.DotNet
-#-}
+{-# LANGUAGE NoImplicitPrelude #-}
 -- |
--- What the process was started with: the arguments it was given, the program's
--- own name, and the variables in its environment.
+-- What the process was started with and the variables in its environment.
 --
--- The four names are one per question. 'getArgs' is the argument list without
--- the program name, 'getProgName' is that name, and the two lookups differ in
--- what happens when the variable is not set: 'lookupEnv' says 'Nothing', while
--- 'getEnv' fails.
+-- 'getArgs' is the argument list without the program name, 'getProgName' is
+-- that name, and the lookups differ in what happens when a variable is not set:
+-- 'lookupEnv' answers 'Nothing', 'getEnvDefault' answers the caller's fallback,
+-- and 'getEnv' raises an 'IOError' whose type is
+-- 'System.IO.Error.doesNotExistErrorType'.
+--
+-- A variable that is set to the empty string is not an unset variable: it comes
+-- back as @'Just' \"\"@ from 'lookupEnv', as the empty string from 'getEnv', and
+-- in 'getEnvironment' as an entry with an empty value. 'setEnv' can give a
+-- variable that value, so the empty string and absence stay distinguishable.
+--
+-- 'setEnv', 'unsetEnv', 'withArgs' and 'withProgName' change what this program
+-- reads back from here on. Nothing outside the program observes the change,
+-- because an environment is per process and a Moggi program starts no other.
 module System.Environment
   ( getArgs
-  , getEnv
-  , lookupEnv
   , getProgName
+  , getExecutablePath
+  , getEnv
+  , getEnvDefault
+  , lookupEnv
+  , setEnv
+  , unsetEnv
+  , withArgs
+  , withProgName
+  , getEnvironment
   ) where
 
+import Control.Applicative
+import Control.Exception (bracket_)
+import Control.Monad
+import Data.Bool
+import Data.Char (Char, chr)
+import Data.List (elem, (++))
+import Data.Num
 import Data.Maybe
-import Data.String
+import Data.String (String, drop, length, singleton, splitOn, take)
 import Moggi.Internal.Base
 import Moggi.Internal.Prim
+import Moggi.IO.Exception (IOErrorType(InvalidArgument))
+import System.IO.Base (IO)
+import System.IO.Error (IOError, doesNotExistErrorType, ioError, ioeSetErrorString, mkIOError)
 
 -- | The arguments the program was started with, in order, without the program
 -- name (that is 'getProgName').
 getArgs :: IO [String]
+getArgs = do
+  argv <- platformProgArgv#
+  pure (dropProgramName argv)
 
--- | The value of an environment variable, or an error when it is not set.
--- Use 'lookupEnv' when an unset variable is an ordinary case.
+dropProgramName :: [String] -> [String]
+dropProgramName argv = case argv of
+  [] -> []
+  _ : rest -> rest
+
+-- | The name the program is running under. At startup it is the host's name
+-- for the launcher with the directories removed; 'withProgName' then sets it to
+-- the name given, exactly as written.
+getProgName :: IO String
+getProgName = do
+  argv <- platformProgArgv#
+  pure (case argv of
+    [] -> ""
+    name : _ -> name)
+
+-- | The absolute path of the program's executable, as the host reports it.
+--
+-- A backend that runs the program inside a virtual machine answers the path of
+-- that machine's launcher, because that is the executable the operating system
+-- started.
+getExecutablePath :: IO String
+getExecutablePath = platformExecutablePath#
+
+-- | The value of an environment variable, or an 'IOError' whose type is
+-- 'System.IO.Error.doesNotExistErrorType' when it is not set. Use 'lookupEnv'
+-- when an unset variable is an ordinary case, or 'getEnvDefault' when there is
+-- an answer for it.
 getEnv :: String -> IO String
+getEnv name = do
+  found <- lookupEnv name
+  case found of
+    Just value -> pure value
+    Nothing -> ioError (missingVariable name)
+
+missingVariable :: String -> IOError
+missingVariable name =
+  ioeSetErrorString (mkIOError doesNotExistErrorType "getEnv" Nothing (Just name)) "no environment variable"
+
+-- | The value of an environment variable, or the given answer when it is not
+-- set. An empty value is a value, so it is answered as such rather than as the
+-- default.
+getEnvDefault :: String -> String -> IO String
+getEnvDefault name fallback = do
+  found <- lookupEnv name
+  pure (fromMaybe fallback found)
 
 -- | The value of an environment variable, or 'Nothing' when it is not set.
--- An empty value is not the same as an unset variable: it comes back as
--- @'Just' ""@.
 lookupEnv :: String -> IO (Maybe String)
+lookupEnv name = do
+  entries <- getEnvironment
+  pure (lookupKey name entries)
 
--- | The name the program was started under, as the host reports it.
-getProgName :: IO String
+lookupKey :: String -> [(String, String)] -> Maybe String
+lookupKey name entries = case entries of
+  [] -> Nothing
+  (key, value) : rest -> case key == name of
+    True -> Just value
+    False -> lookupKey name rest
+
+-- | @setEnv name value@ sets the variable to @value@, including the empty
+-- string.
+--
+-- Raises an 'IOError' whose type is 'InvalidArgument' when @name@ is empty or
+-- contains an equals sign, since the host cannot express such a name.
+setEnv :: String -> String -> IO ()
+setEnv name value = do
+  key <- checkedName "setEnv" name
+  platformSetenv# key (truncateAtNul value)
+
+-- | @unsetEnv name@ removes the variable from the environment this program
+-- reads. Raises an 'IOError' whose type is 'InvalidArgument' when @name@ is
+-- empty or contains an equals sign.
+unsetEnv :: String -> IO ()
+unsetEnv name = do
+  key <- checkedName "unsetEnv" name
+  platformUnsetenv# key
+
+checkedName :: String -> String -> IO String
+checkedName who name = case truncateAtNul name of
+  "" -> ioError (invalidName who)
+  key -> case splitOn "=" key of
+    [_] -> pure key
+    _ -> ioError (invalidName who)
+
+invalidName :: String -> IOError
+invalidName who =
+  ioeSetErrorString (mkIOError InvalidArgument who Nothing Nothing) "invalid environment variable name"
+
+-- | A name and a value end at the first NUL, which is where the host's own
+-- representation ends.
+truncateAtNul :: String -> String
+truncateAtNul s = take (beforeNul s 0 (length s)) s
+
+beforeNul :: String -> Int -> Int -> Int
+beforeNul s i end = case intCompare# i end of
+  LT -> case take 1 (drop i s) of
+    "\0" -> i
+    _ -> beforeNul s (i + 1) end
+  _ -> end
+
+-- | @withArgs args action@ runs @action@ with 'getArgs' answering @args@, and
+-- restores the previous arguments afterwards, even when @action@ raises.
+withArgs :: [String] -> IO a -> IO a
+withArgs args action = do
+  name <- getProgName
+  current <- getArgs
+  bracket_
+    (platformSetProgArgv# (name : args))
+    (platformSetProgArgv# (name : current))
+    action
+
+-- | @withProgName name action@ runs @action@ with 'getProgName' answering
+-- @name@, and restores the previous name afterwards, even when @action@ raises.
+withProgName :: String -> IO a -> IO a
+withProgName name action = do
+  current <- getProgName
+  args <- getArgs
+  bracket_
+    (platformSetProgArgv# (name : args))
+    (platformSetProgArgv# (current : args))
+    action
+
+-- | The entire environment as @(name, value)@ pairs.
+--
+-- An entry whose name is not followed by an equals sign has the empty string as
+-- its value, and a variable this program has changed appears once, with its
+-- current value.
+getEnvironment :: IO [(String, String)]
+getEnvironment = do
+  host <- platformEnvEntries#
+  overlay <- platformEnvOverrides#
+  pure (overlayEntries overlay ++ hostEntries (overlayKeys overlay) host)
+
+overlayKeys :: [String] -> [String]
+overlayKeys overlay = case overlay of
+  [] -> []
+  entry : rest -> entryKey entry : overlayKeys rest
+
+overlayEntries :: [String] -> [(String, String)]
+overlayEntries overlay = collected overlay []
+
+collected :: [String] -> [String] -> [(String, String)]
+collected overlay seen = case overlay of
+  [] -> []
+  entry : rest -> case elem (entryKey entry) seen of
+    True -> collected rest seen
+    False -> case entryIsSet entry of
+      True -> divvy entry : collected rest (entryKey entry : seen)
+      False -> collected rest (entryKey entry : seen)
+
+hostEntries :: [String] -> [String] -> [(String, String)]
+hostEntries hidden host = case host of
+  [] -> []
+  entry : rest -> case elem (entryKey entry) hidden of
+    True -> hostEntries hidden rest
+    False -> divvy entry : hostEntries hidden rest
+
+entryIsSet :: String -> Bool
+entryIsSet entry = case splitOn "=" entry of
+  [_] -> False
+  _ -> True
+
+entryKey :: String -> String
+entryKey entry = case divvy entry of
+  (key, _) -> key
+
+-- | The name and value of one @NAME=value@ entry, split at the first equals
+-- sign. An entry with no equals sign holds its whole text as the name and the
+-- empty string as the value.
+divvy :: String -> (String, String)
+divvy entry = case splitOn "=" entry of
+  [] -> (entry, "")
+  key : [] -> (key, "")
+  key : _ -> (key, drop (length key + 1) entry)

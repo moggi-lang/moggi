@@ -2,6 +2,7 @@
 module Data.String.PHP
   ( singleton
   , unpack
+  , pack
   , length
   , take
   , drop
@@ -53,12 +54,13 @@ utf8 = "UTF-8"
 
 singleton c = intlChr c
 
-unpack s = chunkChars (mbStrSplit s 1 utf8)
+foreign php function rawMapOrd "array_map" :: String -> [String] -> [Char]
 
-chunkChars :: [String] -> [Char]
-chunkChars chunks = case chunks of
-  [] -> []
-  ch : rest -> intToChar# (intlOrd ch) : chunkChars rest
+unpack s = rawMapOrd "IntlChar::ord" (mbStrSplit s 1 utf8)
+
+foreign php function rawMapChr "array_map" :: String -> [Char] -> [String]
+
+pack xs = implode "" (rawMapChr "IntlChar::chr" xs)
 
 length s = mbStrLen s utf8
 

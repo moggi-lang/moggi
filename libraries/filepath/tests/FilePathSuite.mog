@@ -3,7 +3,10 @@ module FilePathSuite (filePathSuite) where
 import Support (assertTrue, expect)
 import System.Environment (getEnv)
 import System.FilePath
-import System.Info (isWindows)
+import System.Info (os)
+
+isWindows :: Bool
+isWindows = os == "mingw32"
 
 -- /directory/file.ext — the example path from the module documentation.
 example :: FilePath

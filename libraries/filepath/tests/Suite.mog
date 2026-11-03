@@ -12,8 +12,11 @@
 module Suite (main) where
 
 import FilePathSuite (filePathSuite)
-import System.Info (isWindows)
+import System.Info (os)
 import WindowsSuite (windowsSuite)
+
+isWindows :: Bool
+isWindows = os == "mingw32"
 
 -- The Windows flavour suite only runs on Windows; `case` lives here rather
 -- than in `main`'s `do`-block, which does not lower branches.

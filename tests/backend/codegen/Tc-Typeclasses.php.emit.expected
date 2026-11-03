@@ -16,9 +16,9 @@ require_once __DIR__ . '/../../../libraries/base/src/Data/Maybe.php';
 
 use function Control\Applicative\__ev_Applicative_Maybe;
 use function Control\Monad\__ev_Monad_Maybe;
-use function Data\Either\__ev_Applicative_Either;
-use function Data\Either\__ev_Functor_Either;
-use function Data\Either\__ev_Monad_Either;
+use function Data\Either\__ev_Applicative_Either_1;
+use function Data\Either\__ev_Functor_Either_1;
+use function Data\Either\__ev_Monad_Either_1;
 use function Data\List\__ev_Applicative_List;
 use function Data\List\__ev_Functor_List;
 use function Data\List\__ev_Monad_List;
@@ -40,7 +40,7 @@ function fmapListDemo($xs) {
 }
 
 function fmapEitherDemo($mx) {
-    return fmapFn(__ev_Functor_Either(), fn($x) => (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1)), $mx);
+    return fmapFn(__ev_Functor_Either_1(), fn($x) => (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1)), $mx);
 }
 
 function inc($x) {
@@ -80,12 +80,12 @@ function monadListDemo() {
 
 function eitherBindOk() {
     $__t9 = ["Right", 2];
-    return monadBind(__ev_Functor_Either(), __ev_Applicative_Either(), __ev_Monad_Either(), $__t9, fn($x) => __lambda_3($x));
+    return monadBind(__ev_Functor_Either_1(), __ev_Applicative_Either_1(), __ev_Monad_Either_1(), $__t9, fn($x) => __lambda_3($x));
 }
 
 function eitherShort() {
     $__t12 = ["Left", "err"];
-    return monadBind(__ev_Functor_Either(), __ev_Applicative_Either(), __ev_Monad_Either(), $__t12, fn($x) => __lambda_4($x));
+    return monadBind(__ev_Functor_Either_1(), __ev_Applicative_Either_1(), __ev_Monad_Either_1(), $__t12, fn($x) => __lambda_4($x));
 }
 
 function listDo($__ev_Functor, $__ev_Applicative_1, $__ev_Monad_2, $xs, $f) {
@@ -127,12 +127,12 @@ function eitherDo($__ev_Functor, $__ev_Applicative_1, $__ev_Monad_2, $m) {
 
 function eitherDoOk() {
     $__t30 = ["Right", 3];
-    return eitherDo(__ev_Functor_Either(), __ev_Applicative_Either(), __ev_Monad_Either(), $__t30);
+    return eitherDo(__ev_Functor_Either_1(), __ev_Applicative_Either_1(), __ev_Monad_Either_1(), $__t30);
 }
 
 function eitherErr() {
     $__t32 = ["Left", "nope"];
-    return eitherDo(__ev_Functor_Either(), __ev_Applicative_Either(), __ev_Monad_Either(), $__t32);
+    return eitherDo(__ev_Functor_Either_1(), __ev_Applicative_Either_1(), __ev_Monad_Either_1(), $__t32);
 }
 
 function listDiscard($__ev_Functor, $__ev_Applicative_1, $__ev_Monad_2, $a, $b) {

@@ -253,6 +253,13 @@ function emitIntrinsicState(EmitEnv $env, IR\Intrinsic $op, array $argExprs): ?s
         'thawIOArray#' => '\\Moggi\\ioThawArray(' . $argExprs[0] . ', true)',
         'unsafeFreezeIOArray#' => '\\Moggi\\ioFreezeArray(' . $argExprs[0] . ', false)',
         'unsafeThawIOArray#' => '\\Moggi\\ioThawArray(' . $argExprs[0] . ', false)',
+        'platformProgArgv#' => '\\Moggi\\platformProgArgv()',
+        'platformSetProgArgv#' => '\\Moggi\\platformSetProgArgv(' . $argExprs[0] . ')',
+        'platformEnvEntries#' => '\\Moggi\\platformEnvEntries()',
+        'platformEnvOverrides#' => '\\Moggi\\platformEnvOverrides()',
+        'platformSetenv#' => '\\Moggi\\platformSetenv(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
+        'platformUnsetenv#' => '\\Moggi\\platformUnsetenv(' . $argExprs[0] . ')',
+        'platformExecutablePath#' => '\\Moggi\\platformExecutablePath()',
         'unsafePerformIO#' => emitIoRunResultExpr($argExprs[0]),
         default => null,
     };

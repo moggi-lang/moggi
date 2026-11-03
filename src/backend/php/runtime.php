@@ -406,6 +406,103 @@ function stThawArray(ArrArray $a, bool $copy): array
     }];
 }
 
+/**
+ * The program's argv with the program name first.
+ *
+ * `$argv` holds the script path at index 0 and the arguments after it. The
+ * host path is reduced to its bare name, because that is what the program is
+ * called; a value this program installed with `platformSetProgArgv()` is
+ * answered exactly as given, so `withProgName` can choose a name of its own.
+ */
+function platformProgArgv(): array
+{
+    $saved = $GLOBALS['__moggiProgArgv'] ?? null;
+    if (\is_array($saved)) {
+        return $saved;
+    }
+
+    global $argv;
+    $values = \array_values($argv ?? []);
+    if ($values !== []) {
+        $values[0] = \basename($values[0]);
+    }
+
+    return $values;
+}
+
+/** Replace argv; the action answers Unit. */
+function platformSetProgArgv(array $argv): mixed
+{
+    $GLOBALS['__moggiProgArgv'] = $argv;
+
+    return null;
+}
+
+/** The host environment as `NAME=value` entries, one string per variable. */
+function platformEnvEntries(): array
+{
+    $entries = \getenv();
+    if (! \is_array($entries)) {
+        return [];
+    }
+
+    $out = [];
+    foreach ($entries as $name => $value) {
+        $out[] = $name . '=' . $value;
+    }
+
+    return $out;
+}
+
+/**
+ * The changes this program made, newest first.
+ *
+ * An entry is `NAME=value` for a set variable, and a bare `NAME` for one that
+ * was unset, so a set-to-empty is told apart from an absence.
+ *
+ * @return list<string>
+ */
+function platformEnvOverrides(): array
+{
+    return $GLOBALS['__moggiEnvOverrides'] ?? [];
+}
+
+/** Set a variable, the empty value included; the action answers Unit. */
+function platformSetenv(string $name, string $value): mixed
+{
+    platformPushEnvOverride($name . '=' . $value);
+
+    return null;
+}
+
+/** Remove a variable from what this program reads; the action answers Unit. */
+function platformUnsetenv(string $name): mixed
+{
+    platformPushEnvOverride($name);
+
+    return null;
+}
+
+function platformPushEnvOverride(string $entry): void
+{
+    $list = $GLOBALS['__moggiEnvOverrides'] ?? [];
+    \array_unshift($list, $entry);
+    $GLOBALS['__moggiEnvOverrides'] = $list;
+}
+
+/** The path of the script the host started, resolved against the working directory. */
+function platformExecutablePath(): string
+{
+    $script = $_SERVER['SCRIPT_FILENAME'] ?? '';
+    if ($script === '') {
+        $script = $_SERVER['argv'][0] ?? '';
+    }
+
+    $real = $script === '' ? false : \realpath($script);
+
+    return $real === false ? $script : $real;
+}
+
 /** A cell holding the value; allocated when the `IO` action runs. */
 function ioNewRef(mixed $x): IORef
 {

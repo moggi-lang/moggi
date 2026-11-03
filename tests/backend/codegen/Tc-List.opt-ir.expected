@@ -97,7 +97,7 @@ module
       t40 = call concatMap(@__ev_Foldable_List, @λ9, [1, 2, 3])
       ret t40
   function format(__ev_Show, xs)
-      t42 = call __ev_Show_List(__ev_Show)
+      t42 = call __ev_Show_List_1(__ev_Show)
       t41 = dict_call t42->show(xs)
       ret t41
   function shown()

@@ -522,6 +522,22 @@ function typeSchemes(): array
             ['i', 'e'],
         ),
         'platformArgv#' => scheme(new TCon('IO', [new TCon('List', [$str])]), []),
+        'platformProgArgv#' => scheme(new TCon('IO', [new TCon('List', [$str])]), []),
+        'platformSetProgArgv#' => scheme(
+            new TArrow(new TCon('List', [$str]), new TCon('IO', [new TUnit()])),
+            [],
+        ),
+        'platformEnvEntries#' => scheme(new TCon('IO', [new TCon('List', [$str])]), []),
+        'platformEnvOverrides#' => scheme(new TCon('IO', [new TCon('List', [$str])]), []),
+        'platformSetenv#' => scheme(
+            new TArrow($str, new TArrow($str, new TCon('IO', [new TUnit()]))),
+            [],
+        ),
+        'platformUnsetenv#' => scheme(
+            new TArrow($str, new TCon('IO', [new TUnit()])),
+            [],
+        ),
+        'platformExecutablePath#' => scheme(new TCon('IO', [$str]), []),
         'platformStdin#' => scheme(new TCon('Handle', []), []),
     ];
 }

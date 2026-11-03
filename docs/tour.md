@@ -117,7 +117,7 @@ and exceptions. Import those where you use them:
 | You want | Import |
 |---|---|
 | handles (`openFile`, `hClose`, `hGetLine`, `hPutStr`, …) | `System.IO` |
-| `getArgs`, `getEnv`, `lookupEnv` | `System.Environment` |
+| arguments, program name, `getEnv`/`lookupEnv`, `setEnv`/`unsetEnv`, `withArgs`/`withProgName` | `System.Environment` |
 | `throwIO`, `catch`, `bracket`, `SomeException` | `Control.Exception` |
 | directories, file metadata, `removeFile`, `copyFile` | `System.Directory` |
 | path manipulation (`takeFileName`, `(</>)`, `normalise`) | `System.FilePath` |

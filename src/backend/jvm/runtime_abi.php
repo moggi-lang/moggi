@@ -5065,6 +5065,10 @@ function buildPlatformClass(): string
     $b = new ClassBuilder('moggi/rt/Platform');
     $b->addField('argv', '[Ljava/lang/String;', 0x000a);
 
+    $b->addField('progArgv', 'Lmoggi/rt/MList;', 0x000a);
+
+    $b->addField('envOverrides', 'Lmoggi/rt/MList;', 0x000a);
+
     $b->addField('stdin', 'Ljava/io/BufferedReader;', 0x000a);
 
     $b->addMethod(
@@ -5183,6 +5187,210 @@ function buildPlatformClass(): string
             $c->label('done');
             $c->noteFrame(['[Ljava/lang/String;', 'moggi/rt/MList', 'int']);
             $c->aload(1);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'progName',
+        '()Ljava/lang/String;',
+        0x0009,
+        0,
+        [],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('java/io/File'));
+            $c->dup();
+            $c->invokestatic($cp->ifaceMethodRef('java/lang/ProcessHandle', 'current', '()Ljava/lang/ProcessHandle;'), 0, true);
+            $c->invokeinterface(
+                $cp->ifaceMethodRef('java/lang/ProcessHandle', 'info', '()Ljava/lang/ProcessHandle$Info;'),
+                0,
+                true,
+            );
+            $c->invokeinterface(
+                $cp->ifaceMethodRef('java/lang/ProcessHandle$Info', 'command', '()Ljava/util/Optional;'),
+                0,
+                true,
+            );
+            $c->ldc($cp->string_('java'));
+            $c->invokevirtual($cp->methodRef('java/util/Optional', 'orElse', '(Ljava/lang/Object;)Ljava/lang/Object;'), 2, true);
+            $c->checkcast($cp->class_('java/lang/String'));
+            $c->invokespecial($cp->methodRef('java/io/File', '<init>', '(Ljava/lang/String;)V'), 2, false);
+            $c->invokevirtual($cp->methodRef('java/io/File', 'getName', '()Ljava/lang/String;'), 1, true);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'progArgv',
+        '()Lmoggi/rt/MList;',
+        0x0009,
+        0,
+        [],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->getstatic($cp->fieldRef('moggi/rt/Platform', 'progArgv', 'Lmoggi/rt/MList;'));
+            $c->ifnonnull('have');
+
+            $c->invokestatic($cp->methodRef('moggi/rt/Platform', 'progName', '()Ljava/lang/String;'), 0, true);
+            $c->invokestatic($cp->methodRef('moggi/rt/Platform', 'argv', '()Lmoggi/rt/MList;'), 0, true);
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'cons', '(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;'),
+                2,
+                true,
+            );
+            $c->putstatic($cp->fieldRef('moggi/rt/Platform', 'progArgv', 'Lmoggi/rt/MList;'));
+
+            $c->label('have');
+            $c->noteFrame([], []);
+            $c->getstatic($cp->fieldRef('moggi/rt/Platform', 'progArgv', 'Lmoggi/rt/MList;'));
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'setProgArgv',
+        '(Lmoggi/rt/MList;)V',
+        0x0009,
+        1,
+        ['Lmoggi/rt/MList;'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->putstatic($cp->fieldRef('moggi/rt/Platform', 'progArgv', 'Lmoggi/rt/MList;'));
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'envEntries',
+        '()Lmoggi/rt/MList;',
+        0x0009,
+        4,
+        [],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->invokestatic($cp->methodRef('java/lang/System', 'getenv', '()Ljava/util/Map;'), 0, true);
+            $c->invokeinterface($cp->ifaceMethodRef('java/util/Map', 'keySet', '()Ljava/util/Set;'), 0, true);
+            $c->iconst(0);
+            $c->anewarray($cp->class_('java/lang/String'));
+            $c->invokeinterface(
+                $cp->ifaceMethodRef('java/util/Set', 'toArray', '([Ljava/lang/Object;)[Ljava/lang/Object;'),
+                1,
+                true,
+            );
+            $c->checkcast($cp->class_('[Ljava/lang/String;'));
+            $c->astore(0);
+            $c->aconst_null();
+            $c->astore(1);
+            $c->aload(0);
+            $c->arraylength();
+            $c->istore(2);
+            $c->aconst_null();
+            $c->astore(3);
+
+            $c->label('loop');
+            $c->noteFrame(['[Ljava/lang/String;', 'moggi/rt/MList', 'int', 'java/lang/String'], []);
+            $c->iload(2);
+            $c->ifeq('done');
+            $c->iinc(2, -1);
+            $c->aload(0);
+            $c->iload(2);
+            $c->aaload();
+            $c->astore(3);
+            $c->aload(3);
+            $c->ldc($cp->string_('='));
+            $c->invokevirtual($cp->methodRef('java/lang/String', 'concat', '(Ljava/lang/String;)Ljava/lang/String;'), 2, true);
+            $c->aload(3);
+            $c->invokestatic($cp->methodRef('java/lang/System', 'getenv', '(Ljava/lang/String;)Ljava/lang/String;'), 1, true);
+            $c->invokevirtual($cp->methodRef('java/lang/String', 'concat', '(Ljava/lang/String;)Ljava/lang/String;'), 2, true);
+            $c->aload(1);
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'cons', '(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;'),
+                2,
+                true,
+            );
+            $c->astore(1);
+            $c->goto_('loop');
+
+            $c->label('done');
+            $c->noteFrame(['[Ljava/lang/String;', 'moggi/rt/MList', 'int', 'java/lang/String'], []);
+            $c->aload(1);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'envOverrides',
+        '()Lmoggi/rt/MList;',
+        0x0009,
+        0,
+        [],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->getstatic($cp->fieldRef('moggi/rt/Platform', 'envOverrides', 'Lmoggi/rt/MList;'));
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'setenv',
+        '(Ljava/lang/String;Ljava/lang/String;)V',
+        0x0009,
+        2,
+        ['Ljava/lang/String;', 'Ljava/lang/String;'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->ldc($cp->string_('='));
+            $c->invokevirtual($cp->methodRef('java/lang/String', 'concat', '(Ljava/lang/String;)Ljava/lang/String;'), 2, true);
+            $c->aload(1);
+            $c->invokevirtual($cp->methodRef('java/lang/String', 'concat', '(Ljava/lang/String;)Ljava/lang/String;'), 2, true);
+            $c->getstatic($cp->fieldRef('moggi/rt/Platform', 'envOverrides', 'Lmoggi/rt/MList;'));
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'cons', '(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;'),
+                2,
+                true,
+            );
+            $c->putstatic($cp->fieldRef('moggi/rt/Platform', 'envOverrides', 'Lmoggi/rt/MList;'));
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'unsetenv',
+        '(Ljava/lang/String;)V',
+        0x0009,
+        1,
+        ['Ljava/lang/String;'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getstatic($cp->fieldRef('moggi/rt/Platform', 'envOverrides', 'Lmoggi/rt/MList;'));
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'cons', '(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;'),
+                2,
+                true,
+            );
+            $c->putstatic($cp->fieldRef('moggi/rt/Platform', 'envOverrides', 'Lmoggi/rt/MList;'));
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'executablePath',
+        '()Ljava/lang/String;',
+        0x0009,
+        0,
+        [],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->invokestatic($cp->ifaceMethodRef('java/lang/ProcessHandle', 'current', '()Ljava/lang/ProcessHandle;'), 0, true);
+            $c->invokeinterface(
+                $cp->ifaceMethodRef('java/lang/ProcessHandle', 'info', '()Ljava/lang/ProcessHandle$Info;'),
+                0,
+                true,
+            );
+            $c->invokeinterface(
+                $cp->ifaceMethodRef('java/lang/ProcessHandle$Info', 'command', '()Ljava/util/Optional;'),
+                0,
+                true,
+            );
+            $c->ldc($cp->string_('java'));
+            $c->invokevirtual($cp->methodRef('java/util/Optional', 'orElse', '(Ljava/lang/Object;)Ljava/lang/Object;'), 2, true);
+            $c->checkcast($cp->class_('java/lang/String'));
             $c->areturn();
         }
     );

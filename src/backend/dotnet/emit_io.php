@@ -258,6 +258,45 @@ function emitIntrinsicState(EmitEnv $env, IR\Intrinsic $op): bool
             $env->m->emit('call object Moggi.Rt.RT::IoWriteRef(class Moggi.Rt.IORef, object)');
 
             return true;
+        case 'platformProgArgv#':
+            $env->m->emit('call class Moggi.Rt.MList Moggi.Rt.Platform::ProgArgv()');
+
+            return true;
+        case 'platformSetProgArgv#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.MList');
+            $env->m->emit('call void Moggi.Rt.Platform::SetProgArgv(class Moggi.Rt.MList)');
+            $env->m->emit('ldnull');
+
+            return true;
+        case 'platformEnvEntries#':
+            $env->m->emit('call class Moggi.Rt.MList Moggi.Rt.Platform::EnvEntries()');
+
+            return true;
+        case 'platformEnvOverrides#':
+            $env->m->emit('call class Moggi.Rt.MList Moggi.Rt.Platform::EnvOverrides()');
+
+            return true;
+        case 'platformSetenv#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass string');
+            emitOperand($env, $args[1]);
+            $env->m->emit('castclass string');
+            $env->m->emit('call void Moggi.Rt.Platform::Setenv(string, string)');
+            $env->m->emit('ldnull');
+
+            return true;
+        case 'platformUnsetenv#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass string');
+            $env->m->emit('call void Moggi.Rt.Platform::Unsetenv(string)');
+            $env->m->emit('ldnull');
+
+            return true;
+        case 'platformExecutablePath#':
+            $env->m->emit('call string Moggi.Rt.Platform::ExecutablePath()');
+
+            return true;
         case 'unsafePerformIO#':
             emitOperand($env, $args[0]);
             $env->m->emit('call object Moggi.Rt.RT::IoRun(object)');

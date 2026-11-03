@@ -9,7 +9,7 @@
 -- that backend runs (a JVM jar built on Linux runs on Windows), so the
 -- operating system and the machine architecture are never compile-time facts.
 -- There is no @OS@ pragma and no CPP: portable code branches on 'os' or
--- 'arch' (or 'isWindows') at run time, and each is a plain value with one
+-- 'arch' at run time, and each is a plain value with one
 -- definition per backend behind this facade.
 --
 -- 'compilerName' and the two version values are build facts rather than
@@ -21,9 +21,9 @@ module System.Info
   , compilerName
   , compilerVersion
   , fullCompilerVersion
-  , isWindows
   ) where
 
+import Data.Bool (Bool(..))
 import Data.Eq
 import Data.Num
 import Data.String (String)
@@ -38,12 +38,6 @@ os :: String
 -- | The machine architecture, in the same spelling: @"x86_64"@, @"aarch64"@,
 -- @"i386"@, @"arm"@, @"riscv64"@, `"powerpc64le"` and so on.
 arch :: String
-
--- | Whether the program runs on Windows. This is how portable code picks the
--- Windows behaviour (drive letters, @\\\\@ separators, @.exe@ suffixes) at run
--- time; matching on 'os' directly is the general form.
-isWindows :: Bool
-isWindows = os == "mingw32"
 
 -- | The implementation a program is built with.
 compilerName :: String
