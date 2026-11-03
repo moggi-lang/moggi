@@ -243,11 +243,6 @@ Honest gaps — listed here so nobody mistakes them for design choices:
   implemented in `Control.Monad.ST`).
 - `Data.Char`'s `lexLitChar` and `readLitChar` (the rest of `Data.Char`,
   including `GeneralCategory` and `generalCategory`, is implemented).
-- `System.Environment`'s `getEnvironment`, `setEnv`, `unsetEnv`, `withArgs`,
-  and `withProgName` (argument and variable lookup is implemented). The setters
-  and `withArgs`/`withProgName` need process-global mutable state the hosts do
-  not uniformly provide: the JVM has no `setenv` at all, and no backend
-  exposes argv for overriding.
 - `System.IO` buffering, text encodings, and seeking. Handles are sequential
   streams on every host (`BufferedReader`/`StreamReader` under the hood), so
   there is nothing seekable to expose without a second handle type; buffering

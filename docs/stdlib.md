@@ -65,8 +65,7 @@ facade with a `{-# BACKEND … #-}` pragma chooses the implementation per target
 Listed so nobody hunts for it: `Float` (the only floating type is `Double`),
 `Data.Ratio`, `Data.Complex`, `Data.Fixed`, `Data.Text`, `Control.Monad.Reader`,
 `Control.Monad.State`. `Text.Read` provides the class and `read`, not the wider
-`reads`/`readMaybe` family. `System.Environment` provides lookup but not the
-setters, because the hosts do not uniformly expose them. The
+`reads`/`readMaybe` family. The
 [differences page](differences-to-haskell.md) tracks the remaining gaps in
 detail.
 

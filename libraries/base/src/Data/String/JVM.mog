@@ -2,6 +2,7 @@
 module Data.String.JVM
   ( singleton
   , unpack
+  , pack
   , length
   , take
   , drop
@@ -70,6 +71,11 @@ substring s a b = rawSubstring s (int32FromInt# a) (int32FromInt# b)
 
 -- Each walk below closes over the string it walks, so its helper takes only the
 -- argument the walk itself varies.
+
+pack :: [Char] -> String
+pack xs = case xs of
+  [] -> ""
+  c : cs -> singleton c <> pack cs
 
 unpack :: String -> [Char]
 unpack s =

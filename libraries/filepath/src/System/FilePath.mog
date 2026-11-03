@@ -1,3 +1,8 @@
+-- | A library for 'FilePath' manipulations, using Posix or Windows filepaths
+-- depending on the platform.
+--
+-- Both "System.FilePath.Posix" and "System.FilePath.Windows" provide the
+-- same interface.
 module System.FilePath
   ( -- * Separator predicates
     FilePath
@@ -63,24 +68,12 @@ module System.FilePath
 
 import System.FilePath.Posix qualified as P
 import System.FilePath.Windows qualified as W
-import System.Info (isWindows)
+import System.Info (os)
 import System.IO.Base (FilePath, IO)
+import Data.List
 
 infixr 7 <.>, -<.>
 infixr 5 </>
-
--- | The `filepath` API on the running operating system's semantics.
---
--- A Moggi program compiles once per backend and runs anywhere that backend
--- runs, so — unlike Haskell's `filepath`, which picks a flavour with CPP at
--- compile time — this module dispatches every operation at run time on
--- `System.Info.isWindows`: separators, drives, case-sensitivity,
--- validity and `$PATH` splitting all follow the machine the program runs on.
--- `System.FilePath.Posix` and `System.FilePath.Windows` hold the two flavours
--- for code that needs one deterministically (tests, cross-platform tools).
---
--- `FilePath` itself is a host-native `String` on every platform; see
--- `System.IO.Base`.
 
 pathSeparator :: Char
 pathSeparator = if isWindows then W.pathSeparator else P.pathSeparator
@@ -237,3 +230,7 @@ isValid x = if isWindows then W.isValid x else P.isValid x
 
 makeValid :: FilePath -> FilePath
 makeValid x = if isWindows then W.makeValid x else P.makeValid x
+
+-- | Whether the program runs on Windows.
+isWindows :: Bool
+isWindows = os == "mingw32"

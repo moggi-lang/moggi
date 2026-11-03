@@ -130,6 +130,49 @@ function vendorProvidesFunction(string $function): bool
     return false;
 }
 
+/**
+ * Whether the runtime this backend emits beside a program declares a function.
+ *
+ * The emitted tree always carries the runtime, so a `Moggi\…` path names the
+ * compiler's own PHP library rather than the host's. The names are read from
+ * the runtime source, because the compiling process does not load it.
+ */
+function runtimeProvidesFunction(string $function): bool
+{
+    $path = \ltrim($function, '\\');
+    if (! \str_starts_with($path, 'Moggi\\')) {
+        return false;
+    }
+
+    $names = runtimeFunctionNames();
+
+    return isset($names[\substr($path, \strlen('Moggi\\'))]);
+}
+
+/** @return array<string, true> */
+function runtimeFunctionNames(): array
+{
+    static $names = null;
+
+    if ($names !== null) {
+        return $names;
+    }
+
+    $names = [];
+    $source = @\file_get_contents(__DIR__ . '/runtime.php');
+    if ($source === false) {
+        return $names;
+    }
+
+    if (\preg_match_all('/^function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/m', $source, $matches) > 0) {
+        foreach ($matches[1] as $name) {
+            $names[$name] = true;
+        }
+    }
+
+    return $names;
+}
+
 /** @param array{dispatch?: string, classPath?: ?string, hostMember?: ?string} $pathInfo */
 function verifyForeignConst(array $pathInfo): ?string
 {
@@ -157,6 +200,10 @@ function verifyForeignConst(array $pathInfo): ?string
 function verifyForeignGlobalFunction(string $function, ?Ast\TypeNode $type): ?string
 {
     if ($function === '') {
+        return null;
+    }
+
+    if (runtimeProvidesFunction($function)) {
         return null;
     }
 

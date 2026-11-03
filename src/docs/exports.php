@@ -8,6 +8,7 @@ use function Moggi\Modules\classMethodsForExport;
 use function Moggi\Modules\collectExports;
 use function Moggi\Modules\constructorsForExport;
 use function Moggi\Modules\exportItemChildNames;
+use function Moggi\Modules\recordFieldLabelsForExport;
 
 /** Resolved export list for documentation (local declarations only). */
 final class DocExportFilter
@@ -109,10 +110,29 @@ function isExportedValue(DocExportFilter $filter, Ast\Program $program, string $
 
     foreach ($filter->types as $typeName => $children) {
         $methods = classMethodsForExport($program, $typeName);
-        if ($methods === null) {
+        if ($methods !== null) {
+            $exported = exportItemChildNames(['name' => $typeName, 'children' => $children], $methods);
+            if (\in_array($name, $exported, true)) {
+                return true;
+            }
+
             continue;
         }
-        $exported = exportItemChildNames(['name' => $typeName, 'children' => $children], $methods);
+
+        // A data type's `(..)` exports its constructors and its record field
+        // selectors, which are ordinary values declared beside the type.
+        $constructors = constructorsForExport($program, $typeName);
+        if ($constructors === null) {
+            continue;
+        }
+        $childrenAvailable = [
+            ...$constructors,
+            ...recordFieldLabelsForExport($program, $typeName),
+        ];
+        $exported = exportItemChildNames(
+            ['name' => $typeName, 'children' => $children],
+            \array_values(\array_unique($childrenAvailable)),
+        );
         if (\in_array($name, $exported, true)) {
             return true;
         }

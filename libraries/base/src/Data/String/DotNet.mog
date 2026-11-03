@@ -2,6 +2,7 @@
 module Data.String.DotNet
   ( singleton
   , unpack
+  , pack
   , length
   , take
   , drop
@@ -89,6 +90,11 @@ offsetByCodePointsAfter s i n end = case intCompare# n 0 of
   EQ -> i
   LT -> i
   GT -> offsetByCodePointsStep s (i + utf16WidthAt s i) (n - 1)
+
+pack :: [Char] -> String
+pack xs = case xs of
+  [] -> ""
+  c : cs -> singleton c <> pack cs
 
 unpack :: String -> [Char]
 unpack s =

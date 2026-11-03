@@ -323,6 +323,73 @@ function emitIntrinsicState(EmitEnv $env, IR\Intrinsic $op): bool
             );
 
             return true;
+        case 'platformProgArgv#':
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/Platform', 'progArgv', '()Lmoggi/rt/MList;'),
+                0,
+                true,
+            );
+
+            return true;
+        case 'platformSetProgArgv#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/MList'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/Platform', 'setProgArgv', '(Lmoggi/rt/MList;)V'),
+                1,
+                false,
+            );
+            $env->c->aconst_null();
+
+            return true;
+        case 'platformEnvEntries#':
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/Platform', 'envEntries', '()Lmoggi/rt/MList;'),
+                0,
+                true,
+            );
+
+            return true;
+        case 'platformEnvOverrides#':
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/Platform', 'envOverrides', '()Lmoggi/rt/MList;'),
+                0,
+                true,
+            );
+
+            return true;
+        case 'platformSetenv#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('java/lang/String'));
+            emitOperand($env, $args[1]);
+            $env->c->checkcast($env->cp->class_('java/lang/String'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/Platform', 'setenv', '(Ljava/lang/String;Ljava/lang/String;)V'),
+                2,
+                false,
+            );
+            $env->c->aconst_null();
+
+            return true;
+        case 'platformUnsetenv#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('java/lang/String'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/Platform', 'unsetenv', '(Ljava/lang/String;)V'),
+                1,
+                false,
+            );
+            $env->c->aconst_null();
+
+            return true;
+        case 'platformExecutablePath#':
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/Platform', 'executablePath', '()Ljava/lang/String;'),
+                0,
+                true,
+            );
+
+            return true;
         case 'unsafePerformIO#':
             emitOperand($env, $args[0]);
             $env->c->invokestatic(

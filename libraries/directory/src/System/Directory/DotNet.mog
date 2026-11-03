@@ -47,6 +47,7 @@ import Moggi.Internal.Base
 import Moggi.IO.Exception
 import System.Directory.Types
 import System.FilePath (takeDirectory, takeExtension, takeFileName, (</>))
+import System.Info (os)
 import System.IO.Base (IO, FilePath)
 import System.IO.Error (mkIOError)
 
@@ -91,7 +92,6 @@ foreign dotnet function setWriteTimeRaw "System.IO.File:SetLastWriteTime" :: Str
 foreign dotnet function dateTicks "System.DateTime.get_Ticks" :: DTime -> Int
 foreign dotnet function dateFromTicks "System.DateTime:__con" :: Int -> DTime
 
-foreign dotnet function osIsWindows "System.OperatingSystem:IsWindows" :: Bool
 -- `UnixFileMode` lives in the core library, not `System.Runtime`: the verifier
 -- ignores scopes, but the emitter bakes the scope into the field reference,
 -- so a wrong one compiles and then fails at runtime (`MissingField`).
@@ -354,7 +354,7 @@ executableBit p = do
   case exists of
     False -> pure False
     True -> do
-      win <- pure osIsWindows
+      win <- pure isWindows
       case win of
         True -> pure (hasExecExtension p)
         False -> do
@@ -408,3 +408,7 @@ utcToUnix t = integerToInt (unixDays + daySecs)
 -- rather than per backend, since one module serves both hosts here.
 exeExtension :: String
 exeExtension = ".exe"
+
+-- | Whether the program runs on Windows.
+isWindows :: Bool
+isWindows = os == "mingw32"

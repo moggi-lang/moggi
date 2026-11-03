@@ -1,0 +1,127 @@
+-- System.Environment: the three answers an environment lookup can give (a
+-- value, the empty value, no entry), the whole environment, and the argument
+-- and program-name stack that withArgs and withProgName push.
+import Control.Exception (SomeException, catch)
+import Data.Bool
+import Data.String (String, length, unpack)
+import Moggi.IO.Exception (IOErrorType(InvalidArgument))
+import System.Environment
+import System.IO.Error (catchIOError, ioeGetErrorType)
+
+absent :: String
+absent = "MOGGI_TEST_ABSENT_VARIABLE"
+
+present :: String
+present = "MOGGI_TEST_PRESENT_VARIABLE"
+
+describe :: Maybe String -> String
+describe m = case m of
+  Nothing -> "unset"
+  Just v -> "=" <> v
+
+envValue :: String -> [(String, String)] -> String
+envValue key entries = case entries of
+  [] -> "<missing>"
+  (k, v) : rest -> case k == key of
+    True -> v
+    False -> envValue key rest
+
+countKey :: String -> [(String, String)] -> Int
+countKey key entries = case entries of
+  [] -> 0
+  (k, _) : rest -> case k == key of
+    True -> 1 + countKey key rest
+    False -> countKey key rest
+
+printLookup :: String -> IO ()
+printLookup name = do
+  found <- lookupEnv name
+  putStrLn (describe found)
+
+printEnvValue :: String -> IO ()
+printEnvValue name = do
+  entries <- getEnvironment
+  putStrLn (envValue name entries)
+
+printKeyCount :: String -> IO ()
+printKeyCount name = do
+  entries <- getEnvironment
+  putStrLn (show (countKey name entries))
+
+envFailure :: String -> IO String
+envFailure name = catchIOError
+  (do _ <- getEnv name
+      pure "no-error")
+  (\e -> pure (case ioeGetErrorType e == InvalidArgument of
+    True -> "wrong-error"
+    False -> "does-not-exist"))
+
+ignoreAll :: SomeException -> IO ()
+ignoreAll _ = pure ()
+
+nameRejection :: IO a -> IO String
+nameRejection action = catchIOError
+  (do _ <- action
+      pure "accepted")
+  (\e -> pure (case ioeGetErrorType e == InvalidArgument of
+    True -> "rejected"
+    False -> "wrong-error"))
+
+main :: IO ()
+main = do
+  printLookup absent
+  setEnv present "hello"
+  printLookup present
+  printEnvValue present
+  printKeyCount present
+  setEnv present ""
+  printLookup present
+  printEnvValue present
+  setEnv present "again"
+  unsetEnv present
+  printLookup present
+  printKeyCount present
+  putStrLn =<< envFailure absent
+  setEnv present "value"
+  putStrLn =<< getEnv present
+  setEnv present ""
+  value <- getEnvDefault present "fallback"
+  putStrLn (show value)
+  putStrLn =<< getEnvDefault absent "fallback"
+  emptyValue <- getEnv present
+  putStrLn (show emptyValue)
+  putStrLn =<< nameRejection (setEnv "" "x")
+  putStrLn =<< nameRejection (setEnv "with=equals" "x")
+  putStrLn =<< nameRejection (unsetEnv "with=equals")
+  setEnv present "left=right"
+  printEnvValue present
+  args0 <- getArgs
+  putStrLn (show args0)
+  withArgs ["alpha", "beta"] (do
+    inner <- getArgs
+    putStrLn (show inner))
+  args1 <- getArgs
+  putStrLn (show args1)
+  _ <- catch (withArgs ["gamma"] (error "withArgs boom")) ignoreAll
+  args2 <- getArgs
+  putStrLn (show args2)
+  name0 <- getProgName
+  putStrLn (show (length name0 > 0))
+  withProgName "moggiline" (do
+    inner <- getProgName
+    putStrLn inner)
+  name1 <- getProgName
+  putStrLn (show (name1 == name0))
+  withProgName "dir/tool" (do
+    inner <- getProgName
+    putStrLn inner)
+  name2 <- getProgName
+  putStrLn (show (name2 == name0))
+  _ <- catch (withProgName "exc/tool" (error "withProgName boom")) ignoreAll
+  name3 <- getProgName
+  putStrLn (show (name3 == name0))
+  withProgName "tool" (withArgs ["x"] (do
+    inner <- getArgs
+    putStrLn (show inner)))
+  exe <- getExecutablePath
+  putStrLn (show (length exe > 0))

@@ -6,7 +6,7 @@ module
       t1 = call fmapFn(@__ev_Functor_List, @λ0, xs)
       ret t1
   function fmapEitherDemo(mx)
-      t2 = call fmapFn(@__ev_Functor_Either, @λ1, mx)
+      t2 = call fmapFn(@__ev_Functor_Either_1, @λ1, mx)
       ret t2
   function inc(x)
       ret intrinsic intAdd#(x, 1)
@@ -32,11 +32,11 @@ module
       ret t8
   function eitherBindOk()
       t9 = call Right(2)
-      t11 = call monadBind(@__ev_Functor_Either, @__ev_Applicative_Either, @__ev_Monad_Either, t9, @λ3)
+      t11 = call monadBind(@__ev_Functor_Either_1, @__ev_Applicative_Either_1, @__ev_Monad_Either_1, t9, @λ3)
       ret t11
   function eitherShort()
       t12 = call Left("err")
-      t14 = call monadBind(@__ev_Functor_Either, @__ev_Applicative_Either, @__ev_Monad_Either, t12, @λ4)
+      t14 = call monadBind(@__ev_Functor_Either_1, @__ev_Applicative_Either_1, @__ev_Monad_Either_1, t12, @λ4)
       ret t14
   function listDo(__ev_Functor, __ev_Applicative_1, __ev_Monad_2, xs, f)
       t18 = dict_call __ev_Monad_2->>>=(xs, partial λ5(f, __ev_Monad_2, __ev_Applicative_1))
@@ -65,11 +65,11 @@ module
       ret t29
   function eitherDoOk()
       t30 = call Right(3)
-      t31 = call eitherDo(@__ev_Functor_Either, @__ev_Applicative_Either, @__ev_Monad_Either, t30)
+      t31 = call eitherDo(@__ev_Functor_Either_1, @__ev_Applicative_Either_1, @__ev_Monad_Either_1, t30)
       ret t31
   function eitherErr()
       t32 = call Left("nope")
-      t33 = call eitherDo(@__ev_Functor_Either, @__ev_Applicative_Either, @__ev_Monad_Either, t32)
+      t33 = call eitherDo(@__ev_Functor_Either_1, @__ev_Applicative_Either_1, @__ev_Monad_Either_1, t32)
       ret t33
   function listDiscard(__ev_Functor, __ev_Applicative_1, __ev_Monad_2, a, b)
       t34 = dict_call __ev_Monad_2->>>=(a, partial λ11(b))

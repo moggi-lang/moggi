@@ -55,9 +55,6 @@ unpack :: String -> [Char]
 
 -- | A string built from the given scalars. The inverse of 'unpack'.
 pack :: [Char] -> String
-pack xs = case xs of
-  [] -> ""
-  c : cs -> singleton c <> pack cs
 
 
 -- | The number of Unicode scalars in a string.

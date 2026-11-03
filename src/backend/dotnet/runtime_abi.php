@@ -4915,6 +4915,162 @@ function rtConIl(): string
 IL;
 }
 
+function platformProgNameIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static string ProgName() cil managed
+  {
+    .maxstack 8
+    call string [System.Runtime]System.Environment::get_ProcessPath()
+    call string [System.Runtime]System.IO.Path::GetFileName(string)
+    dup
+    brtrue HaveName
+    pop
+    ldstr "moggi"
+
+    HaveName:
+    ret
+  }
+
+IL;
+}
+
+function platformProgArgvIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.MList ProgArgv() cil managed
+  {
+    .maxstack 8
+    ldsfld class Moggi.Rt.MList Moggi.Rt.Platform::progArgv
+    brfalse Build
+    ldsfld class Moggi.Rt.MList Moggi.Rt.Platform::progArgv
+    ret
+
+    Build:
+    call string Moggi.Rt.Platform::ProgName()
+    call class Moggi.Rt.MList Moggi.Rt.Platform::Argv()
+    call class Moggi.Rt.MList Moggi.Rt.RT::Cons(object, object)
+    dup
+    stsfld class Moggi.Rt.MList Moggi.Rt.Platform::progArgv
+    ret
+  }
+
+IL;
+}
+
+function platformSetProgArgvIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static void SetProgArgv(class Moggi.Rt.MList argv) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    stsfld class Moggi.Rt.MList Moggi.Rt.Platform::progArgv
+    ret
+  }
+
+IL;
+}
+
+function platformEnvEntriesIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.MList EnvEntries() cil managed
+  {
+    .maxstack 8
+    .locals init (class [System.Runtime]System.Collections.IDictionaryEnumerator e, class Moggi.Rt.MList acc)
+
+    call class [System.Runtime]System.Collections.IDictionary [System.Runtime]System.Environment::GetEnvironmentVariables()
+    callvirt instance class [System.Runtime]System.Collections.IDictionaryEnumerator [System.Runtime]System.Collections.IDictionary::GetEnumerator()
+    stloc.0
+    ldnull
+    stloc.1
+    br Check
+
+    Loop:
+    ldloc.0
+    callvirt instance object [System.Runtime]System.Collections.IDictionaryEnumerator::get_Key()
+    ldstr "="
+    ldloc.0
+    callvirt instance object [System.Runtime]System.Collections.IDictionaryEnumerator::get_Value()
+    call string [System.Runtime]System.String::Concat(object, object, object)
+    ldloc.1
+    call class Moggi.Rt.MList Moggi.Rt.RT::Cons(object, object)
+    stloc.1
+
+    Check:
+    ldloc.0
+    callvirt instance bool [System.Runtime]System.Collections.IEnumerator::MoveNext()
+    brtrue Loop
+    ldloc.1
+    ret
+  }
+
+IL;
+}
+
+function platformEnvOverridesIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.MList EnvOverrides() cil managed
+  {
+    .maxstack 8
+    ldsfld class Moggi.Rt.MList Moggi.Rt.Platform::envOverrides
+    ret
+  }
+
+IL;
+}
+
+function platformSetenvIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static void Setenv(string envName, string envValue) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldstr "="
+    call string [System.Runtime]System.String::Concat(string, string)
+    ldarg.1
+    call string [System.Runtime]System.String::Concat(string, string)
+    ldsfld class Moggi.Rt.MList Moggi.Rt.Platform::envOverrides
+    call class Moggi.Rt.MList Moggi.Rt.RT::Cons(object, object)
+    stsfld class Moggi.Rt.MList Moggi.Rt.Platform::envOverrides
+    ret
+  }
+
+IL;
+}
+
+function platformUnsetenvIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static void Unsetenv(string envName) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldsfld class Moggi.Rt.MList Moggi.Rt.Platform::envOverrides
+    call class Moggi.Rt.MList Moggi.Rt.RT::Cons(object, object)
+    stsfld class Moggi.Rt.MList Moggi.Rt.Platform::envOverrides
+    ret
+  }
+
+IL;
+}
+
+function platformExecutablePathIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static string ExecutablePath() cil managed
+  {
+    .maxstack 8
+    call string [System.Runtime]System.Environment::get_ProcessPath()
+    ret
+  }
+
+IL;
+}
+
 function platformRuntime(): string
 {
     return \implode("\n", [
@@ -4924,10 +5080,22 @@ function platformRuntime(): string
 {
   .field private static string[] argv
 
+  .field private static class Moggi.Rt.MList progArgv
+
+  .field private static class Moggi.Rt.MList envOverrides
+
 IL,
         platformSetArgsIl(),
         platformArgvIl(),
         platformArchitectureIl(),
+        platformProgNameIl(),
+        platformProgArgvIl(),
+        platformSetProgArgvIl(),
+        platformEnvEntriesIl(),
+        platformEnvOverridesIl(),
+        platformSetenvIl(),
+        platformUnsetenvIl(),
+        platformExecutablePathIl(),
         <<<'IL'
 }
 
