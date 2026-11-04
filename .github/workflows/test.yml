@@ -49,7 +49,7 @@ jobs:
 
       # GraalVM and native-image.
       - name: Cache GraalVM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.tool_cache }}/Java_GraalVM_jdk
           key: graalvm-21-${{ runner.os }}-${{ runner.arch }}-v1
@@ -62,7 +62,7 @@ jobs:
 
       # Maven installation and dependency repository.
       - name: Cache Maven installation
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/maven
           key: maven-3.9.12-${{ runner.os }}-${{ runner.arch }}
@@ -99,14 +99,14 @@ jobs:
           "$mavenBin" >> $env:GITHUB_PATH
 
       - name: Cache Maven dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.m2/repository
           key: maven-deps-${{ runner.os }}-${{ runner.arch }}-v1
 
       # .NET SDK and NuGet.
       - name: Cache .NET SDK
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.tool_cache }}/dotnet
           key: dotnet-8-${{ runner.os }}-${{ runner.arch }}-v1
@@ -117,7 +117,7 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Cache NuGet packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('libraries/**/*.csproj', 'libraries/**/packages.lock.json') }}
@@ -135,7 +135,7 @@ jobs:
       # Linux C toolchain.
       - name: Cache apt packages
         if: runner.os == 'Linux'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             /var/cache/apt/archives
@@ -168,7 +168,7 @@ jobs:
       # Schnorr CLI.
       - name: Cache Schnorr CLI
         id: schnorr-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: schnorr
           key: schnorr-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packaging/schnorr.php', 'schnorr/**') }}
@@ -195,7 +195,7 @@ jobs:
 
       # Moggi's persistent compiler-managed artifacts.
       - name: Cache Moggi artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             .moggi/runtime
