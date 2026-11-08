@@ -345,6 +345,17 @@ final class FunctionDecl implements IrNode
     }
 
     /**
+     * The slots a call passes, in the order the entry is invoked with them: the
+     * capture prefix a lifted callable closes over, then the declared parameters.
+     *
+     * @return list<string>
+     */
+    public function runtimeSlots(): array
+    {
+        return [...($this->captures ?? []), ...$this->params];
+    }
+
+    /**
      * A copy of this declaration with the named fields replaced.
      *
      * A rewrite changes a field or two, so one copy helper reads the field list

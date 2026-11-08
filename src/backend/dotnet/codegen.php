@@ -148,7 +148,7 @@ function emitFunction(
     }
     $env->tailRecSlots = \array_map(
         static fn (string $p): string => $env->locals[$p],
-        $fn->params,
+        $params,
     );
     $m->emitLine($fn->srcLoc);
 

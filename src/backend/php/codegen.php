@@ -42,6 +42,7 @@ use function Moggi\Debug\normalizeDisplayPath;
 use Moggi\Debug\SourceMapBuilder;
 use Moggi\IR;
 use Moggi\Modules\EmitPlan;
+use function Moggi\IR\Callables\arityBySymbol;
 use function Moggi\IR\Callables\captureMeta;
 use function Moggi\IR\Visit\collectIrCodegenUsage;
 use function Moggi\IR\Visit\moduleUsesMoggiRuntime;
@@ -84,9 +85,28 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     foreach ($module->instanceEvidence as $evidence) {
         $functionArity[$evidence->evidenceName] = \count($evidence->contextParams);
     }
+    foreach (arityBySymbol($options['callableTables'] ?? []) as $symbol => $arity) {
+        $functionArity[$symbol] ??= $arity;
+    }
+    foreach ($functionArity as $name => $arity) {
+        foreach (qualifiedNameSpellings($name) as $spelling) {
+            $functionArity[$spelling] ??= $arity;
+        }
+    }
     foreach ($plan->externalFnRuntimeArity as $name => $runtimeArity) {
+        foreach (qualifiedNameSpellings($name) as $spelling) {
+            if (! isset($localBindings[$spelling])) {
+                $functionArity[$spelling] ??= $runtimeArity;
+            }
+        }
         if (! isset($localBindings[$name])) {
             $functionArity[$name] = $runtimeArity;
+        }
+        $resolved = $plan->externalFns[$name] ?? null;
+        if (\is_string($resolved) && $resolved !== '') {
+            foreach (qualifiedNameSpellings($resolved) as $spelling) {
+                $functionArity[$spelling] ??= $runtimeArity;
+            }
         }
     }
     $moduleName = (string) ($options['artifactModuleName'] ?? $module->moduleName ?? '');
@@ -208,7 +228,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     }
 
     foreach ($module->instanceEvidence as $evidence) {
-        $lines[] = \rtrim(emitEvidence($evidence, $phpNames), "\n");
+        $lines[] = \rtrim(emitEvidence($evidence, $phpNames, $functionArity, (string) $namespace), "\n");
         $lines[] = '';
     }
 
@@ -250,8 +270,26 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     ];
 }
 
-/** @param array<string, string> $phpNames */
-function emitEvidence(IR\InstanceEvidence $evidence, array $phpNames): string
+/**
+ * The dictionary a module's `instance` declarations lower to.
+ *
+ * A dictionary entry is a method *value*, so it has to behave like every other
+ * function value in the backend: applying it to fewer arguments than the method
+ * declares yields a partial, and the runtime completes the call later. The
+ * forwarding closure a fixed signature would give us instead throws
+ * `ArgumentCountError` on that first short application, which is exactly what a
+ * class whose method returns a function (`class PrintfType r` with
+ * `spr :: String -> [UFormat] -> [FormatArg] -> r`) does at every call site.
+ *
+ * The cell is written out here rather than built by `Moggi\__apply` so that an
+ * evidence-only module needs no runtime import, and `$functionArity` supplies
+ * the method's declared parameters (the instance context dictionaries are its
+ * leading ones, already applied).
+ *
+ * @param array<string, string> $phpNames
+ * @param array<string, int> $functionArity
+ */
+function emitEvidence(IR\InstanceEvidence $evidence, array $phpNames, array $functionArity = [], string $namespace = ''): string
 {
     $name = phpFunctionName($evidence->evidenceName, $phpNames);
     $contextParams = $evidence->contextParams;
@@ -262,16 +300,40 @@ function emitEvidence(IR\InstanceEvidence $evidence, array $phpNames): string
     $entries = [];
     foreach ($evidence->methods as $surfaceName => $irName) {
         $methodName = phpFunctionName($irName, $phpNames);
-        if ($contextParams === []) {
-            $entries[] = '        ' . \json_encode($surfaceName, JSON_UNESCAPED_UNICODE)
-                . " => {$methodName}(...)";
-        } else {
-            $entries[] = '        ' . \json_encode($surfaceName, JSON_UNESCAPED_UNICODE)
-                . " => fn(...\$args) => {$methodName}({$contextList}, ...\$args)";
+        $key = '        ' . \json_encode($surfaceName, JSON_UNESCAPED_UNICODE) . ' => ';
+        $argsCode = $contextParams === [] ? '...$args' : "{$contextList}, ...\$args";
+        $call = "{$methodName}({$argsCode})";
+        $remaining = ($functionArity[$irName] ?? 0) - \count($contextParams);
+        if ($remaining <= 0) {
+            $entries[] = $key . "fn(...\$args) => {$call}";
+
+            continue;
         }
+        $target = $namespace === '' ? $methodName : '\\' . $namespace . '\\' . $methodName;
+        $cell = "['__partial', " . ($remaining + \count($contextParams)) . ', '
+            . \json_encode($target, JSON_UNESCAPED_UNICODE)
+            . ($contextParams === [] ? '' : ", {$contextList}") . ', ...$args]';
+        $entries[] = $key . "fn(...\$args) => \\count(\$args) < {$remaining} ? {$cell} : {$call}";
     }
 
     return "function {$name}({$contextList}): array {\n    return [\n" . \implode(",\n", $entries) . "\n    ];\n}\n\n";
+}
+
+/**
+ * Every spelling one qualified symbol reaches the emitter under.
+ *
+ * The plan writes a resolved callee as `Module::name` or `Module.name`, while a
+ * body that specialization lifted into this module spells the same callee
+ * `Module\name`. Arity has to be readable under all of them, or a function value
+ * is emitted as a call.
+ *
+ * @return list<string>
+ */
+function qualifiedNameSpellings(string $name): array
+{
+    $backslashed = \str_replace(['::', '.'], '\\', $name);
+
+    return \array_values(\array_unique([$name, $backslashed]));
 }
 
 /** @param list<IR\FunctionDecl> $functions @return array{lambdaIndex: array<string, IR\FunctionDecl>, lambdaMeta: array<string, array{captures: array<int, string>, params: array<int, string>}>, functionArity: array<string, int>} */
@@ -323,7 +385,7 @@ function emitFunction(IR\FunctionDecl $function, EmitEnv $env): string
     $paramsCode = \implode(', ', \array_map(static fn (string $p): string => '$' . mangleVar($p), $params));
     $fnEnv = clone $env;
     $fnEnv->functionParams = $params;
-    $fnEnv->tailRecParams = $function->params;
+    $fnEnv->tailRecParams = $params;
     $fnEnv->frameFunction = $generated;
     $fnEnv->tempReads = tempReadCounts($function->body);
     $body = emitBlock($fnEnv, $function->body, 1);

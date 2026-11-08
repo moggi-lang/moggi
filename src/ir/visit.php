@@ -325,6 +325,9 @@ function moduleUsesMoggiRuntime(IR\Module $module): bool
     $runtimeIntrinsics = [
         'error#' => true,
         'fix#' => true,
+        'coerce#' => true,
+        'mfixPure#' => true,
+        'mfixIO#' => true,
         'exceptionWrap#' => true,
         'exceptionUnwrap#' => true,
         'exceptionThrow#' => true,

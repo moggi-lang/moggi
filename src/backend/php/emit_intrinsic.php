@@ -39,6 +39,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): string
     $locExpr = ($name === 'error#' || $name === 'exceptionThrow#') ? emitSrcLocValue($inner, $op->srcLoc) : 'null';
 
     return match ($name) {
+        'coerce#' => '(' . $argExprs[0] . ')',
         'error#' => '\\Moggi\\throwErrorCall(' . $argExprs[0] . ', ' . $locExpr . ')',
         'exceptionWrap#' => '\\Moggi\\exceptionWrap(' . $argExprs[0] . ', ' . $argExprs[1] . ', ' . $argExprs[2] . ')',
         'exceptionUnwrap#' => '\\Moggi\\exceptionUnwrap(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
@@ -48,6 +49,8 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): string
             "intrinsic `{$name}` must be lowered to IO exception IR",
         ),
         'fix#' => '\\Moggi\\fix(' . $argExprs[0] . ')',
+        'mfixPure#' => '\\Moggi\\mfixValue(' . $argExprs[0] . ', ' . $argExprs[1] . ', ' . $argExprs[2] . ')',
+        'mfixIO#' => '\\Moggi\\mfixIO(' . $argExprs[0] . ')',
         default => throw new \InvalidArgumentException("unknown intrinsic `{$name}`"),
     };
 }

@@ -13,6 +13,10 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
 
     $args = $op->args;
     switch ($op->name) {
+        case 'coerce#':
+            emitOperand($env, $args[0]);
+
+            return;
         case 'error#':
             emitOperand($env, $args[0]);
             $env->m->emit('castclass string');
@@ -23,6 +27,18 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
         case 'fix#':
             emitOperand($env, $args[0]);
             $env->m->emit('call object Moggi.Rt.RT::Fix(object)');
+
+            return;
+        case 'mfixPure#':
+            emitOperand($env, $args[0]);
+            emitOperand($env, $args[1]);
+            emitOperand($env, $args[2]);
+            $env->m->emit('call object Moggi.Rt.RT::MFixValue(object, object, object)');
+
+            return;
+        case 'mfixIO#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('call object Moggi.Rt.RT::MFix(object)');
 
             return;
         case 'exceptionWrap#':

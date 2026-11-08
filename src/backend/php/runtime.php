@@ -147,6 +147,84 @@ function fix(callable|array $f): mixed
 }
 
 /**
+ * The guarded cell behind `Control.Monad.Fix.mfix`: the self-reference handed
+ * to the builder and the publisher that defines it.
+ *
+ * The reference forwards to the published value — `self`, `self 5`,
+ * `self "x"` — so recursion expressed through it works once publication has
+ * happened. A read before then is a fixed point demanded before it exists; that
+ * is a black hole, not a value, so it raises the same `ErrorCall` `error#`
+ * raises instead of answering a placeholder. The state distinguishes a value
+ * that was never published from one whose definition is still running.
+ *
+ * @return array{0: \Closure, 1: \Closure}
+ */
+function mfixCell(): array
+{
+    $value = null;
+    $state = 0;
+    $self = static function () use (&$value, &$state): mixed {
+        if ($state !== 2) {
+            throwErrorCall($state === 1
+                ? 'the recursive value is demanded while it is being defined'
+                : 'the recursive value was demanded before it was initialized');
+        }
+
+        $args = \func_get_args();
+
+        return $args === [] ? $value : __apply($value, ...$args);
+    };
+    $publish = static function ($x) use (&$value, &$state): mixed {
+        $value = $x;
+        $state = 2;
+
+        return $x;
+    };
+    $state = 1;
+
+    return [$self, $publish];
+}
+
+/**
+ * Guarded fixed point for `IO` (`mfixIO#`): run the action the builder returns
+ * with the self-reference still undefined, publish the result, and answer it.
+ * An effect that demands the reference before that reads the black hole.
+ *
+ * @param callable|array<int|string, mixed> $f
+ */
+function mfixIO(callable|array $f): mixed
+{
+    [$self, $publish] = mfixCell();
+    $action = __apply($f, $self);
+    $result = ($action[1])();
+    $publish($result);
+
+    return $result;
+}
+
+/**
+ * Guarded fixed point for the pure monads (`mfixPure#`): the builder returns
+ * the monadic value, `$test` says whether it carries a value to publish, and
+ * `$extract` projects that value. A value the builder answers without one —
+ * `Nothing`, `Left` — has no fixed point to tie, so nothing is published and
+ * the answer stays the one the builder gave.
+ *
+ * @param callable|array<int|string, mixed> $build
+ * @param callable|array<int|string, mixed> $test
+ * @param callable|array<int|string, mixed> $extract
+ */
+function mfixValue(callable|array $build, callable|array $test, callable|array $extract): mixed
+{
+    [$self, $publish] = mfixCell();
+    $result = __apply($build, $self);
+    if (__apply($test, $result) === true) {
+        $publish(__apply($extract, $result));
+    }
+
+    return $result;
+}
+
+/**
  * A mutable cell living in one state thread: the `STRef` an ST action
  * allocates and touches. An object (not an array) because PHP arrays are
  * copy-on-write values while objects are references — a cell must be

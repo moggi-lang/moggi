@@ -120,6 +120,8 @@ function languageRuntime(): array
         'moggi/rt/RT' => buildRTClass(),
         'moggi/rt/ConstFn' => buildConstFnClass(),
         'moggi/rt/Rec' => buildRecClass(),
+        'moggi/rt/MFixCell' => buildMFixCellClass(),
+        'moggi/rt/MFixPublish' => buildMFixPublishClass(),
         'moggi/rt/TopLevelFn' => buildTopLevelFnClass(),
         'moggi/rt/StaticFn' => buildStaticFnClass(),
         'moggi/rt/Word64' => buildWord64Class(),
@@ -1248,6 +1250,138 @@ function buildRecClass(): string
                 2,
                 true,
             );
+            $c->areturn();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/**
+ * Cell behind `mfix#`: the self-reference of `Control.Monad.Fix.mfix`.
+ *
+ * `invoke(args)` answers the published fixed point of `args` — or the fixed
+ * point itself when no argument arrives — but only once the builder has
+ * published it. Before that there is nothing to forward to, so it raises
+ * `ErrorCall` naming the demand rather than answering a placeholder; the
+ * builder's state distinguishes a value that was never published from one
+ * still being defined.
+ */
+function buildMFixCellClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/MFixCell');
+    $b->implement('moggi/rt/Fn');
+    $b->addField('value', 'Ljava/lang/Object;', 0x0001);
+    $b->addField('state', 'I', 0x0001);
+
+    $b->addMethod(
+        '<init>',
+        '()V',
+        0x0001,
+        1,
+        ['moggi/rt/MFixCell', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'invoke',
+        '([Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0001,
+        3,
+        ['moggi/rt/MFixCell', '[Ljava/lang/Object;'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MFixCell', 'state', 'I'));
+            $c->iconst(2);
+            $c->if_icmpne('notReady');
+
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MFixCell', 'value', 'Ljava/lang/Object;'));
+            $c->aload(1);
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'apply', '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;'),
+                2,
+                true,
+            );
+            $c->areturn();
+
+            $c->label('notReady');
+            $c->noteFrame(['moggi/rt/MFixCell', '[Ljava/lang/Object;']);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MFixCell', 'state', 'I'));
+            $c->ifeq('unpublished');
+            $c->ldc($cp->string_('the recursive value is demanded while it is being defined'));
+            $c->goto_('fail');
+            $c->label('unpublished');
+            $c->noteFrame(['moggi/rt/MFixCell', '[Ljava/lang/Object;']);
+            $c->ldc($cp->string_('the recursive value was demanded before it was initialized'));
+            $c->label('fail');
+            $c->noteFrame(['moggi/rt/MFixCell', '[Ljava/lang/Object;'], ['java/lang/String']);
+            $c->iconst(0);
+            $c->anewarray($cp->class_('java/lang/Object'));
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'throwErrorCall', '(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;'),
+                2,
+                true,
+            );
+            $c->areturn();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/**
+ * The builder's publisher for `mfix#`: it records the fixed point in its cell
+ * and answers the value it was given, so the builder can hand it straight to
+ * the monad's own constructor (`Just (publish x)`).
+ */
+function buildMFixPublishClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/MFixPublish');
+    $b->implement('moggi/rt/Fn');
+    $b->addField('cell', 'Lmoggi/rt/MFixCell;', 0x0011);
+
+    $b->addMethod(
+        '<init>',
+        '(Lmoggi/rt/MFixCell;)V',
+        0x0001,
+        2,
+        ['moggi/rt/MFixPublish', 'moggi/rt/MFixCell', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/MFixPublish', 'cell', 'Lmoggi/rt/MFixCell;'));
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'invoke',
+        '([Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0001,
+        2,
+        ['moggi/rt/MFixPublish', '[Ljava/lang/Object;'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MFixPublish', 'cell', 'Lmoggi/rt/MFixCell;'));
+            $c->aload(1);
+            $c->iconst(0);
+            $c->aaload();
+            $c->putfield($cp->fieldRef('moggi/rt/MFixCell', 'value', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MFixPublish', 'cell', 'Lmoggi/rt/MFixCell;'));
+            $c->iconst(2);
+            $c->putfield($cp->fieldRef('moggi/rt/MFixCell', 'state', 'I'));
+            $c->aload(1);
+            $c->iconst(0);
+            $c->aaload();
             $c->areturn();
         }
     );
@@ -5065,6 +5199,169 @@ function buildRTClass(): string
                 2,
                 true,
             );
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'mfix',
+        '(Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0009,
+        4,
+        ['java/lang/Object', 'moggi/rt/MFixCell', 'moggi/rt/MFixPublish', 'java/lang/Object', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('moggi/rt/MFixCell'));
+            $c->dup();
+            $c->invokespecial($cp->methodRef('moggi/rt/MFixCell', '<init>', '()V'), 0, false);
+            $c->astore(1);
+
+            $c->new_($cp->class_('moggi/rt/MFixPublish'));
+            $c->dup();
+            $c->aload(1);
+            $c->invokespecial($cp->methodRef('moggi/rt/MFixPublish', '<init>', '(Lmoggi/rt/MFixCell;)V'), 1, false);
+            $c->astore(2);
+
+            $c->aload(1);
+            $c->iconst(1);
+            $c->putfield($cp->fieldRef('moggi/rt/MFixCell', 'state', 'I'));
+
+            $c->aload(0);
+            $c->iconst(1);
+            $c->anewarray($cp->class_('java/lang/Object'));
+            $c->dup();
+            $c->iconst(0);
+            $c->aload(1);
+            $c->aastore();
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'apply', '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;'),
+                2,
+                true,
+            );
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'ioRun', '(Ljava/lang/Object;)Ljava/lang/Object;'),
+                1,
+                true,
+            );
+            $c->astore(3);
+
+            $c->aload(2);
+            $c->iconst(1);
+            $c->anewarray($cp->class_('java/lang/Object'));
+            $c->dup();
+            $c->iconst(0);
+            $c->aload(3);
+            $c->aastore();
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'apply', '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;'),
+                2,
+                true,
+            );
+            $c->astore(4);
+
+            $c->aload(3);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'mfixValue',
+        '(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0009,
+        6,
+        [
+            'java/lang/Object',
+            'java/lang/Object',
+            'java/lang/Object',
+            'moggi/rt/MFixCell',
+            'moggi/rt/MFixPublish',
+            'java/lang/Object',
+            'java/lang/Object',
+        ],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('moggi/rt/MFixCell'));
+            $c->dup();
+            $c->invokespecial($cp->methodRef('moggi/rt/MFixCell', '<init>', '()V'), 0, false);
+            $c->astore(3);
+
+            $c->new_($cp->class_('moggi/rt/MFixPublish'));
+            $c->dup();
+            $c->aload(3);
+            $c->invokespecial($cp->methodRef('moggi/rt/MFixPublish', '<init>', '(Lmoggi/rt/MFixCell;)V'), 1, false);
+            $c->astore(4);
+
+            $c->aload(3);
+            $c->iconst(1);
+            $c->putfield($cp->fieldRef('moggi/rt/MFixCell', 'state', 'I'));
+
+            $c->aconst_null();
+            $c->astore(6);
+
+            $c->aload(0);
+            $c->iconst(1);
+            $c->anewarray($cp->class_('java/lang/Object'));
+            $c->dup();
+            $c->iconst(0);
+            $c->aload(3);
+            $c->aastore();
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'apply', '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;'),
+                2,
+                true,
+            );
+            $c->astore(5);
+
+            $c->aload(1);
+            $c->iconst(1);
+            $c->anewarray($cp->class_('java/lang/Object'));
+            $c->dup();
+            $c->iconst(0);
+            $c->aload(5);
+            $c->aastore();
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'apply', '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;'),
+                2,
+                true,
+            );
+            $c->checkcast($cp->class_('java/lang/Boolean'));
+            $c->invokevirtual($cp->methodRef('java/lang/Boolean', 'booleanValue', '()Z'), 0, true);
+            $c->ifeq('noValue');
+
+            $c->aload(4);
+            $c->iconst(1);
+            $c->anewarray($cp->class_('java/lang/Object'));
+            $c->dup();
+            $c->iconst(0);
+            $c->aload(2);
+            $c->iconst(1);
+            $c->anewarray($cp->class_('java/lang/Object'));
+            $c->dup();
+            $c->iconst(0);
+            $c->aload(5);
+            $c->aastore();
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'apply', '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;'),
+                2,
+                true,
+            );
+            $c->aastore();
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'apply', '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;'),
+                2,
+                true,
+            );
+            $c->astore(6);
+
+            $c->label('noValue');
+            $c->noteFrame([
+                'java/lang/Object',
+                'java/lang/Object',
+                'java/lang/Object',
+                'moggi/rt/MFixCell',
+                'moggi/rt/MFixPublish',
+                'java/lang/Object',
+                'java/lang/Object',
+            ]);
+            $c->aload(5);
             $c->areturn();
         }
     );

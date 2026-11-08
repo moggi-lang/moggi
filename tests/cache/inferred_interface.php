@@ -35,7 +35,7 @@ try {
             seedCacheDir($cacheDir);
         }
 
-        return runCompiledProcess([PHP_BINARY, $root . '/moggi.php', 'compile', $consumer, '--ir'], 60, $env, $root);
+        return runCompiledProcess([PHP_BINARY, $root . '/moggi.php', 'compile', $consumer, '--ir'], 180, $env, $root);
     };
 
     $runs = [

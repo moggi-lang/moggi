@@ -1,0 +1,22 @@
+-- A written role says what `coerce` may change: the tag is declared phantom, so
+-- the type-level argument is free to differ, while the value keeps its own
+-- representation.
+module Main where
+
+import Data.Bool (Bool(..))
+import Data.Char (Char)
+import Data.Coerce (Coercible, coerce)
+import Moggi.Internal.Base
+
+data Tagged tag value = Tagged value
+
+type role Tagged phantom representational
+
+retag :: Tagged Bool Int -> Tagged Char Int
+retag = coerce
+
+unwrap :: Tagged Char Int -> Int
+unwrap (Tagged n) = n
+
+main :: IO ()
+main = putStrLn (show (unwrap (retag (Tagged 5))))

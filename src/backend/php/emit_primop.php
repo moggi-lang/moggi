@@ -167,6 +167,8 @@ function emitIntrinsicPrimop(EmitEnv $env, IR\Intrinsic $op, array $argExprs): ?
         'doubleSignum#' => doubleSignumExpr($argExprs[0]),
         'doubleFromInteger#' => '(float) ' . $argExprs[0],
         'doubleToInt#' => '(int) ' . $argExprs[0],
+        'castWord64ToDouble#' => "\\unpack('d', \\pack('P', {$argExprs[0]}))[1]",
+        'castDoubleToWord64#' => "\\unpack('P', \\pack('d', {$argExprs[0]}))[1]",
         'doubleExp#' => '\\exp(' . $argExprs[0] . ')',
         'doubleLog#' => '\\log(' . $argExprs[0] . ')',
         'doubleSqrt#' => '\\sqrt(' . $argExprs[0] . ')',

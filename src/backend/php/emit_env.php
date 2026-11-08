@@ -46,7 +46,7 @@ final class EmitEnv
     /** @var list<string> the parameters of the function being emitted, captures included */
     public array $functionParams = [];
 
-    /** @var list<string> the declared parameters `IR\TailRecall` overwrites before jumping back */
+    /** @var list<string> the runtime parameters, captures included, `IR\TailRecall` overwrites before jumping back */
     public array $tailRecParams = [];
 
     /** Generated name of the function being emitted, for the frame marks its body writes. */

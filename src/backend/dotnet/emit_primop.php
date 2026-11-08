@@ -362,6 +362,22 @@ function emitIntrinsicPrimop(EmitEnv $env, IR\Intrinsic $op): bool
 
             return true;
 
+        case 'word64ToDouble':
+            emitOperand($env, $args[0]);
+            unboxInt($env);
+            $env->m->emit('call float64 [System.Runtime]System.BitConverter::Int64BitsToDouble(int64)');
+            boxDouble($env);
+
+            return true;
+
+        case 'doubleToWord64':
+            emitOperand($env, $args[0]);
+            unboxDouble($env);
+            $env->m->emit('call int64 [System.Runtime]System.BitConverter::DoubleToInt64Bits(float64)');
+            boxInt($env);
+
+            return true;
+
         case 'doubleFromInteger':
             emitOperand($env, $args[0]);
             $env->m->emit('unbox.any valuetype [System.Runtime.Numerics]System.Numerics.BigInteger');

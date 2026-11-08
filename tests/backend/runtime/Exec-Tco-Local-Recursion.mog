@@ -1,0 +1,13 @@
+-- A recursive local helper closes over `start` and `steps`, so it is a lifted
+-- callable rather than an entry. Its tail call must still become a loop: one
+-- stack frame per step would exhaust the default stack long before 100000.
+
+countTo :: Int -> Int -> Int
+countTo start steps =
+  let go i acc = case i >= steps of
+        True -> acc
+        False -> go (i + 1) (acc + start)
+  in go 0 0
+
+main :: IO ()
+main = putStrLn (show (countTo 2 100000))

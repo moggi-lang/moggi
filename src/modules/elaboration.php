@@ -63,13 +63,23 @@ function walkElaboration(Ast\AstWalkable $root, callable $visit): void
  * application) has no span and therefore no origin a tool could point at; its
  * type stays inside the elaboration instead of being given a made-up key.
  *
+ * `$before` is the boundary gate ({@see obligationsSettledCheck()}): it is the
+ * same walk the table comes from, so a body is traversed once rather than once
+ * per fact published about it, and a node it refuses cannot have its type
+ * published first.
+ *
+ * @param null|callable(Ast\AstNode): void $before
  * @return list<array{origin: string, type: Type}>
  */
-function termTypesFor(Ast\FunctionDecl $fn): array
+function termTypesFor(Ast\FunctionDecl $fn, ?callable $before = null): array
 {
     $terms = [];
 
-    $visit = static function (Ast\AstNode $node) use (&$terms): void {
+    $visit = static function (Ast\AstNode $node) use (&$terms, $before): void {
+        if ($before !== null) {
+            $before($node);
+        }
+
         if ($node->inferredInternalType !== null && $node->line > 0) {
             $terms[] = [
                 'origin' => CheckedFunction::termOrigin($node),

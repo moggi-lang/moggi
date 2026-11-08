@@ -313,6 +313,30 @@ function emitIntrinsicPrimop(EmitEnv $env, IR\Intrinsic $op): bool
 
             return true;
 
+        case 'word64ToDouble':
+            emitOperand($env, $args[0]);
+            unboxInt($env);
+            $env->c->invokestatic(
+                $env->cp->methodRef('java/lang/Double', 'longBitsToDouble', '(J)D'),
+                2,
+                2,
+            );
+            boxDouble($env);
+
+            return true;
+
+        case 'doubleToWord64':
+            emitOperand($env, $args[0]);
+            unboxDouble($env);
+            $env->c->invokestatic(
+                $env->cp->methodRef('java/lang/Double', 'doubleToRawLongBits', '(D)J'),
+                2,
+                2,
+            );
+            boxInt($env);
+
+            return true;
+
         case 'doubleFromInteger':
             emitOperand($env, $args[0]);
             $env->c->checkcast($env->cp->class_('java/math/BigInteger'));

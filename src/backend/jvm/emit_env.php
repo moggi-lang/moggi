@@ -39,9 +39,9 @@ final class EmitEnv implements \Moggi\Backend\Managed\StmtTarget
     public array $locByLine = [];
 
     /**
-     * Local slots of the enclosing function's declared parameters, in
-     * `FunctionDecl::$params` order. `IR\TailRecall` writes these slots and
-     * jumps back to {@see $tailLoopHead}.
+     * Local slots of the enclosing function's runtime parameters, in capture
+     * prefix then `FunctionDecl::$params` order. `IR\TailRecall` writes these
+     * slots and jumps back to {@see $tailLoopHead}.
      *
      * @var list<int>
      */

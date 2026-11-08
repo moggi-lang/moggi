@@ -262,6 +262,54 @@ function bindCapturedPartial(IR\Partial $partial, CallableTable $table): IR\Part
     return new IR\Partial($partial->fn, $arity, $args);
 }
 
+/**
+ * A partial that already supplies every hidden slot, in the order the entry publishes them.
+ *
+ * Lowering records the names a closure closes over in the order its body reaches them, and a
+ * dictionary the body reaches first can sit behind one it reaches later; the declaration takes the
+ * slots in the order the callable table published. Reordering by name against that vector is what
+ * keeps the two sides agreeing on which argument is which, so a slot is never handed another
+ * slot's dictionary.
+ */
+function orderHiddenArgs(IR\Partial $partial, CallableTable $table): IR\Partial
+{
+    $layout = publishedLayout($table, $partial->fn);
+    if ($layout === null) {
+        return $partial;
+    }
+
+    $vector = $layout['captures'];
+    if ($vector === [] || \count($partial->args) !== \count($vector)) {
+        return $partial;
+    }
+
+    $byName = [];
+    foreach ($partial->args as $arg) {
+        if (! ($arg instanceof IR\Local) || ! \in_array($arg->name, $vector, true)) {
+            return $partial;
+        }
+
+        $byName[$arg->name] = $arg;
+    }
+
+    $ordered = [];
+    foreach ($vector as $name) {
+        if (! isset($byName[$name])) {
+            return $partial;
+        }
+
+        $ordered[] = $byName[$name];
+    }
+
+    foreach ($ordered as $index => $arg) {
+        if ($arg !== $partial->args[$index]) {
+            return new IR\Partial($partial->fn, $partial->arity, $ordered);
+        }
+    }
+
+    return $partial;
+}
+
 function bindLambdaCapturesOperand(IR\Operand $operand, CallableTable $table): IR\Operand
 {
     if ($operand instanceof IR\FnRef) {
@@ -278,7 +326,7 @@ function bindLambdaCapturesOperand(IR\Operand $operand, CallableTable $table): I
     }
 
     return match ($operand::class) {
-        IR\Partial::class => bindCapturedPartial($operand, $table),
+        IR\Partial::class => orderHiddenArgs(bindCapturedPartial($operand, $table), $table),
         IR\Intrinsic::class => new IR\Intrinsic(
             $operand->name,
             \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $table), $operand->args),
@@ -578,20 +626,28 @@ function returnedPartialExpr(IR\FunctionDecl $provider, array $providerArgs): ?I
  * call's own argument, since the provider's parameter does not exist there.
  *
  * Returns `null` when the arguments cannot stand in for every captured name —
- * the call's argument count does not line up with the parameters, or a capture
- * is a `let`/pattern-bound local rather than a parameter. The caller then
- * leaves the application to the runtime `__apply`, which builds the closure
- * inside the provider where the names still exist.
+ * the call's argument count does not line up with the slots the provider reads,
+ * or a capture is a `let`/pattern-bound local rather than one of them. The
+ * caller then leaves the application to the runtime `__apply`, which builds the
+ * closure inside the provider where the names still exist.
+ *
+ * The slots are {@see FunctionDecl::runtimeSlots()}, not `params`: a lifted
+ * callable reads its own free locals as leading arguments, so a `__letrecN`
+ * binder whose body closes over a local of the function around it (a dictionary
+ * captured by a polymorphic recursive helper) declares fewer parameters than
+ * the call supplies. Comparing against `params` alone rejected those calls, and
+ * a rejected call here is a self call TCO never gets to see.
  *
  * @param list<IR\Operand> $providerArgs
  */
 function substituteProviderParams(IR\Partial $expr, IR\FunctionDecl $provider, array $providerArgs): ?IR\Operand
 {
-    if (\count($provider->params) !== \count($providerArgs)) {
+    $slots = $provider->runtimeSlots();
+    if (\count($slots) !== \count($providerArgs)) {
         return null;
     }
 
-    $subst = \array_combine($provider->params, $providerArgs);
+    $subst = \array_combine($slots, $providerArgs);
     $resolved = true;
 
     $substitute = null;
@@ -851,6 +907,11 @@ function specializePartialReturnFunction(IR\FunctionDecl $function, array $captu
 
     $layout = $table === null ? null : publishedLayout($table, $partial->fn);
     $runtimeArity = $layout === null ? $partial->arity : $layout['sig']->runtimeArity();
+
+    if ($layout !== null && \count($partial->args) <= \count($layout['captures'])) {
+        return $function;
+    }
+
     $missing = $runtimeArity - \count($partial->args);
     if ($missing <= 0) {
         return $function;
@@ -862,7 +923,8 @@ function specializePartialReturnFunction(IR\FunctionDecl $function, array $captu
     }
 
     $newParams = [...$existing];
-    while (\count($newParams) < $missing) {
+    $wanted = \count($existing) + $missing;
+    while (\count($newParams) < $wanted) {
         $newParams[] = freshPartialParamName($newParams);
     }
 

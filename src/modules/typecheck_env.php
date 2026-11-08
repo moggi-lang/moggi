@@ -85,6 +85,26 @@ function updateProjectClassesForModule(
 
         $projectClasses[$name] = $state->classes[$name];
     }
+
+    applyDeclaredRoles($state, $unit);
+}
+
+/**
+ * Put a unit's written `type role` declarations on the types they describe.
+ *
+ * The declaring module checked them against the fields; this is how the answer
+ * reaches every other module, whose types are registered from the same parsed
+ * items rather than from the declaration that module checked.
+ *
+ * @param array<string, mixed> $unit
+ */
+function applyDeclaredRoles(Types\TypeCheckState $state, array $unit): void
+{
+    foreach ($unit['program']->items as $item) {
+        if ($item instanceof Ast\RoleDecl) {
+            Types\installDeclaredRoles($state, $item->name, $item->roles);
+        }
+    }
 }
 
 function mergeExportedTypes(Types\TypeCheckState $state, array $unit, array $units = []): void
@@ -121,6 +141,8 @@ function mergeExportedTypes(Types\TypeCheckState $state, array $unit, array $uni
             Types\installTypeSynonymKind($state, $name, $type);
         }
 
+        applyDeclaredRoles($state, $unit);
+
         return;
     }
 
@@ -147,6 +169,8 @@ function mergeExportedTypes(Types\TypeCheckState $state, array $unit, array $uni
             }
         }
     }
+
+    applyDeclaredRoles($state, $unit);
 }
 
 /**

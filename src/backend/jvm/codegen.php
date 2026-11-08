@@ -161,7 +161,7 @@ function emitFunction(
             }
             $env->tailRecSlots = \array_map(
                 static fn (string $p): int => $env->locals[$p],
-                $fn->params,
+                $params,
             );
             noteSrcLoc($env, $fn->srcLoc);
 

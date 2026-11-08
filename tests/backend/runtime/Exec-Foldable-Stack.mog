@@ -1,0 +1,37 @@
+import Data.Foldable qualified as F
+import Data.List qualified as L
+import Text.Show
+
+-- Every helper here walks the whole spine in constant stack: the folds are
+-- loops on a list, the length/sum/product/maximum family leans on them, and
+-- reverse/sort/genericLength are tail recursive themselves. A list this long
+-- overflows the 1 MB stack a Windows main thread allows as soon as one frame
+-- per element survives -- the Endo chain the folds used to build did at half
+-- this depth -- while a loop over it costs none.
+
+range :: Int -> [Int]
+range n = let
+    go k acc = case k <= 0 of
+      True -> acc
+      False -> go (k - 1) (k : acc)
+  in go n []
+
+xs :: [Int]
+xs = range 2000
+
+small :: [Int]
+small = range 1000
+
+main :: IO ()
+main = do
+  putStrLn (show (L.length xs))
+  putStrLn (show (L.foldl (\a b -> a + b) 0 xs))
+  putStrLn (show (L.sum xs))
+  putStrLn (show (L.product (L.map (\_ -> 1) (range 1000))))
+  putStrLn (show (L.length (L.reverse xs)))
+  putStrLn (show (L.maximum xs))
+  putStrLn (show (L.minimum xs))
+  putStrLn (show (L.length (F.toList xs)))
+  putStrLn (show (L.genericLength xs))
+  putStrLn (show (L.length (L.sort small)))
+  putStrLn (show (L.last (L.sort small)))

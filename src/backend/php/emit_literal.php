@@ -23,9 +23,11 @@ function formatDoubleLiteral(float $value): string
         return $value < 0 ? '-INF' : 'INF';
     }
 
-    $text = \rtrim(\rtrim(\sprintf('%.17F', $value), '0'), '.');
+    $text = \sprintf('%.17G', $value);
 
-    return \str_contains($text, '.') ? $text : $text . '.0';
+    return \str_contains($text, '.') || \str_contains($text, 'E') || \str_contains($text, 'e')
+        ? $text
+        : $text . '.0';
 }
 
 function exportStringLiteral(string $value): string

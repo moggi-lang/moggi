@@ -109,6 +109,8 @@ function languageRuntime(): string
         moggiExceptionClassIl(),
         constFnClassIl(),
         recClassIl(),
+        mfixCellClassIl(),
+        mfixPublishClassIl(),
         topLevelFnClassIl(),
         stableNameClassIl(),
         weakClassIl(),
@@ -1049,6 +1051,124 @@ function recClassIl(): string
 IL;
 }
 
+/**
+ * Cell behind `mfix#`: the self-reference of `Control.Monad.Fix.mfix`.
+ *
+ * `Invoke(args)` answers the published fixed point of `args`, or the fixed
+ * point itself when no argument arrives, but only once the builder has
+ * published it. Before that there is nothing to forward to, so it raises
+ * `ErrorCall` naming the demand rather than answering a placeholder; the
+ * state distinguishes a value that was never published from one still being
+ * defined.
+ */
+function mfixCellClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.MFixCell
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .field public object stored
+  .field public int32 state
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld int32 Moggi.Rt.MFixCell::state
+    ldc.i4.2
+    bne.un NotReady
+
+    ldarg.0
+    ldfld object Moggi.Rt.MFixCell::stored
+    ldarg.1
+    call object Moggi.Rt.RT::Apply(object, object[])
+    ret
+
+    NotReady:
+    ldarg.0
+    ldfld int32 Moggi.Rt.MFixCell::state
+    brfalse.s Unpublished
+
+    ldstr "the recursive value is demanded while it is being defined"
+    br.s Fail
+
+    Unpublished:
+    ldstr "the recursive value was demanded before it was initialized"
+
+    Fail:
+    ldc.i4.0
+    newarr object
+    call object Moggi.Rt.RT::ThrowErrorCall(string, object[])
+    ret
+  }
+}
+
+IL;
+}
+
+/**
+ * The builder's publisher for `mfix#`: it records the fixed point in its cell
+ * and answers the value it was given, so the builder can hand it straight to
+ * the monad's own constructor (`Just (publish x)`).
+ */
+function mfixPublishClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.MFixPublish
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .field public object cell
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(object cell) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.1
+    stfld object Moggi.Rt.MFixPublish::cell
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld object Moggi.Rt.MFixPublish::cell
+    ldarg.1
+    ldc.i4.0
+    ldelem.ref
+    stfld object Moggi.Rt.MFixCell::stored
+
+    ldarg.0
+    ldfld object Moggi.Rt.MFixPublish::cell
+    ldc.i4.2
+    stfld int32 Moggi.Rt.MFixCell::state
+
+    ldarg.1
+    ldc.i4.0
+    ldelem.ref
+    ret
+  }
+}
+
+IL;
+}
+
 function topLevelFnClassIl(): string
 {
     return <<<'IL'
@@ -1215,6 +1335,7 @@ function rtClassIl(): string
         rtReportUncaughtIl(),
         rtThrowSomeExceptionIl(),
         rtThrowErrorCallIl(),
+        rtMFixIl(),
         rtIntAbsIl(),
         rtNaturalFromIntegerIl(),
         rtNormalizeHostExceptionIl(),
@@ -4896,6 +5017,120 @@ function rtFixIl(): string
     ldarg.0
     ldloc args
     call object Moggi.Rt.RT::Apply(object, object[])
+    ret
+  }
+
+IL;
+}
+
+/**
+ * Guarded fixed point (`Control.Monad.Fix.mfix`): the IO form runs the action
+ * the builder returns with the self-reference still undefined, publishes the
+ * result, and answers it; the pure form projects the fixed point out of the
+ * monadic value and publishes that before answering the value.
+ */
+function rtMFixIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object MFix(object f) cil managed
+  {
+    .maxstack 16
+    .locals init (object cell,
+                  object publish,
+                  object result,
+                  object discarded)
+
+    newobj instance void Moggi.Rt.MFixCell::.ctor()
+    stloc cell
+    ldloc cell
+    newobj instance void Moggi.Rt.MFixPublish::.ctor(object)
+    stloc publish
+    ldloc cell
+    ldc.i4.1
+    stfld int32 Moggi.Rt.MFixCell::state
+
+    ldarg.0
+    ldc.i4.1
+    newarr object
+    dup
+    ldc.i4.0
+    ldloc cell
+    stelem.ref
+    call object Moggi.Rt.RT::Apply(object, object[])
+    call object Moggi.Rt.RT::IoRun(object)
+    stloc result
+
+    ldloc publish
+    ldc.i4.1
+    newarr object
+    dup
+    ldc.i4.0
+    ldloc result
+    stelem.ref
+    call object Moggi.Rt.RT::Apply(object, object[])
+    stloc discarded
+
+    ldloc result
+    ret
+  }
+
+  .method public hidebysig static object MFixValue(object build, object test, object extract) cil managed
+  {
+    .maxstack 16
+    .locals init (object cell,
+                  object publish,
+                  object result,
+                  object discarded)
+
+    newobj instance void Moggi.Rt.MFixCell::.ctor()
+    stloc cell
+    ldloc cell
+    newobj instance void Moggi.Rt.MFixPublish::.ctor(object)
+    stloc publish
+    ldloc cell
+    ldc.i4.1
+    stfld int32 Moggi.Rt.MFixCell::state
+
+    ldarg.0
+    ldc.i4.1
+    newarr object
+    dup
+    ldc.i4.0
+    ldloc cell
+    stelem.ref
+    call object Moggi.Rt.RT::Apply(object, object[])
+    stloc result
+
+    ldarg.1
+    ldc.i4.1
+    newarr object
+    dup
+    ldc.i4.0
+    ldloc result
+    stelem.ref
+    call object Moggi.Rt.RT::Apply(object, object[])
+    unbox.any bool
+    brfalse noValue
+
+    ldloc publish
+    ldc.i4.1
+    newarr object
+    dup
+    ldc.i4.0
+    ldarg.2
+    ldc.i4.1
+    newarr object
+    dup
+    ldc.i4.0
+    ldloc result
+    stelem.ref
+    call object Moggi.Rt.RT::Apply(object, object[])
+    stelem.ref
+    call object Moggi.Rt.RT::Apply(object, object[])
+    stloc discarded
+
+    noValue:
+    ldloc result
     ret
   }
 
