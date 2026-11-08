@@ -1,0 +1,148 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- Module      :  Data.Type.Equality
+-- License     :  BSD-style (see the file LICENSE)
+--
+-- Stability   :  stable
+-- Portability :  not portable
+--
+-- Definition of propositional equality @(':~:')@. Pattern-matching on a variable
+-- of type @(a ':~:' b)@ produces a proof that @a '~' b@.
+module Data.Type.Equality
+  (
+    -- * The equality types
+    type (~)
+  , type (~~)
+  , (:~:)(..)
+  , (:~~:)(..)
+
+    -- * Working with equality
+  , sym
+  , trans
+  , castWith
+  , gcastWith
+  , apply
+  , inner
+  , outer
+
+    -- * Inferring equality from other types
+  , TestEquality(..)
+
+    -- * Boolean type-level equality
+  , type (==)
+  ) where
+
+import Data.Bool (Bool(..))
+import Data.Bounded (Bounded(..))
+import Data.Enum (Enum(..))
+import Data.Type.Bool
+import Data.Eq (Eq(..))
+import Moggi.Err (error)
+import Data.Maybe (Maybe(..))
+import Data.Ord (Ord(..), Ordering(..))
+import Text.Read (Read(..), lex, readParen)
+import Text.Show (Show(..))
+
+-- | Propositional equality. If @a :~: b@ is inhabited by some terminating
+-- value, then the type @a@ is the same as the type @b@. To use this equality
+-- in practice, pattern-match on the @a :~: b@ to get out the @Refl@ constructor;
+-- in the body of the pattern-match, the compiler knows that @a ~ b@.
+data (:~:) a b where
+  Refl :: a :~: a
+
+-- | Kind heterogeneous propositional equality. Like ':~:', @a :~~: b@ is
+-- inhabited by a terminating value if and only if @a@ is the same type as @b@.
+data (:~~:) a b where
+  HRefl :: a :~~: a
+
+-- with credit to Conal Elliott for 'ty', Erik Hesselink & Martijn van
+-- Steenbergen for 'type-equality', Edward Kmett for 'eq', and Gabor Greif
+-- for 'type-eq'
+
+-- | Symmetry of equality
+sym :: (a :~: b) -> (b :~: a)
+sym Refl = Refl
+
+-- | Transitivity of equality
+trans :: (a :~: b) -> (b :~: c) -> (a :~: c)
+trans Refl Refl = Refl
+
+-- | Type-safe cast, using propositional equality
+castWith :: (a :~: b) -> a -> b
+castWith Refl x = x
+
+-- | Generalized form of type-safe cast using propositional equality
+gcastWith :: (a :~: b) -> ((a ~ b) => r) -> r
+gcastWith Refl x = x
+
+-- | Apply one equality to another, jointly
+apply :: (f :~: g) -> (a :~: b) -> (f a :~: g b)
+apply Refl Refl = Refl
+
+-- | Extract a witness of equality of two types
+inner :: (f a :~: g b) -> a :~: b
+inner Refl = Refl
+
+-- | Extract a witness of equality of two type constructors
+outer :: (f a :~: g b) -> f :~: g
+outer Refl = Refl
+
+instance Eq (a :~: b) where
+  (==) Refl Refl = True
+
+instance Show (a :~: b) where
+  show Refl = "Refl"
+
+instance Ord (a :~: b) where
+  compare Refl Refl = EQ
+
+deriving instance a ~ b => Read (a :~: b)
+
+instance a ~ b => Enum (a :~: b) where
+  toEnum 0 = Refl
+  toEnum _ = error "Data.Type.Equality.toEnum: bad argument"
+  fromEnum Refl = 0
+
+deriving instance a ~ b => Bounded (a :~: b)
+
+instance Eq (a :~~: b) where
+  (==) HRefl HRefl = True
+
+instance Show (a :~~: b) where
+  show HRefl = "HRefl"
+
+instance Ord (a :~~: b) where
+  compare HRefl HRefl = EQ
+
+-- | A type family to compute Boolean equality.
+type family (a :: k) == (b :: k) :: Bool where
+  f a == g b = (f == g) && (a == b)
+  a == a = 'True
+  _ == _ = 'False
+
+-- | This class contains types where you can learn the equality of two types
+-- from information contained in /terms/.
+--
+-- The result should be @Just Refl@ if and only if the types applied to @f@ are
+-- equal:
+--
+-- @testEquality (x :: f a) (y :: f b) = Just Refl ⟺ a = b@
+--
+-- Typically, only singleton types should inhabit this class. In that case type
+-- argument equality coincides with term equality:
+--
+-- @testEquality (x :: f a) (y :: f b) = Just Refl ⟺ a = b ⟺ x = y@
+--
+-- @isJust (testEquality x y) = x == y@
+--
+-- Singleton types are not required, however, and so the latter two would-be
+-- laws are not in fact valid in general.
+class TestEquality f where
+  -- | Conditionally prove the equality of @a@ and @b@.
+  testEquality :: f a -> f b -> Maybe (a :~: b)
+
+instance TestEquality ((:~:) a) where
+  testEquality Refl Refl = Just Refl
+
+instance TestEquality ((:~~:) a) where
+  testEquality HRefl HRefl = Just Refl

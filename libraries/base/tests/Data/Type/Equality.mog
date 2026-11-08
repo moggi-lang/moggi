@@ -1,0 +1,102 @@
+import Data.Type.Equality ((~), (~~), (:~:), (:~~:), (==), Refl, HRefl, sym, trans, castWith, gcastWith, apply, inner, outer, TestEquality(..))
+import Data.Maybe (Maybe(..))
+import Data.Eq
+import Data.Ord
+import Text.Show
+import Text.Read (read)
+import Data.Bool (Bool(..))
+import Data.Bounded (Bounded(..))
+import Data.Enum (Enum(..))
+
+-- Propositional equality: `Refl` is the only inhabitant of `a :~: a`, and the
+-- combinators move that proof to the other side or through a chain without
+-- inspecting the value. `castWith` is the point of the exercise: the proof is
+-- spent, the value crosses to the other type unchanged, and the checker has
+-- learned `a ~ b` for the body. The instances are observed on the same values.
+
+intRefl :: Int :~: Int
+intRefl = Refl
+
+symProof :: Int :~: Int
+symProof = sym intRefl
+
+transProof :: Int :~: Int
+transProof = trans intRefl intRefl
+
+boolProof :: Bool :~: Bool
+boolProof = Refl
+
+-- The proof drives the match: `testEquality` answers `Just Refl` for equal
+-- indices, and the `Refl` alternative is the only one that can refine here.
+viaTest :: Int :~: Int
+viaTest = case testEquality intRefl intRefl of
+  Just Refl -> Refl
+  Nothing -> intRefl
+
+-- `apply` proves two applied types equal from two proofs about their parts;
+-- `inner` and `outer` take such a proof apart again, one for the argument and
+-- one for the constructors.
+maybeEquality :: Maybe Int :~: Maybe Int
+maybeEquality = apply Refl Refl
+
+innerProof :: Int :~: Int
+innerProof = inner maybeEquality
+
+outerProof :: Maybe :~: Maybe
+outerProof = outer maybeEquality
+
+-- `gcastWith` uses a proof to let the body see the two types as one: the
+-- continuation's context `(a ~ b) => r` adds no argument, and the value is
+-- checked as `r` with the equality in scope.
+castViaProof :: (a :~: a) -> a -> a
+castViaProof p x = gcastWith p x
+
+-- `:~~:` is the same proposition at two kinds, and `TestEquality` learns it
+-- from a value the same way the `:~:` instance does.
+hetero :: Maybe :~~: Maybe
+hetero = HRefl
+
+-- `(==)` compares two applications by their heads and their arguments, so a
+-- pair of different constructors answers `'False` rather than staying stuck,
+-- and the proof of either answer is `Refl` once the family has reduced.
+equalTypes :: (Int == Int) :~: 'True
+equalTypes = Refl
+
+differentTypes :: (Int == Bool) :~: 'False
+differentTypes = Refl
+
+appliedTypes :: (Maybe Int == Maybe Int) :~: 'True
+appliedTypes = Refl
+
+appliedDifferent :: (Maybe Int == Maybe Bool) :~: 'False
+appliedDifferent = Refl
+
+-- `~~` is the same proposition without a shared kind: written as a constraint
+-- it makes its two sides the one type, exactly as `~` does, and passes no
+-- dictionary, so the function below is the identity at every type.
+hetSame :: (a ~~ a) => a -> a
+hetSame x = x
+
+main :: IO ()
+main = do
+  putStrLn (show (castWith intRefl 42))
+  putStrLn (show (castWith symProof 7))
+  putStrLn (show (castWith transProof 9))
+  putStrLn (show (castWith boolProof True))
+  putStrLn (show (castWith viaTest 5))
+  putStrLn (show intRefl)
+  putStrLn (show (intRefl == intRefl))
+  putStrLn (show (compare intRefl intRefl))
+  putStrLn (show (castWith innerProof 11))
+  putStrLn (show (castWith maybeEquality (Just 3)))
+  putStrLn (show outerProof)
+  putStrLn (show (castViaProof intRefl 13))
+  putStrLn (show hetero)
+  putStrLn (show (case testEquality hetero hetero of
+    Just Refl -> True
+    Nothing -> False))
+  putStrLn (show (read "Refl" :: Int :~: Int))
+  putStrLn (show (fromEnum (Refl :: Int :~: Int)))
+  putStrLn (show (toEnum 0 :: Int :~: Int))
+  putStrLn (show (maxBound :: Int :~: Int))
+  putStrLn (show (hetSame 17))
