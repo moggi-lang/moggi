@@ -3,12 +3,14 @@
 -- the 'enumFrom' family, which is what @[x ..]@ desugars to) and 'enumerate'.
 module Data.Enum
   ( Enum(succ, pred, toEnum, fromEnum, enumFrom, enumFromThen, enumFromTo, enumFromThenTo)
+  , Bounded(..)
   , enumerate
   ) where
 
 import Data.Bool
 import Data.Bounded
 import Data.Eq
+import Data.Num
 import Data.Ord
 import Moggi.Err
 import Moggi.Internal.Base
@@ -32,8 +34,10 @@ import Moggi.Internal.Prim
 class Enum a where
   -- | Successor of a value. For numeric types, 'succ' adds 1.
   succ :: a -> a
+  succ x = toEnum (fromEnum x + 1)
   -- | Predecessor of a value. For numeric types, 'pred' subtracts 1.
   pred :: a -> a
+  pred x = toEnum (fromEnum x - 1)
   -- | Convert from an 'Int'.
   toEnum :: Int -> a
   -- | Convert to an 'Int'.

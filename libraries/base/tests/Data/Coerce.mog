@@ -1,0 +1,52 @@
+import Data.Coerce (Coercible, coerce)
+import Data.Bool (Bool(..))
+import Data.Eq
+import Data.Maybe (Maybe(..))
+import Data.Ord
+import Text.Show
+
+-- Coercion is decided from the roles of the types involved, so the cases below
+-- are the three kinds of instance: a newtype and its representation (either
+-- way round), a constructor applied at coercible, equal and phantom arguments,
+-- and the trivial `a` to `a`. A function coerces when its domain and codomain
+-- do, which is what makes `shifted` typecheck at the newtype.
+
+newtype Age = Age Int
+
+deriving instance Show Age
+
+data Tagged tag value = Tagged value deriving (Show)
+
+ageToInt :: Age -> Int
+ageToInt = coerce
+
+intToAge :: Int -> Age
+intToAge = coerce
+
+roundTrip :: Int -> Int
+roundTrip n = ageToInt (intToAge n)
+
+throughMaybe :: Maybe Age -> Maybe Int
+throughMaybe = coerce
+
+shifted :: Age -> Age
+shifted = coerce (\n -> n + 1 :: Int)
+
+phantomSwap :: Tagged Bool Int -> Tagged Char Int
+phantomSwap = coerce
+
+convert :: Coercible a b => a -> b
+convert x = coerce x
+
+viaConstraint :: Int
+viaConstraint = convert (Age 5)
+
+main :: IO ()
+main = do
+  putStrLn (show (ageToInt (Age 42)))
+  putStrLn (show (intToAge 7))
+  putStrLn (show (roundTrip 9))
+  putStrLn (show (throughMaybe (Just (Age 3))))
+  putStrLn (show (shifted (Age 1)))
+  putStrLn (show (phantomSwap (Tagged 5)))
+  putStrLn (show viaConstraint)
