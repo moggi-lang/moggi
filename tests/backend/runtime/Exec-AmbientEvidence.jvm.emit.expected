@@ -46,7 +46,7 @@ public class moggi.Main {
          7: invokestatic  #29                 // Method java/lang/Boolean.valueOf:(Z)Ljava/lang/Boolean;
         10: areturn
         11: aload_3
-        12: ifnull        140
+        12: ifnull        127
         15: aload_3
         16: checkcast     #31                 // class moggi/rt/MList
         19: getfield      #35                 // Field moggi/rt/MList.head:Ljava/lang/Object;
@@ -76,57 +76,53 @@ public class moggi.Main {
         63: aload         7
         65: checkcast     #25                 // class java/lang/Boolean
         68: invokevirtual #43                 // Method java/lang/Boolean.booleanValue:()Z
-        71: ifeq          83
+        71: ifeq          79
         74: iconst_1
         75: invokestatic  #29                 // Method java/lang/Boolean.valueOf:(Z)Ljava/lang/Boolean;
-        78: astore        8
-        80: goto          137
-        83: aload         7
-        85: checkcast     #25                 // class java/lang/Boolean
-        88: invokevirtual #43                 // Method java/lang/Boolean.booleanValue:()Z
-        91: ifne          127
-        94: aload_0
-        95: astore        9
-        97: aload_1
-        98: astore        10
-       100: aload_2
-       101: checkcast     #31                 // class moggi/rt/MList
-       104: getfield      #39                 // Field moggi/rt/MList.tail:Lmoggi/rt/MList;
-       107: astore        11
-       109: aload         9
+        78: areturn
+        79: aload         7
+        81: checkcast     #25                 // class java/lang/Boolean
+        84: invokevirtual #43                 // Method java/lang/Boolean.booleanValue:()Z
+        87: ifne          117
+        90: aload_0
+        91: astore        8
+        93: aload_1
+        94: astore        9
+        96: aload_2
+        97: checkcast     #31                 // class moggi/rt/MList
+       100: getfield      #39                 // Field moggi/rt/MList.tail:Lmoggi/rt/MList;
+       103: astore        10
+       105: aload         8
+       107: astore_0
+       108: aload         9
+       110: astore_1
        111: aload         10
-       113: aload         11
-       115: invokestatic  #45                 // Method memEq:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
-       118: astore        12
-       120: aload         12
-       122: astore        8
-       124: goto          137
-       127: new           #47                 // class java/lang/RuntimeException
+       113: astore_2
+       114: goto          0
+       117: new           #45                 // class java/lang/RuntimeException
+       120: dup
+       121: ldc           #47                 // String non-exhaustive match
+       123: invokespecial #51                 // Method java/lang/RuntimeException."<init>":(Ljava/lang/String;)V
+       126: athrow
+       127: new           #45                 // class java/lang/RuntimeException
        130: dup
-       131: ldc           #49                 // String non-exhaustive match
-       133: invokespecial #53                 // Method java/lang/RuntimeException."<init>":(Ljava/lang/String;)V
+       131: ldc           #47                 // String non-exhaustive match
+       133: invokespecial #51                 // Method java/lang/RuntimeException."<init>":(Ljava/lang/String;)V
        136: athrow
-       137: aload         8
-       139: areturn
-       140: new           #47                 // class java/lang/RuntimeException
-       143: dup
-       144: ldc           #49                 // String non-exhaustive match
-       146: invokespecial #53                 // Method java/lang/RuntimeException."<init>":(Ljava/lang/String;)V
-       149: athrow
-       150: aconst_null
-       151: areturn
+       137: aconst_null
+       138: areturn
 
   public static java.lang.Object demoEqTrue();
     Code:
-         0: invokestatic  #60                 // Method moggi/Data/Eq.__ev_Eq_Int:()Ljava/lang/Object;
+         0: invokestatic  #58                 // Method moggi/Data/Eq.__ev_Eq_Int:()Ljava/lang/Object;
          3: astore_0
          4: iconst_3
          5: i2l
-         6: invokestatic  #65                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+         6: invokestatic  #63                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
          9: astore_1
         10: iconst_3
         11: i2l
-        12: invokestatic  #65                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+        12: invokestatic  #63                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
         15: astore_2
         16: aload_0
         17: aload_1
@@ -138,15 +134,15 @@ public class moggi.Main {
 
   public static java.lang.Object demoEqFalse();
     Code:
-         0: invokestatic  #60                 // Method moggi/Data/Eq.__ev_Eq_Int:()Ljava/lang/Object;
+         0: invokestatic  #58                 // Method moggi/Data/Eq.__ev_Eq_Int:()Ljava/lang/Object;
          3: astore_0
          4: iconst_3
          5: i2l
-         6: invokestatic  #65                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+         6: invokestatic  #63                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
          9: astore_1
         10: iconst_4
         11: i2l
-        12: invokestatic  #65                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+        12: invokestatic  #63                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
         15: astore_2
         16: aload_0
         17: aload_1
@@ -158,64 +154,64 @@ public class moggi.Main {
 
   public static java.lang.Object demoMemTrue();
     Code:
-         0: invokestatic  #60                 // Method moggi/Data/Eq.__ev_Eq_Int:()Ljava/lang/Object;
+         0: invokestatic  #58                 // Method moggi/Data/Eq.__ev_Eq_Int:()Ljava/lang/Object;
          3: astore_0
          4: iconst_3
          5: i2l
-         6: invokestatic  #65                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+         6: invokestatic  #63                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
          9: astore_1
         10: aconst_null
         11: iconst_3
         12: i2l
-        13: invokestatic  #65                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+        13: invokestatic  #63                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
         16: swap
-        17: invokestatic  #71                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
+        17: invokestatic  #69                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
         20: iconst_2
         21: i2l
-        22: invokestatic  #65                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+        22: invokestatic  #63                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
         25: swap
-        26: invokestatic  #71                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
+        26: invokestatic  #69                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
         29: lconst_1
-        30: invokestatic  #65                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+        30: invokestatic  #63                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
         33: swap
-        34: invokestatic  #71                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
+        34: invokestatic  #69                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
         37: astore_2
         38: aload_0
         39: aload_1
         40: aload_2
-        41: invokestatic  #45                 // Method memEq:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+        41: invokestatic  #71                 // Method memEq:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
         44: areturn
         45: aconst_null
         46: areturn
 
   public static java.lang.Object demoMemFalse();
     Code:
-         0: invokestatic  #60                 // Method moggi/Data/Eq.__ev_Eq_Int:()Ljava/lang/Object;
+         0: invokestatic  #58                 // Method moggi/Data/Eq.__ev_Eq_Int:()Ljava/lang/Object;
          3: astore_0
          4: bipush        9
          6: i2l
-         7: invokestatic  #65                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+         7: invokestatic  #63                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
         10: astore_1
         11: aconst_null
         12: iconst_3
         13: i2l
-        14: invokestatic  #65                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+        14: invokestatic  #63                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
         17: swap
-        18: invokestatic  #71                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
+        18: invokestatic  #69                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
         21: iconst_2
         22: i2l
-        23: invokestatic  #65                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+        23: invokestatic  #63                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
         26: swap
-        27: invokestatic  #71                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
+        27: invokestatic  #69                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
         30: lconst_1
-        31: invokestatic  #65                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+        31: invokestatic  #63                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
         34: swap
-        35: invokestatic  #71                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
+        35: invokestatic  #69                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
         38: astore_2
         39: aload_0
         40: aload_1
         41: aload_2
-        42: invokestatic  #45                 // Method memEq:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+        42: invokestatic  #71                 // Method memEq:(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
         45: areturn
         46: aconst_null
         47: areturn
@@ -246,7 +242,7 @@ public class moggi.Main {
         23: anewarray     #4                  // class java/lang/Object
         26: dup
         27: iconst_0
-        28: invokestatic  #60                 // Method moggi/Data/Eq.__ev_Eq_Int:()Ljava/lang/Object;
+        28: invokestatic  #58                 // Method moggi/Data/Eq.__ev_Eq_Int:()Ljava/lang/Object;
         31: aastore
         32: dup
         33: iconst_1
@@ -257,18 +253,18 @@ public class moggi.Main {
         42: aconst_null
         43: iconst_2
         44: i2l
-        45: invokestatic  #65                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+        45: invokestatic  #63                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
         48: swap
-        49: invokestatic  #71                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
+        49: invokestatic  #69                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
         52: lconst_1
-        53: invokestatic  #65                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+        53: invokestatic  #63                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
         56: swap
-        57: invokestatic  #71                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
+        57: invokestatic  #69                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
         60: iconst_3
         61: i2l
-        62: invokestatic  #65                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+        62: invokestatic  #63                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
         65: swap
-        66: invokestatic  #71                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
+        66: invokestatic  #69                 // Method moggi/rt/RT.cons:(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/MList;
         69: astore_1
         70: aload_0
         71: aload_1

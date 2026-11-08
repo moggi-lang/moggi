@@ -11,6 +11,24 @@ burn n acc = case n of
   0 -> acc
   _ -> burn (n - 1) (acc + n)
 
+-- Burn CPU in bounded rounds until the reading moves, returning the reading
+-- and the total of the last round (so the work cannot be dropped). Hosts that
+-- report processor time in whole scheduler ticks -- .NET on Linux reads
+-- /proc, whose times advance a tick at a time -- can absorb one short burst
+-- inside a single tick, so a fixed burst would be testing the host's clock
+-- resolution rather than whether the work was accounted for.
+busier :: Integer -> Int -> IO (Integer, Int)
+busier start rounds = case rounds of
+  0 -> do
+    now <- getCPUTime
+    pure (now, 0)
+  _ -> case burn 200000 0 of
+    worked -> do
+      now <- getCPUTime
+      case now > start of
+        True -> pure (now, worked)
+        False -> busier start (rounds - 1)
+
 main :: IO ()
 main = do
   putStrLn (show cpuTimePrecision)
@@ -19,7 +37,8 @@ main = do
   putStrLn (show (burn 200000 0))
   mid <- getCPUTime
   putStrLn (show (mid >= start))
-  putStrLn (show (mid > start))
-  putStrLn (show (burn 200000 0))
+  later <- busier start 100
+  putStrLn (show (case later of (t, _) -> t > start))
+  putStrLn (show (case later of (_, w) -> w))
   end <- getCPUTime
   putStrLn (show (end >= mid))
