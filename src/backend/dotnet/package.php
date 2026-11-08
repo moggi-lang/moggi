@@ -609,6 +609,7 @@ function dotNetOutputReferencedAssemblies(string $outputRoot): array
         if (! \is_string($chunk)) {
             continue;
         }
+        $chunk = \preg_replace('/"(?:[^"\\\\]|\\\\.)*"/s', '""', $chunk) ?? $chunk;
         if (\preg_match_all('/\[([A-Za-z_][A-Za-z0-9_.]*)\]/', $chunk, $m) > 0) {
             foreach ($m[1] as $name) {
                 $found[$name] = true;

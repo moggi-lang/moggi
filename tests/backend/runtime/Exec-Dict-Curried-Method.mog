@@ -1,0 +1,33 @@
+import Text.Show
+
+-- A dictionary entry is a method value, so the method can be applied to fewer
+-- arguments than it declares: `spr` takes a format, a width and a payload, and
+-- the payload is supplied by whatever the instance's result type is. `build`
+-- reaches the method through a dictionary only known at runtime, so it cannot
+-- saturate the call itself — the entry has to curry.
+
+class Tag a where
+  tag :: a -> String
+
+instance Tag Int where
+  tag n = "i"
+
+class Build r where
+  spr :: String -> Int -> Int -> r
+
+instance Build String where
+  spr fmt w p = fmt <> show (w + p)
+
+instance (Tag t, Build r) => Build (t -> r) where
+  spr fmt w p = \x -> spr (fmt <> tag x) w p
+
+build :: Build r => String -> Int -> Int -> r
+build fmt w = spr fmt w
+
+main :: IO ()
+main = do
+  putStrLn (spr "a" 1 2)
+  putStrLn (spr "b" 1 2 3)
+  putStrLn ((spr "c" 1) 2 3)
+  putStrLn (build "d" 1 2)
+  putStrLn (build "e" 1 2 3)

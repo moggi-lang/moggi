@@ -171,6 +171,13 @@ function optimize(Module $module, ?Facts $owner = null): Module
             static fn (array $fns): array => foldPartialApply($fns, $moduleName),
             false,
         );
+        $functions = PassCheckpoints\runOnFunctions(
+            'tail-recursion',
+            $module,
+            $functions,
+            static fn (array $fns): array => \array_map(optimizeFunctionTailRecursion(...), $fns),
+            false,
+        );
 
         $module = new Module($functions, $module->data, $instanceEvidence, $module->entry, $moduleName, $module->sourceFile);
         $module = PassCheckpoints\runOnModule('eliminate-intrinsic-wrappers', $module, eliminateIntrinsicWrappers(...));
@@ -249,10 +256,32 @@ function optimizeFunctionEarly(FunctionDecl $function, Model $effects, Facts $fa
 
     $body = cseBlock($body, $effects);
     $body = dceBlock($body, $effects);
-    $body = eliminateTailRecursion($function->name, $function->params, $body, $function->shape->kind);
-    $body = new Block(foldMatchReturn($body->items));
+    $body = new Block(foldMatchReturn(
+        eliminateTailRecursion($function->name, $function->runtimeSlots(), $body)->items,
+    ));
 
     return $function->withBody($body);
+}
+
+/**
+ * The second tail-recursion pass, run once the partial-application rewrites
+ * have spelled a lifted self call as one `partial` application.
+ *
+ * The early pass sees a recursive local as the curried chain `__letrecN`
+ * produces — `f x` applied one argument at a time — which names no entry to
+ * recall. By this point the collapse has folded that chain into the partial the
+ * runtime actually builds, so a lifted recursive binding such as `length`'s
+ * scalar walk becomes a loop instead of a stack-growing call per code point.
+ */
+function optimizeFunctionTailRecursion(FunctionDecl $function): FunctionDecl
+{
+    if ($function->shape->ioStraightLine || functionReturnsIo($function->type)) {
+        return $function;
+    }
+
+    return $function->withBody(
+        eliminateTailRecursion($function->name, $function->runtimeSlots(), $function->body),
+    );
 }
 
 function optimizeFunctionAfterInline(FunctionDecl $function, Model $effects, Facts $facts): FunctionDecl

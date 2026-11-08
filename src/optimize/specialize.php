@@ -516,7 +516,12 @@ function qualifyCtorTreeFns(CtorTree $tree, string $moduleName, array $externals
         $args[] = $arg;
     }
 
-    return new CtorTree(qualifyCtorRefName($tree->name, $moduleName, $externals), $args, $tree->srcLoc);
+    return new CtorTree(
+        qualifyCtorRefName($tree->name, $moduleName, $externals),
+        $args,
+        $tree->srcLoc,
+        $tree->callee === null ? null : qualifyCtorRefName($tree->callee, $moduleName, $externals),
+    );
 }
 
 /**

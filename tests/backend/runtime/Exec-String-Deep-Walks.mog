@@ -1,0 +1,35 @@
+import Data.Char (chr)
+import Data.String qualified as S
+import System.IO
+import Text.Show
+
+-- A 131072-scalar string, built by doubling so the test itself needs no deep
+-- recursion. Walking it used to cost one stack frame per scalar, which
+-- overflows the 1 MB stack a Windows main thread gets.
+seed :: String
+seed = "abcdefgh"
+
+grow :: Int -> String -> String
+grow n acc = case n <= 0 of
+  True -> acc
+  False -> grow (n - 1) (acc <> acc)
+
+long :: String
+long = grow 14 seed
+
+-- The list round trip runs on a shorter string: a backend that represents a
+-- list as an array pays for copying a tail, while the recursion depth under
+-- test is the same shape at any length.
+small :: String
+small = grow 8 seed
+
+main :: IO ()
+main = do
+  putStrLn (show (S.length long))
+  putStrLn (show (S.length (S.reverse long)))
+  putStrLn (show (S.take 3 (S.reverse long)))
+  putStrLn (show (S.length (S.drop 100000 long)))
+  putStrLn (show (S.length (S.pack (S.unpack small))))
+  putStrLn (show (S.take 4 (S.reverse (S.pack (S.unpack "abcdef")))))
+  putStrLn (show (S.reverse (S.pack [chr 97, chr 128512, chr 98]) == S.pack [chr 98, chr 128512, chr 97]))
+  putStrLn (show (S.unpack (S.pack [chr 128512, chr 128513]) == [chr 128512, chr 128513]))

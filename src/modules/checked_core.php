@@ -388,6 +388,9 @@ function evidenceVectorFor(TypeCheckState $state, Ast\FunctionDecl $item, Scheme
     $evidence = [];
     $seen = [];
     foreach ($item->constraints as $constraint) {
+        if (\Moggi\Semantics\Types\constraintIsErased($constraint)) {
+            continue;
+        }
         if ($constraint->evidence === '') {
             throw typeFail(
                 $state,
@@ -510,11 +513,10 @@ function publishElaboration(Ast\Program $program, ?\Moggi\Semantics\Types\TypeCh
             );
         }
 
-        if ($state !== null) {
-            assertObligationsSettled($declaration, $core->module, $state);
-        }
-
-        $termTypes = termTypesFor($declaration);
+        $gate = $state === null
+            ? null
+            : obligationsSettledCheck($declaration, $core->module, $state);
+        $termTypes = termTypesFor($declaration, $gate);
         $terms = checkedTermsIn($declaration);
 
         $core = $core->withFunction($record->withElaboration($termTypes, $terms));
@@ -526,7 +528,8 @@ function publishElaboration(Ast\Program $program, ?\Moggi\Semantics\Types\TypeCh
 }
 
 /**
- * Refuse an elaboration that still carries an unresolved obligation.
+ * Refuse an elaboration that still carries an unresolved obligation, as the
+ * per-node check {@see termTypesFor()} runs while it collects the table.
  *
  * The boundary asserts this over the body the check leaves behind, and
  * normalization then rewrites that body (strict IO sequencing, eta-expanded IO
@@ -534,14 +537,17 @@ function publishElaboration(Ast\Program $program, ?\Moggi\Semantics\Types\TypeCh
  * obligation still on it would be lowered from plans that never planned it, so
  * the last gate is the published tree itself, walked by the same
  * {@see walkElaboration()} the terms and plans come from — no shape is skipped
- * because someone forgot it in a match.
+ * because someone forgot it in a match, and no second walk is spent proving what
+ * the walk already in hand can answer.
+ *
+ * @return callable(Ast\AstNode): void
  */
-function assertObligationsSettled(
+function obligationsSettledCheck(
     Ast\FunctionDecl $declaration,
     string $module,
     \Moggi\Semantics\Types\TypeCheckState $state,
-): void {
-    $refuse = static function (Ast\AstNode $node) use ($declaration, $module, $state): void {
+): callable {
+    return static function (Ast\AstNode $node) use ($declaration, $module, $state): void {
         $pending = \Moggi\Semantics\Types\pendingConstraintsOf($state, $node);
         if ($pending === []) {
             return;
@@ -553,11 +559,6 @@ function assertObligationsSettled(
             . $node::class . " at line {$node->line}; the checked core cannot publish a body it did not settle",
         );
     };
-
-    foreach ($declaration->params as $param) {
-        walkElaboration($param, $refuse);
-    }
-    walkElaboration($declaration->body, $refuse);
 }
 
 /**

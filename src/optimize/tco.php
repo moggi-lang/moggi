@@ -6,9 +6,18 @@ use Moggi\IR;
 
 use function Moggi\Optimize\Support\preserveMatchArm;
 
-function eliminateTailRecursion(string $name, array $params, IR\Block $body, IR\FunctionKind $kind): IR\Block
+/**
+ * Rewrite a self tail call into a loop.
+ *
+ * `$params` is the function's whole runtime slot vector — the capture prefix a
+ * lifted callable is invoked with, then its declared parameters — because that
+ * is what a recall has to overwrite, and what a call site applies.
+ *
+ * @param list<string> $params
+ */
+function eliminateTailRecursion(string $name, array $params, IR\Block $body): IR\Block
 {
-    if ($kind->takesCaptures() || $params === []) {
+    if ($params === []) {
         return $body;
     }
 
@@ -20,7 +29,7 @@ function eliminateTailRecursion(string $name, array $params, IR\Block $body, IR\
     return new IR\Block([new IR\Loop(new IR\Block(convertTailRecBody($name, $params, $body->items, $plan)))]);
 }
 
-/** @param list<IR\Stmt> $items @return array{kind: string, args?: list<IR\Operand>, match?: IR\MatchStmt}|null */
+/** @param list<IR\Stmt> $items @return array{kind: string, args?: list<IR\Operand>, match?: IR\MatchStmt|IR\MatchReturn}|null */
 function findTailRecPlan(string $name, array $params, array $items): ?array
 {
     if ($items === []) {
@@ -35,6 +44,10 @@ function findTailRecPlan(string $name, array $params, array $items): ?array
         }
     }
 
+    if ($last instanceof IR\MatchReturn) {
+        return findMatchReturnTailRecPlan($name, $params, $last);
+    }
+
     if (\count($items) === 2 && $items[1] instanceof IR\Ret && $items[0] instanceof IR\MatchStmt) {
         return findMatchTailRecPlan($name, $params, $items[0], $items[1]);
     }
@@ -42,38 +55,60 @@ function findTailRecPlan(string $name, array $params, array $items): ?array
     return null;
 }
 
-/** @param list<IR\Stmt> $items @return list<IR\Stmt>|null */
+/**
+ * The recall arguments a value-position `ret` answers with, when the statement
+ * right before it computes the function's own call.
+ *
+ * @param list<IR\Stmt> $items
+ * @return list<IR\Operand>|null
+ */
 function tailSelfCallFromRetValue(IR\Operand $value, string $name, array $params, array $items): ?array
 {
-    if ($value instanceof IR\Temp) {
-        if (\count($items) !== 2) {
-            return null;
-        }
-
-        $defining = $items[0];
-        if ($defining instanceof IR\Call && $defining->dest === $value->id) {
-            return tailSelfCallFromCall($defining, $name, $params);
-        }
-
+    if (! $value instanceof IR\Temp) {
         return null;
+    }
+
+    $defining = $items[\count($items) - 2] ?? null;
+    if ($defining instanceof IR\Call && $defining->dest === $value->id) {
+        return tailSelfCallFromCall($defining, $name, $params);
+    }
+
+    if ($defining instanceof IR\CallValue && $defining->dest === $value->id) {
+        return tailSelfCallFromCallValueStmt($defining, $name, $params, $items);
     }
 
     return null;
 }
 
-/** @param list<IR\Operand> $extraArgs @return list<IR\Stmt>|null */
+/** @param list<IR\Operand> $extraArgs @return list<IR\Operand>|null */
 function tailSelfCallFromCall(IR\Stmt $call, string $name, array $params, array $extraArgs = []): ?array
 {
     if (! ($call instanceof IR\Call) || $call->callee !== $name) {
         return null;
     }
 
-    $args = [...$call->args, ...$extraArgs];
-    if (\count($args) !== \count($params)) {
+    return tailSelfCallFromOperands($call->args, $extraArgs, $params);
+}
+
+/**
+ * The operand vector a recall supplies, when it fills every runtime slot.
+ *
+ * A partially applied self call hands its capture prefix through the `partial`
+ * operand and its remaining slots through the application.
+ *
+ * @param list<IR\Operand> $prefix
+ * @param list<IR\Operand> $supplied
+ * @param list<string> $params
+ * @return list<IR\Operand>|null
+ */
+function tailSelfCallFromOperands(array $prefix, array $supplied, array $params): ?array
+{
+    $recall = [...$prefix, ...$supplied];
+    if (\count($recall) !== \count($params)) {
         return null;
     }
 
-    return $args;
+    return $recall;
 }
 
 /** @param list<IR\Stmt> $items @return array{kind: string, args?: list<IR\Operand>, match?: IR\MatchStmt}|null */
@@ -129,8 +164,17 @@ function tailSelfCallInBlock(string $name, array $params, array $items, int $mat
 /** @param list<IR\Stmt> $items @return list<IR\Stmt>|null */
 function tailSelfCallFromCallValueStmt(IR\CallValue $callValue, string $name, array $params, array $items): ?array
 {
-    if (! ($callValue instanceof IR\CallValue) || ! ($callValue->callee instanceof IR\Temp)) {
+    if ($callValue->callee instanceof IR\Partial && $callValue->callee->fn === $name) {
+        return tailSelfCallFromOperands($callValue->callee->args, $callValue->args, $params);
+    }
+
+    if (! ($callValue->callee instanceof IR\Temp)) {
         return null;
+    }
+
+    $partial = partialDefiningTemp($items, $callValue->callee->id);
+    if ($partial !== null && $partial->fn === $name) {
+        return tailSelfCallFromOperands($partial->args, $callValue->args, $params);
     }
 
     $partialCall = findCallDefiningTemp($items, $callValue->callee->id);
@@ -139,6 +183,32 @@ function tailSelfCallFromCallValueStmt(IR\CallValue $callValue, string $name, ar
     }
 
     return tailSelfCallFromCall($partialCall, $name, $params, $callValue->args);
+}
+
+/** The `partial` holding the function's own entry, when a temp was assigned one. */
+function partialDefiningTemp(array $items, int $tempId): ?IR\Partial
+{
+    foreach (\array_reverse($items) as $item) {
+        if ($item instanceof IR\Assign && $item->dest === $tempId) {
+            return $item->value instanceof IR\Partial ? $item->value : null;
+        }
+    }
+
+    return null;
+}
+
+/** @param list<IR\Stmt> $items @return list<IR\Stmt> */
+function removeAssignDefiningTemp(array $items, int $tempId): array
+{
+    foreach (\array_reverse(\array_keys($items)) as $i) {
+        if ($items[$i] instanceof IR\Assign && $items[$i]->dest === $tempId) {
+            unset($items[$i]);
+
+            return \array_values($items);
+        }
+    }
+
+    return $items;
 }
 
 /** @return array{kind: string, args?: list<IR\Operand>, match?: IR\MatchStmt}|null */
@@ -169,14 +239,67 @@ function findMatchTailRecPlan(string $name, array $params, IR\MatchStmt $match, 
     return ['kind' => 'match', 'match' => $match, 'args' => $recursiveArgs];
 }
 
-/** @param array{kind: string, args?: list<IR\Operand>, match?: IR\MatchStmt} $plan @param list<IR\Stmt> $items @return list<IR\Stmt> */
+/** @param array{kind: string, args?: list<IR\Operand>, match?: IR\MatchStmt|IR\MatchReturn} $plan @param list<IR\Stmt> $items @return list<IR\Stmt> */
 function convertTailRecBody(string $name, array $params, array $items, array $plan): array
 {
     return match ($plan['kind']) {
-        'direct' => [new IR\TailRecall($plan['args'])],
-        'match' => [convertTailRecMatch($name, $params, $plan['match'])],
+        'direct' => [...stripRecursiveTail($items, -1, $name), new IR\TailRecall($plan['args'])],
+        'match' => [
+            ...\array_slice($items, 0, -2),
+            convertTailRecMatch($name, $params, $plan['match']),
+        ],
+        'match_return' => [
+            ...\array_slice($items, 0, -1),
+            convertTailRecMatchReturn($name, $params, $plan['match']),
+        ],
         default => throw new \RuntimeException("unknown tail recursion plan `{$plan['kind']}`"),
     };
+}
+
+/** @return array{kind: string, args: list<IR\Operand>, match: IR\MatchReturn}|null */
+function findMatchReturnTailRecPlan(string $name, array $params, IR\MatchReturn $match): ?array
+{
+    $recursiveArgs = null;
+    foreach ($match->arms as $arm) {
+        $call = tailSelfCallInBlock($name, $params, $arm->body->items, -1);
+        if ($call === null) {
+            continue;
+        }
+
+        if ($recursiveArgs !== null) {
+            return null;
+        }
+
+        $recursiveArgs = $call;
+    }
+
+    if ($recursiveArgs === null) {
+        return null;
+    }
+
+    return ['kind' => 'match_return', 'match' => $match, 'args' => $recursiveArgs];
+}
+
+/** The late-stage match, whose arms already answer by returning rather than naming a region. */
+function convertTailRecMatchReturn(string $name, array $params, IR\MatchReturn $match): IR\MatchReturn
+{
+    $arms = [];
+
+    foreach ($match->arms as $arm) {
+        $call = tailSelfCallInBlock($name, $params, $arm->body->items, -1);
+        if ($call === null) {
+            $arms[] = $arm;
+
+            continue;
+        }
+
+        $arms[] = preserveMatchArm($arm, new IR\Block([
+            ...stripRecursiveTail($arm->body->items, -1, $name),
+            new IR\TailRecall($call),
+        ]));
+    }
+
+    return new IR\MatchReturn($match->scrutinee, $arms, $match->exhaustive);
 }
 
 function convertTailRecMatch(string $name, array $params, IR\MatchStmt $match): IR\MatchReturn
@@ -226,42 +349,44 @@ function convertMatchArmToReturn(array $items, int $matchDest): array
     throw new \RuntimeException('unsupported match arm shape for tail recursion conversion');
 }
 
-/** @param list<IR\Stmt> $items @return list<IR\Stmt> */
+/**
+ * The arm's statements without the return path the loop's back-edge replaces.
+ *
+ * A recursive arm ends in the recall, under the assignment that names the match
+ * result and a `ret` when the arm answers the region with one. All three are
+ * dropped, and what ran before the call — evaluating its arguments — stays,
+ * because that is what runs again on every iteration.
+ *
+ * @param list<IR\Stmt> $items
+ * @return list<IR\Stmt>
+ */
 function stripRecursiveTail(array $items, int $matchDest, string $name): array
 {
     $items = \array_values($items);
-    if ($items === []) {
-        return [];
+
+    if ($items !== [] && $items[\count($items) - 1] instanceof IR\Ret) {
+        \array_pop($items);
     }
 
-    $retValue = null;
-    if ($items[\count($items) - 1] instanceof IR\Ret) {
-        $retValue = \array_pop($items)->value;
+    if ($items !== [] && $items[\count($items) - 1] instanceof IR\Assign
+        && $items[\count($items) - 1]->dest === $matchDest) {
+        \array_pop($items);
     }
 
-    if ($retValue === null && $items !== [] && $items[\count($items) - 1] instanceof IR\CallValue) {
-        $callValue = $items[\count($items) - 1];
-        if ($callValue->callee instanceof IR\Temp && isSelfCallDefiningTemp($items, $callValue->callee->id, $name)) {
+    $tail = $items[\count($items) - 1] ?? null;
+    if ($tail instanceof IR\Call && $tail->callee === $name) {
+        \array_pop($items);
+    } elseif ($tail instanceof IR\CallValue && $tail->callee instanceof IR\Partial && $tail->callee->fn === $name) {
+        \array_pop($items);
+    } elseif ($tail instanceof IR\CallValue && $tail->callee instanceof IR\Temp) {
+        $partial = partialDefiningTemp($items, $tail->callee->id);
+        if ($partial !== null && $partial->fn === $name) {
             \array_pop($items);
-            $items = removeCallDefiningTemp($items, $callValue->callee->id);
-        }
-    }
-
-    while ($items !== []) {
-        $last = $items[\count($items) - 1];
-        if ($last instanceof IR\Assign && $last->dest === $matchDest) {
+            $items = removeAssignDefiningTemp($items, $tail->callee->id);
+        } elseif (isSelfCallDefiningTemp($items, $tail->callee->id, $name)) {
             \array_pop($items);
-
-            continue;
+            $items = removeCallDefiningTemp($items, $tail->callee->id);
         }
-
-        if ($last instanceof IR\Call && $last->callee === $name) {
-            \array_pop($items);
-
-            continue;
-        }
-
-        break;
     }
 
     return $items;

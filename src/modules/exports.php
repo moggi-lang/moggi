@@ -390,8 +390,20 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
 
         $exportsBeforeItem = $exports;
         try {
+            if ($item['tag'] === 'value' && ! isset($available['env'][$item['name']])
+                && (isset($available['typeSynonyms'][$item['name']])
+                    || isset($available['data'][$item['name']]))
+            ) {
+                addExportedType($exports, $available, $program, $item, $moduleName, $units);
+
+                continue;
+            }
+
             if ($item['tag'] === 'value') {
                 addExportedValue($exports, $available, $item['name'], $moduleName, $item, $units);
+                if (isset($available['typeSynonyms'][$item['name']]) || isset($available['data'][$item['name']])) {
+                    addExportedType($exports, $available, $program, $item, $moduleName, $units);
+                }
 
                 continue;
             }
@@ -406,8 +418,20 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
             mergeImportExportsIntoAvailable($available, $program->imports, $units, $moduleName);
             $importsMerged = true;
 
+            if ($item['tag'] === 'value' && ! isset($available['env'][$item['name']])
+                && (isset($available['typeSynonyms'][$item['name']])
+                    || isset($available['data'][$item['name']]))
+            ) {
+                addExportedType($exports, $available, $program, $item, $moduleName, $units);
+
+                continue;
+            }
+
             if ($item['tag'] === 'value') {
                 addExportedValue($exports, $available, $item['name'], $moduleName, $item, $units);
+                if (isset($available['typeSynonyms'][$item['name']]) || isset($available['data'][$item['name']])) {
+                    addExportedType($exports, $available, $program, $item, $moduleName, $units);
+                }
 
                 continue;
             }
@@ -861,7 +885,7 @@ function addExportedType(
         return;
     }
 
-    if (isBuiltinTupleExportName($name) || isBuiltinKindExportName($name)) {
+    if (isBuiltinTupleExportName($name) || isBuiltinKindExportName($name) || isBuiltinConstraintExportName($name)) {
         if (isset($exports['ambientTypes'][$name]) || isset($exports['typeSynonyms'][$name]) || isset($exports['data'][$name])) {
             throw exportError("duplicate export `{$name}` in module `{$moduleName}`", $item, $unit);
         }
@@ -915,6 +939,18 @@ function addExportedType(
 function isBuiltinKindExportName(string $name): bool
 {
     return $name === 'Type';
+}
+
+/**
+ * `~` and `~~` are the compiler's builtin equality constraints: they are
+ * written in a signature without any declaration introducing the names, so
+ * `Data.Type.Equality` re-exports them as `type (~)` and `type (~~)` the same
+ * way `Data.Kind` re-exports `Type`. They are type-level names only; there is
+ * no value `~` or `~~`.
+ */
+function isBuiltinConstraintExportName(string $name): bool
+{
+    return $name === '~' || $name === '~~';
 }
 
 function isBuiltinTupleExportName(string $name): bool

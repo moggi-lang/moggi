@@ -35,11 +35,16 @@ final class CtorTree
      * @param ?IR\SrcLoc $srcLoc where the constructor application was written, when it came from a
      *   statement: a tree is materialized into an operand later, and that operand has to carry the
      *   site the call had or the frame it should own leaves the module's map.
+     * @param ?string $callee the callable a tuple construction was written with. A tuple tree is
+     *   named `()` so the field fold can match it against a tuple pattern, but `()` is the unit
+     *   constructor: rebuilding the call from the name alone would call the unit constructor with
+     *   the tuple's own fields, so the construction keeps the callee it came from.
      */
     public function __construct(
         public string $name,
         public array $args,
         public ?IR\SrcLoc $srcLoc = null,
+        public ?string $callee = null,
     ) {
     }
 }
@@ -1398,6 +1403,7 @@ function recordCtorDef(IR\Stmt $stmt, array &$ctors, array &$aliases, Facts $fac
                     $stmt->args,
                 ),
                 $stmt->srcLoc,
+                $stmt->callee,
             );
 
             return;
@@ -1580,8 +1586,9 @@ function materializeOperand(CtorTree|IR\Operand $value, array &$out, int &$nextT
         return $value;
     }
 
+    $callee = $value->callee ?? $value->name;
     if ($value->args === []) {
-        return new IR\FnRef($value->name);
+        return new IR\FnRef($callee);
     }
 
     $args = [];
@@ -1589,12 +1596,12 @@ function materializeOperand(CtorTree|IR\Operand $value, array &$out, int &$nextT
         $args[] = materializeOperand($arg, $out, $nextTemp);
     }
 
-    $primop = primopForPublicOperator($value->name);
+    $primop = primopForPublicOperator($callee);
     if ($primop !== null) {
         return new IR\Intrinsic($primop, $args);
     }
 
-    [$temp, $nextTemp] = scheduleCall($value->name, $args, $out, $nextTemp, $value->srcLoc);
+    [$temp, $nextTemp] = scheduleCall($callee, $args, $out, $nextTemp, $value->srcLoc);
 
     return $temp;
 }

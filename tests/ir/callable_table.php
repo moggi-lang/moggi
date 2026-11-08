@@ -653,9 +653,9 @@ if ($typed !== null) {
             . ' slot(s); one evidence slot plus two parameters is 3',
     );
     $check(
-        ($typed->interface?->callableArity()['$'] ?? null) === 1,
+        ($typed->interface?->callableArity()['$'] ?? null) === 2,
         '($) reached the importer as ' . \json_encode($typed->interface?->callableArity()['$'] ?? null)
-            . ' slot(s); its declared vector is 1',
+            . ' slot(s); its declared parameters are 2',
     );
 
     $units = \Moggi\Modules\moduleCompileContext($importPath, $importContext, $importProgram)['units'];
@@ -667,8 +667,8 @@ if ($typed !== null) {
             'fix did not publish a nullary binding: ' . \json_encode($function['fix'] ?? null),
         );
         $check(
-            ($function['$'] ?? null) === ['evidence' => 0, 'params' => 1, 'arity' => 1],
-            '($) did not publish its one declared parameter: ' . \json_encode($function['$'] ?? null),
+            ($function['$'] ?? null) === ['evidence' => 0, 'params' => 2, 'arity' => 2],
+            '($) did not publish its two declared parameters: ' . \json_encode($function['$'] ?? null),
         );
     }
     $show = $units['Text.Show']['facts']['callables']['entries'] ?? null;

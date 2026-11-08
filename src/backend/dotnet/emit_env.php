@@ -234,9 +234,9 @@ final class EmitEnv implements \Moggi\Backend\Managed\StmtTarget
     public ?array $tempReads = null;
 
     /**
-     * `arg:N` slots of the enclosing function's declared parameters, in
-     * `FunctionDecl::$params` order. `IR\TailRecall` overwrites these slots
-     * with `starg` and jumps back to {@see $tailLoopHead}.
+     * `arg:N` slots of the enclosing function's runtime parameters, in capture
+     * prefix then `FunctionDecl::$params` order. `IR\TailRecall` overwrites these
+     * slots with `starg` and jumps back to {@see $tailLoopHead}.
      *
      * @var list<string>
      */

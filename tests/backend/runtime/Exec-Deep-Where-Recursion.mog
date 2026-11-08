@@ -1,0 +1,53 @@
+import Data.Int
+import System.IO
+import Text.Show
+
+-- A where-bound helper captures its enclosing function's arguments, so it is a
+-- lifted callable rather than an entry. Its tail calls must still become loops:
+-- one stack frame per step exhausts the 1 MB stack a Windows main thread gets
+-- long before 200000.
+
+countUp :: Int -> Int -> Int
+countUp start steps = go 0 0
+  where
+    go i acc = case i >= steps of
+      True -> acc
+      False -> go (i + 1) (acc + start)
+
+-- Two captures, and the loop calls a second where-bound helper.
+sumScaled :: Int -> Int -> Int
+sumScaled bound factor = outer 0 0
+  where
+    outer i acc = case i >= bound of
+      True -> acc
+      False -> outer (i + 1) (add i acc)
+
+    add i acc = acc + i * factor
+
+-- A captured function argument, applied once per step.
+applyN :: (Int -> Int) -> Int -> Int
+applyN f steps = go 0 0
+  where
+    go i acc = case i >= steps of
+      True -> acc
+      False -> go (i + 1) (f acc)
+
+-- The accumulator is a pair, and the helper recurses over a list argument.
+countList :: [Int] -> Int
+countList xs = go xs (0, 0)
+  where
+    go rest acc = case rest of
+      [] -> fst acc + snd acc
+      y : more -> go more (fst acc + y, snd acc + 1)
+
+rangeDown :: Int -> [Int] -> [Int]
+rangeDown n acc = case n <= 0 of
+  True -> acc
+  False -> rangeDown (n - 1) (n : acc)
+
+main :: IO ()
+main = do
+  putStrLn (show (countUp 3 200000))
+  putStrLn (show (sumScaled 100000 2))
+  putStrLn (show (applyN (\x -> x + 1) 200000))
+  putStrLn (show (countList (rangeDown 2000 [])))

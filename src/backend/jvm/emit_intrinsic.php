@@ -13,6 +13,10 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
 
     $args = $op->args;
     switch ($op->name) {
+        case 'coerce#':
+            emitOperand($env, $args[0]);
+
+            return;
         case 'error#':
             emitOperand($env, $args[0]);
             $env->c->checkcast($env->cp->class_('java/lang/String'));
@@ -71,6 +75,26 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitOperand($env, $args[0]);
             $env->c->invokestatic(
                 $env->cp->methodRef('moggi/rt/RT', 'fix', '(Ljava/lang/Object;)Ljava/lang/Object;'),
+                1,
+                true,
+            );
+
+            return;
+        case 'mfixPure#':
+            emitOperand($env, $args[0]);
+            emitOperand($env, $args[1]);
+            emitOperand($env, $args[2]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'mfixValue', '(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;'),
+                3,
+                true,
+            );
+
+            return;
+        case 'mfixIO#':
+            emitOperand($env, $args[0]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'mfix', '(Ljava/lang/Object;)Ljava/lang/Object;'),
                 1,
                 true,
             );
