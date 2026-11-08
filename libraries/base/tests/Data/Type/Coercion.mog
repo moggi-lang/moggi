@@ -1,0 +1,58 @@
+import Data.Type.Coercion
+import Data.Bool (Bool(..))
+import Data.Bounded (minBound)
+import Data.Coerce (coerce)
+import Data.Enum (Enum(..))
+import Data.Eq
+import Data.Maybe (Maybe(..))
+import Data.Ord (Ordering(..))
+import Data.Type.Equality ((:~:), Refl)
+import Text.Read (read)
+import Text.Show
+
+-- A `Coercion` proof is inhabited at every pair the roles admit: the newtype and
+-- its representation here. Matching it gives back the `Coercible` instance, so
+-- `coerceWith` casts through the proof and `sym`/`trans` move it about without
+-- inspecting the value. `repr` promotes nominal equality, and the derived
+-- instances read the proof as the single value it is.
+
+newtype Age = Age Int deriving (Show)
+
+newtype TTL = TTL Int deriving (Show)
+
+ageProof :: Coercion Age Int
+ageProof = Coercion
+
+castAge :: Age -> Int
+castAge = coerceWith ageProof
+
+symmetric :: Coercion Int Age
+symmetric = sym ageProof
+
+transitive :: Coercion Age TTL
+transitive = trans ageProof (sym (Coercion :: Coercion TTL Int))
+
+nominalProof :: Coercion Age Age
+nominalProof = repr (Refl :: Age :~: Age)
+
+castGenerally :: Age -> Int
+castGenerally age = gcoerceWith ageProof (coerce age)
+
+tested :: Maybe (Coercion Int Int)
+tested = testCoercion (Refl :: Int :~: Int) (Refl :: Int :~: Int)
+
+main :: IO ()
+main = do
+  putStrLn (show (castAge (Age 4)))
+  putStrLn (show ageProof)
+  putStrLn (show symmetric)
+  putStrLn (show transitive)
+  putStrLn (show nominalProof)
+  putStrLn (show (castGenerally (Age 5)))
+  putStrLn (show tested)
+  putStrLn (show (ageProof == ageProof))
+  putStrLn (show (compare ageProof ageProof))
+  putStrLn (show (fromEnum ageProof))
+  putStrLn (show (minBound :: Coercion Age Int))
+  putStrLn (show (toEnum 0 :: Coercion Age Int))
+  putStrLn (show (read "Coercion" :: Coercion Age Int))

@@ -1,0 +1,52 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+--
+-- Module      :  Data.Coerce
+-- Copyright   :  (c) The University of Glasgow 2001
+-- License     :  BSD-style (see the LICENSE file in the distribution)
+--
+-- Stability   :  provisional
+-- Portability :  portable
+--
+-- Safe coercions between data types.
+module Data.Coerce
+  ( -- * Safe coercions
+    coerce
+  , Coercible
+  ) where
+
+import Moggi.Internal.Prim
+
+-- | Class of types which can be coerced.
+--
+-- @'Coercible' a b@ holds when the compiler can infer that @a@ and @b@ have the
+-- same representation. The class has no instances a module writes: they are
+-- created while type checking, and declaring one is an error.
+--
+-- Three kinds of instance are as if declared. First, as a trivial base case,
+-- @Coercible a a@. Second, for every type constructor there is an instance that
+-- allows coercion under it: for a constructor @D@ with parameters of nominal,
+-- representational and phantom role, @Coercible b b' => Coercible (D a b c) (D a b' c')@
+-- — the nominal arguments are equal, the representational ones need to be
+-- coercible themselves, and the phantom ones may change arbitrarily. Third, for
+-- every newtype @NT = MkNT T@ there are @Coercible a T => Coercible a NT@ and
+-- @Coercible T b => Coercible NT b@.
+--
+-- @since base-4.7.0.0
+class Coercible a b where
+
+-- | The function 'coerce' allows you to safely convert between values of
+-- types that have the same representation with no run-time overhead.
+--
+-- In the simplest case you can use it instead of a newtype constructor, to go
+-- from the newtype's concrete type to the abstract type. But it also works in
+-- more complicated settings, e.g. converting a list of newtypes to a list of
+-- concrete types.
+--
+-- > newtype TTL = TTL Int
+-- > newtype Age = Age Int
+-- >
+-- > coerce (Age 42) :: TTL
+-- > coerce (\x -> x + 1 :: Int) (Age 42) :: TTL
+-- > coerce (map (\x -> x + 1 :: Int)) [Age 42, Age 24] :: [TTL]
+coerce :: Coercible a b => a -> b
+coerce = coerce#
