@@ -146,7 +146,7 @@ import Data.String qualified as S
 import Data.Tuple
 import Data.Word (Word8)
 import Moggi.Err
-import Moggi.Internal.Base
+import Moggi.Internal.Base hiding (take, drop, unpack)
 import Moggi.Internal.Prim ((:), bytesToString#, bytesFromString#, word8FromInt#, word8ToInt#)
 
 import System.IO.Base (FilePath)

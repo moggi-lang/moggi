@@ -12,7 +12,9 @@
 -- it does not report whether the object is still reachable. Use
 -- 'System.Mem.Weak.Weak' for that.
 module System.Mem.StableName
-  ( StableName
+  (
+    -- * Stable Names
+    StableName
   , makeStableName
   , hashStableName
   , eqStableName

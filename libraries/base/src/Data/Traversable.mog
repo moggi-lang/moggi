@@ -3,15 +3,21 @@
 -- ('traverse', 'sequenceA', 'mapM', 'sequence'), the 'for'/'forM' and
 -- 'mapAccum' family built on it.
 module Data.Traversable
-  ( Traversable(..)
+  (
+    -- * The 'Traversable' class
+    Traversable(..)
+
+  -- * Utility functions
   , for
   , forM
+  , forAccumM
   , mapAccumL
   , mapAccumR
+  , mapAccumM
+
+  -- * General definitions for superclass methods
   , fmapDefault
   , foldMapDefault
-  , mapAccumM
-  , forAccumM
   ) where
 
 import Control.Applicative

@@ -30,7 +30,7 @@ import Control.Monad
 import Data.Functor
 import Data.Maybe (Maybe(..))
 import Data.String (String)
-import Moggi.Internal.Base
+import Moggi.Internal.Base hiding (take, drop, unpack)
 import Moggi.Internal.IO
 
 type IO = IO#

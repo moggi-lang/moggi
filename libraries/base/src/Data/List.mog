@@ -8,6 +8,8 @@
 module Data.List
   ( List
   , (:)
+
+  -- * Basic functions
   , (++)
   , head
   , last
@@ -18,6 +20,9 @@ module Data.List
   , singleton
   , null
   , length
+  , compareLength
+
+  -- * List transformations
   , map
   , reverse
   , intersperse
@@ -25,35 +30,14 @@ module Data.List
   , transpose
   , subsequences
   , permutations
-  , scanl
-  , scanl1
-  , scanr
-  , scanr1
-  , mapAccumL
-  , mapAccumR
-  , replicate
-  , unfoldr
-  , take
-  , drop
-  , splitAt
-  , takeWhile
-  , dropWhile
-  , dropWhileEnd
-  , span
-  , break
-  , stripPrefix
-  , group
-  , groupBy
-  , inits
-  , tails
-  , isPrefixOf
-  , isSuffixOf
-  , isInfixOf
-  , isSubsequenceOf
+
+  -- * Reducing lists (folds)
   , foldl
   , foldl1
   , foldr
   , foldr1
+
+  -- ** Special folds
   , concat
   , concatMap
   , and
@@ -64,23 +48,70 @@ module Data.List
   , product
   , maximum
   , minimum
+
+  -- * Building lists
+
+  -- ** Scans
+  , scanl
+  , scanl1
+  , scanr
+  , scanr1
+
+  -- ** Accumulating maps
+  , mapAccumL
+  , mapAccumR
+
+  -- ** Infinite lists
+  , replicate
+
+  -- ** Unfolding
+  , unfoldr
+
+  -- * Sublists
+
+  -- ** Extracting sublists
+  , take
+  , drop
+  , splitAt
+  , takeWhile
+  , dropWhile
+  , dropWhileEnd
+  , span
+  , break
+  , stripPrefix
+  , group
+  , inits
+  , tails
+
+  -- ** Predicates
+  , isPrefixOf
+  , isSuffixOf
+  , isInfixOf
+  , isSubsequenceOf
+
+  -- * Searching lists
+
+  -- ** Searching by equality
   , elem
   , notElem
-  , maximumBy
-  , minimumBy
   , lookup
+
+  -- ** Searching with a predicate
   , find
-  , mapMaybe
-  , catMaybes
   , filter
   , partition
+  , mapMaybe
+  , catMaybes
+
+  -- * Indexing lists
   , (!!)
   , (!?)
-  , compareLength
   , elemIndex
   , elemIndices
   , findIndex
   , findIndices
+
+  -- * Zipping and unzipping lists
   , zip
   , zip3
   , zip4
@@ -99,21 +130,40 @@ module Data.List
   , unzip5
   , unzip6
   , unzip7
+
+  -- * Special lists
+
+  -- ** "Set" operations
   , nub
   , delete
+  , (\\)
   , union
   , intersect
-  , (\\)
+
+  -- ** Ordered lists
   , sort
   , sortOn
   , insert
+
+  -- * Generalized functions
+
+  -- ** The "@By@" operations
+
+  -- *** User-supplied equality (replacing an @Eq@ context)
   , nubBy
   , deleteBy
   , deleteFirstsBy
   , unionBy
   , intersectBy
+  , groupBy
+
+  -- *** User-supplied comparison (replacing an @Ord@ context)
   , sortBy
   , insertBy
+  , maximumBy
+  , minimumBy
+
+  -- ** The "@generic@" operations
   , genericLength
   , genericTake
   , genericDrop
@@ -164,6 +214,13 @@ listFoldl :: (b -> a -> b) -> b -> [a] -> b
 listFoldl f z xs = case xs of
   [] -> z
   x : rest -> listFoldl f (f z x) rest
+
+listLength :: [a] -> Int
+listLength xs = let
+    go n ys = case ys of
+      [] -> n
+      _ : rest -> go (n + 1) rest
+  in go 0 xs
 
 -- Basic functions -----------------------------------------------------------
 
@@ -479,8 +536,11 @@ findIndicesGo p (x : xs) k = case p x of
 -- >>> genericLength [1, 2, 3] :: Integer
 -- 3
 genericLength :: Num i => [a] -> i
-genericLength [] = 0
-genericLength (_ : l) = 1 + genericLength l
+genericLength xs = let
+    go n ys = case ys of
+      [] -> n
+      _ : rest -> go (n + 1) rest
+  in go 0 xs
 
 -- | The 'genericTake' function is an overloaded version of 'take', which
 -- accepts any 'Integral' value as the number of elements to take.
@@ -720,7 +780,7 @@ sort :: Ord a => [a] -> [a]
 sort xs = sortBy compare xs
 
 sortBy :: (a -> a -> Ordering) -> [a] -> [a]
-sortBy cmp xs = listFoldr (insertBy cmp) [] xs
+sortBy cmp xs = listFoldl (\acc x -> insertBy cmp x acc) [] xs
 
 -- | \(\mathcal{O}(n)\). The 'insert' function takes an element and a list and
 -- inserts the element into the list at the first position where it is less than
@@ -756,8 +816,15 @@ instance Eq (List a) where
 instance Ord (List a) where
   compare a b = listCompare# a b
 
+-- The defaults for these four answer through `foldr` and a composed `Endo`,
+-- which is one stack frame per element when the fold is applied; a list is
+-- walked by a loop instead, so every fold over a long list stays constant
+-- stack (`length`, `sum`, `product`, `maximum` and `minimum` all ride on them).
 instance Foldable List where
   foldr f z xs = listFoldr f z xs
+  foldl f z xs = listFoldl f z xs
+  toList xs = xs
+  length xs = listLength xs
 
 instance Functor List where
   map f xs = case xs of

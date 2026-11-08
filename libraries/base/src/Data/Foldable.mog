@@ -5,26 +5,38 @@
 -- 'for_', 'sequenceA_', 'mapM_', 'forM_', 'sequence_', 'asum').
 module Data.Foldable
   ( Foldable(..)
-  , notElem
-  , find
-  , any
-  , all
-  , and
-  , or
-  , maximumBy
-  , minimumBy
-  , concat
-  , concatMap
+
+  -- * Special biased folds
+  , foldrM
+  , foldlM
+
+  -- * Folding actions
+
+  -- ** Applicative actions
   , traverse_
   , for_
   , sequenceA_
+  , asum
+
+  -- ** Monadic actions
   , mapM_
   , forM_
   , sequence_
-  , asum
   , msum
-  , foldrM
-  , foldlM
+
+  -- * Specialized folds
+  , concat
+  , concatMap
+  , and
+  , or
+  , any
+  , all
+  , maximumBy
+  , minimumBy
+
+  -- * Searches
+  , notElem
+  , find
   ) where
 
 import Control.Applicative
