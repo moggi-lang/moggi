@@ -6,7 +6,7 @@ program
   newtype WrappedPair a
     constructor WrappedPair
       field  :: Pair a
-  function __ev_Eq_Pair_1_Op3d3d :: __Dict_Eq -> Pair t6 -> Pair t6 -> Bool
+  function __ev_Eq_Pair_1_Op3d3d :: __Dict_Eq -> Pair t0 -> Pair t0 -> Bool
     pat_var __ev_Eq
     pat_con Pair
       pat_var a
@@ -42,7 +42,7 @@ program
       alt
         pat_con False
         constructor_ref True
-  function __ev_Show_Pair_1_show :: __Dict_Show -> Pair t34 -> String
+  function __ev_Show_Pair_1_show :: __Dict_Show -> Pair t27 -> String
     pat_var __ev_Show
     pat_con Pair
       pat_var a
@@ -82,7 +82,7 @@ program
             evidence_ref Show Pair a
         variable ls
       variable s
-  function __ev_Eq_WrappedPair_1_Op3d3d :: __Dict_Eq -> WrappedPair t61 -> WrappedPair t61 -> Bool
+  function __ev_Eq_WrappedPair_1_Op3d3d :: __Dict_Eq -> WrappedPair t57 -> WrappedPair t57 -> Bool
     pat_var __ev_Eq
     pat_con WrappedPair
       pat_var __v0
@@ -93,7 +93,7 @@ program
         evidence_method Eq.== evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
-  function __ev_Eq_WrappedPair_1_Op2f3d :: __Dict_Eq -> WrappedPair t66 -> WrappedPair t66 -> Bool
+  function __ev_Eq_WrappedPair_1_Op2f3d :: __Dict_Eq -> WrappedPair t57 -> WrappedPair t57 -> Bool
     pat_var __ev_Eq
     pat_con WrappedPair
       pat_var __v0
@@ -104,7 +104,7 @@ program
         evidence_method Eq./= evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
-  function __ev_Show_WrappedPair_1_showsPrec :: __Dict_Show -> Int -> WrappedPair t76 -> String -> String
+  function __ev_Show_WrappedPair_1_showsPrec :: __Dict_Show -> Int -> WrappedPair t72 -> String -> String
     pat_var __ev_Show
     pat_var __v0
     pat_con WrappedPair
@@ -117,7 +117,7 @@ program
           variable __v0
         variable __v1
       variable __v2
-  function __ev_Show_WrappedPair_1_show :: __Dict_Show -> WrappedPair t81 -> String
+  function __ev_Show_WrappedPair_1_show :: __Dict_Show -> WrappedPair t72 -> String
     pat_var __ev_Show
     pat_con WrappedPair
       pat_var __v0

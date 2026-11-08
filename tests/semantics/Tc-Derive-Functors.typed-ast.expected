@@ -465,7 +465,7 @@ program
           variable __ev_Functor
         variable __ev_Applicative_1
       variable t
-  function __ev_Eq_Box_1_Op3d3d :: __Dict_Eq -> Box t450 -> Box t450 -> Bool
+  function __ev_Eq_Box_1_Op3d3d :: __Dict_Eq -> Box t442 -> Box t442 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -487,7 +487,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_Box_1_Op2f3d :: __Dict_Eq -> Box t458 -> Box t458 -> Bool
+  function __ev_Eq_Box_1_Op2f3d :: __Dict_Eq -> Box t442 -> Box t442 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -521,7 +521,7 @@ program
       field  :: a
       field  :: b
     deriving (Functor, Foldable, Traversable)
-  function __ev_Functor_Pair_1_map :: t472 -> t469 -> Pair t471 t472 -> Pair t471 t469
+  function __ev_Functor_Pair_1_map :: t472 -> t469 -> Pair t464 t472 -> Pair t464 t469
     pat_var __f
     pat_var __x
     case
@@ -537,7 +537,7 @@ program
           apply
             variable __f
             variable __v1
-  function __ev_Foldable_Pair_1_foldr :: t512 -> t509 -> t509 -> t509 -> Pair t511 t512 -> t509
+  function __ev_Foldable_Pair_1_foldr :: t512 -> t509 -> t509 -> t509 -> Pair t476 t512 -> t509
     pat_var __f
     pat_var __z
     pat_var __x
@@ -923,7 +923,7 @@ program
               variable go
               variable x
             variable xs
-  function __ev_Traversable_Pair_1_traverse :: __Dict_Functor -> __Dict_Applicative -> t831 -> t797 t798 -> Pair t830 t831 -> t797 Pair t830 t798
+  function __ev_Traversable_Pair_1_traverse :: __Dict_Functor -> __Dict_Applicative -> t831 -> t797 t798 -> Pair t780 t831 -> t797 Pair t780 t798
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var __f
@@ -1538,7 +1538,7 @@ program
     constructor Phantom
       field  :: a
     deriving (Functor, Foldable, Traversable)
-  function __ev_Functor_Phantom_1_map :: t1487 -> t1484 -> Phantom t1486 t1487 -> Phantom t1486 t1484
+  function __ev_Functor_Phantom_1_map :: t1487 -> t1484 -> Phantom t1479 t1487 -> Phantom t1479 t1484
     pat_var __f
     pat_var __x
     case
@@ -1549,7 +1549,7 @@ program
         apply
           constructor_ref Phantom
           variable __v0
-  function __ev_Foldable_Phantom_1_foldr :: t1528 -> t1525 -> t1525 -> t1525 -> Phantom t1527 t1528 -> t1525
+  function __ev_Foldable_Phantom_1_foldr :: t1528 -> t1525 -> t1525 -> t1525 -> Phantom t1492 t1528 -> t1525
     pat_var __f
     pat_var __z
     pat_var __x
@@ -1930,7 +1930,7 @@ program
               variable go
               variable x
             variable xs
-  function __ev_Traversable_Phantom_1_traverse :: __Dict_Functor -> __Dict_Applicative -> t1848 -> t1814 t1815 -> Phantom t1847 t1848 -> t1814 Phantom t1847 t1815
+  function __ev_Traversable_Phantom_1_traverse :: __Dict_Functor -> __Dict_Applicative -> t1848 -> t1814 t1815 -> Phantom t1797 t1848 -> t1814 Phantom t1797 t1815
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var __f
@@ -2494,7 +2494,7 @@ program
     constructor Compose
       field  :: f a
     deriving (Functor)
-  function __ev_Functor_Compose_1_map :: __Dict_Functor -> t2482 -> t2474 -> Compose t2481 t2482 -> Compose t2481 t2474
+  function __ev_Functor_Compose_1_map :: __Dict_Functor -> t2482 -> t2474 -> Compose t2469 t2482 -> Compose t2469 t2474
     pat_var __ev_Functor
     pat_var __f
     pat_var __x
@@ -2514,7 +2514,7 @@ program
     constructor Nest
       field  :: Maybe Maybe a
     deriving (Eq, Show, Functor, Foldable)
-  function __ev_Eq_Nest_1_Op3d3d :: __Dict_Eq -> Nest t2498 -> Nest t2498 -> Bool
+  function __ev_Eq_Nest_1_Op3d3d :: __Dict_Eq -> Nest t2490 -> Nest t2490 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -2534,7 +2534,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_Nest_1_Op2f3d :: __Dict_Eq -> Nest t2511 -> Nest t2511 -> Bool
+  function __ev_Eq_Nest_1_Op2f3d :: __Dict_Eq -> Nest t2490 -> Nest t2490 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -2561,7 +2561,7 @@ program
       alt
         pat_con False
         constructor_ref True
-  function showsPrec :: __Dict_Show -> Int -> Nest t2528 -> String -> String
+  function showsPrec :: __Dict_Show -> Int -> Nest t2520 -> String -> String
     pat_var __ev_Show
     pat_var __d
     pat_var __x
@@ -3039,7 +3039,7 @@ program
       field  :: a
       field  :: b
     deriving (Eq, Ord, Bounded)
-  function __ev_Eq_BPair_2_Op3d3d :: __Dict_Eq -> __Dict_Eq -> BPair t2844 t2845 -> BPair t2844 t2845 -> Bool
+  function __ev_Eq_BPair_2_Op3d3d :: __Dict_Eq -> __Dict_Eq -> BPair t2832 t2833 -> BPair t2832 t2833 -> Bool
     pat_var __ev_Eq
     pat_var __ev_Eq_1
     pat_var __l
@@ -3070,7 +3070,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_BPair_2_Op2f3d :: __Dict_Eq -> __Dict_Eq -> BPair t2855 t2856 -> BPair t2855 t2856 -> Bool
+  function __ev_Eq_BPair_2_Op2f3d :: __Dict_Eq -> __Dict_Eq -> BPair t2832 t2833 -> BPair t2832 t2833 -> Bool
     pat_var __ev_Eq
     pat_var __ev_Eq_1
     pat_var __l
@@ -3108,7 +3108,7 @@ program
       alt
         pat_con False
         constructor_ref True
-  function compare :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t2893 t2894 -> BPair t2893 t2894 -> Ordering
+  function compare :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t2864 t2865 -> BPair t2864 t2865 -> Ordering
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var __ev_Eq_2

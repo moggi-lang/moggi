@@ -5,7 +5,7 @@ program
     constructor GTI :: OrderingI a b
   class EqI a b
     method eqI :: OrderingI a b -> Bool
-  function eqI :: OrderingI t12 t12 -> Bool
+  function eqI :: OrderingI t2 t2 -> Bool
     pat_var _p0
     case
       variable _p0

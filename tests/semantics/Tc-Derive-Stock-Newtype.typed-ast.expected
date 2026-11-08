@@ -979,8 +979,10 @@ program
     case
       apply
         apply
-          evidence_method Read.readsPrec evidence= nullary=0
-            instance Color
+          apply
+            variable readPrec_to_S
+            evidence_method Read.readPrec evidence= nullary=1
+              instance Color
           integer 0
         variable s
       alt

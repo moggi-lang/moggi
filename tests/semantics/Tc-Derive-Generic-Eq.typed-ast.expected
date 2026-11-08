@@ -190,7 +190,7 @@ program
       field  :: a
       field  :: b
     deriving (Generic)
-  function __ev_Generic_Pair_2_from :: Pair t129 t130 -> Rep Pair t129 t130 t127
+  function __ev_Generic_Pair_2_from :: Pair t119 t120 -> Rep Pair t119 t120 t127
     pat_var __x
     case
       variable __x
@@ -213,7 +213,7 @@ program
                 apply
                   constructor_ref K1
                   variable __f1
-  function __ev_Generic_Pair_2_to :: Rep Pair t174 t181 t182 -> Pair t174 t181
+  function __ev_Generic_Pair_2_to :: Rep Pair t119 t120 t182 -> Pair t119 t120
     pat_var __r
     case
       variable __r
@@ -457,7 +457,7 @@ program
       field  :: a
       field  :: b
     deriving (Generic)
-  function __ev_Generic_h_92fce4fd6d64c552_from :: t314 :|| t315 -> Rep t314 :|| t315 t312
+  function __ev_Generic_h_92fce4fd6d64c552_from :: t304 :|| t305 -> Rep t304 :|| t305 t312
     pat_var __x
     case
       variable __x
@@ -480,7 +480,7 @@ program
                 apply
                   constructor_ref K1
                   variable __f1
-  function __ev_Generic_h_92fce4fd6d64c552_to :: Rep t359 :|| t366 t367 -> t359 :|| t366
+  function __ev_Generic_h_92fce4fd6d64c552_to :: Rep t304 :|| t305 t367 -> t304 :|| t305
     pat_var __r
     case
       variable __r
