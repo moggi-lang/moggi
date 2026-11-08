@@ -163,7 +163,7 @@ applyFive = map ($ 5) [(+1), (2^)]
 @
 -}
 ($) :: (a -> b) -> a -> b
-($) f = f
+f $ x = f x
 
 -- | '&' is a reverse application operator.  This provides notational
 -- convenience.  Its precedence is one higher than that of the forward

@@ -68,7 +68,7 @@ import Data.Maybe
 import Data.Monoid
 import Data.Ord
 import Data.Semigroup
-import Moggi.Internal.Base
+import Moggi.Internal.Base hiding (take, drop, unpack)
 import Text.Show
 import Data.Word
 import Moggi.Err

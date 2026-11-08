@@ -26,8 +26,12 @@
 -- `bitSize` is provided for compatibility and deprecated: `bitSizeMaybe`
 -- distinguishes types without a fixed size, and `finiteBitSize` is total.
 module Data.Bits
-  ( Bits(..)
+  (
+    -- * Type classes
+    Bits(..)
   , FiniteBits(..)
+
+  -- * Extra functions
   , bitDefault
   , testBitDefault
   , popCountDefault
@@ -38,6 +42,8 @@ module Data.Bits
   , (.<<.)
   , (!>>.)
   , (!<<.)
+
+  -- * Newtypes
   , And(And)
   , getAnd
   , Ior(Ior)

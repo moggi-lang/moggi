@@ -46,5 +46,8 @@ main = do
   putStrLn (show (range (1, 3) :: [Word16]))
   putStrLn (show (range (1, 3) :: [Word32]))
   putStrLn (show (range (1, 3) :: [Word64]))
+  putStrLn (show (range ((1, 0, 0), (2, 1, 1))))
+  putStrLn (show (index ((1, 1), (3, 3)) (3, 1)))
+  putStrLn (show (rangeSize ((1, 2), (3, 4))))
   putStrLn (show (index ((1, 5) :: (Int16, Int16)) 4))
   putStrLn (show (inRange ((1, 5) :: (Word32, Word32)) 9))

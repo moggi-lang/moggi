@@ -18,14 +18,18 @@
 -- value - setting, testing and counting bits, shifts and rotates - are in
 -- 'Data.Bits'.
 module Data.Word
-  ( Word
+  (
+    -- * Unsigned integral types
+    Word
   , Word8
   , Word16
   , Word32
   , Word64
+  -- * byte swapping
   , byteSwap16
   , byteSwap32
   , byteSwap64
+  -- * bit reversal
   , bitReverse8
   , bitReverse16
   , bitReverse32

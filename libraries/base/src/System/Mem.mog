@@ -8,7 +8,9 @@
 -- a particular point; use a weak pointer when the question is whether an object
 -- has become unreachable.
 module System.Mem
-  ( performGC
+  (
+    -- * Garbage collection
+    performGC
   , performMajorGC
   ) where
 

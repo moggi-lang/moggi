@@ -160,7 +160,7 @@ import Data.Monoid
 import Data.Num
 import Data.Real
 import Data.Semigroup
-import Moggi.Internal.Base
+import Moggi.Internal.Base hiding (take, drop, unpack)
 import Text.Show
 import Data.Ord
 import Data.Enum

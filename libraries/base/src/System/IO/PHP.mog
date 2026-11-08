@@ -23,7 +23,7 @@ module System.IO.PHP
   , openTempFile
   ) where
 
-import Moggi.Internal.Base
+import Moggi.Internal.Base hiding (take, drop, unpack)
 import Text.Show
 import Control.Exception (catch)
 import Moggi.IO.Exception

@@ -102,9 +102,16 @@ listAppend :: [a] -> [a] -> [a]
 listAppend xs ys = listAppend# xs ys
 
 listLength :: [a] -> Int
-listLength xs = case xs of
-  [] -> 0
-  _ : rest -> 1 + listLength rest
+listLength xs = let
+    go n ys = case ys of
+      [] -> n
+      _ : rest -> go (n + 1) rest
+  in go 0 xs
+
+listFoldl :: (b -> a -> b) -> b -> [a] -> b
+listFoldl f z xs = case xs of
+  [] -> z
+  x : rest -> listFoldl f (f z x) rest
 
 foldableToList :: Foldable t => t a -> [a]
 foldableToList t = foldr (\x xs -> x : xs) [] t
@@ -494,6 +501,8 @@ instance Functor NonEmpty where
 instance Foldable NonEmpty where
   foldr f z ne = case ne of
     a :| xs -> f a (listFoldrNe f z xs)
+  foldl f z ne = case ne of
+    a :| xs -> listFoldl f (f z a) xs
 
 instance Traversable NonEmpty where
   traverse f ne = case ne of

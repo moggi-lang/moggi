@@ -16,7 +16,9 @@
 -- same reason its 'Read' instance lives in 'Text.Read': 'Data.Char' sits below
 -- this module, so the type cannot derive the instance beside its declaration.
 module Data.Ix
-  ( Ix(range, index, unsafeIndex, inRange, rangeSize, unsafeRangeSize)
+  (
+    -- * The 'Ix' class
+    Ix(range, index, unsafeIndex, inRange, rangeSize, unsafeRangeSize)
   , safeRangeSize
   , safeIndex
   ) where

@@ -25,7 +25,7 @@ two = runST (do
 ioBridge :: IO Int
 ioBridge = stToIO (do
   r <- newSTRef 41
-  modifySTRef' r (\x -> x + 1)
+  modifySTRef r (\x -> x + 1)
   readSTRef r)
 
 main :: IO ()

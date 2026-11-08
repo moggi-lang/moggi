@@ -23,7 +23,9 @@
 -- another: the values share the host's machine integer, and the width is
 -- imposed after every operation.
 module Data.Int
-  ( Int(..)
+  (
+    -- * Signed integer types
+    Int(..)
   , Int8(..)
   , Int16(..)
   , Int32(..)

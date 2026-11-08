@@ -1,7 +1,11 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 -- | The Bool type and related functions.
 module Data.Bool
-  ( Bool(..)
+  (
+    -- * Booleans
+    Bool(..)
+
+  -- ** Operations
   , (&&)
   , (||)
   , not

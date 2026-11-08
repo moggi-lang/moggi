@@ -11,7 +11,9 @@
 -- There are no atomic variants: the machine exposes no atomic
 -- read-modify-write over a cell.
 module Data.IORef
-  ( IORef
+  (
+    -- * IORefs
+    IORef
   , newIORef
   , readIORef
   , writeIORef
