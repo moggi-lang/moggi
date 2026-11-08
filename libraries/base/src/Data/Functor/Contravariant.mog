@@ -166,6 +166,7 @@ instance Num a => Num (Op a b) where
 instance Fractional a => Fractional (Op a b) where
   (/) f g = Op (\a -> getOp f a / getOp g a)
   recip f = Op (\a -> recip (getOp f a))
+  fromRational r = Op (\_ -> fromRational r)
 
 instance Floating a => Floating (Op a b) where
   pi = Op (\_ -> pi)

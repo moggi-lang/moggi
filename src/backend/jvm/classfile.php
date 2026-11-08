@@ -40,6 +40,9 @@ final class ConstantPool
     /** @var array<string, int> */
     private array $longs = [];
 
+    /** @var array<string, int> */
+    private array $doubles = [];
+
     public function utf8(string $s): int
     {
         if (isset($this->utf8[$s])) {
@@ -102,6 +105,21 @@ final class ConstantPool
         $this->entries[] = ['tag' => 5, 'bytes' => $v];
         $this->entries[] = ['tag' => 0, 'pad' => true];
         $this->longs[$key] = $i;
+
+        return $i;
+    }
+
+    /** CONSTANT_Double (tag 6) — occupies two constant-pool slots. */
+    public function double_(float $v): int
+    {
+        $key = \sprintf('%.17g', $v);
+        if (isset($this->doubles[$key])) {
+            return $this->doubles[$key];
+        }
+        $i = \count($this->entries);
+        $this->entries[] = ['tag' => 6, 'bytes' => $v];
+        $this->entries[] = ['tag' => 0, 'pad' => true];
+        $this->doubles[$key] = $i;
 
         return $i;
     }
@@ -189,6 +207,7 @@ final class ConstantPool
                 1 => \chr(1) . utf8Info($e['bytes']),
                 3 => \chr(3) . u4($e['bytes']),
                 5 => \chr(5) . u8($e['bytes']),
+                6 => \chr(6) . \pack('E', $e['bytes']),
                 7 => \chr(7) . u2($e['name']),
                 8 => \chr(8) . u2($e['string']),
                 9, 10, 11 => \chr($e['tag']) . u2($e['class']) . u2($e['nameAndType']),

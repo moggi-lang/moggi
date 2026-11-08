@@ -44,6 +44,22 @@ function emitDoubleBinopToStack(EmitEnv $env, string $op, IR\Operand $left, IR\O
 /** One-argument `System.Math` call on a boxed `Double` (sqrt, exp, sin, ...). */
 function emitDoubleUnaryMath(EmitEnv $env, string $method, IR\Operand $arg): void
 {
+    if ($method === 'log1p' || $method === 'expm1') {
+        emitOperand($env, $arg);
+        unboxDouble($env);
+        if ($method === 'expm1') {
+            $env->m->emit('call float64 [System.Runtime]System.Math::Exp(float64)');
+            $env->m->emit('ldc.r8 1.0');
+            $env->m->emit('sub');
+        } else {
+            $env->m->emit('ldc.r8 1.0');
+            $env->m->emit('add');
+            $env->m->emit('call float64 [System.Runtime]System.Math::Log(float64)');
+        }
+        boxDouble($env);
+
+        return;
+    }
     emitOperand($env, $arg);
     unboxDouble($env);
     $env->m->emit('call float64 [System.Runtime]System.Math::' . \ucfirst($method) . '(float64)');
@@ -188,6 +204,16 @@ function emitIntrinsicPrimop(EmitEnv $env, IR\Intrinsic $op): bool
 
         case 'doubleUnaryMath':
             emitDoubleUnaryMath($env, $job[1], $args[0]);
+
+            return true;
+
+        case 'doubleMathBinop':
+            emitOperand($env, $args[0]);
+            unboxDouble($env);
+            emitOperand($env, $args[1]);
+            unboxDouble($env);
+            $env->m->emit('call float64 [System.Runtime]System.Math::' . \ucfirst($job[1]) . '(float64, float64)');
+            boxDouble($env);
 
             return true;
 

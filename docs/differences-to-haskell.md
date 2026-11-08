@@ -100,12 +100,9 @@ constructor explicitly is the alternative (see
 
 - `Int` is 64-bit signed on every backend (a 64-bit PHP build is required).
   `Integer` is arbitrary precision, as in `base`.
-- The only floating-point type is `Double`. There is no `Float`, and no `Real`,
-  `RealFrac`, or `RealFloat` classes; if you need a floating-point operation,
-  it is a plain `Double` function.
-- The numeric classes live in public `Data.*` modules: `Num` in `Data.Num`,
-  `Integral`, `Fractional`, and `Floating` in `Data.Real`, with the helpers
-  `subtract`, `even`, `odd`, `gcd`, `lcm`, `(^)`, and `(^^)`.
+- The only floating-point type is `Double`; there is no `Float`. `Real`,
+  `RealFrac`, and `RealFloat` are classes, as in `base`, and `Double` is their
+  only instance.
 - An ambiguous numeric variable defaults to `Int` first, then `Double` —
   `default (Int, Double)` where `base` has `(Integer, Double)`. An unannotated
   computation that overflows `Int` wraps instead of promoting, so annotate

@@ -1,13 +1,29 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 -- | Exact and fractional arithmetic: 'Integral' ('quot', 'rem', 'div', 'mod',
 -- 'toInteger'), 'Fractional' ('/', 'recip', 'fromRational'), 'Floating',
--- and the helpers 'even', 'odd', '(^)', '(^^)', 'gcd' and 'lcm'.
--- Instances stay with their type's module ('Double' in @Data.Double@).
+-- 'Real' ('toRational'), 'RealFrac' ('properFraction', 'truncate', 'round',
+-- 'ceiling', 'floor'), the rational type 'Ratio' with 'Rational', and the
+-- helpers 'even', 'odd', '(^)', '(^^)', 'gcd' and 'lcm'.
+--
+-- 'Ratio' is defined here rather than in 'Data.Ratio' for the same reason
+-- It lives beside the numeric classes: the instances need 'Integral'
+-- and 'RealFrac', and 'Data.Ratio' re-exports the type, its constructor and the
+-- operators so that the public name and its identity are unchanged.
+-- Instances for the numeric types stay with their type's module ('Double' in
+-- @Data.Double@, the integers in @Data.Integer@, @Data.Int@ and @Data.Word@).
 module Data.Real
   ( Integral(..)
   , Fractional(..)
   , Floating(..)
+  , Real(..)
+  , RealFrac(..)
+  , Ratio(..)
+  , Rational
+  , (%)
+  , numerator
+  , denominator
   , fromIntegral
+  , realToFrac
   , even
   , odd
   , (^)
@@ -20,6 +36,7 @@ import Data.Num
 import Data.Ord
 import Data.Enum
 import Data.Bool
+import Data.Eq
 import Data.Function
 import Moggi.Err
 import Moggi.Internal.Base
@@ -29,6 +46,7 @@ infixr 8 ^, ^^
 infixr 8 **
 infixl 7 `quot`, `rem`, `div`, `mod`
 infixl 7 /
+infixl 7 %
 
 -- Integer is bootstrap-available; instances live in the module that defines the
 -- type (`Data.Integer`, `Data.Int`).
@@ -36,10 +54,16 @@ infixl 7 /
 class Num a => Fractional a where
   (/) :: a -> a -> a
   recip :: a -> a
+  fromRational :: Rational -> a
+
+  -- Each of these is written with the other, so an instance may skip either
+  -- one and still be complete with 'fromRational'.
+  recip x = 1 / x
+  x / y = x * recip y
 
 -- | Trigonometric and hyperbolic functions and related functions.
 --
--- The methods with a default body are exactly `base`'s: @('**')@, @'logBase'@,
+-- These methods have default bodies: @('**')@, @'logBase'@,
 -- @'sqrt'@, @'tan'@, @'tanh'@, @'log1p'@, @'expm1'@, @'log1pexp'@ and @'log1mexp'@.
 class Fractional a => Floating a where
   -- | The constant @π@.
@@ -85,13 +109,198 @@ class Fractional a => Floating a where
   log1pexp x = log1p (exp x)
   log1mexp x = log1p (negate (exp x))
 
+class (Num a, Ord a) => Real a where
+  -- | the rational equivalent of its real argument with full precision.
+  toRational :: a -> Rational
+
 class (Num a, Ord a, Enum a) => Integral a where
   quot, rem, div, mod :: a -> a -> a
   quotRem, divMod :: a -> a -> (a, a)
   toInteger :: a -> Integer
 
+  -- Each division is one half of the pair, and 'divMod' corrects a quotient
+  -- that was truncated towards zero rather than towards negative infinity.
+  quot n d = case quotRem n d of
+    (q, _) -> q
+  rem n d = case quotRem n d of
+    (_, r) -> r
+  div n d = case divMod n d of
+    (q, _) -> q
+  mod n d = case divMod n d of
+    (_, r) -> r
+  divMod n d = case quotRem n d of
+    (q, r) -> case signum r == negate (signum d) of
+      True -> (q - 1, r + d)
+      False -> (q, r)
+
+-- | Extracting components of fractions.
+class (Real a, Fractional a) => RealFrac a where
+  -- | @'properFraction' x@ returns the pair @(n,f)@ where @n@ is @x@
+  -- truncated towards zero and @f@ is the fractional part, so that
+  -- @x = n + f@.
+  properFraction :: Integral b => a -> (b, a)
+
+  -- | @'truncate' x@ returns the integer nearest @x@ between zero and @x@.
+  truncate :: Integral b => a -> b
+  -- | @'round' x@ returns the nearest integer to @x@; even integers are
+  -- preferred when @x@ is equidistant from two of them.
+  round :: Integral b => a -> b
+  -- | @'ceiling' x@ returns the least integer not less than @x@.
+  ceiling :: Integral b => a -> b
+  -- | @'floor' x@ returns the greatest integer not greater than @x@.
+  floor :: Integral b => a -> b
+
+  truncate = truncateDefault
+  round = roundDefault
+  ceiling = ceilingDefault
+  floor = floorDefault
+
+truncateDefault :: (RealFrac a, Integral b) => a -> b
+truncateDefault x = case properFraction x of
+  (n, _) -> n
+
+roundDefault :: (RealFrac a, Integral b) => a -> b
+roundDefault x = case properFraction x of
+  (n, r) -> case compare (2 * abs r) (fromInteger 1) of
+    LT -> n
+    GT -> bump n r
+    EQ -> case even n of
+      True -> n
+      False -> bump n r
+  where
+    bump n r = case r < 0 of
+      True -> n - 1
+      False -> n + 1
+
+ceilingDefault :: (RealFrac a, Integral b) => a -> b
+ceilingDefault x = case properFraction x of
+  (n, r) -> case r > 0 of
+    True -> n + 1
+    False -> n
+
+floorDefault :: (RealFrac a, Integral b) => a -> b
+floorDefault x = case properFraction x of
+  (n, r) -> case r < 0 of
+    True -> n - 1
+    False -> n
+
+-- | Rational numbers, with the numerator and the denominator in lowest terms
+-- and a positive denominator. The constructor is exported by 'Data.Ratio' as
+-- @(:%)@; build a value with '(%)' unless the two parts are already reduced.
+data Ratio a = a :% a
+
+-- | The type of rational numbers.
+type Rational = Ratio Integer
+
+-- | @'numerator'@ and @'denominator'@ are the two parts, in lowest terms.
+numerator :: Ratio a -> a
+numerator (x :% _) = x
+
+denominator :: Ratio a -> a
+denominator (_ :% y) = y
+
+-- | Forms the ratio of two integral numbers, reducing it to lowest terms and
+-- moving the sign to the numerator. A zero denominator is
+-- 'RatioZeroDenominator'.
+(%) :: Integral a => a -> a -> Ratio a
+n % d = reduceRatio n d
+
+reduceRatio :: Integral a => a -> a -> Ratio a
+reduceRatio n d = case d == 0 of
+  True -> error "Data.Ratio.%: zero denominator"
+  False -> case d < 0 of
+    True -> reduced (negate n) (negate d)
+    False -> reduced n d
+
+reduced :: Integral a => a -> a -> Ratio a
+reduced n d = case g == 1 of
+  True -> n :% d
+  False -> (n `quot` g) :% (d `quot` g)
+  where
+    g = gcd n d
+
+instance Integral a => Eq (Ratio a) where
+  (==) (x :% y) (u :% v) = x == u && y == v
+
+instance Integral a => Ord (Ratio a) where
+  compare (x :% y) (u :% v) = compare (x * v) (u * y)
+
+-- A literal at @Ratio a@ is built at @a@, not at 'Integer': the two parts of a
+-- ratio are of the component type, which for 'Ratio Int' is a machine integer.
+ratioFromInteger :: Integral a => Integer -> Ratio a
+ratioFromInteger n = fromInteger n :% 1
+
+instance Integral a => Num (Ratio a) where
+  (+) (x :% y) (u :% v) = reduceRatio (x * v + u * y) (y * v)
+  (-) (x :% y) (u :% v) = reduceRatio (x * v - u * y) (y * v)
+  (*) (x :% y) (u :% v) = reduceRatio (x * u) (y * v)
+  negate (x :% y) = negate x :% y
+  abs (x :% y) = abs x :% y
+  signum (x :% _) = signum x :% 1
+  fromInteger = ratioFromInteger
+
+instance Integral a => Real (Ratio a) where
+  toRational (x :% y) = toInteger x :% toInteger y
+
+instance Integral a => Fractional (Ratio a) where
+  (/) (x :% y) (u :% v) = reduceRatio (x * v) (y * u)
+  recip (x :% y) = reduceRatio y x
+  fromRational (x :% y) = fromInteger x % fromInteger y
+
+instance Integral a => RealFrac (Ratio a) where
+  properFraction (x :% y) = (fromIntegral q, r :% y)
+    where
+      (q, r) = quotRem x y
+
+instance Integral a => Enum (Ratio a) where
+  succ x = x + 1
+  pred x = x - 1
+  toEnum n = fromIntegral n
+  fromEnum x = truncate x
+  enumFrom x = ratioEnumFrom x
+  enumFromThen x y = ratioEnumFromThen x y
+  enumFromTo x y = ratioEnumFromTo x y
+  enumFromThenTo x y z = ratioEnumFromThenTo x y z
+
+-- Enumeration steps by whole numbers from the first element, so a range of
+-- ratios counts in whole steps: the successor of @1 % 2@ is
+-- @3 % 2@, not the next representable rational.
+ratioEnumFrom :: Integral a => Ratio a -> [Ratio a]
+ratioEnumFrom x = go 0
+  where
+    go k = (x + fromInteger k) : go (k + 1)
+
+ratioEnumFromThen :: Integral a => Ratio a -> Ratio a -> [Ratio a]
+ratioEnumFromThen x y = go 0
+  where
+    step = y - x
+    go k = (x + fromInteger k * step) : go (k + 1)
+
+ratioEnumFromTo :: Integral a => Ratio a -> Ratio a -> [Ratio a]
+ratioEnumFromTo x limit = go 0
+  where
+    go k = case x + fromInteger k <= limit of
+      True -> (x + fromInteger k) : go (k + 1)
+      False -> []
+
+ratioEnumFromThenTo :: Integral a => Ratio a -> Ratio a -> Ratio a -> [Ratio a]
+ratioEnumFromThenTo x y limit = go 0
+  where
+    step = y - x
+    go k = case step >= 0 of
+      True -> case x + fromInteger k * step <= limit of
+        True -> (x + fromInteger k * step) : go (k + 1)
+        False -> []
+      False -> case x + fromInteger k * step >= limit of
+        True -> (x + fromInteger k * step) : go (k + 1)
+        False -> []
+
 fromIntegral :: (Integral a, Num b) => a -> b
 fromIntegral x = fromInteger (toInteger x)
+
+-- | @'realToFrac'@ is the general coercion between real and fractional types.
+realToFrac :: (Real a, Fractional b) => a -> b
+realToFrac x = fromRational (toRational x)
 
 -- | Fractional arithmetic delegates to the wrapped value; only the 'Ord' is
 -- reversed. Lives here (where 'Fractional' and 'Floating' are defined)
@@ -99,6 +308,7 @@ fromIntegral x = fromInteger (toInteger x)
 instance Fractional a => Fractional (Down a) where
   (/) a b = Down (getDown a / getDown b)
   recip a = Down (recip (getDown a))
+  fromRational r = Down (fromRational r)
 
 instance Floating a => Floating (Down a) where
   pi = Down pi
@@ -147,7 +357,7 @@ x ^^ n = case n >= 0 of
   False -> recip (x ^ negate n)
 
 -- @'gcd' 4 2 = 2@, @'gcd' (-4) 6 = 2@, @'gcd' 0 4@ = @4@, @'gcd' 0 0@ = @0@ —
--- the common divisor that is \"greatest\" in the divisibility preordering.
+-- the common divisor that is \\\"greatest\\\" in the divisibility preordering.
 --
 -- Note: since for signed fixed-width integer types @'abs' 'minBound' < 0@, the
 -- result may be negative if one of the arguments is @'minBound'@ (and

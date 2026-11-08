@@ -1,0 +1,33 @@
+-- Ratio at a machine integer: the two parts are built at the component type,
+-- so a literal at `Ratio Int` is an `Int` and not an unbounded integer in an
+-- `Int` slot.
+import Data.Int (Int)
+import Data.Num (Num(..))
+import Data.Ratio
+import Data.Real (RealFrac(..), realToFrac)
+import Text.Read (read)
+import Text.Show
+
+half :: Ratio Int
+half = 1 % 2
+
+sevenHalves :: Ratio Int
+sevenHalves = 7 % 2
+
+fiveHalves :: Ratio Int
+fiveHalves = 5 % 2
+
+main :: IO ()
+main = do
+  putStrLn (show (half + 1))
+  putStrLn (show (1 + half))
+  putStrLn (show (half * 6))
+  putStrLn (show (half - 2))
+  putStrLn (show (negate half))
+  putStrLn (show (signum half, abs (negate half)))
+  putStrLn (show (compare half (3 % 4), half < 3 % 4, half == 2 % 4))
+  putStrLn (show (numerator (half + 1), denominator (half + 1)))
+  putStrLn (show (floor sevenHalves :: Int, ceiling sevenHalves :: Int, round fiveHalves :: Int))
+  putStrLn (show (truncate (half + 1) :: Int))
+  putStrLn (show (read "3 % 4" :: Ratio Int))
+  putStrLn (show (realToFrac ((1 :: Integer) % (3 :: Integer)) :: Ratio Int))

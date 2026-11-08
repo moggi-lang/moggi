@@ -128,3 +128,6 @@ instance Bits Natural where
   bitSizeMaybe _ = Nothing
   bitSize _ = error "Data.Bits.bitSize(Natural)"
   isSigned _ = False
+
+instance Real Natural where
+  toRational n = naturalToInteger# n :% 1

@@ -1,0 +1,27 @@
+-- Data.Fixed: the unit a fixed-point number counts in, and the operations
+-- built over it -- the show form, the resolution, and the division that has to
+-- round back to that unit.
+import Data.Fixed
+import Data.Num (Num(..))
+import Data.Proxy (Proxy(..))
+import Data.Ratio ((%))
+import Data.Real (Fractional(..), RealFrac(..), realToFrac)
+import Text.Show
+
+twoAndHalf :: Centi
+twoAndHalf = MkFixed 250
+
+main :: IO ()
+main = do
+  putStrLn (showFixed True (MkFixed 10000 :: Fixed E3))
+  putStrLn (showFixed False (MkFixed 10000 :: Fixed E3))
+  putStrLn (show (MkFixed 12345 :: Fixed E0))
+  putStrLn (show (MkFixed 12345 :: Fixed E1))
+  putStrLn (show (MkFixed 12345 :: Fixed E9))
+  putStrLn (show (signum twoAndHalf))
+  putStrLn (show (twoAndHalf / 3))
+  putStrLn (show (realToFrac ((5 :: Integer) % (2 :: Integer)) :: Centi))
+  putStrLn (show (div' (7 :: Integer) (2 :: Integer) :: Int))
+  putStrLn (show (mod' (7 :: Integer) (2 :: Integer)))
+  putStrLn (show ([1, 2 .. 2] :: [Deci]))
+  putStrLn (show (resolution (Proxy :: Proxy E3)))

@@ -1,0 +1,4 @@
+tests/semantics/Bad-Instance-Method-Rigid-Head.mog:13:10: type error: could not unify `a` with `Integer`
+
+  13 | instance Wrap (Box a) where
+     |          ^^^^

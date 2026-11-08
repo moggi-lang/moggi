@@ -395,3 +395,18 @@ intQuot :: Int -> Int -> Int
 intMinBound :: Int
 
 intMaxBound :: Int
+
+instance Real Int where
+  toRational n = toInteger n :% 1
+
+instance Real Int8 where
+  toRational n = toInteger n :% 1
+
+instance Real Int16 where
+  toRational n = toInteger n :% 1
+
+instance Real Int32 where
+  toRational n = toInteger n :% 1
+
+instance Real Int64 where
+  toRational n = toInteger n :% 1

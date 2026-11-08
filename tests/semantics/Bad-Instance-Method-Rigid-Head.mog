@@ -1,0 +1,14 @@
+-- An instance method body cannot choose a type for one of the instance head's
+-- variables: `wrap` promises a `Box a` for every `a`, but the argument is an
+-- `Integer`, so the body would only typecheck at `a = Integer`.
+module Main where
+
+import Moggi.Internal.Base
+
+data Box a = Box a
+
+class Wrap a where
+  wrap :: Integer -> a
+
+instance Wrap (Box a) where
+  wrap n = Box n

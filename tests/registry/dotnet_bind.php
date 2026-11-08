@@ -1,5 +1,7 @@
 <?php declare(strict_types=1);
 
+// backends: dotnet
+
 /**
  * The .NET binding: `moggi bind dotnet:Acme.Hello` inspects the fixture
  * assembly and generates the `Nuget.Acme.Hello` module and versioned sidecar.

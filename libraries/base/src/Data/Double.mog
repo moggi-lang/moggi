@@ -120,6 +120,7 @@ instance Enum Double where
 instance Fractional Double where
   (/) a b = doubleDiv# a b
   recip x = doubleDiv# (fromInteger (intToInteger# 1)) x
+  fromRational r = rationalToDouble (numerator r) (denominator r)
 
 instance Show Double where
   show x = S.pack (showSignedChars x)
@@ -362,9 +363,13 @@ floatToDigitsGen base rn sN mUpN mDnN ds =
 -- ---------------------------------------------------------------------------
 
 decodeDouble :: Double -> (Integer, Int)
-decodeDouble x = case doubleLessThan x 0.0 of
-  True -> let decoded = decodeMagnitude (doubleNegate# x) in (negate (fst decoded), snd decoded)
-  False -> decodeMagnitude x
+decodeDouble x = case doubleEq# x 0.0 of
+  -- Zero has no significand to scale, and the scaling loop below would not
+  -- terminate on it.
+  True -> (integerFromInt 0, 0)
+  False -> case doubleLessThan x 0.0 of
+    True -> let decoded = decodeMagnitude (doubleNegate# x) in (negate (fst decoded), snd decoded)
+    False -> decodeMagnitude x
 
 decodeMagnitude :: Double -> (Integer, Int)
 decodeMagnitude x = decodeScaleDown x 0
@@ -384,17 +389,21 @@ decodeScaleUp x e = case doubleCompare# x 4503599627370496.0 of
 --
 -- `Floating` itself lives in `Data.Real`; the host math comes from the
 -- compiler's `double*#` intrinsics (via `Moggi.Internal.Prim`), the same way
--- `Double`'s arithmetic does. `java.lang.Math` has no `asinh`/`acosh`/`atanh`,
--- so those three are derived from `log` and `sqrt` on every backend.
+-- `Double`'s arithmetic does. The inverse hyperbolic functions are host calls
+-- where the platform has them, and the `log`/`sqrt` identity elsewhere; the
+-- arguments where that identity would overflow keep the `log x + log 2` branch
+-- written here.
 -- ---------------------------------------------------------------------------
 
 instance Floating Double where
   pi = 3.141592653589793
   exp x = doubleExp# x
   log x = doubleLog# x
+  x ** y = doublePow# x y
   sqrt x = doubleSqrt# x
   sin x = doubleSin# x
   cos x = doubleCos# x
+  tan x = doubleTan# x
   asin x = doubleAsin# x
   acos x = doubleAcos# x
   atan x = doubleAtan# x
@@ -403,27 +412,29 @@ instance Floating Double where
   asinh x = case doubleLessThan (doubleAbs# x) 1.0e-8 of
     True -> x
     False -> case doubleLessThan (doubleAbs# x) 1.0e150 of
-      True -> log (x + sqrt (x * x + 1.0))
+      True -> doubleAsinh# x
       False -> case doubleLessThan x 0.0 of
         True -> negate (log (doubleNegate# x) + 0.6931471805599453)
         False -> log x + 0.6931471805599453
   acosh x = case doubleLessThan x 1.0e150 of
-    True -> log (x + sqrt (x * x - 1.0))
+    True -> doubleAcosh# x
     False -> log x + 0.6931471805599453
   atanh x = case doubleLessThan (doubleAbs# x) 1.0e-8 of
     True -> x
-    False -> 0.5 * log ((1.0 + x) / (1.0 - x))
+    False -> doubleAtanh# x
   log1p x = case doubleLessThan (doubleAbs# x) 1.0e-8 of
     True -> x
-    False -> doubleLog# (doubleAdd# 1.0 x)
+    False -> doubleLog1p# x
   expm1 x = case doubleLessThan (doubleAbs# x) 1.0e-8 of
     True -> x
-    False -> doubleSub# (doubleExp# x) 1.0
-  tanh x = case doubleLessThan 20.0 (doubleAbs# x) of
-    True -> case doubleLessThan x 0.0 of
-      True -> -1.0
-      False -> 1.0
-    False -> doubleDiv# (doubleSinh# x) (doubleCosh# x)
+    False -> doubleExpm1# x
+  tanh x = doubleTanh# x
+  log1pexp a = case doubleLessThan 18.0 a of
+    True -> case doubleLessThan 100.0 a of
+      True -> a
+      False -> a + exp (negate a)
+    False -> log1p (exp a)
+  log1mexp x = log1mexpOrd x
 
 -- | The 'Double' nearest to @num \/ den@: the quotient of the two integers as
 -- a floating-point value. The quotient is formed at full width and then scaled
@@ -647,13 +658,13 @@ expDouble :: Double -> Double
 expDouble x = doubleExp# x
 
 expm1Double :: Double -> Double
-expm1Double x = doubleSub# (doubleExp# x) 1.0
+expm1Double x = doubleExpm1# x
 
 logDouble :: Double -> Double
 logDouble x = doubleLog# x
 
 log1pDouble :: Double -> Double
-log1pDouble x = doubleLog# (doubleAdd# x 1.0)
+log1pDouble x = doubleLog1p# x
 
 sqrtDouble :: Double -> Double
 sqrtDouble x = doubleSqrt# x
@@ -668,7 +679,7 @@ cosDouble :: Double -> Double
 cosDouble x = doubleCos# x
 
 tanDouble :: Double -> Double
-tanDouble x = doubleDiv# (doubleSin# x) (doubleCos# x)
+tanDouble x = doubleTan# x
 
 asinDouble :: Double -> Double
 asinDouble x = doubleAsin# x
@@ -686,16 +697,16 @@ coshDouble :: Double -> Double
 coshDouble x = doubleCosh# x
 
 tanhDouble :: Double -> Double
-tanhDouble x = doubleDiv# (doubleSinh# x) (doubleCosh# x)
+tanhDouble x = doubleTanh# x
 
 asinhDouble :: Double -> Double
-asinhDouble x = doubleLog# (doubleAdd# x (doubleSqrt# (doubleAdd# (doubleMul# x x) 1.0)))
+asinhDouble x = doubleAsinh# x
 
 acoshDouble :: Double -> Double
-acoshDouble x = doubleLog# (doubleAdd# x (doubleSqrt# (doubleSub# (doubleMul# x x) 1.0)))
+acoshDouble x = doubleAcosh# x
 
 atanhDouble :: Double -> Double
-atanhDouble x = doubleMul# 0.5 (doubleLog# (doubleDiv# (doubleAdd# 1.0 x) (doubleSub# 1.0 x)))
+atanhDouble x = doubleAtanh# x
 
 -- ---------------------------------------------------------------------------
 -- Formatting
@@ -731,17 +742,16 @@ showSignedFloat showPos p x = case doubleLessThan x 0.0 of
 -- Powers of two and the numeric-literal helpers
 -- ---------------------------------------------------------------------------
 
-powerDouble :: Double -> Int -> Double
-powerDouble x n = x ^ n
+powerDouble :: Double -> Double -> Double
+powerDouble x y = doublePow# x y
 
 powerOfTwo :: Int -> Double
 powerOfTwo e = scaleByPowerOfTwo 1.0 e
 
-log1mexpOrd :: Double -> Int
-log1mexpOrd x = case doubleCompare# x (-0.6931471805599453) of
-  LT -> -1
-  EQ -> 0
-  GT -> 1
+log1mexpOrd :: Double -> Double
+log1mexpOrd a = case doubleLessThan (-0.6931471805599453) a of
+  True -> log (negate (expm1 a))
+  False -> log1p (negate (exp a))
 
 clamp :: Int -> Int -> Int -> Int
 clamp lo hi x = max lo (min hi x)
@@ -819,7 +829,7 @@ integerBits n = case n == integerFromInt 0 of
 -- RealFloat
 -- ---------------------------------------------------------------------------
 
-class Floating a => RealFloat a where
+class (RealFrac a, Floating a) => RealFloat a where
   floatRadix :: a -> Integer
   floatDigits :: a -> Int
   floatRange :: a -> (Int, Int)
@@ -833,6 +843,48 @@ class Floating a => RealFloat a where
   isDenormalized :: a -> Bool
   isNegativeZero :: a -> Bool
   isIEEE :: a -> Bool
+  -- | @'atan2' y x@ is the angle of the point @(x, y)@, in @(-pi, pi]@: the
+  -- quadrant is chosen from the signs of both arguments.
+  atan2 :: a -> a -> a
+
+  -- The quadrant comes from the signs of both arguments, with the signed
+  -- zeroes of IEEE giving the angles on the negative real axis their sides.
+  atan2 y x = case x > 0 of
+    True -> atan (y / x)
+    False -> case x == 0 && y > 0 of
+      True -> pi / 2
+      False -> case x < 0 && y > 0 of
+        True -> pi + atan (y / x)
+        False -> case x < 0 && y < 0 of
+          True -> atan (y / x) - pi
+          False -> case x < 0 && isNegativeZero y of
+            True -> negate pi
+            False -> case isNegativeZero x && isNegativeZero y of
+              True -> negate pi
+              False -> case y == 0 && (x < 0 || isNegativeZero x) of
+                True -> pi
+                False -> case x == 0 && y == 0 of
+                  True -> y
+                  False -> x + y
+
+  -- The significand and the exponent are the two halves of 'decodeFloat', and
+  -- 'scaleFloat' re-encodes with the exponent shifted, clamped so the sum
+  -- cannot overflow an 'Int'.
+  exponent x = case decodeFloat x of
+    (m, n) -> case m == 0 of
+      True -> 0
+      False -> n + floatDigits x
+
+  significand x = case decodeFloat x of
+    (m, _) -> encodeFloat m (negate (floatDigits x))
+
+  scaleFloat k x = case k == 0 of
+    True -> x
+    False -> case x == 0 || isNaN x || isInfinite x of
+      True -> x
+      False -> case decodeFloat x of
+        (m, n) -> case floatRange x of
+          (l, h) -> encodeFloat m (n + clamp (negate (h - l + 4 * floatDigits x)) (h - l + 4 * floatDigits x) k)
 
 instance RealFloat Double where
   floatRadix _ = integerFromInt 2
@@ -840,11 +892,37 @@ instance RealFloat Double where
   floatRange _ = (0 - 1021, 1024)
   decodeFloat x = decodeDouble x
   encodeFloat m e = doubleMul# (doubleFromInteger# m) (powerOfTwo e)
-  exponent x = 52 + snd (decodeDouble x)
-  significand x = doubleMul# x (powerOfTwo (negate (52 + snd (decodeDouble x))))
+  -- @x = significand x * 2 ^ exponent x@, with 'floatDigits' 53: the
+  -- significand of a normal value lies in [1/2, 1).
+  exponent x = case doubleEq# x 0.0 of
+    True -> 0
+    False -> 53 + snd (decodeDouble x)
+  significand x = case doubleEq# x 0.0 of
+    True -> 0.0
+    False -> doubleMul# x (powerOfTwo (negate (53 + snd (decodeDouble x))))
   scaleFloat e x = doubleMul# x (powerOfTwo e)
   isNaN x = isNaNDouble x
   isInfinite x = isInfiniteDouble x
   isDenormalized x = isDoubleDenormalized x
   isNegativeZero x = isNegativeZeroDouble x
   isIEEE _ = True
+
+instance Real Double where
+  toRational x = doubleToRational x
+
+instance RealFrac Double where
+  properFraction = properFractionDouble
+
+-- The exact rational a finite 'Double' denotes: the mantissa and the binary
+-- exponent the format stores, so a value that came from a decimal literal reads
+-- back as the same rational.
+doubleToRational :: Double -> Rational
+doubleToRational x = case isNaN x || isInfinite x of
+  True -> error "Data.Real.toRational: not finite"
+  False -> case decodeDouble x of
+    (m, e) -> case e >= 0 of
+      True -> (m * pow2 e) % 1
+      False -> m % pow2 (negate e)
+
+pow2 :: Int -> Integer
+pow2 k = 2 ^ k

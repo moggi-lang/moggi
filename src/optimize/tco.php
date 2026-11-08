@@ -378,9 +378,6 @@ function convertTailRecMatch(string $name, array $params, IR\MatchStmt $match): 
         $nested = nestedMatchInArm($items, $dest);
         if ($nested !== null && onlyRecursiveArmArgs($name, $params, $nested) !== null) {
             $arms[] = preserveMatchArm($arm, new IR\Block([
-                // Drop both the nested match and the assignment that names its
-                // result: the converted match returns instead, so running the
-                // original first would still make the call the rewrite removes.
                 ...\array_slice($items, 0, -2),
                 convertTailRecMatch($name, $params, $nested),
             ]));

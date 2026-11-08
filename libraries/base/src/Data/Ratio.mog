@@ -1,0 +1,94 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Rational numbers: the 'Ratio' type, its constructor and the functions
+-- written over it.
+--
+-- A 'Ratio' holds a numerator and a denominator in lowest terms with a
+-- positive denominator, so equal rationals are equal values: @'2 % 4'@ and
+-- @'1 % 2'@ are the same 'Ratio', and '(==)' is the comparison of the reduced
+-- parts. The type and its instances are defined beside the numeric classes in
+-- 'Data.Real' — beside the numeric classes, with @Data.Ratio@ as the
+-- public name for the type — so 'Ratio' here is that type and not a copy of it.
+--
+-- A zero denominator is the 'RatioZeroDenominator' exception rather than an
+-- error value.
+module Data.Ratio
+  ( Ratio
+  , Rational
+  , (%)
+  , numerator
+  , denominator
+  , approxRational
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Eq
+import Data.Int (Int)
+import Data.Integer (Integer)
+import Data.Num
+import Data.Ord
+import Data.Real
+import Text.Read
+import Text.Show
+
+-- Ratios print as @n % d@, at the precedence the constructor's fixity gives
+-- them, so a compound ratio is parenthesised.
+instance (Integral a, Show a) => Show (Ratio a) where
+  showsPrec p (x :% y) s = showParen (p > 7) (\t -> showsPrec 8 x (showString " % " (showsPrec 8 y t))) s
+
+-- The parser for @n % d@: read two values, consume the @%@ and reduce them.
+-- 'readsPrec' carries the precedence, so @read@ and @readPrec@ both work, and
+-- the parentheses are optional below the constructor's precedence.
+instance (Integral a, Read a) => Read (Ratio a) where
+  readsPrec = ratioReadsPrec
+
+ratioReadsPrec :: (Integral a, Read a) => Int -> ReadS (Ratio a)
+ratioReadsPrec p = readParen (p > 7) (readPrec_to_S ratioBody 0)
+
+ratioBody :: (Integral a, Read a) => ReadPrec (Ratio a)
+ratioBody = prec 7 (do
+  x <- step readPrec
+  _ <- lexP
+  y <- step readPrec
+  pure (x % y))
+
+-- | 'approxRational', applied to two real fractional numbers @x@ and @epsilon@,
+-- returns the simplest rational number within @epsilon@ of @x@. A rational @y@
+-- is simpler than @y'@ when @'abs' ('numerator' y) <= 'abs' ('numerator' y')@
+-- and @'denominator' y <= 'denominator' y'@; every real interval contains a
+-- unique simplest rational, and @0 % 1@ is the simplest of all.
+--
+-- The interval is assumed closed. If it contains a whole number, the simplest
+-- rational is the absolutely least one; otherwise the bounds are
+-- @q + r/d@ and @q' + r'/d'@ and the answer is @q@ plus the reciprocal of the
+-- simplest rational between @d'/r'@ and @d/r@.
+approxRational :: RealFrac a => a -> a -> Rational
+approxRational rat eps =
+  -- Converting before subtracting or adding keeps a wide @eps@ from
+  -- overflowing the intermediate type.
+  simplestRational (toRational rat - toRational eps) (toRational rat + toRational eps)
+
+simplestRational :: Rational -> Rational -> Rational
+simplestRational x y = case y < x of
+  True -> simplestRational y x
+  False -> case x == y of
+    True -> x
+    False -> case x > 0 of
+      True -> simplestPositive (numerator x) (denominator x) (numerator y) (denominator y)
+      False -> case y < 0 of
+        True -> negate (simplestPositive (negate (numerator y)) (denominator y) (negate (numerator x)) (denominator x))
+        False -> 0 % 1
+
+-- Assumes @0 < n/d < n'/d'@.
+simplestPositive :: Integer -> Integer -> Integer -> Integer -> Rational
+simplestPositive n d n' d' = case quotRem n d of
+  (q, r) -> case quotRem n' d' of
+    (q', r') -> case r == 0 of
+      True -> q % 1
+      False -> case q == q' of
+        True -> fromSimplest (simplestPositive d' r' d r) q
+        False -> (q + 1) % 1
+
+fromSimplest :: Rational -> Integer -> Rational
+fromSimplest nd q = (q * numerator nd + denominator nd) % numerator nd
