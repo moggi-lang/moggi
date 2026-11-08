@@ -1,0 +1,281 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Complex numbers in rectangular form: @a ':+' b@ is @a + bi@.
+--
+-- A complex number uses the '@(:+)@' constructor and the usual accessors,
+-- and is arithmetic, shown, compared for equality and converted from a
+-- rational. There is no 'Ord' instance — complex numbers are not ordered —
+-- and no 'Real' or 'RealFrac' one.
+module Data.Complex
+  (
+  -- * Rectangular form
+    Complex((:+))
+
+  , realPart
+  , imagPart
+  -- * Polar form
+  , mkPolar
+  , cis
+  , polar
+  , magnitude
+  , phase
+  -- * Conjugate
+  , conjugate
+  )  where
+
+import Control.Applicative (Applicative(..), liftA2)
+import Control.Monad (Monad(..))
+import Control.Monad.Fix (MonadFix(..))
+import Control.Monad.Zip (MonadZip(..))
+import Data.Bool
+import Data.Double (RealFloat(..))
+import Data.Eq
+import Data.Int (Int)
+import Data.Integer (Integer)
+import Data.Function (const)
+import Data.Functor (Functor(..))
+import Data.Num
+import Data.Ord
+import Data.Real
+import Moggi.Internal.Prim (mfixPure#)
+import Text.Read (Read(..), ReadPrec, ReadS, lex, prec, readParen, readS_to_Prec, readPrec_to_S, step)
+import Text.Show
+
+-- | Complex numbers, in rectangular form: the real part and the imaginary
+-- part. Both are held strictly, as every field is.
+data Complex a = a :+ a
+
+infix 6 :+
+
+-- | The real part of a complex number.
+realPart :: Complex a -> a
+realPart (x :+ _) = x
+
+-- | The imaginary part of a complex number.
+imagPart :: Complex a -> a
+imagPart (_ :+ y) = y
+
+-- | @'conjugate' (x :+ y) = x :+ (-y)@.
+conjugate :: Num a => Complex a -> Complex a
+conjugate (x :+ y) = x :+ negate y
+
+-- | The non-negative magnitude of a complex number: @sqrt (x*x + y*y)@,
+-- scaled by the larger exponent so a value near the top of the range does not
+-- overflow before the square root brings it back.
+magnitude :: RealFloat a => Complex a -> a
+magnitude (x :+ y) = scaleFloat k (sqrt (sqr (scaleFloat mk x) + sqr (scaleFloat mk y)))
+  where
+    k = max (exponent x) (exponent y)
+    mk = negate k
+    sqr z = z * z
+
+-- | The phase of a complex number: the angle the point @(x, y)@ makes with
+-- the positive real axis, in @(-pi, pi]@.
+phase :: RealFloat a => Complex a -> a
+phase (0 :+ 0) = 0
+phase (x :+ y) = atan2 y x
+
+-- | @'polar' z = ('magnitude' z, 'phase' z)@.
+polar :: RealFloat a => Complex a -> (a, a)
+polar z = (magnitude z, phase z)
+
+-- | @'mkPolar' r theta@ is the complex number with magnitude @r@ and phase
+-- @theta@.
+mkPolar :: Floating a => a -> a -> Complex a
+mkPolar r theta = r * cos theta :+ r * sin theta
+
+-- | @'cis' theta = cos theta :+ sin theta@, the point of the unit circle at
+-- angle @theta@.
+cis :: Floating a => a -> Complex a
+cis theta = cos theta :+ sin theta
+
+instance Eq a => Eq (Complex a) where
+  (==) (x :+ y) (u :+ v) = x == u && y == v
+
+instance Show a => Show (Complex a) where
+  showsPrec p (x :+ y) s =
+    showParen (p > 6) (\t -> showsPrec 7 x (showString " :+ " (showsPrec 7 y t))) s
+
+-- The parser for @x :+ y@: read both parts and put the constructor between
+-- them, with the precedence its fixity gives it. 'readsPrec' is the method
+-- that carries the precedence, so @read@ and @readPrec@ both work; the
+-- parentheses are optional below the constructor's precedence, as 'Show'
+-- leaves them out there.
+instance Read a => Read (Complex a) where
+  readsPrec = complexReadsPrec
+
+complexReadsPrec :: Read a => Int -> ReadS (Complex a)
+complexReadsPrec p = readParen (p > 6) (readPrec_to_S complexBody 0)
+
+complexBody :: Read a => ReadPrec (Complex a)
+complexBody = prec 6 (do
+  x <- step readPrec
+  _ <- complexSymbol
+  y <- step readPrec
+  pure (x :+ y))
+
+-- The constructor, required as the token it is: a complex number is read only
+-- where @:+@ stands, so another symbol in its place is no parse.
+complexSymbol :: ReadPrec ()
+complexSymbol = readS_to_Prec (\_ s -> case lex s of
+  (tok, rest) : _ -> case tok == ":+" of
+    True -> [((), rest)]
+    False -> []
+  [] -> [])
+
+
+-- 'map' changes both parts, so the shape of a complex number is fixed.
+instance Functor Complex where
+  map f (x :+ y) = f x :+ f y
+
+-- The two parts are independent, so '(<*>)' pairs them pointwise.
+instance Applicative Complex where
+  pure a = a :+ a
+  (<*>) (f :+ g) (a :+ b) = f a :+ g b
+  liftA2 f (x :+ y) (a :+ b) = f x a :+ f y b
+
+-- 'pure' duplicates the value, so a bind feeds the real part to the real
+-- branch and the imaginary part to the imaginary branch.
+instance Monad Complex where
+  (>>=) (a :+ b) f = realPart (f a) :+ imagPart (f b)
+
+instance MonadZip Complex where
+  mzipWith = liftA2
+
+-- The two parts are independent, so each ties its own knot: the real part is
+-- fed the real part the function produces, and the imaginary part likewise.
+instance MonadFix Complex where
+  mfix f = case mfixPure# f (const True) realPart of
+    (real :+ _) -> case mfixPure# f (const True) imagPart of
+      (_ :+ imag) -> real :+ imag
+
+instance RealFloat a => Num (Complex a) where
+  (+) (x :+ y) (u :+ v) = (x + u) :+ (y + v)
+  (-) (x :+ y) (u :+ v) = (x - u) :+ (y - v)
+  (*) (x :+ y) (u :+ v) = (x * u - y * v) :+ (x * v + y * u)
+  negate (x :+ y) = negate x :+ negate y
+  abs z = magnitude z :+ fromInteger 0
+  signum z = case magnitude z == 0 of
+    True -> 0
+    False -> (realPart z / magnitude z) :+ (imagPart z / magnitude z)
+  fromInteger n = fromInteger n :+ fromInteger 0
+
+instance RealFloat a => Fractional (Complex a) where
+  (/) (x :+ y) (u :+ v) = ((x * u' + y * v') / d) :+ ((y * u' - x * v') / d)
+    where
+      u' = scaleFloat k u
+      v' = scaleFloat k v
+      k = negate (max (exponent u) (exponent v))
+      d = u * u' + v * v'
+  recip z = 1 / z
+  fromRational r = fromRational r :+ fromRational 0
+
+instance RealFloat a => Floating (Complex a) where
+  pi = complexPi
+  exp (x :+ y) = (exp x * cos y) :+ (exp x * sin y)
+  log z = complexLog z
+  sqrt z = complexSqrt z
+  x ** y = case y of
+    (0 :+ 0) -> 1 :+ 0
+    (exp_re :+ _) -> case x of
+      (0 :+ 0) -> case compare exp_re 0 of
+        GT -> 0 :+ 0
+        LT -> complexInf
+        EQ -> complexNaN
+      (re :+ im) -> case isInfinite re || isInfinite im of
+        True -> case compare exp_re 0 of
+          GT -> complexInf
+          LT -> 0 :+ 0
+          EQ -> complexNaN
+        False -> exp (log x * y)
+  sin (x :+ y) = (sin x * cosh y) :+ (cos x * sinh y)
+  cos (x :+ y) = (cos x * cosh y) :+ (negate (sin x) * sinh y)
+  tan (x :+ y) = (sinx * coshy :+ cosx * sinhy) / (cosx * coshy :+ negate (sinx * sinhy))
+    where
+      sinx = sin x
+      cosx = cos x
+      sinhy = sinh y
+      coshy = cosh y
+  sinh (x :+ y) = (cos y * sinh x) :+ (sin y * cosh x)
+  cosh (x :+ y) = (cos y * cosh x) :+ (sin y * sinh x)
+  tanh (x :+ y) = (cosy * sinhx :+ siny * coshx) / (cosy * coshx :+ siny * sinhx)
+    where
+      siny = sin y
+      cosy = cos y
+      sinhx = sinh x
+      coshx = cosh x
+  asinh z = log (z + sqrt (1 + z * z))
+  acosh z = log (z + sqrt (z + 1) * sqrt (z - 1))
+  atanh z = log ((1 + z) / (1 - z)) / 2
+  asin (x :+ y) = case log ((negate y :+ x) + sqrt (1 - (x :+ y) * (x :+ y))) of
+    (x' :+ y') -> y' :+ negate x'
+  acos (x :+ y) = case log ((x :+ y) + (0 :+ 1) * sqrt (1 - (x :+ y) * (x :+ y))) of
+    (x' :+ y') -> y' :+ negate x'
+  atan (x :+ y) = case log (((1 - y) :+ x) / sqrt (1 + (x :+ y) * (x :+ y))) of
+    (x' :+ y') -> y' :+ negate x'
+  log1p z = complexLog1p z
+  expm1 z = complexExpm1 z
+
+-- Multiplication by @i@, which the trigonometric inverses are written with:
+-- @i * (x :+ y) = (-y) :+ x@.
+imulC :: Num a => Complex a -> Complex a
+imulC (x :+ y) = negate y :+ x
+
+-- @'sqrt' (x :+ y)@ from the real and imaginary parts, so that a value on the
+-- negative real axis comes out with a positive imaginary part.
+complexSqrt :: RealFloat a => Complex a -> Complex a
+complexSqrt (x :+ y) = case x == 0 && y == 0 of
+  True -> 0
+  False -> case x < 0 of
+    True -> v' :+ signedU
+    False -> u' :+ signedV
+  where
+    u' = sqrt ((magnitude (x :+ y) + abs x) / 2)
+    v' = abs y / (u' * 2)
+    signedU = case y < 0 of
+      True -> negate u'
+      False -> u'
+    signedV = case y < 0 of
+      True -> negate v'
+      False -> v'
+
+-- @'log1p'@ for a complex number: near the origin the sum
+-- @2a + a*a + b*b@ is evaluated first, so the logarithm of a value close to
+-- @1@ keeps its precision. The recursive call is at the component type, where
+-- the 'RealFloat' argument's own 'log1p' is the one that applies.
+complexLog1p :: RealFloat a => Complex a -> Complex a
+complexLog1p (a :+ b) = case abs a < (1 / 2) && abs b < (1 / 2) of
+  True -> log1p (u / (1 + sqrt (u + 1))) :+ atan2 (1 + a) b
+  False -> log (1 + (a :+ b))
+  where
+    u = 2 * a + a * a + b * b
+
+-- @'expm1'@ for a complex number: inside the unit circle the
+-- result is built from @'expm1' a@ and @sin (b/2)@, which keeps the
+-- difference small; outside it the direct difference is accurate enough.
+complexExpm1 :: RealFloat a => Complex a -> Complex a
+complexExpm1 (a :+ b) = case a * a + b * b < 1 of
+  True -> (u * w + u + w) :+ (u + 1) * sin b
+  False -> exp (a :+ b) - 1
+  where
+    u = expm1 a
+    v = sin (b / 2)
+    w = negate 2 * v * v
+
+-- The angle constant at the component type. It cannot be written in the
+-- instance body: a class method named there is this instance's, so @pi :+ 0@
+-- would apply the complex @pi@ to a component.
+complexPi :: RealFloat a => Complex a
+complexPi = pi :+ 0
+
+-- @'log' z = 'log' ('magnitude' z) :+ 'phase' z@, with the magnitude scaled so
+-- a value near the top of the range does not overflow before the logarithm.
+complexLog :: RealFloat a => Complex a -> Complex a
+complexLog z = log (magnitude z) :+ phase z
+
+-- The two extreme results of @('**')@, built at the component type outside
+-- the instance body.
+complexInf :: RealFloat a => Complex a
+complexInf = (1 / 0) :+ 0
+
+complexNaN :: RealFloat a => Complex a
+complexNaN = (0 / 0) :+ (0 / 0)

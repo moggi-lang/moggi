@@ -50,7 +50,7 @@ facade with a `{-# BACKEND … #-}` pragma chooses the implementation per target
 |---|---|
 | `Prelude` | the implicit import; see `libraries/base/src/Prelude.mog` |
 | `Control.*` | `Applicative`, `Arrow`, `Category`, `Exception` (+ `Exception.Base`), `Monad`, `Monad.Fail`, `Monad.Fix`, `Monad.IO.Class`, `Monad.ST` |
-| `Data.*` | `Array.Byte`, `Bifoldable`, `Bifoldable1`, `Bifunctor`, `Bits`, `Bool`, `Bounded`, `ByteString` (+ `Char8`), `Char`, `Coerce`, `Double`, `Either`, `Enum`, `Eq`, `Foldable`, `Function`, `Functor` (+ `Classes`, `Compose`, `Const`, `Contravariant`, `Identity`, `Product`, `Sum`), `Int`, `Integer`, `IORef`, `Ix`, `Kind`, `List`, `List.NonEmpty`, `Maybe`, `Monoid`, `Num`, `Ord`, `Proxy`, `Real`, `Semigroup`, `STRef`, `String`, `Traversable`, `Tuple`, `Type.Bool`, `Type.Coercion`, `Type.Equality`, `Type.Ord`, `Version`, `Void`, `Word` |
+| `Data.*` | `Array.Byte`, `Bifoldable`, `Bifoldable1`, `Bifunctor`, `Bits`, `Bool`, `Bounded`, `ByteString` (+ `Char8`), `Char`, `Coerce`, `Complex`, `Double`, `Either`, `Enum`, `Eq`, `Fixed`, `Foldable`, `Function`, `Functor` (+ `Classes`, `Compose`, `Const`, `Contravariant`, `Identity`, `Product`, `Sum`), `Int`, `Integer`, `IORef`, `Ix`, `Kind`, `List`, `List.NonEmpty`, `Maybe`, `Monoid`, `Num`, `Ord`, `Proxy`, `Ratio`, `Real`, `Semigroup`, `STRef`, `String`, `Traversable`, `Tuple`, `Type.Bool`, `Type.Coercion`, `Type.Equality`, `Type.Ord`, `Version`, `Void`, `Word` |
 | `Numeric.*` | `Natural` |
 | `System.*` | `Clock`, `Console.GetOpt`, `CPUTime`, `Environment`, `Exit`, `IO` (+ `IO.Base`, `IO.Error`, `IO.Types`, `IO.Unsafe`), `Info`, `Mem` (+ `Mem.StableName`, `Mem.Weak`) |
 | `Text.*` | `ParserCombinators.ReadPrec`, `Printf`, `Read`, `Show` |
@@ -63,8 +63,8 @@ facade with a `{-# BACKEND … #-}` pragma chooses the implementation per target
 ## What is not there
 
 Listed so nobody hunts for it: `Float` (the only floating type is `Double`),
-`Data.Ratio`, `Data.Complex`, `Data.Fixed`, `Data.Text`, `Numeric` (except
-`Numeric.Natural`), and `transformers`/`mtl`. `Text.Read` provides the class,
+`Data.Text`, `Numeric` (except `Numeric.Natural`), and
+`transformers`/`mtl`. `Text.Read` provides the class,
 `read`, the `reads`/`readMaybe` family and the `ReadPrec` precedence parser,
 `Lexeme(..)` and `lexP` included, but not `expectP` or a character-level
 `Text.ParserCombinators.ReadP`. A few names are missing from the ends of

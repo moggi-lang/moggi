@@ -1,5 +1,7 @@
 <?php declare(strict_types=1);
 
+// backends: dotnet
+
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);

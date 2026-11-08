@@ -110,7 +110,11 @@ class Read a where
 
   readListPrec = readListPrecDefault
 
-  read s = case readsPrec 0 s of
+  -- Parsing goes through 'readPrec' rather than 'readsPrec': an instance may
+  -- define either one, and the default for the other has to terminate. With
+  -- 'readsPrec' here, an instance that defines only 'readPrec' would come back
+  -- through this default to 'readsPrec', whose default reads a whole string.
+  read s = case readPrec_to_S readPrec 0 s of
     [] -> error "Prelude.read: no parse"
     (x, _) : _ -> x
 

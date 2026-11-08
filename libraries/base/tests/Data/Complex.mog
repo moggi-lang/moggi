@@ -1,0 +1,35 @@
+-- Data.Complex: rectangular arithmetic, the polar helpers, and the
+-- functions that read a complex number as a point in the plane.
+import Data.Complex
+import Data.Double
+import Data.Maybe (Maybe)
+import Text.Read (read, readMaybe)
+import Text.Show
+
+main :: IO ()
+main = do
+  putStrLn (show (1 :+ 2))
+  putStrLn (show (realPart (3 :+ 4), imagPart (3 :+ 4)))
+  putStrLn (show (conjugate (1 :+ 2)))
+  putStrLn (show (magnitude (3 :+ 4) :: Double))
+  putStrLn (show (phase (0 :+ 1) :: Double))
+  putStrLn (show ((1 :+ 2) + (3 :+ 4), (1 :+ 2) * (3 :+ 4)))
+  putStrLn (show ((1 :+ 2) / (3 :+ 4)))
+  putStrLn (show (cis 0.0))
+  putStrLn (show (mkPolar 2.0 0.0))
+  putStrLn (show (sqrt (((-4) :+ 0) :: Complex Double)))
+  putStrLn (show (exp ((0 :+ 3.141592653589793) :: Complex Double)))
+  putStrLn (show (abs (3 :+ 4), signum (3 :+ 4)))
+  putStrLn (show (pi :: Complex Double))
+  putStrLn (show (isInfinite (realPart (log (1.0e300 :+ 1.0e300)))))
+  putStrLn (show (isInfinite (realPart (sqrt (1.0e300 :+ 1.0e300)))))
+  putStrLn (show ((0 :+ 0) ** (0 :+ 0)))
+  putStrLn (show ((0 :+ 0) ** (2 :+ 0)))
+  putStrLn (show ((2 :+ 3) ** (0 :+ 0)))
+  putStrLn (show ((1 :+ 2) == (1 :+ 2), (1 :+ 2) == (1 :+ 3)))
+  putStrLn (show (polar (1.0 :+ 1.0) :: (Double, Double)))
+  putStrLn (show (read "1 :+ 2" :: Complex Int))
+  putStrLn (show (read "(1 :+ 2) :+ (3 :+ 4)" :: Complex (Complex Int)))
+  putStrLn (show (readMaybe "1:+2" :: Maybe (Complex Int)))
+  putStrLn (show (readMaybe "1 :* 2" :: Maybe (Complex Int)))
+  putStrLn (show (readMaybe "1 :+ 2 :+ 3" :: Maybe (Complex (Complex Int))))

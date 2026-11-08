@@ -380,3 +380,18 @@ showDigit d = case d of
   8 -> "8"
   9 -> "9"
   _ -> "?"
+
+instance Real Word where
+  toRational n = toInteger n :% 1
+
+instance Real Word8 where
+  toRational n = toInteger n :% 1
+
+instance Real Word16 where
+  toRational n = toInteger n :% 1
+
+instance Real Word32 where
+  toRational n = toInteger n :% 1
+
+instance Real Word64 where
+  toRational n = toInteger n :% 1

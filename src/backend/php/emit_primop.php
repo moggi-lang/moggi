@@ -179,6 +179,14 @@ function emitIntrinsicPrimop(EmitEnv $env, IR\Intrinsic $op, array $argExprs): ?
         'doubleAtan#' => '\\atan(' . $argExprs[0] . ')',
         'doubleSinh#' => '\\sinh(' . $argExprs[0] . ')',
         'doubleCosh#' => '\\cosh(' . $argExprs[0] . ')',
+        'doubleTan#' => '\\tan(' . $argExprs[0] . ')',
+        'doubleTanh#' => '\\tanh(' . $argExprs[0] . ')',
+        'doubleAsinh#' => '\\asinh(' . $argExprs[0] . ')',
+        'doubleAcosh#' => '\\acosh(' . $argExprs[0] . ')',
+        'doubleAtanh#' => '\\atanh(' . $argExprs[0] . ')',
+        'doubleLog1p#' => '\\log1p(' . $argExprs[0] . ')',
+        'doublePow#' => '\\pow(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
+        'doubleExpm1#' => '\\expm1(' . $argExprs[0] . ')',
         default => null,
     };
 }

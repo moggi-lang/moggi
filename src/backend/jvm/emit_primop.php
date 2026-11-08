@@ -43,6 +43,41 @@ function emitDoubleBinopToStack(EmitEnv $env, string $op, IR\Operand $left, IR\O
 /** One-argument `java.lang.Math` call on a boxed `Double` (sqrt, exp, sin, ...). */
 function emitDoubleUnaryMath(EmitEnv $env, string $method, IR\Operand $arg): void
 {
+    if ($method === 'asinh' || $method === 'acosh') {
+        emitOperand($env, $arg);
+        unboxDouble($env);
+        $env->c->dup2();
+        $env->c->dup2();
+        $env->c->dmul();
+        $env->c->ldc2_w($env->cp->double_(1.0));
+        $method === 'asinh' ? $env->c->dadd() : $env->c->dsub();
+        $env->c->invokestatic($env->cp->methodRef('java/lang/Math', 'sqrt', '(D)D'), 2, 2);
+        $env->c->dadd();
+        $env->c->invokestatic($env->cp->methodRef('java/lang/Math', 'log', '(D)D'), 2, 2);
+        boxDouble($env);
+
+        return;
+    }
+    if ($method === 'atanh') {
+        emitOperand($env, $arg);
+        $slot = $env->freshLocal('java/lang/Double');
+        $env->c->astore($slot);
+        $env->c->aload($slot);
+        unboxDouble($env);
+        $env->c->ldc2_w($env->cp->double_(1.0));
+        $env->c->dadd();
+        $env->c->ldc2_w($env->cp->double_(1.0));
+        $env->c->aload($slot);
+        unboxDouble($env);
+        $env->c->dsub();
+        $env->c->ddiv();
+        $env->c->invokestatic($env->cp->methodRef('java/lang/Math', 'log', '(D)D'), 2, 2);
+        $env->c->ldc2_w($env->cp->double_(0.5));
+        $env->c->dmul();
+        boxDouble($env);
+
+        return;
+    }
     emitOperand($env, $arg);
     unboxDouble($env);
     $env->c->invokestatic($env->cp->methodRef('java/lang/Math', $method, '(D)D'), 2, 2);
@@ -150,6 +185,16 @@ function emitIntrinsicPrimop(EmitEnv $env, IR\Intrinsic $op): bool
 
         case 'doubleUnaryMath':
             emitDoubleUnaryMath($env, $job[1], $args[0]);
+
+            return true;
+
+        case 'doubleMathBinop':
+            emitOperand($env, $args[0]);
+            unboxDouble($env);
+            emitOperand($env, $args[1]);
+            unboxDouble($env);
+            $env->c->invokestatic($env->cp->methodRef('java/lang/Math', $job[1], '(DD)D'), 4, 4);
+            boxDouble($env);
 
             return true;
 

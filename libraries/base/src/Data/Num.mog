@@ -27,6 +27,11 @@ class Num a where
   negate, abs, signum :: a -> a
   fromInteger :: Integer -> a
 
+  -- Subtraction and negation are each written with the other, so an instance
+  -- may skip either one.
+  x - y = x + negate y
+  negate x = 0 - x
+
 -- The machine integers' (`Int` and `Word`, both 64-bit) instances live with the
 -- class: `Int` and `Word` are the widths the library's own low-level code is
 -- written at -- `Data.Foldable`'s `length`, `Control.Monad`'s

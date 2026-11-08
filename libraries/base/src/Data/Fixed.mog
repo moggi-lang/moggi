@@ -1,0 +1,272 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Fixed-point arithmetic: a 'Fixed' value is an 'Integer' scaled by a
+-- resolution the type names, so @Fixed E2@ counts hundredths. The resolution is
+-- a type-level number — 'E0' is a whole unit, 'E2' a hundredth, 'E12' a
+-- picounit — which lets arithmetic, comparison and 'show' agree on the scale
+-- without carrying it at run time.
+--
+-- Multiplication and division are not associative or distributive: each result
+-- is rounded back to the resolution it is written at, so @(0.2 * 0.6 :: Deci) *
+-- 0.9@ and @0.2 * (0.6 * 0.9)@ differ in the last unit.
+--
+-- @'realToFrac' (0.123456 :: Pico) :: Milli@ is @0.123@: converting to a
+-- smaller resolution truncates, losing information.
+module Data.Fixed
+  ( -- * The Fixed type
+    Fixed(..)
+  , HasResolution(..)
+  , showFixed
+    -- * Resolution \/ scaling factors
+  , E0, Uni
+  , E1, Deci
+  , E2, Centi
+  , E3, Milli
+  , E6, Micro
+  , E9, Nano
+  , E12, Pico
+    -- * Generalized functions on reals
+  , div'
+  , mod'
+  , divMod'
+  ) where
+
+import Data.Bool
+import Data.Double
+import Data.Enum
+import Data.Eq
+import Data.Integer (Integer)
+import Data.List
+import Data.Num
+import Data.Ord
+import Data.Proxy
+import Data.Real
+import Data.Semigroup
+import Moggi.Internal.Base
+import Text.Show
+
+-- | Generalisation of 'div' to any instance of 'Real'.
+div' :: (Real a, Integral b) => a -> a -> b
+div' n d = floor (toRational n / toRational d)
+
+-- | Generalisation of 'divMod' to any instance of 'Real'.
+divMod' :: Real a => a -> a -> (Integer, a)
+divMod' n d = (f, n - fromInteger f * d)
+  where
+    f = div' n d
+
+-- | Generalisation of 'mod' to any instance of 'Real'.
+mod' :: Real a => a -> a -> a
+mod' n d = n - fromInteger (div' n d) * d
+
+-- | The type of fixed-point fractional numbers. The type parameter names a
+-- resolution — a 'HasResolution' instance — and the constructor holds the
+-- scaled integer.
+newtype Fixed a = MkFixed Integer
+
+-- | The resolution of a 'Fixed' type: how many units make one whole.
+class HasResolution a where
+  -- | Provide the resolution of a fixed-point type.
+  resolution :: Proxy a -> Integer
+
+-- | A resolution of one: whole numbers.
+data E0
+
+-- | A resolution of ten: tenths.
+data E1
+
+-- | A resolution of a hundred: hundredths.
+data E2
+
+-- | A resolution of a thousand: thousandths.
+data E3
+
+-- | A resolution of a million: millionths.
+data E6
+
+-- | A resolution of a thousand million: billionths.
+data E9
+
+-- | A resolution of a million million: picounits.
+data E12
+
+instance HasResolution E0 where
+  resolution _ = 1
+
+instance HasResolution E1 where
+  resolution _ = 10
+
+instance HasResolution E2 where
+  resolution _ = 100
+
+instance HasResolution E3 where
+  resolution _ = 1000
+
+instance HasResolution E6 where
+  resolution _ = 1000000
+
+instance HasResolution E9 where
+  resolution _ = 1000000000
+
+instance HasResolution E12 where
+  resolution _ = 1000000000000
+
+-- | Resolution of 1, this works the same as Integer.
+type Uni = Fixed E0
+
+-- | Resolution of 10^-1 = .1
+type Deci = Fixed E1
+
+-- | Resolution of 10^-2 = .01, useful for many monetary currencies
+type Centi = Fixed E2
+
+-- | Resolution of 10^-3 = .001
+type Milli = Fixed E3
+
+-- | Resolution of 10^-6 = .000001
+type Micro = Fixed E6
+
+-- | Resolution of 10^-9 = .000000001
+type Nano = Fixed E9
+
+-- | Resolution of 10^-12 = .000000000001
+type Pico = Fixed E12
+
+instance HasResolution a => Eq (Fixed a) where
+  (==) (MkFixed x) (MkFixed y) = x == y
+
+instance HasResolution a => Ord (Fixed a) where
+  compare (MkFixed x) (MkFixed y) = compare x y
+
+-- | 'succ' and 'pred' step by one unit of the resolution — the smallest
+-- amount that leaves the value's resolution unchanged — not by one whole.
+instance HasResolution a => Enum (Fixed a) where
+  succ (MkFixed x) = MkFixed (x + 1)
+  pred (MkFixed x) = MkFixed (x - 1)
+  toEnum n = MkFixed (fromIntegral n)
+  fromEnum (MkFixed x) = fromIntegral x
+  enumFrom (MkFixed x) = fixedEnumFrom x
+  enumFromThen (MkFixed x) (MkFixed y) = fixedEnumFromThen x y
+  enumFromTo (MkFixed x) (MkFixed y) = fixedEnumFromTo x y
+  enumFromThenTo (MkFixed x) (MkFixed y) (MkFixed z) = fixedEnumFromThenTo x y z
+
+fixedEnumFrom :: Integer -> [Fixed a]
+fixedEnumFrom x = MkFixed x : fixedEnumFrom (x + 1)
+
+fixedEnumFromThen :: Integer -> Integer -> [Fixed a]
+fixedEnumFromThen x y = go x
+  where
+    step = y - x
+    go at = MkFixed at : go (at + step)
+
+fixedEnumFromTo :: Integer -> Integer -> [Fixed a]
+fixedEnumFromTo x limit = go x
+  where
+    go at = case at <= limit of
+      True -> MkFixed at : go (at + 1)
+      False -> []
+
+fixedEnumFromThenTo :: Integer -> Integer -> Integer -> [Fixed a]
+fixedEnumFromThenTo x y limit = go x
+  where
+    step = y - x
+    go at = case step >= 0 of
+      True -> case at <= limit of
+        True -> MkFixed at : go (at + step)
+        False -> []
+      False -> case at >= limit of
+        True -> MkFixed at : go (at + step)
+        False -> []
+
+instance HasResolution a => Num (Fixed a) where
+  (+) (MkFixed x) (MkFixed y) = MkFixed (x + y)
+  (-) (MkFixed x) (MkFixed y) = MkFixed (x - y)
+  (*) (MkFixed x) (MkFixed y) = MkFixed (div (x * y) (resolution (Proxy :: Proxy a)))
+  negate (MkFixed x) = MkFixed (negate x)
+  abs (MkFixed x) = MkFixed (abs x)
+  signum (MkFixed x) = fromInteger (signum x)
+  fromInteger i = MkFixed (i * resolution (Proxy :: Proxy a))
+
+instance HasResolution a => Real (Fixed a) where
+  toRational (MkFixed x) = (x % 1) / (resolution (Proxy :: Proxy a) % 1)
+
+instance HasResolution a => Fractional (Fixed a) where
+  (/) (MkFixed x) (MkFixed y) = MkFixed (div (x * resolution (Proxy :: Proxy a)) y)
+  recip (MkFixed x) = MkFixed (div (res * res) x)
+    where
+      res = resolution (Proxy :: Proxy a)
+  fromRational r = MkFixed (floor (r * (resolution (Proxy :: Proxy a) % 1)))
+
+-- | @'properFraction'@ truncates towards zero, so the integer
+-- part of @-1.5 :: Centi@ is @-1@ and the fraction is @-0.5@.
+instance HasResolution a => RealFrac (Fixed a) where
+  properFraction (MkFixed x) = case quotRem x (resolution (Proxy :: Proxy a)) of
+    (q, r) -> (fromIntegral q, MkFixed r)
+
+chopZeros :: Integer -> String
+chopZeros x = case x == 0 of
+  True -> ""
+  False -> case mod x 10 == 0 of
+    True -> chopZeros (div x 10)
+    False -> show x
+
+-- | Only works for a non-negative @x@.
+showIntegerZeros :: Bool -> Int -> Integer -> String
+showIntegerZeros chop digits x = case chop && x == 0 of
+  True -> ""
+  False -> zeros (digits - digitCount x) <> digits'
+  where
+    digits' = case chop of
+      True -> chopZeros x
+      False -> show x
+
+withDot :: String -> String
+withDot s = case s == "" of
+  True -> ""
+  False -> "." <> s
+
+-- | The string form of a fixed-point number.
+--
+-- === __Examples__
+--
+-- >>> showFixed True  (MkFixed 10000 :: Fixed E3)
+-- "10"
+--
+-- >>> showFixed False (MkFixed 10000 :: Fixed E3)
+-- "10.000"
+showFixed :: HasResolution a => Bool -> Fixed a -> String
+showFixed chop f = showFixedWith chop (resolution (Proxy :: Proxy a)) f
+
+-- The resolution is threaded rather than looked up again: the constrained
+-- wrapper above is not recursive, so its constraint is used exactly once.
+showFixedWith :: Bool -> Integer -> Fixed a -> String
+showFixedWith chop res (MkFixed x) = case x < 0 of
+  True -> "-" <> showFixedWith chop res (MkFixed (negate x))
+  False -> showFixedUnits chop res x
+
+showFixedUnits :: Bool -> Integer -> Integer -> String
+showFixedUnits chop res x = case divMod x res of
+  (i, d) -> show i <> withDot (showIntegerZeros chop (fixedDigits res) (divCeil (d * pow10 (fixedDigits res)) res))
+  where
+    divCeil u v = div (u + v - 1) v
+
+-- | Enough digits to be unambiguous.
+fixedDigits :: Integer -> Int
+fixedDigits res = (ceiling (logBase 10 (fromInteger res :: Double)) :: Int)
+
+pow10 :: Int -> Integer
+pow10 k = case k <= 0 of
+  True -> 1
+  False -> 10 * pow10 (k - 1)
+
+instance HasResolution a => Show (Fixed a) where
+  showsPrec p n = showParen (p > 6 && n < 0) (showString (showFixed False n))
+
+zeros :: Int -> String
+zeros n = case n <= 0 of
+  True -> ""
+  False -> "0" <> zeros (n - 1)
+
+digitCount :: Integer -> Int
+digitCount n = case n < 10 of
+  True -> 1
+  False -> 1 + digitCount (div n 10)

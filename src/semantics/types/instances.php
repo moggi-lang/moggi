@@ -2458,6 +2458,14 @@ function checkInstanceMethod(
     $headVars = $headType === null || ! instanceHeadIsGadt($state, $headType)
         ? []
         : typeVars($headType);
+    if ($headType !== null && ! instanceHeadIsGadt($state, $headType)) {
+        foreach (\array_keys(typeVars($headType)) as $name) {
+            if (isset($state->rigidVars[$name])) {
+                continue;
+            }
+            $state->rigidVars[$name] = true;
+        }
+    }
     $headSkolems = [];
     foreach (\array_keys(typeVars($fnType)) as $name) {
         if (! isset($headVars[$name]) || isset($state->rigidVars[$name]) || \preg_match('/\$sk\d+$/', $name) === 1) {

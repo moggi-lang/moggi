@@ -73,3 +73,11 @@ asinh 1e-300 == 1e-300: True
 asinh 1e300 ~ 691.4686750787736: True
 acosh 1e300 ~ 691.4686750787736: True
 expm1 1e-3 ~ 0.0010005001667083417: True
+(**) negative base, integral exponent: True
+(**) 2 ** 0.5 ~ sqrt 2: True
+logBase 10 1000 ~ 3: True
+log1pexp 1000 == 1000: True
+log1pexp -1000 ~ 0: True
+log1pexp 50 == 50 + exp -50: True
+log1mexp -0.1 ~ -2.3521684610440907: True
+log1mexp -1000 ~ 0: True

@@ -297,3 +297,6 @@ integerPopCountNonNeg :: Integer -> Int
 integerPopCountNonNeg x = case x == integerBitZeroI of
   True -> 0
   False -> intAdd# (intPopCnt# (integerToInt (mod x integerBitLimbBase))) (integerPopCountNonNeg (div x integerBitLimbBase))
+
+instance Real Integer where
+  toRational n = n :% 1
