@@ -15,13 +15,18 @@ concurrency:
 
 jobs:
   test:
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
+    # One job per OS and backend: a job installs only the toolchain its backend
+    # needs (GraalVM and Maven for jvm, the .NET SDK and NuGet for dotnet) and
+    # runs only that backend's cases. A failure names one backend, and the cheap
+    # backends no longer wait behind the slow ones' toolchain setup.
+    name: ${{ matrix.platform.name }} / ${{ matrix.backend }}
+    runs-on: ${{ matrix.platform.os }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        include:
+        backend: [php, jvm, dotnet]
+        platform:
           - {name: linux-x86_64,   os: ubuntu-24.04}
           - {name: linux-aarch64,  os: ubuntu-24.04-arm}
           - {name: macos-x86_64,   os: macos-15-intel}
@@ -47,28 +52,31 @@ jobs:
           ini-values: memory_limit=1G
           coverage: none
 
-      # GraalVM and native-image.
+      # GraalVM and native-image (jvm only).
       - name: Cache GraalVM
+        if: matrix.backend == 'jvm'
         uses: actions/cache@v6
         with:
           path: ${{ runner.tool_cache }}/Java_GraalVM_jdk
           key: graalvm-21-${{ runner.os }}-${{ runner.arch }}-v1
 
       - name: Set up GraalVM
+        if: matrix.backend == 'jvm'
         uses: actions/setup-java@v6.1.0
         with:
           distribution: graalvm
           java-version: '21'
 
-      # Maven installation and dependency repository.
+      # Maven installation and dependency repository (jvm only).
       - name: Cache Maven installation
+        if: matrix.backend == 'jvm'
         uses: actions/cache@v6
         with:
           path: ~/maven
           key: maven-3.9.12-${{ runner.os }}-${{ runner.arch }}
 
       - name: Set up Maven (Linux, macOS)
-        if: runner.os != 'Windows'
+        if: matrix.backend == 'jvm' && runner.os != 'Windows'
         shell: bash
         run: |
           MAVEN_VERSION=3.9.12
@@ -83,7 +91,7 @@ jobs:
           echo "$HOME/maven/bin" >> "$GITHUB_PATH"
 
       - name: Set up Maven (Windows)
-        if: runner.os == 'Windows'
+        if: matrix.backend == 'jvm' && runner.os == 'Windows'
         shell: pwsh
         run: |
           $mavenVersion = '3.9.12'
@@ -99,24 +107,28 @@ jobs:
           "$mavenBin" >> $env:GITHUB_PATH
 
       - name: Cache Maven dependencies
+        if: matrix.backend == 'jvm'
         uses: actions/cache@v6
         with:
           path: ~/.m2/repository
           key: maven-deps-${{ runner.os }}-${{ runner.arch }}-v1
 
-      # .NET SDK and NuGet.
+      # .NET SDK and NuGet (dotnet only).
       - name: Cache .NET SDK
+        if: matrix.backend == 'dotnet'
         uses: actions/cache@v6
         with:
           path: ${{ runner.tool_cache }}/dotnet
           key: dotnet-8-${{ runner.os }}-${{ runner.arch }}-v1
 
       - name: Set up .NET SDK
+        if: matrix.backend == 'dotnet'
         uses: actions/setup-dotnet@v6.0.0
         with:
           dotnet-version: '8.0.x'
 
       - name: Cache NuGet packages
+        if: matrix.backend == 'dotnet'
         uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
@@ -124,13 +136,19 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-${{ runner.arch }}-
 
-      - name: Show the toolchains
+      - name: Show the PHP toolchain
+        run: php --version
+
+      - name: Show the JVM toolchain
+        if: matrix.backend == 'jvm'
         run: |
-          php --version
           java -version
-          dotnet --version
           native-image --version
           mvn --version
+
+      - name: Show the .NET toolchain
+        if: matrix.backend == 'dotnet'
+        run: dotnet --version
 
       # Linux C toolchain.
       - name: Cache apt packages
@@ -153,14 +171,15 @@ jobs:
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2.33.0
         with:
-          msystem: ${{ matrix.msystem }}
+          msystem: ${{ matrix.platform.msystem }}
           update: false
-          install: ${{ matrix.msysPackages }}
+          install: ${{ matrix.platform.msysPackages }}
           path-type: inherit
           cache: true
 
       - name: Set up the MSVC toolchain (Windows)
-        if: runner.os == 'Windows'
+        # Native AOT and native-image both link with MSVC on Windows.
+        if: runner.os == 'Windows' && matrix.backend != 'php'
         uses: ilammy/msvc-dev-cmd@v1.13.0
         with:
           arch: x64
@@ -201,9 +220,9 @@ jobs:
             .moggi/runtime
             .moggi/catalog
             .moggi/packages
-          key: moggi-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('libraries/*/*.moggi', 'libraries/*/meta/**', 'tests/registry/**') }}
+          key: moggi-${{ matrix.backend }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('libraries/*/*.moggi', 'libraries/*/meta/**', 'tests/registry/**') }}
           restore-keys: |
-            moggi-${{ runner.os }}-${{ runner.arch }}-
+            moggi-${{ matrix.backend }}-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Run the suite
-        run: php test-all.php --backend all --native
+        run: php test-all.php --backend ${{ matrix.backend }} --native
