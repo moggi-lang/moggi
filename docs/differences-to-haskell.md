@@ -11,55 +11,13 @@ what will surprise you. Everything not mentioned here is meant to behave like
 `base`; if you find a divergence that is not listed, that is a bug — please
 report it.
 
+Two of them show up in the first five minutes of any port, and both are
+below: evaluation is strict, and `String` is the host's own string type
+rather than `[Char]`. Most of what follows is a consequence of the first.
+
 New to Moggi? Start with the [tour](tour.md) instead; this page assumes you
 already know Haskell. The language itself is described in the
 [language reference](language.md), and host calls in the [FFI guide](ffi.md).
-
-## No language extensions to enable
-
-There are no `{-# LANGUAGE … #-}` opt-ins for features. Everything the compiler
-implements — multi-parameter classes and their associated types, higher-kinded
-types, type-level data, generic programming — is available in every module; no
-feature is switched on per module or per file. The only `LANGUAGE` pragma is
-`{-# LANGUAGE NoImplicitPrelude #-}`, which drops the implicit `Prelude`
-import. A module can also carry a `{-# BACKEND … #-}` pragma above its header
-([language.md § Pragmas](language.md#pragmas)).
-
-So a program ported here does not need its pragmas translated, and there is no
-way to disable a feature to get different behaviour: a feature either exists,
-with one behaviour, or it does not exist at all.
-
-### Extensions that are simply on
-
-The list is what has a counterpart, not what exists; each row names the pragma
-you would write there and the syntax that works here with no pragma at all.
-
-| Extension | What is available in every module |
-|---|---|
-| `MultiParamTypeClasses` | `class Convert a b where convert :: a -> b` |
-| `FlexibleInstances` | `instance C (Pair Int b)` — an instance head may be a partially applied type |
-| `FlexibleContexts` | `f :: Eq [a] => [a] -> Bool` |
-| `ConstrainedClassMethods` | `class C a where c :: Eq a => a -> a -> Bool` |
-| `TypeFamilies` | associated types: `class Collection c where type Element c` |
-| `KindSignatures` | `data Tagged (c :: Color) = Tagged` |
-| `DataKinds` | promoted constructors (`'Red`), `Nat`, `Symbol` |
-| `DuplicateRecordFields` | two records may both declare `name` |
-| `OverloadedRecordDot` | `person.name`, chained |
-| `OverloadedRecordUpdate` | `p { age = 31 }`, nested included |
-| `DeriveFunctor`, `DeriveFoldable`, `DeriveTraversable` | `deriving (Functor, Foldable, Traversable)` |
-| `DeriveGeneric` | `deriving (Generic)` with `import Moggi.Generics` |
-| `GeneralizedNewtypeDeriving` | `deriving newtype (Num)` |
-| `DeriveAnyClass` | `deriving anyclass (C)` |
-| `DerivingVia` | `deriving via (V) C` |
-| `DerivingStrategies` | `deriving stock (C)`, `deriving newtype (C)`, `deriving anyclass (C)`, `deriving via (V) C` |
-| `StandaloneDeriving` | `deriving instance (Eq a) => Eq (T a)` |
-| `GADTs` | `data Expr a where Lit :: Int -> Expr Int`; with it, existential constructor variables (`MkBox :: a -> Box`) and refinement from a constructor's written result type |
-| `BlockArguments` | `when True do …`, with no `$` |
-
-The reverse has no analogue: an extension with nothing behind it has no pragma
-either. `GADTs` is the one readers look for first, and it is part of the
-language: `data Expr a where …` parses, refines and runs like it does in
-Haskell ([data types](types/data-types.md#gadts)).
 
 ## Evaluation is strict
 
@@ -80,6 +38,33 @@ function arguments, not record fields, not constructor fields.
   containers package's `Data.Map` is strict, full stop.
 - Partial application is still a value you can pass around; it just holds
   already-evaluated arguments instead of a suspended computation.
+- Fixed points have to be tied to a value that exists, not to a thunk. `fix`
+  is the strict fixed point of `Data.Function`, and `mfix f` runs `f` once with
+  a reference to its own result: recursion through that reference is ordinary
+  recursion once the result is there, and reading it earlier raises an
+  `ErrorCall` instead of looping or answering a placeholder. So the value you
+  recurse into must be buildable without being forced — a function is the usual
+  shape, `mfix (\rec -> pure (\n -> … rec (n - 1)))`, and an argument that is
+  never demanded also works. `MonadFix` has instances for `IO`, `Identity`,
+  `Maybe`, `Either e` and `Down`, and `fixIO`, `unsafeFixIO` and
+  `Control.Arrow`'s `loop` for `(->)` behave the same way.
+
+## Strings and characters
+
+`String` is a host-native string (UTF-8/UTF-16 depending on the backend), not
+`[Char]`. `Char` is a Unicode scalar value. Consequences:
+
+- There is `Data.String` but no `Data.Text`. To move between the two worlds,
+  `Data.String` provides `pack`, `unpack`, and `singleton`.
+- `Data.String` also provides `length`, `take`, `drop`, `isPrefixOf`, and
+  `isSuffixOf` for strings, and path manipulation (`System.FilePath`,
+  `System.Directory`) works directly on those strings: `FilePath` is
+  `String`, not `[Char]`. There is no `OsPath`/`OsString` layer and no
+  encoding step — pure path functions only ever inspect ASCII (separators,
+  drive letters, extension markers) and pass everything else through
+  untouched, and host calls take the string as-is.
+- A module importing both `Data.String` and
+  `Data.List` must disambiguate those names with a `hiding` list.
 
 ## Names that differ
 
@@ -110,23 +95,6 @@ with a single constructor and is spelled as it is there, without
 which fields the value has is only known at run time; matching on the
 constructor explicitly is the alternative (see
 [language.md § Records](language.md#records)).
-
-## Strings and characters
-
-`String` is a host-native string (UTF-8/UTF-16 depending on the backend), not
-`[Char]`. `Char` is a Unicode scalar value. Consequences:
-
-- There is `Data.String` but no `Data.Text`. To move between the two worlds,
-  `Data.String` provides `pack`, `unpack`, and `singleton`.
-- `Data.String` also provides `length`, `take`, `drop`, `isPrefixOf`, and
-  `isSuffixOf` for strings, and path manipulation (`System.FilePath`,
-  `System.Directory`) works directly on those strings: `FilePath` is
-  `String`, not `[Char]`. There is no `OsPath`/`OsString` layer and no
-  encoding step — pure path functions only ever inspect ASCII (separators,
-  drive letters, extension markers) and pass everything else through
-  untouched, and host calls take the string as-is.
-- A module importing both `Data.String` and
-  `Data.List` must disambiguate those names with a `hiding` list.
 
 ## Numbers
 
@@ -201,7 +169,7 @@ directly with `foreign` declarations (see the [FFI guide](ffi.md)):
 
 ## Where things live
 
-`base` 4.22 splits its definitions across a `ghc-internal` package behind
+Haskell's `base` splits its definitions across a `ghc-internal` package behind
 re-export shims; Moggi does not mirror that tree. Implementations live in the
 module you import: numbers in `Data.Int`/`Data.Word`/`Data.Integer`/
 `Data.Double`/`Data.Num`/`Data.Real`, `Show` and `Read` directly in
@@ -212,44 +180,64 @@ user-facing `GHC.*` layer at all.
 Because there is one file per module and no build file, each library lives
 where you import it — there is no separate `.cabal` package tree to learn.
 
-## Not implemented yet
+## What is missing
 
-Honest gaps — listed here so nobody mistakes them for design choices:
+Nothing is stubbed: a module either exists with `base`'s API or is absent, and
+the [standard library](stdlib.md#what-is-not-there) page lists what is absent,
+so a name you cannot bring into scope is simply not there rather than
+half-implemented. What shapes a port is not a missing function but the language:
+`Float` has no counterpart ([Numbers](#numbers)), `IO` does not nest, so
+`MonadIO` has only its `IO` instance (see the
+[purity boundary](effects/io.md#the-purity-boundary)), and the lazy shapes
+listed above — `ZipList`, `unsafeInterleaveIO`, `iterate`, `mfix` on lists —
+cannot be expressed at all.
 
-- `Float`, `Data.Ratio`, `Data.Complex`, `Data.Fixed`, and `Numeric`.
-- `Text.Read`'s precedence-builder layer: `ReadPrec`, `readPrec`, `step`, `prec`,
-  `parens`, `expectP`, and the helpers built on them — `readData`, `readPrec1`,
-  `readPrec2`, `readUnaryWith`, `readBinaryWith`, `liftReadListPrecDefault`,
-  `liftReadListPrec2Default`, `readsSingleFieldRecordWith`,
-  `showsSingleFieldRecordWith`. `reads`, `read`, `readMaybe`, `readEither`,
-  `lex`, `readParen`, `readsData`/`readsUnaryWith`/`readsBinaryWith` and the
-  `Show`-side helpers `showsUnaryWith`/`showsBinaryWith` are implemented, as is
-  stock `deriving (Read)`.
-- `CallStack`/`SrcLoc`, and exception tags synthesized by the compiler.
-- `Control.Applicative`'s `ZipList` (its `pure` needs an infinite list, which
-  strict Moggi cannot build) and `WrappedArrow` (needs an `Arrow` class, which
-  does not exist yet). `WrappedMonad` lives in `Control.Monad` and `Const` in
-  `Data.Functor.Const`.
-- `System.IO.Unsafe.unsafeFixIO`: it reads a reference before it is written
-  (interleaved IO), which strict evaluation cannot do — the same reason
-  `unsafeInterleaveIO` is absent. `unsafePerformIO` is implemented;
-  `unsafeDupablePerformIO` arrives with the threading model, where the
-  duplicate barrier it omits has something to omit.
-- Infinite producers: `Data.List`'s `repeat`, `iterate` and `cycle` and
-  `Data.List.NonEmpty`'s `repeat`, `iterate` and `cycle`. A list here is a
-  finite, eagerly built value, so nothing can build an unbounded spine;
-  `replicate`, `unfoldr` and `fromList` cover the bounded shapes.
-- `Control.Monad.Reader` and `Control.Monad.State` (the `ST` monad itself is
-  implemented in `Control.Monad.ST`).
-- `Data.Char`'s `lexLitChar` and `readLitChar` (the rest of `Data.Char`,
-  including `GeneralCategory` and `generalCategory`, is implemented).
-- `System.IO` buffering, text encodings, and seeking. Handles are sequential
-  streams on every host (`BufferedReader`/`StreamReader` under the hood), so
-  there is nothing seekable to expose without a second handle type; buffering
-  stays host-managed (`hFlush` covers the case that matters); and strings are
-  host-native, so there is no encoding to set. `openTempFile` and
-  `openBinaryTempFile` (an alias — Moggi has no text/binary mode split) are
-  implemented.
+## No language extensions to enable
+
+There are no `{-# LANGUAGE … #-}` opt-ins for features. Everything the compiler
+implements — multi-parameter classes and their associated types, higher-kinded
+types, type-level data, generic programming — is available in every module; no
+feature is switched on per module or per file. The only `LANGUAGE` pragma is
+`{-# LANGUAGE NoImplicitPrelude #-}`, which drops the implicit `Prelude`
+import. A module can also carry a `{-# BACKEND … #-}` pragma above its header
+([language.md § Pragmas](language.md#pragmas)).
+
+So a program ported here does not need its pragmas translated, and there is no
+way to disable a feature to get different behaviour: a feature either exists,
+with one behaviour, or it does not exist at all.
+
+### Extensions that are simply on
+
+The list is what has a counterpart, not what exists; each row names the pragma
+you would write there and the syntax that works here with no pragma at all.
+
+| Extension | What is available in every module |
+|---|---|
+| `MultiParamTypeClasses` | `class Convert a b where convert :: a -> b` |
+| `FlexibleInstances` | `instance C (Pair Int b)` — an instance head may be a partially applied type |
+| `FlexibleContexts` | `f :: Eq [a] => [a] -> Bool` |
+| `ConstrainedClassMethods` | `class C a where c :: Eq a => a -> a -> Bool` |
+| `TypeFamilies` | associated types (`class Collection c where type Element c`) and closed families declared on their own (`type family Not (x :: Bool) where`) |
+| `KindSignatures` | `data Tagged (c :: Color) = Tagged` |
+| `RoleAnnotations` | `type role T phantom representational` |
+| `DataKinds` | promoted constructors (`'Red`), `Nat`, `Symbol` |
+| `DuplicateRecordFields` | two records may both declare `name` |
+| `OverloadedRecordDot` | `person.name`, chained |
+| `OverloadedRecordUpdate` | `p { age = 31 }`, nested included |
+| `DeriveFunctor`, `DeriveFoldable`, `DeriveTraversable` | `deriving (Functor, Foldable, Traversable)` |
+| `DeriveGeneric` | `deriving (Generic)` with `import Moggi.Generics` |
+| `GeneralizedNewtypeDeriving` | `deriving newtype (Num)` |
+| `DeriveAnyClass` | `deriving anyclass (C)` |
+| `DerivingVia` | `deriving via (V) C` |
+| `DerivingStrategies` | `deriving stock (C)`, `deriving newtype (C)`, `deriving anyclass (C)`, `deriving via (V) C` |
+| `StandaloneDeriving` | `deriving instance (Eq a) => Eq (T a)` |
+| `GADTs` | `data Expr a where Lit :: Int -> Expr Int`; with it, existential constructor variables (`MkBox :: a -> Box`) and refinement from a constructor's written result type |
+| `BlockArguments` | `when True do …`, with no `$` |
+
+The reverse has no analogue: an extension with nothing behind it has no pragma
+either. `GADTs` is the one readers look for first, and it is part of the
+language: `data Expr a where …` parses, refines and runs like it does in
+Haskell ([data types](types/data-types.md#gadts)).
 
 ## What is *not* different
 

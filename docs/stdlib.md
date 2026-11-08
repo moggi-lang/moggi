@@ -49,12 +49,12 @@ facade with a `{-# BACKEND … #-}` pragma chooses the implementation per target
 | Namespace | Modules |
 |---|---|
 | `Prelude` | the implicit import; see `libraries/base/src/Prelude.mog` |
-| `Control.*` | `Applicative`, `Monad`, `Monad.Fail`, `Monad.ST`, `Exception`, `Exception.Base` |
-| `Data.*` | `Bits`, `Bifunctor`, `Bifoldable`, `Bool`, `Bounded`, `ByteString` (+ `Char8`), `Char`, `Double`, `Either`, `Enum`, `Eq`, `Foldable`, `Function`, `Functor`, `Functor.Const`, `Int`, `Integer`, `Ix`, `List`, `List.NonEmpty`, `Maybe`, `Monoid`, `Num`, `Ord`, `Proxy`, `Real`, `Semigroup`, `STRef`, `String`, `Traversable`, `Tuple`, `Version`, `Void`, `Word` |
+| `Control.*` | `Applicative`, `Arrow`, `Category`, `Exception` (+ `Exception.Base`), `Monad`, `Monad.Fail`, `Monad.Fix`, `Monad.IO.Class`, `Monad.ST` |
+| `Data.*` | `Array.Byte`, `Bifoldable`, `Bifoldable1`, `Bifunctor`, `Bits`, `Bool`, `Bounded`, `ByteString` (+ `Char8`), `Char`, `Coerce`, `Double`, `Either`, `Enum`, `Eq`, `Foldable`, `Function`, `Functor` (+ `Classes`, `Compose`, `Const`, `Contravariant`, `Identity`, `Product`, `Sum`), `Int`, `Integer`, `IORef`, `Ix`, `Kind`, `List`, `List.NonEmpty`, `Maybe`, `Monoid`, `Num`, `Ord`, `Proxy`, `Real`, `Semigroup`, `STRef`, `String`, `Traversable`, `Tuple`, `Type.Bool`, `Type.Coercion`, `Type.Equality`, `Type.Ord`, `Version`, `Void`, `Word` |
 | `Numeric.*` | `Natural` |
-| `System.*` | `Environment`, `Exit`, `IO` (+ `IO.Base`, `IO.Error`, `IO.Types`), `Info` |
-| `Text.*` | `Show`, `Read` |
-| `Moggi.*` | `Err`, `Exception`, `Generics`, `IO.Exception`, `Internal.*` (primitives and the numeric backend) |
+| `System.*` | `Clock`, `Console.GetOpt`, `CPUTime`, `Environment`, `Exit`, `IO` (+ `IO.Base`, `IO.Error`, `IO.Types`, `IO.Unsafe`), `Info`, `Mem` (+ `Mem.StableName`, `Mem.Weak`) |
+| `Text.*` | `ParserCombinators.ReadPrec`, `Printf`, `Read`, `Show` |
+| `Moggi.*` | `Err`, `Exception` (+ `Exception.Type`), `Generics`, `IO.Exception`, `Internal.*` (primitives and the numeric backend) |
 | `Platform.PHP` | PHP reification (`PHPValue`); importing it makes a module PHP-only ([FFI](ffi.md)) |
 
 `Moggi.Internal.*` is implementation: primitives, the numeric types and the
@@ -63,11 +63,15 @@ facade with a `{-# BACKEND … #-}` pragma chooses the implementation per target
 ## What is not there
 
 Listed so nobody hunts for it: `Float` (the only floating type is `Double`),
-`Data.Ratio`, `Data.Complex`, `Data.Fixed`, `Data.Text`, `Control.Monad.Reader`,
-`Control.Monad.State`. `Text.Read` provides the class and `read`, not the wider
-`reads`/`readMaybe` family. The
-[differences page](differences-to-haskell.md) tracks the remaining gaps in
-detail.
+`Data.Ratio`, `Data.Complex`, `Data.Fixed`, `Data.Text`, `Numeric` (except
+`Numeric.Natural`), and `transformers`/`mtl`. `Text.Read` provides the class,
+`read`, the `reads`/`readMaybe` family and the `ReadPrec` precedence parser,
+`Lexeme(..)` and `lexP` included, but not `expectP` or a character-level
+`Text.ParserCombinators.ReadP`. A few names are missing from the ends of
+otherwise complete modules: `Control.Applicative`'s `ZipList`,
+`System.IO.Unsafe`'s `unsafeInterleaveIO`, `MonadFix` for lists, `NonEmpty` and
+`(->) r`, and `ArrowLoop` beyond `(->)`. The
+[differences page](differences-to-haskell.md) covers the language reason.
 
 ## Finding your way around
 
