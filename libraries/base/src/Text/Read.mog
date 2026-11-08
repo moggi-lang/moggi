@@ -2,35 +2,79 @@
 -- | Converting strings to values: the 'Read' class and the functions around it.
 --
 -- The class methods are 'readsPrec' and 'readList', and 'reads', 'read',
--- 'readParen' and 'lex' are the functions written over them. The
--- precedence-parameterised parser monad some libraries add beside them is not
--- part of this one.
+-- 'readParen' and 'lex' are the functions written over them. 'ReadPrec' is the
+-- parser those are written from: it carries the precedence a signature asks
+-- for, so a parser can be composed instead of threaded through by hand, and
+-- 'readPrec' is the method an instance writes when the parser is the easier
+-- form.
 module Text.Read
-  ( Read(..)
+  (
+    -- * The 'Read' class
+    Read(..)
   , ReadS
+
+    -- * Operations
   , reads
+  , read
   , readParen
   , lex
+
+    -- * New parsing functions
+  , module Text.ParserCombinators.ReadPrec
+  , Lexeme(..)
+  , lexP
+  , parens
   , readListDefault
+  , readListPrecDefault
   , readEither
   , readMaybe
   ) where
 
+import Control.Applicative
+import Control.Monad
+import Control.Monad.Fail
 import Data.Bool
 import Data.Char
+import Data.Double (Double, rationalToDouble)
 import Data.Either (Either(Left, Right))
 import Data.Functor.Const (Const(Const))
 import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.Functor.Identity (Identity(..))
+import Data.Int (Int8, Int16, Int32, Int64)
+import Data.Integer (Integer, integerAdd, integerFromInt, integerMul)
 import Data.Tuple (Solo(MkSolo))
+import Data.Word (Word, Word8, Word16, Word32, Word64)
 import Data.Eq
 import Data.Maybe (Maybe(Nothing, Just))
 import Data.Num
 import Data.Ord
-import Data.String (ReadS, isPrefixOf, lexLitChar, pack, readLitChar, singleton, unpack)
+import Numeric.Natural (Natural)
+import Data.Char (lexLitChar, readLitChar)
+import Data.String (isPrefixOf, pack, singleton, unpack)
+import Text.Show
+import Text.ParserCombinators.ReadPrec
 import Moggi.Err
-import Moggi.Internal.Base
+import Moggi.Internal.Base hiding (take, drop, unpack)
 import Moggi.Internal.Prim
+
+
+-- | A parse of @a@ from the front of a string: the value and the rest.
+type ReadS a = String -> [(a, String)]
+
+-- | The parser at precedence zero, in parentheses when the input has them.
+parens :: ReadPrec a -> ReadPrec a
+parens p = readS_to_Prec (\_ s -> readParen True (readPrec_to_S (reset p) 0) s)
+
+-- Keep the parses that are followed by the closing parenthesis.
+parenthesised :: ReadS a -> ReadS a
+parenthesised g s = case lex s of
+  ("(", r) : _ -> closeParses (g r)
+  _ -> []
+
+mapParses :: (a -> b) -> [(a, String)] -> [(b, String)]
+mapParses f pairs = case pairs of
+  [] -> []
+  (x, rest) : more -> (f x, rest) : mapParses f more
 
 -- | Parsing a value out of the front of a string.
 --
@@ -40,7 +84,7 @@ import Moggi.Internal.Prim
 -- is what the instances written before 'readsPrec' existed do, and the default
 -- below keeps them working.
 class Read a where
-  {-# MINIMAL readsPrec | read #-}
+  {-# MINIMAL readsPrec | readPrec | read #-}
 
   -- | Parse a value at the given precedence, with the input that follows it.
   readsPrec :: Int -> ReadS a
@@ -52,13 +96,118 @@ class Read a where
   -- | Parse a value out of a string, failing unless the string is one.
   read :: String -> a
 
+  -- | Parse a value at the given precedence, as a composed parser.
+  readPrec :: ReadPrec a
+
+  -- | Parse a list of values, as a composed parser.
+  readListPrec :: ReadPrec [a]
+
   readsPrec _ s = [(read s, "")]
 
   readList s = readListDefault s
 
+  readPrec = readS_to_Prec readsPrec
+
+  readListPrec = readListPrecDefault
+
   read s = case readsPrec 0 s of
     [] -> error "Prelude.read: no parse"
     (x, _) : _ -> x
+
+-- | What 'readListPrec' does by default: the @[a,b]@ form the 'Show' instance
+-- for lists renders, with each element read at precedence zero.
+readListPrecDefault :: Read a => ReadPrec [a]
+readListPrecDefault = readS_to_Prec (\_ -> readListDefault)
+
+-- | A unary constructor: its name, then one field at precedence eleven.
+readUnaryWith :: ReadPrec a -> String -> (a -> t) -> ReadPrec t
+readUnaryWith rp name cons = readS_to_Prec (\_ s -> unaryNamed rp name cons s)
+
+unaryNamed :: ReadPrec a -> String -> (a -> t) -> String -> [(t, String)]
+unaryNamed rp name cons s = case lex s of
+  (tok, rest) : _ -> case tok == name of
+    True -> mapParses cons (readPrec_to_S (prec 11 rp) 11 rest)
+    False -> []
+  [] -> []
+
+-- | A binary constructor: its name, then two fields at precedence eleven.
+readBinaryWith :: ReadPrec a -> ReadPrec b -> String -> (a -> b -> t) -> ReadPrec t
+readBinaryWith rp rq name cons = readS_to_Prec (\_ s -> binaryNamed rp rq name cons s)
+
+binaryNamed :: ReadPrec a -> ReadPrec b -> String -> (a -> b -> t) -> String -> [(t, String)]
+binaryNamed rp rq name cons s = case lex s of
+  (tok, rest) : _ -> case tok == name of
+    True -> readThen (readPrec_to_S (prec 11 rp) 11) (binarySecond rq cons) rest
+    False -> []
+  [] -> []
+
+binarySecond :: ReadPrec b -> (a -> b -> t) -> a -> String -> [(t, String)]
+binarySecond rq cons x t = mapParses (cons x) (readPrec_to_S (prec 11 rq) 11 t)
+
+-- | A number literal, as the lexer reads it: the token walk hands digits
+-- over as one token, so this is a decimal integer.
+data Number = MkNumber Integer
+  deriving (Eq, Show)
+
+-- | A lexeme: a character or string literal, punctuation, an identifier, a
+-- symbol, a number, or the end of the input.
+data Lexeme
+  = Char Char
+  | String String
+  | Punc String
+  | Ident String
+  | Symbol String
+  | Number Number
+  | EOF
+  deriving (Eq, Show)
+
+-- | The next lexeme of the input, as a parser.
+--
+-- It answers the same tokenization 'lex' does, one constructor per kind of
+-- token, and 'EOF' at the end, so a parser built on it sees a stream.
+lexP :: ReadPrec Lexeme
+lexP = readS_to_Prec (\_ -> lexemeParses)
+
+lexemeParses :: ReadS Lexeme
+lexemeParses s = case lex s of
+  [] -> [(EOF, "")]
+  (tok, rest) : _ -> [(lexemeOf tok, rest)]
+
+lexemeOf :: String -> Lexeme
+lexemeOf tok = case unpack tok of
+  [] -> EOF
+  c : _ -> case isIdentifierStart c of
+    True -> Ident tok
+    False -> case isDigit c of
+      True -> numberLexeme tok
+      False -> case c == '\'' of
+        True -> charLexeme tok
+        False -> case c == '"' of
+          True -> stringLexeme tok
+          False -> case isPunctuationChar c of
+            True -> Punc tok
+            False -> Symbol tok
+
+numberLexeme :: String -> Lexeme
+numberLexeme tok = case digitsToken tok of
+  Nothing -> Symbol tok
+  Just n -> Number (MkNumber n)
+
+charLexeme :: String -> Lexeme
+charLexeme tok = case readLitChar (pack (dropChars 1 (unpack tok))) of
+  (c, _) : _ -> Char c
+  [] -> Symbol tok
+
+stringLexeme :: String -> Lexeme
+stringLexeme tok = case stringBody (pack (dropChars 1 (unpack tok))) of
+  Just text -> String text
+  Nothing -> Symbol tok
+
+-- | Punctuation: the characters that are lexemes of their own.
+isPunctuationChar :: Char -> Bool
+isPunctuationChar c =
+  c == '(' || c == ')' || c == '[' || c == ']' || c == ',' || c == ';'
+  || c == '`' || c == '{' || c == '}'
 
 -- | 'readsPrec' at precedence zero.
 reads :: Read a => ReadS a
@@ -242,6 +391,180 @@ foldDigits :: [Char] -> Int -> Int
 foldDigits cs acc = case cs of
   [] -> acc
   d : rest -> foldDigits rest (acc * 10 + digitToInt d)
+
+-- | Reads a decimal integer of any size, as 'Text.Show.Show' writes it: an
+-- optional minus sign, then digits.
+instance Read Integer where
+  readsPrec _ = readIntegerAs
+
+-- | Reads a decimal natural number. A negative literal underflows through
+-- 'fromInteger', which is where the type itself refuses it.
+instance Read Natural where
+  readsPrec _ = readIntegerAs
+
+-- | Reads a decimal 'Word'. The digits are folded into an 'Integer' and
+-- converted with 'fromInteger', so a literal outside the width keeps its low
+-- bits exactly as the 'Num' instance does.
+instance Read Word where
+  readsPrec _ = readIntegerAs
+
+instance Read Word8 where
+  readsPrec _ = readIntegerAs
+
+instance Read Word16 where
+  readsPrec _ = readIntegerAs
+
+instance Read Word32 where
+  readsPrec _ = readIntegerAs
+
+instance Read Word64 where
+  readsPrec _ = readIntegerAs
+
+instance Read Int8 where
+  readsPrec _ = readIntegerAs
+
+instance Read Int16 where
+  readsPrec _ = readIntegerAs
+
+instance Read Int32 where
+  readsPrec _ = readIntegerAs
+
+instance Read Int64 where
+  readsPrec _ = readIntegerAs
+
+-- | Reads a decimal floating-point literal: an optional minus sign, digits with
+-- an optional fraction, and an optional exponent (@1.5e-3@). The written
+-- decimal stays exact until the conversion to 'Double', so the result is the
+-- nearest representable value.
+instance Read Double where
+  readsPrec _ s = doubleParses (skipSpaces (unpack s))
+
+-- | Reads what 'Text.Show.Show' writes: @LT@, @EQ@ and @GT@.
+instance Read Ordering where
+  readsPrec d s = readParen (d > 10) orderingParses s
+
+orderingParses :: ReadS Ordering
+orderingParses s = case lex s of
+  ("LT", r) : _ -> [(LT, r)]
+  ("EQ", r) : _ -> [(EQ, r)]
+  ("GT", r) : _ -> [(GT, r)]
+  _ -> []
+
+-- | Reads what 'Text.Show.Show' writes: @()@.
+instance Read () where
+  readsPrec d s = readParen (d > 10) unitParses s
+
+unitParses :: ReadS ()
+unitParses s = case lex s of
+  ("(", r) : _ -> case lex r of
+    (")", rest) : _ -> [((), rest)]
+    _ -> []
+  _ -> []
+
+-- The digits of a decimal literal are folded into an 'Integer' and handed to
+-- 'fromInteger', which is where a narrower type truncates and a natural number
+-- refuses a negative one — the same conversion 'base' reads numbers through.
+readIntegerAs :: Num a => ReadS a
+readIntegerAs s = case signedInteger s of
+  Nothing -> []
+  Just (n, rest) -> [(fromInteger n, rest)]
+
+signedInteger :: String -> Maybe (Integer, String)
+signedInteger s = case lex s of
+  ("-", r) : _ -> case lex r of
+    (tok, rest) : _ -> case digitsToken tok of
+      Nothing -> Nothing
+      Just n -> Just (negate n, rest)
+    [] -> Nothing
+  (tok, rest) : _ -> case digitsToken tok of
+    Nothing -> Nothing
+    Just n -> Just (n, rest)
+  [] -> Nothing
+
+digitsToken :: String -> Maybe Integer
+digitsToken tok = case unpack tok of
+  [] -> Nothing
+  ds -> case allDigits ds of
+    True -> Just (foldDigitsInteger ds (integerFromInt 0))
+    False -> Nothing
+
+foldDigitsInteger :: [Char] -> Integer -> Integer
+foldDigitsInteger cs acc = case cs of
+  [] -> acc
+  d : rest ->
+    foldDigitsInteger rest (integerAdd (integerMul acc (integerFromInt 10)) (integerFromInt (digitToInt d)))
+
+doubleParses :: [Char] -> [(Double, String)]
+doubleParses cs = case signOf cs of
+  (neg, rest) -> case spanDigits rest of
+    ([], _) -> []
+    (whole, afterWhole) -> case afterWhole of
+      '.' : afterDot -> case spanDigits afterDot of
+        (frac, afterFrac) -> scaledDouble neg (appendLists whole frac) (countChars frac) afterFrac
+      _ -> scaledDouble neg whole 0 afterWhole
+
+signOf :: [Char] -> (Bool, [Char])
+signOf cs = case cs of
+  '-' : rest -> (True, rest)
+  _ -> (False, cs)
+
+spanDigits :: [Char] -> ([Char], [Char])
+spanDigits cs = (takeWhileChars isDigit cs, dropWhileChars isDigit cs)
+
+countChars :: [Char] -> Int
+countChars cs = case cs of
+  [] -> 0
+  _ : rest -> 1 + countChars rest
+
+scaledDouble :: Bool -> [Char] -> Int -> [Char] -> [(Double, String)]
+scaledDouble neg digits frac cs = case exponentOf cs of
+  Nothing -> []
+  Just (e, rest) ->
+    [(applySign neg (decimalValue (foldDigitsInteger digits (integerFromInt 0)) frac e), pack rest)]
+
+applySign :: Bool -> Double -> Double
+applySign neg x = case neg of
+  True -> negate x
+  False -> x
+
+-- The written value is @mant * 10^(e - frac)@, built as an exact rational so
+-- that a single rounding produces the 'Double'.
+decimalValue :: Integer -> Int -> Int -> Double
+decimalValue mant frac e = case e >= frac of
+  True -> rationalToDouble (integerMul mant (pow10 (e - frac))) (integerFromInt 1)
+  False -> rationalToDouble mant (pow10 (frac - e))
+
+pow10 :: Int -> Integer
+pow10 n = case n <= 0 of
+  True -> integerFromInt 1
+  False -> integerMul (integerFromInt 10) (pow10 (n - 1))
+
+exponentOf :: [Char] -> Maybe (Int, [Char])
+exponentOf cs = case cs of
+  'e' : rest -> signedExponent rest
+  'E' : rest -> signedExponent rest
+  _ -> Just (0, cs)
+
+signedExponent :: [Char] -> Maybe (Int, [Char])
+signedExponent cs = case cs of
+  '-' : rest -> negatedExponent rest
+  '+' : rest -> positiveExponent rest
+  _ -> positiveExponent cs
+
+negatedExponent :: [Char] -> Maybe (Int, [Char])
+negatedExponent cs = case positiveExponent cs of
+  Nothing -> Nothing
+  Just (e, rest) -> Just (negate e, rest)
+
+positiveExponent :: [Char] -> Maybe (Int, [Char])
+positiveExponent cs = case spanDigits cs of
+  ([], _) -> Nothing
+  (ds, rest) -> Just (foldExponent ds 0, rest)
+
+foldExponent :: [Char] -> Int -> Int
+foldExponent cs acc = case cs of
+  [] -> acc
+  d : rest -> foldExponent rest (acc * 10 + digitToInt d)
 
 -- | Reads a list, which is the rendering the 'Show' instance for lists
 -- produces: the elements between brackets, separated by commas.

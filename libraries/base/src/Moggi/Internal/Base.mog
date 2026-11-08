@@ -1,4 +1,9 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# BACKEND
+  php = Moggi.Internal.Base.PHP
+  jvm = Moggi.Internal.Base.JVM
+  dotnet = Moggi.Internal.Base.DotNet
+#-}
 -- | The bottom of the library: the readable names of the machine's types.
 --
 -- 'Moggi.Internal.Prim' owns the MagicHash layer — @Int#@, @String#@, @List#@
@@ -24,6 +29,10 @@
 -- * every module that writes @[a]@ names 'List', and those modules
 --   (@Text.Show@, @Data.Enum@, @Data.Monad@, @Data.Foldable@) sit below
 --   @Data.List@.
+-- * @Data.Char@ reads a character out of a string literal: that walk needs the
+--   scalars of a string and a slice of one, so the backend's 'unpack', 'take'
+--   and 'drop' live here too — @Data.Char@ sits below @Data.String@, which is
+--   where the public string API is.
 --
 -- So the names live at the one place no library module is below, and the public
 -- modules re-export them: @Data.Int@ and @Data.Word@ keep their instances and
@@ -57,6 +66,9 @@ module Moggi.Internal.Base
   , Char
   , String
   , List
+  , unpack
+  , take
+  , drop
   , NonEmpty(..)
   , Bool(..)
   , Ordering(..)
@@ -125,6 +137,21 @@ type String = String#
 
 -- | The list type, whose syntax is `[a]`. Its operations are `Data.List`'s.
 type List = List#
+
+-- | The scalars of a string, left to right.
+unpack :: String -> [Char]
+
+-- | The prefix of @s@ holding its first @n@ scalars.
+--
+-- A count past the end gives the whole string; a non-positive count gives
+-- @""@.
+take :: Int -> String -> String
+
+-- | @s@ without its first @n@ scalars.
+--
+-- A count at or past the end gives @""@; a non-positive count leaves @s@
+-- unchanged.
+drop :: Int -> String -> String
 
 infix 4 ==, /=
 infix 4 <, <=, >, >=

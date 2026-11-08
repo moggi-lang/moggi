@@ -1,0 +1,102 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The precedence layer of the 'Read' class: a parser that carries the
+-- precedence context a signature asks for, so a parser can be composed instead
+-- of threaded through by hand.
+module Text.ParserCombinators.ReadPrec
+  ( ReadPrec
+  , readPrec_to_S
+  , readS_to_Prec
+  , pfail
+  , (<++>)
+  , reset
+  , prec
+  , step
+  , minPrec
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Control.Monad.Fail
+import Data.Functor
+import Data.Num
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+
+-- | A parse of @a@ from the front of a string: the value and the rest.
+type ReadS a = String -> [(a, String)]
+
+-- | A parser for a value at a precedence context: the read side of the
+-- precedence argument 'Text.Show.showsPrec' takes. A 'Text.Read.Read' instance
+-- may state its parser with @readPrec@ instead of a precedence function.
+newtype ReadPrec a = ReadPrec (Int -> ReadS a)
+
+-- | Run a precedence parser at the given context.
+readPrec_to_S :: ReadPrec a -> Int -> ReadS a
+readPrec_to_S p d = case p of
+  ReadPrec f -> f d
+
+-- | The parser a precedence function is: it reads the context it is given.
+readS_to_Prec :: (Int -> ReadS a) -> ReadPrec a
+readS_to_Prec f = ReadPrec f
+
+instance Functor ReadPrec where
+  map f p = ReadPrec (\d s -> mapParses f (readPrec_to_S p d s))
+
+instance Applicative ReadPrec where
+  pure x = ReadPrec (\_ s -> [(x, s)])
+  (<*>) pf px = ReadPrec (\d s -> readThen (readPrec_to_S pf d) (\f t -> readPrec_to_S px d t) s)
+
+instance Monad ReadPrec where
+  (>>=) p k = ReadPrec (\d s -> readThen (readPrec_to_S p d) (\x t -> readPrec_to_S (k x) d t) s)
+
+instance Alternative ReadPrec where
+  empty = pfail
+  (<|>) p q = ReadPrec (\d s -> appendLists (readPrec_to_S p d s) (readPrec_to_S q d s))
+
+instance MonadPlus ReadPrec where
+  mzero = pfail
+  mplus p q = ReadPrec (\d s -> appendLists (readPrec_to_S p d s) (readPrec_to_S q d s))
+
+instance MonadFail ReadPrec where
+  fail _ = pfail
+
+-- | The parser that answers nothing.
+pfail :: ReadPrec a
+pfail = ReadPrec (\_ _ -> [])
+
+-- | The left parser, and the right one only when the left answers nothing.
+(<++>) :: ReadPrec a -> ReadPrec a -> ReadPrec a
+p <++> q = ReadPrec (\d s -> case readPrec_to_S p d s of
+  [] -> readPrec_to_S q d s
+  xs -> xs)
+
+-- | Run the parser at precedence zero.
+reset :: ReadPrec a -> ReadPrec a
+reset p = ReadPrec (\_ s -> readPrec_to_S p 0 s)
+
+-- | Run the parser at the given context.
+prec :: Int -> ReadPrec a -> ReadPrec a
+prec n p = ReadPrec (\_ s -> readPrec_to_S p n s)
+
+-- | Run the parser one context deeper: the argument of an application.
+step :: ReadPrec a -> ReadPrec a
+step p = ReadPrec (\d s -> readPrec_to_S p (d + 1) s)
+
+-- | The context the parser was given.
+minPrec :: ReadPrec Int
+minPrec = ReadPrec (\d s -> [(d, s)])
+
+mapParses :: (a -> b) -> [(a, String)] -> [(b, String)]
+mapParses f pairs = case pairs of
+  [] -> []
+  (x, rest) : more -> (f x, rest) : mapParses f more
+
+appendLists :: [a] -> [a] -> [a]
+appendLists xs ys = case xs of
+  [] -> ys
+  x : rest -> x : appendLists rest ys
+
+readThen :: (String -> [(a, String)]) -> (a -> String -> [(t, String)]) -> String -> [(t, String)]
+readThen p k s = case p s of
+  [] -> []
+  (x, rest) : _ -> k x rest

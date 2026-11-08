@@ -1,0 +1,38 @@
+4607182418800017408
+4602678819172646912
+4611686018427387904
+13830554455654793216
+9223372036854775808
+1
+9218868437227405311
+9218868437227405312
+18442240474082181120
+1.0 bits: True
+0.5 bits: True
+2.0 bits: True
+-1.0 bits are unsigned: True
+-0.0 bits: True
+-0.0 differs from 0.0: True
+min subnormal bits: True
+max finite bits: True
+inf bits: True
+-inf bits: True
+0.0/0.0 is nan: True
+1.0 round trip: True
+1.5 round trip: True
+2.5 round trip: True
+0.0 round trip: True
+-0.0 round trip: True
+inf round trip: True
+-inf round trip: True
+nan round trip: True
+min subnormal round trip: True
+max finite round trip: True
+pi round trip: True
+pattern 1 is min subnormal: True
+pattern 2 is twice it: True
+sign bit alone is -0.0: True
+max finite pattern round trip: True
+canonical nan pattern round trip: True
+all ones is nan: True
+all ones keeps bits: True

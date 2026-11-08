@@ -1,6 +1,79 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 module Data.Double
-  ( Double(..)
+  (-- *  Classes
+    Floating(..),
+    RealFloat(..),
+    -- *  'Double'
+    Double(..),
+    -- **  Conversion
+    double2Int,
+    int2Double,
+    word2Double,
+    rationalToDouble,
+    castWord64ToDouble,
+    castDoubleToWord64,
+    -- **  Operations
+    floorDouble,
+    ceilingDouble,
+    truncateDouble,
+    roundDouble,
+    properFractionDouble,
+    -- **  Predicate
+    isDoubleDenormalized,
+    isDoubleFinite,
+    isDoubleInfinite,
+    isDoubleNaN,
+    isDoubleNegativeZero,
+    -- **  Comparison
+    gtDouble,
+    geDouble,
+    leDouble,
+    ltDouble,
+    -- **  Arithmetic
+    plusDouble,
+    minusDouble,
+    timesDouble,
+    divideDouble,
+    negateDouble,
+    expDouble,
+    expm1Double,
+    logDouble,
+    log1pDouble,
+    sqrtDouble,
+    fabsDouble,
+    sinDouble,
+    cosDouble,
+    tanDouble,
+    asinDouble,
+    acosDouble,
+    atanDouble,
+    sinhDouble,
+    coshDouble,
+    tanhDouble,
+    asinhDouble,
+    acoshDouble,
+    atanhDouble,
+    -- *  Formatting
+    FFFormat(..),
+    formatRealFloat,
+    formatRealFloatAlt,
+    showSignedFloat,
+    -- *  Operations
+    log1mexpOrd,
+    roundTo,
+    floatToDigits,
+    integerToBinaryFloat',
+    -- *  Monomorphic equality operators
+    eqDouble,
+    -- *  Internal
+    clamp,
+    expt,
+    expts,
+    expts10,
+    maxExpt,
+    maxExpt10,
+    minExpt,
+    powerDouble
   ) where
 
 import Data.Bool
@@ -12,11 +85,12 @@ import Data.Maybe
 import Data.Ord
 import Data.String qualified as S
 import Data.Tuple
+import Data.Word (Word, Word64)
 import Data.Num
 import Data.Integer
 import Data.Real
 import Moggi.Err
-import Moggi.Internal.Base
+import Moggi.Internal.Base hiding (take, drop, unpack)
 import Text.Show
 import Moggi.Internal.Prim
 import Data.Functor (Functor(map))
@@ -94,7 +168,8 @@ showSignedChars x = case doubleLessThan x 0.0 of
     True -> '-' : formatRealFloatChars FFGeneric Nothing (doubleNegate# x)
     False -> formatRealFloatChars FFGeneric Nothing x
 
--- The format kinds. Not exported.
+-- | The notation 'formatRealFloatChars' prints in: exponent, fixed point, or
+-- whichever of the two is shorter.
 data FFFormat = FFExponent | FFFixed | FFGeneric
 
 formatRealFloatChars :: FFFormat -> Maybe Int -> Double -> [Char]
@@ -325,6 +400,451 @@ instance Floating Double where
   atan x = doubleAtan# x
   sinh x = doubleSinh# x
   cosh x = doubleCosh# x
-  asinh x = log (x + sqrt (x * x + 1.0))
-  acosh x = log (x + sqrt (x * x - 1.0))
-  atanh x = 0.5 * log ((1.0 + x) / (1.0 - x))
+  asinh x = case doubleLessThan (doubleAbs# x) 1.0e-8 of
+    True -> x
+    False -> case doubleLessThan (doubleAbs# x) 1.0e150 of
+      True -> log (x + sqrt (x * x + 1.0))
+      False -> case doubleLessThan x 0.0 of
+        True -> negate (log (doubleNegate# x) + 0.6931471805599453)
+        False -> log x + 0.6931471805599453
+  acosh x = case doubleLessThan x 1.0e150 of
+    True -> log (x + sqrt (x * x - 1.0))
+    False -> log x + 0.6931471805599453
+  atanh x = case doubleLessThan (doubleAbs# x) 1.0e-8 of
+    True -> x
+    False -> 0.5 * log ((1.0 + x) / (1.0 - x))
+  log1p x = case doubleLessThan (doubleAbs# x) 1.0e-8 of
+    True -> x
+    False -> doubleLog# (doubleAdd# 1.0 x)
+  expm1 x = case doubleLessThan (doubleAbs# x) 1.0e-8 of
+    True -> x
+    False -> doubleSub# (doubleExp# x) 1.0
+  tanh x = case doubleLessThan 20.0 (doubleAbs# x) of
+    True -> case doubleLessThan x 0.0 of
+      True -> -1.0
+      False -> 1.0
+    False -> doubleDiv# (doubleSinh# x) (doubleCosh# x)
+
+-- | The 'Double' nearest to @num \/ den@: the quotient of the two integers as
+-- a floating-point value. The quotient is formed at full width and then scaled
+-- by a power of two, so neither very large denominators nor subnormal results
+-- overflow on the way.
+rationalToDouble :: Integer -> Integer -> Double
+rationalToDouble num den = case den == integerFromInt 0 of
+  True -> case num == integerFromInt 0 of
+    True -> doubleDiv# 0.0 0.0
+    False -> case num > integerFromInt 0 of
+      True -> doubleDiv# 1.0 0.0
+      False -> doubleDiv# (-1.0) 0.0
+  False -> case num == integerFromInt 0 of
+    True -> 0.0
+    False -> case sameSign num den of
+      True -> ratioMagnitude (absInteger num) (absInteger den)
+      False -> negate (ratioMagnitude (absInteger num) (absInteger den))
+
+sameSign :: Integer -> Integer -> Bool
+sameSign a b = case a > integerFromInt 0 of
+  True -> b > integerFromInt 0
+  False -> b < integerFromInt 0
+
+absInteger :: Integer -> Integer
+absInteger n = case n > integerFromInt 0 of
+  True -> n
+  False -> negate n
+
+ratioMagnitude :: Integer -> Integer -> Double
+ratioMagnitude a b = scaleByPowerOfTwo (doubleFromInteger# q) (negate k)
+  where
+    k = 53 + bitLength b - bitLength a
+    scaled = case k >= 0 of
+      True -> a * (integerFromInt 2 ^ k)
+      False -> a
+    divisor = case k >= 0 of
+      True -> b
+      False -> b * (integerFromInt 2 ^ (negate k))
+    q = roundQuotient scaled divisor
+
+bitLength :: Integer -> Int
+bitLength n = case n > integerFromInt 0 of
+  True -> bitLengthGo n 0
+  False -> 0
+
+bitLengthGo :: Integer -> Int -> Int
+bitLengthGo n acc = case n == integerFromInt 0 of
+  True -> acc
+  False -> bitLengthGo (quot n 2) (acc + 1)
+
+scaleByPowerOfTwo :: Double -> Int -> Double
+scaleByPowerOfTwo x e = case e >= 0 of
+  True -> scaleUp x e
+  False -> scaleDown x (negate e)
+
+scaleUp :: Double -> Int -> Double
+scaleUp x e = case e == 0 of
+  True -> x
+  False -> scaleUp (doubleMul# x 2.0) (e - 1)
+
+scaleDown :: Double -> Int -> Double
+scaleDown x e = case e == 0 of
+  True -> x
+  False -> scaleDown (doubleDiv# x 2.0) (e - 1)
+
+castWord64ToDouble :: Word64 -> Double
+castWord64ToDouble w = castWord64ToDouble# w
+
+castDoubleToWord64 :: Double -> Word64
+castDoubleToWord64 x = castDoubleToWord64# x
+
+isDoubleNaN :: Double -> Bool
+isDoubleNaN x = isNaNDouble x
+
+isDoubleInfinite :: Double -> Bool
+isDoubleInfinite x = isInfiniteDouble x
+
+isDoubleNegativeZero :: Double -> Bool
+isDoubleNegativeZero x = isNegativeZeroDouble x
+
+-- ---------------------------------------------------------------------------
+-- Conversions
+-- ---------------------------------------------------------------------------
+
+double2Int :: Double -> Int
+double2Int x = doubleToInt# x
+
+int2Double :: Int -> Double
+int2Double n = doubleFromInteger# (intToInteger# n)
+
+word2Double :: Word -> Double
+word2Double w = doubleFromInteger# (toInteger w)
+
+-- ---------------------------------------------------------------------------
+-- Rounding to integral values
+-- ---------------------------------------------------------------------------
+
+truncateToInteger :: Double -> Integer
+truncateToInteger x = case isNaNDouble x of
+  True -> error "truncate: NaN"
+  False -> case isInfiniteDouble x of
+    True -> error "truncate: Infinity"
+    False -> case doubleLessThan x 0.0 of
+      True -> negate (magnitudeWhole (doubleNegate# x))
+      False -> magnitudeWhole x
+
+magnitudeWhole :: Double -> Integer
+magnitudeWhole x = case doubleEq# x 0.0 of
+  True -> integerFromInt 0
+  False -> wholeOfDecoded (decodeDouble x)
+
+wholeOfDecoded :: (Integer, Int) -> Integer
+wholeOfDecoded decoded = case snd decoded >= 0 of
+  True -> fst decoded * (integerFromInt 2 ^ snd decoded)
+  False -> integerQuot (fst decoded) (integerFromInt 2 ^ intNegate# (snd decoded))
+
+truncateDouble :: Integral a => Double -> a
+truncateDouble x = fromInteger (truncateToInteger x)
+
+floorDouble :: Integral a => Double -> a
+floorDouble x = case doubleLessThan x (doubleFromInteger# w) of
+  True -> fromInteger (w - 1)
+  False -> fromInteger w
+  where
+    w = truncateToInteger x
+
+ceilingDouble :: Integral a => Double -> a
+ceilingDouble x = case doubleLessThan (doubleFromInteger# w) x of
+  True -> fromInteger (w + 1)
+  False -> fromInteger w
+  where
+    w = truncateToInteger x
+
+roundDouble :: Integral a => Double -> a
+roundDouble x = case doubleLessThan x 0.0 of
+  True -> fromInteger (negate (roundMagnitude (doubleNegate# x)))
+  False -> fromInteger (roundMagnitude x)
+
+roundMagnitude :: Double -> Integer
+roundMagnitude x = case doubleLessThan frac 0.5 of
+  True -> w
+  False -> case doubleLessThan 0.5 frac of
+    True -> w + 1
+    False -> case evenInteger w of
+      True -> w
+      False -> w + 1
+  where
+    w = magnitudeWhole x
+    frac = x - doubleFromInteger# w
+
+evenInteger :: Integer -> Bool
+evenInteger n = rem n (integerFromInt 2) == integerFromInt 0
+
+properFractionDouble :: Integral a => Double -> (a, Double)
+properFractionDouble x = (fromInteger w, x - doubleFromInteger# w)
+  where
+    w = truncateToInteger x
+
+-- ---------------------------------------------------------------------------
+-- Predicates
+-- ---------------------------------------------------------------------------
+
+isDoubleFinite :: Double -> Bool
+isDoubleFinite x = case isNaNDouble x of
+  True -> False
+  False -> case isInfiniteDouble x of
+    True -> False
+    False -> True
+
+isDoubleDenormalized :: Double -> Bool
+isDoubleDenormalized x = case doubleEq# x 0.0 of
+  True -> False
+  False -> doubleLessThan (doubleAbs# x) 2.2250738585072014e-308
+
+-- ---------------------------------------------------------------------------
+-- Comparison
+-- ---------------------------------------------------------------------------
+
+gtDouble :: Double -> Double -> Bool
+gtDouble a b = case doubleCompare# a b of
+  GT -> True
+  _ -> False
+
+geDouble :: Double -> Double -> Bool
+geDouble a b = case doubleCompare# a b of
+  GT -> True
+  EQ -> True
+  _ -> False
+
+leDouble :: Double -> Double -> Bool
+leDouble a b = case doubleCompare# a b of
+  LT -> True
+  EQ -> True
+  _ -> False
+
+ltDouble :: Double -> Double -> Bool
+ltDouble a b = case doubleCompare# a b of
+  LT -> True
+  _ -> False
+
+-- ---------------------------------------------------------------------------
+-- Arithmetic
+-- ---------------------------------------------------------------------------
+
+plusDouble :: Double -> Double -> Double
+plusDouble a b = doubleAdd# a b
+
+minusDouble :: Double -> Double -> Double
+minusDouble a b = doubleSub# a b
+
+timesDouble :: Double -> Double -> Double
+timesDouble a b = doubleMul# a b
+
+divideDouble :: Double -> Double -> Double
+divideDouble a b = doubleDiv# a b
+
+negateDouble :: Double -> Double
+negateDouble x = doubleNegate# x
+
+expDouble :: Double -> Double
+expDouble x = doubleExp# x
+
+expm1Double :: Double -> Double
+expm1Double x = doubleSub# (doubleExp# x) 1.0
+
+logDouble :: Double -> Double
+logDouble x = doubleLog# x
+
+log1pDouble :: Double -> Double
+log1pDouble x = doubleLog# (doubleAdd# x 1.0)
+
+sqrtDouble :: Double -> Double
+sqrtDouble x = doubleSqrt# x
+
+fabsDouble :: Double -> Double
+fabsDouble x = doubleAbs# x
+
+sinDouble :: Double -> Double
+sinDouble x = doubleSin# x
+
+cosDouble :: Double -> Double
+cosDouble x = doubleCos# x
+
+tanDouble :: Double -> Double
+tanDouble x = doubleDiv# (doubleSin# x) (doubleCos# x)
+
+asinDouble :: Double -> Double
+asinDouble x = doubleAsin# x
+
+acosDouble :: Double -> Double
+acosDouble x = doubleAcos# x
+
+atanDouble :: Double -> Double
+atanDouble x = doubleAtan# x
+
+sinhDouble :: Double -> Double
+sinhDouble x = doubleSinh# x
+
+coshDouble :: Double -> Double
+coshDouble x = doubleCosh# x
+
+tanhDouble :: Double -> Double
+tanhDouble x = doubleDiv# (doubleSinh# x) (doubleCosh# x)
+
+asinhDouble :: Double -> Double
+asinhDouble x = doubleLog# (doubleAdd# x (doubleSqrt# (doubleAdd# (doubleMul# x x) 1.0)))
+
+acoshDouble :: Double -> Double
+acoshDouble x = doubleLog# (doubleAdd# x (doubleSqrt# (doubleSub# (doubleMul# x x) 1.0)))
+
+atanhDouble :: Double -> Double
+atanhDouble x = doubleMul# 0.5 (doubleLog# (doubleDiv# (doubleAdd# 1.0 x) (doubleSub# 1.0 x)))
+
+-- ---------------------------------------------------------------------------
+-- Formatting
+-- ---------------------------------------------------------------------------
+
+formatRealFloat :: FFFormat -> Maybe Int -> Double -> String
+formatRealFloat fmt decs x = S.pack (formatRealFloatChars fmt decs x)
+
+formatRealFloatAlt :: FFFormat -> Maybe Int -> Bool -> Double -> String
+formatRealFloatAlt fmt decs alt x = case alt of
+  True -> S.pack (ensurePoint (formatRealFloatChars fmt decs x))
+  False -> S.pack (formatRealFloatChars fmt decs x)
+
+ensurePoint :: [Char] -> [Char]
+ensurePoint s = case break pointOrExponent s of
+  (_, '.' : _) -> s
+  (pre, 'e' : rest) -> pre ++ '.' : 'e' : rest
+  (pre, 'E' : rest) -> pre ++ '.' : 'E' : rest
+  _ -> s ++ ['.']
+  where
+    pointOrExponent c = case c of
+      '.' -> True
+      'e' -> True
+      'E' -> True
+      _ -> False
+
+showSignedFloat :: (Double -> ShowS) -> Int -> Double -> ShowS
+showSignedFloat showPos p x = case doubleLessThan x 0.0 of
+  True -> showParen (p > 6) (\s -> showPos (doubleNegate# x) (showChar '-' s))
+  False -> showPos x
+
+-- ---------------------------------------------------------------------------
+-- Powers of two and the numeric-literal helpers
+-- ---------------------------------------------------------------------------
+
+powerDouble :: Double -> Int -> Double
+powerDouble x n = x ^ n
+
+powerOfTwo :: Int -> Double
+powerOfTwo e = scaleByPowerOfTwo 1.0 e
+
+log1mexpOrd :: Double -> Int
+log1mexpOrd x = case doubleCompare# x (-0.6931471805599453) of
+  LT -> -1
+  EQ -> 0
+  GT -> 1
+
+clamp :: Int -> Int -> Int -> Int
+clamp lo hi x = max lo (min hi x)
+
+expt :: Integer -> Int -> Integer
+expt b e = b ^ e
+
+expts10 :: Integer -> Int -> Integer
+expts10 m e = m * (integerFromInt 10 ^ e)
+
+expts :: Int -> [(Integer, Int)]
+expts b = exptsUp b 0
+
+exptsUp :: Int -> Int -> [(Integer, Int)]
+exptsUp b e = case e > maxExpt of
+  True -> []
+  False -> (integerFromInt b ^ e, e) : exptsUp b (e + 1)
+
+maxExpt :: Int
+maxExpt = 1024
+
+maxExpt10 :: Int
+maxExpt10 = 324
+
+minExpt :: Int
+minExpt = 0 - 1074
+
+-- | @n \/ d@ rounded to the nearest integer, halves to even. The invariant is
+-- @d > 0@.
+roundQuotient :: Integer -> Integer -> Integer
+roundQuotient n d = case 2 * r > d of
+  True -> q + 1
+  False -> case 2 * r == d of
+    True -> case rem q (integerFromInt 2) == integerFromInt 0 of
+      True -> q
+      False -> q + 1
+    False -> q
+  where
+    q = quot n d
+    r = rem n d
+
+integerToBinaryFloat' :: Integer -> (Integer, Int)
+integerToBinaryFloat' n = shrinkInteger n 0
+
+shrinkInteger :: Integer -> Int -> (Integer, Int)
+shrinkInteger m e = case m >= big of
+  True -> shrinkInteger (quot m 2) (e + 1)
+  False -> case m <= negate big of
+    True -> shrinkInteger (quot m 2) (e + 1)
+    False -> (m, e)
+  where
+    big = integerFromInt 2 ^ 53
+
+eqDouble :: Double -> Double -> Bool
+eqDouble a b = doubleEq# a b
+
+floatToDigits :: Integer -> Double -> ([Int], Int)
+floatToDigits base x = case base == integerFromInt 10 of
+  True -> floatToDigitsDouble x
+  False -> binaryFloatDigits x
+
+binaryFloatDigits :: Double -> ([Int], Int)
+binaryFloatDigits x = case doubleEq# x 0.0 of
+  True -> ([0], 0)
+  False -> (integerBits (fst decoded), 53 + snd decoded)
+  where
+    decoded = decodeDouble x
+
+integerBits :: Integer -> [Int]
+integerBits n = case n == integerFromInt 0 of
+  True -> []
+  False -> integerBits (quot n 2) ++ [integerToInt (rem n 2)]
+
+-- ---------------------------------------------------------------------------
+-- RealFloat
+-- ---------------------------------------------------------------------------
+
+class Floating a => RealFloat a where
+  floatRadix :: a -> Integer
+  floatDigits :: a -> Int
+  floatRange :: a -> (Int, Int)
+  decodeFloat :: a -> (Integer, Int)
+  encodeFloat :: Integer -> Int -> a
+  exponent :: a -> Int
+  significand :: a -> a
+  scaleFloat :: Int -> a -> a
+  isNaN :: a -> Bool
+  isInfinite :: a -> Bool
+  isDenormalized :: a -> Bool
+  isNegativeZero :: a -> Bool
+  isIEEE :: a -> Bool
+
+instance RealFloat Double where
+  floatRadix _ = integerFromInt 2
+  floatDigits _ = 53
+  floatRange _ = (0 - 1021, 1024)
+  decodeFloat x = decodeDouble x
+  encodeFloat m e = doubleMul# (doubleFromInteger# m) (powerOfTwo e)
+  exponent x = 52 + snd (decodeDouble x)
+  significand x = doubleMul# x (powerOfTwo (negate (52 + snd (decodeDouble x))))
+  scaleFloat e x = doubleMul# x (powerOfTwo e)
+  isNaN x = isNaNDouble x
+  isInfinite x = isInfiniteDouble x
+  isDenormalized x = isDoubleDenormalized x
+  isNegativeZero x = isNegativeZeroDouble x
+  isIEEE _ = True

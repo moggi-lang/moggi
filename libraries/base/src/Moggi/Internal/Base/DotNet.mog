@@ -1,0 +1,101 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Moggi.Internal.Base.DotNet
+  ( unpack
+  , take
+  , drop
+  ) where
+
+import Moggi.Internal.Prim
+
+-- Ordinary BCL FFI only (no Moggi.Rt.StringOps).
+-- Width-exact signatures: BCL String/Char APIs are int32/UTF-16-char based.
+
+foreign dotnet function rawUtf16Length "System.String.get_Length" :: String -> Int32
+
+foreign dotnet function rawConvertToUtf32At "System.Char:ConvertToUtf32" :: String -> Int32 -> Int32
+
+foreign dotnet function rawCharAt "System.String.get_Chars" :: String -> Int32 -> Char
+
+foreign dotnet function rawIsHighSurrogate "System.Char:IsHighSurrogate" :: Char -> Bool
+
+foreign dotnet function rawIsLowSurrogate "System.Char:IsLowSurrogate" :: Char -> Bool
+
+foreign dotnet function rawSubstringLen "System.String.Substring" :: String -> Int32 -> Int32 -> String
+
+utf16Length s = int32ToInt# (rawUtf16Length s)
+
+substringLen s start len = rawSubstringLen s (int32FromInt# start) (int32FromInt# len)
+
+-- | UTF-16 width of the scalar starting at @i@: 2 for a surrogate pair, else 1.
+-- The pair's low half is read through the same walk, so it stays here.
+utf16WidthAt :: String -> Int -> Int
+utf16WidthAt s i =
+  let charAt j = rawCharAt s (int32FromInt# j)
+      end = utf16Length s
+  in case rawIsHighSurrogate (charAt i) of
+    False -> 1
+    True -> case intCompare# (intAdd# i 1) end of
+      LT -> case rawIsLowSurrogate (charAt (intAdd# i 1)) of
+        True -> 2
+        False -> 1
+      EQ -> 1
+      GT -> 1
+
+offsetByCodePoints :: String -> Int -> Int -> Int
+offsetByCodePoints s i n = case intCompare# n 0 of
+  EQ -> i
+  LT -> i
+  GT -> offsetByCodePointsFrom s i n (utf16Length s)
+
+-- | One self-recursive walk that stops on its own: a pair of helpers calling
+-- each other would not be a tail call, and a long count would keep one stack
+-- frame per scalar.
+offsetByCodePointsFrom :: String -> Int -> Int -> Int -> Int
+offsetByCodePointsFrom s i n end = case intCompare# i end of
+  LT -> case intCompare# n 0 of
+    GT -> offsetByCodePointsFrom s (intAdd# i (utf16WidthAt s i)) (intSub# n 1) end
+    _ -> i
+  _ -> i
+
+-- | The scalars come out right to left and are flipped at the end, so the walk
+-- is a tail call however long the string is.
+unpack :: String -> [Char]
+unpack s = unpackFrom s 0 (utf16Length s) []
+
+unpackFrom :: String -> Int -> Int -> [Char] -> [Char]
+unpackFrom s i endBound acc = case intCompare# i endBound of
+  LT -> unpackFrom s (intAdd# i (utf16WidthAt s i)) endBound (codePointAt s i : acc)
+  _ -> reverseOnto acc []
+
+codePointAt :: String -> Int -> Char
+codePointAt s i = intToChar# (int32ToInt# (rawConvertToUtf32At s (int32FromInt# i)))
+
+reverseOnto :: [a] -> [a] -> [a]
+reverseOnto xs acc = case xs of
+  [] -> acc
+  x : rest -> reverseOnto rest (x : acc)
+
+length :: String -> Int
+length s = codePointCountGo s 0 (utf16Length s) 0
+
+-- | A top-level loop rather than a closure: the scalar walk of a long string
+-- must run in constant stack, and only an entry's tail call becomes one.
+codePointCountGo :: String -> Int -> Int -> Int -> Int
+codePointCountGo s i endBound acc = case intCompare# i endBound of
+  EQ -> acc
+  GT -> acc
+  LT -> codePointCountGo s (intAdd# i (utf16WidthAt s i)) endBound (intAdd# acc 1)
+
+take :: Int -> String -> String
+take n s =
+  let end = offsetByCodePoints s 0 n
+  in substringLen s 0 end
+
+drop :: Int -> String -> String
+drop n s =
+  let len = length s
+      dropFrom start = substringLen s start (intSub# (utf16Length s) start)
+  in case intCompare# n len of
+    LT -> dropFrom (offsetByCodePoints s 0 n)
+    EQ -> ""
+    GT -> ""
