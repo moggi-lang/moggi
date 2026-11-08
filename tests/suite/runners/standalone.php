@@ -16,15 +16,25 @@ function standaloneTimeoutSeconds(): int
  * Exit 2 is "this machine cannot exercise the case" — a missing toolchain, reported as a `skip` with the
  * stderr text as its reason, so coverage a case did not exercise cannot read as coverage it did.
  *
+ * The backend being run is handed over as `--backend <name>`, so a case that covers more than one
+ * backend (".NET and JVM runtime bytes") exercises only the one that was selected instead of probing
+ * for a toolchain the run does not need. A case whose `// backends:` line excludes this backend is
+ * not run at all, so nothing here decides whether a missing toolchain makes it applicable.
+ *
  * @return array{passed: bool, message: string, skip?: string}
  */
-function runStandaloneTest(string $path): array
+function runStandaloneTest(string $path, string $backend): array
 {
     if (! \is_file($path)) {
         return ['passed' => false, 'message' => "missing standalone test {$path}"];
     }
 
-    $result = runCompiledProcess([PHP_BINARY, $path], standaloneTimeoutSeconds(), null, projectRootPath());
+    $result = runCompiledProcess(
+        [PHP_BINARY, $path, '--backend', $backend],
+        standaloneTimeoutSeconds(),
+        null,
+        projectRootPath(),
+    );
     if (($result['timedOut'] ?? false) === true) {
         return ['passed' => false, 'message' => 'standalone test timed out', 'timeout' => true];
     }
