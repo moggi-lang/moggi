@@ -1,0 +1,64 @@
+import Prelude hiding (id)
+import System.Console.GetOpt
+import System.IO
+import Text.Show
+
+data Flag
+  = Verbose
+  | Version
+  | Output String
+  | Name String
+  | Path String
+
+instance Show Flag where
+  show f = case f of
+    Verbose -> "Verbose"
+    Version -> "Version"
+    Output s -> "Output " <> show s
+    Name s -> "Name " <> show s
+    Path s -> "Path " <> show s
+
+options :: [OptDescr Flag]
+options =
+  [ Option ['v'] ["verbose"] (NoArg Verbose) "chatty output"
+  , Option ['V', '?'] ["version"] (NoArg Version) "show version"
+  , Option ['o'] ["output"] (OptArg out "FILE") "use FILE for output"
+  , Option ['n'] ["name"] (ReqArg Name "USER") "only USER's files"
+  , Option ['L'] ["libdir"] (ReqArg Path "DIR") "add DIR to the library path"
+  ]
+
+out :: Maybe String -> Flag
+out m = case m of
+  Nothing -> Output "stdout"
+  Just f -> Output f
+
+stringOption :: OptDescr String
+stringOption = Option ['s'] ["string"] (ReqArg (\x -> x) "S") "a string"
+
+mappedOption :: OptDescr Flag
+mappedOption = map Output stringOption
+
+showResult :: ([Flag], [String], [String]) -> String
+showResult result = case result of
+  (os, xs, es) -> show os <> " " <> show xs <> " " <> show es
+
+showResult4 :: ([Flag], [String], [String], [String]) -> String
+showResult4 result = case result of
+  (os, xs, us, es) -> show os <> " " <> show xs <> " " <> show us <> " " <> show es
+
+main :: IO ()
+main = do
+  putStrLn (showResult (getOpt RequireOrder options ["foo", "-v"]))
+  putStrLn (showResult (getOpt Permute options ["foo", "-v"]))
+  putStrLn (showResult (getOpt (ReturnInOrder Output) options ["foo", "-v"]))
+  putStrLn (showResult (getOpt Permute options ["--", "-v", "x"]))
+  putStrLn (showResult (getOpt Permute options ["-?o", "--name", "bar", "--na=baz"]))
+  putStrLn (showResult (getOpt Permute options ["-o", "f", "--output=g", "-o"]))
+  putStrLn (showResult (getOpt Permute options ["-vL", "lib", "-n"]))
+  putStrLn (showResult4 (getOpt' Permute options ["-z", "--wat", "keep"]))
+  putStrLn (showResult (getOpt Permute options ["-v", "-v"]))
+  putStrLn (show (getOpt' Permute options ["--ver", "x"] == ([], ["x"], ["--ver"], [])))
+  putStrLn (show (getOpt' Permute options ["--verbose=yes"] == ([], [], [], [])))
+  putStrLn (show (map (+ 1) [1, 2]))
+  putStrLn (usageInfo "mapped:" [mappedOption])
+  putStrLn (usageInfo "Usage: prog [OPTION...] files..." options)

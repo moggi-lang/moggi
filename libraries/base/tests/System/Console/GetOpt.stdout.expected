@@ -1,0 +1,22 @@
+[] ["foo","-v"] []
+[Verbose] ["foo"] []
+[Output "foo",Verbose] [] []
+[] ["-v","x"] []
+[Version,Output "stdout",Name "bar",Name "baz"] [] []
+[Output "stdout",Output "g",Output "stdout"] ["f"] []
+[Verbose,Path "lib"] [] ["option `-n' requires an argument USER\n"]
+[] ["keep"] ["-z","--wat"] []
+[Verbose,Verbose] [] []
+False
+False
+[2,3]
+mapped:
+  -s S  --string=S  a string
+
+Usage: prog [OPTION...] files...
+  -v        --verbose        chatty output
+  -V, -?    --version        show version
+  -o[FILE]  --output[=FILE]  use FILE for output
+  -n USER   --name=USER      only USER's files
+  -L DIR    --libdir=DIR     add DIR to the library path
+
