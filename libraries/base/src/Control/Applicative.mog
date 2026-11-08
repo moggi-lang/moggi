@@ -13,8 +13,17 @@
 -- nothing, and '(<|>)' picks the first of two actions that succeeds. Everything
 -- else in this module that mentions 'Alternative' is built from those two.
 module Control.Applicative
-  ( Applicative(pure, (<*>), liftA2, (*>), (<*))
+  (
+    -- * Applicative functors
+    Applicative(pure, (<*>), liftA2, (*>), (<*))
+
+  -- * Alternatives
   , Alternative(empty, (<|>), some, many)
+
+  -- * Instances
+  , WrappedArrow(..)
+
+  -- * Utility functions
   , (<**>)
   , liftA
   , liftA3
@@ -26,6 +35,7 @@ module Control.Applicative
 
 import Data.Bool
 import Data.Function (const, id)
+import Data.Kind (Type)
 import Data.Functor
 import Data.Maybe
 import Data.Ord (Down(Down))
@@ -134,3 +144,14 @@ instance Alternative Maybe where
   (<|>) mx my = case mx of
     Nothing -> my
     other -> other
+
+-- | An arrow read as an 'Applicative': the arrow is run on the unit value, and
+-- its own result is the value.
+--
+-- The instances are declared in "Control.Arrow", where 'Arrow' and the
+-- operations they are written with live.
+newtype WrappedArrow (a :: Type -> Type -> Type) b c = WrapArrow { unwrapArrow :: a b c }
+
+unwrapArrow :: WrappedArrow a b c -> a b c
+unwrapArrow x = case x of
+  WrapArrow arrow -> arrow

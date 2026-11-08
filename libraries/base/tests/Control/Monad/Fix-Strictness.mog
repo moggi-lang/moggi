@@ -1,0 +1,25 @@
+import Control.Exception (ErrorCall(..), try)
+import Control.Monad.Fix (mfix)
+import System.IO
+
+-- The action demands the fixed point while it is still being defined: the
+-- publisher only runs once the action has returned its result, so the read
+-- happens too early and reports the black hole.
+strictAction :: IO (Int -> Int)
+strictAction = mfix (\rec -> do
+  y <- pure (rec 5)
+  pure (\x -> y + x))
+
+-- The report goes to the caller as an 'ErrorCall' instead of ending the
+-- program, so the message can be checked without the frames a backend adds.
+runStrict :: IO (Either ErrorCall ())
+runStrict = try (do
+  f <- strictAction
+  putStrLn (show (f 1)))
+
+main :: IO ()
+main = do
+  outcome <- runStrict
+  case outcome of
+    Left (ErrorCall message) -> putStrLn message
+    Right _ -> putStrLn "the black hole was not reported"

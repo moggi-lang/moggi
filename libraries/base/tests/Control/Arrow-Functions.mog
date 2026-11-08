@@ -1,0 +1,57 @@
+import Prelude hiding (id)
+import Control.Applicative
+import Control.Arrow
+import Control.Category
+import Control.Monad
+
+increment :: Int -> Int
+increment x = x + 1
+
+double :: Int -> Int
+double x = x * 2
+
+runArrowMonadFunction :: ArrowMonad (->) a -> a
+runArrowMonadFunction m = case m of
+  ArrowMonad f -> f ()
+
+arrowMonadPure :: ArrowMonad (->) Int
+arrowMonadPure = pure 2
+
+arrowMonadApply :: ArrowMonad (->) Int
+arrowMonadApply = pure (\x -> x + 1) <*> ArrowMonad (\_ -> 4)
+
+arrowMonadBind :: ArrowMonad (->) Int
+arrowMonadBind = ArrowMonad (\_ -> 2) >>= (\x -> ArrowMonad (\_ -> x + 3))
+
+arrowMonadMap :: ArrowMonad (->) Int
+arrowMonadMap = map (\x -> x * 2) (ArrowMonad (\_ -> 4))
+
+main :: IO ()
+main = do
+  putStrLn (show ((increment >>> double) 3))
+  putStrLn (show ((double <<< increment) 3))
+  putStrLn (show (id 4))
+  putStrLn (show (arr (\x -> x + 1) 4))
+  putStrLn (show (first increment (1, "a")))
+  putStrLn (show (second increment ("a", 1)))
+  putStrLn (show ((increment *** double) (1, 2)))
+  putStrLn (show ((increment &&& double) 3))
+  putStrLn (show (left increment (Left 1 :: Either Int Int)))
+  putStrLn (show (left increment (Right 2 :: Either Int Int)))
+  putStrLn (show (right increment (Left 2 :: Either Int Int)))
+  putStrLn (show (right increment (Right 1 :: Either Int Int)))
+  putStrLn (show ((increment +++ double) (Left 1 :: Either Int Int)))
+  putStrLn (show ((increment +++ double) (Right 2 :: Either Int Int)))
+  putStrLn (show ((increment ||| double) (Left 1 :: Either Int Int)))
+  putStrLn (show ((increment ||| double) (Right 2 :: Either Int Int)))
+  putStrLn (show (app (increment, 5)))
+  putStrLn (show (returnA 9))
+  putStrLn (show ((increment ^>> double) 3))
+  putStrLn (show ((double >>^ increment) 3))
+  putStrLn (show ((double <<^ increment) 3))
+  putStrLn (show ((increment ^<< double) 3))
+  putStrLn (show (leftApp increment (Left 1 :: Either Int Int)))
+  putStrLn (show (runArrowMonadFunction arrowMonadPure))
+  putStrLn (show (runArrowMonadFunction arrowMonadApply))
+  putStrLn (show (runArrowMonadFunction arrowMonadBind))
+  putStrLn (show (runArrowMonadFunction arrowMonadMap))

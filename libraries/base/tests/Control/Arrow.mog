@@ -1,0 +1,144 @@
+import Prelude hiding (id, map)
+import Control.Applicative
+import Control.Arrow
+import Control.Category
+import Control.Monad
+import Data.Functor (Functor(map))
+
+newtype Fun a b = Fun (a -> b)
+
+runFun :: Fun a b -> a -> b
+runFun f x = case f of
+  Fun g -> g x
+
+instance Category Fun where
+  id = Fun (\x -> x)
+  (.) (Fun f) (Fun g) = Fun (\x -> f (g x))
+
+instance Arrow Fun where
+  arr f = Fun f
+  first (Fun f) = Fun (\pair -> case pair of
+    (b, d) -> (f b, d))
+
+instance ArrowChoice Fun where
+  left (Fun f) = Fun (\value -> case value of
+    Left b -> Left (f b)
+    Right d -> Right d)
+
+instance ArrowApply Fun where
+  app = Fun (\pair -> case pair of
+    (f, x) -> runFun f x)
+
+instance ArrowLoop Fun where
+  loop _ = Fun (\_ -> error "Control.Arrow.loop: no executable feedback in this test arrow")
+
+increment :: Fun Int Int
+increment = arr (\x -> x + 1)
+
+double :: Fun Int Int
+double = arr (\x -> x * 2)
+
+kleisliIncrement :: Kleisli Maybe Int Int
+kleisliIncrement = Kleisli (\x -> Just (x + 1))
+
+kleisliDouble :: Kleisli Maybe Int Int
+kleisliDouble = Kleisli (\x -> Just (x * 2))
+
+kleisliFail :: Kleisli Maybe Int Int
+kleisliFail = Kleisli (\_ -> Nothing)
+
+kleisliArr :: Kleisli Maybe Int Int
+kleisliArr = arr (\x -> x + 1)
+
+loopIdentity :: Fun Int Int
+loopIdentity = loop (arr (\pair -> case pair of
+  (b, d) -> (b, d)))
+
+loopIncrement :: Int -> Int
+loopIncrement = loop (\pair -> case pair of
+  (b, d) -> (b + 1, d))
+
+runArrowMonadFun :: ArrowMonad Fun a -> a
+runArrowMonadFun m = case m of
+  ArrowMonad f -> runFun f ()
+
+runArrowMonadKleisli :: ArrowMonad (Kleisli Maybe) a -> Maybe a
+runArrowMonadKleisli m = case m of
+  ArrowMonad f -> runKleisli f ()
+
+emptyArrowMonadKleisli :: ArrowMonad (Kleisli Maybe) Int
+emptyArrowMonadKleisli = empty
+
+mzeroArrowMonadKleisli :: ArrowMonad (Kleisli Maybe) Int
+mzeroArrowMonadKleisli = mzero
+
+arrowMonadPure :: ArrowMonad Fun Int
+arrowMonadPure = pure 2
+
+arrowMonadApply :: ArrowMonad Fun Int
+arrowMonadApply = pure (\x -> x + 1) <*> ArrowMonad (Fun (\_ -> 4))
+
+arrowMonadBind :: ArrowMonad Fun Int
+arrowMonadBind = ArrowMonad (Fun (\_ -> 2)) >>= (\x -> ArrowMonad (Fun (\_ -> x + 3)))
+
+arrowMonadMap :: ArrowMonad Fun Int
+arrowMonadMap = map (\x -> x * 2) (ArrowMonad (Fun (\_ -> 4)))
+
+main :: IO ()
+main = do
+  putStrLn (show (runFun increment 2))
+  putStrLn (show (runFun (first increment) (2, "a")))
+  putStrLn (show (runFun (second increment) ("a", 2)))
+  putStrLn (show (runFun (increment *** double) (2, 3)))
+  putStrLn (show (runFun (increment &&& double) 3))
+  putStrLn (show (runFun returnA 9))
+  putStrLn (show (runFun ((\x -> x + 1) ^>> double) 3))
+  putStrLn (show (runFun (double >>^ (\x -> x + 1)) 3))
+  putStrLn (show (runFun (double <<^ (\x -> x + 1)) 3))
+  putStrLn (show (runFun ((\x -> x + 1) ^<< double) 3))
+  putStrLn (show (runFun (left increment) (Left 4 :: Either Int Int)))
+  putStrLn (show (runFun (left increment) (Right 9 :: Either Int Int)))
+  putStrLn (show (runFun (right increment) (Left 9 :: Either Int Int)))
+  putStrLn (show (runFun (right increment) (Right 4 :: Either Int Int)))
+  putStrLn (show (runFun (increment +++ double) (Left 4 :: Either Int Int)))
+  putStrLn (show (runFun (increment +++ double) (Right 4 :: Either Int Int)))
+  putStrLn (show (runFun (increment ||| double) (Left 4 :: Either Int Int)))
+  putStrLn (show (runFun (increment ||| double) (Right 4 :: Either Int Int)))
+  putStrLn (show (runFun app (increment, 5)))
+  putStrLn (show (runFun (leftApp increment) (Left 1 :: Either Int Int)))
+  putStrLn (show (runFun (leftApp increment) (Right 7 :: Either Int Int)))
+  putStrLn (show (runArrowMonadFun arrowMonadPure))
+  putStrLn (show (runArrowMonadFun arrowMonadApply))
+  putStrLn (show (runArrowMonadFun arrowMonadBind))
+  putStrLn (show (runArrowMonadFun arrowMonadMap))
+  putStrLn (show (runKleisli kleisliArr 2))
+  putStrLn (show (runKleisli (id :: Kleisli Maybe Int Int) 4))
+  putStrLn (show (runKleisli (kleisliIncrement >>> kleisliDouble) 3))
+  putStrLn (show (runKleisli (map (\x -> x + 1) kleisliDouble) 3))
+  putStrLn (show (runKleisli (pure 4 :: Kleisli Maybe Int Int) 0))
+  putStrLn (show (runKleisli ((Kleisli (\x -> Just (\y -> x + y))) <*> kleisliDouble) 3))
+  putStrLn (show (runKleisli (Kleisli (\x -> Just x) >>= (\x -> Kleisli (\_ -> Just (x + 1)))) 4))
+  putStrLn (show (runKleisli (empty :: Kleisli Maybe Int Int) 0))
+  putStrLn (show (runKleisli (kleisliFail <|> kleisliIncrement) 1))
+  putStrLn (show (runKleisli (mzero :: Kleisli Maybe Int Int) 0))
+  putStrLn (show (runKleisli (mplus kleisliFail kleisliIncrement) 1))
+  putStrLn (show (runKleisli (zeroArrow :: Kleisli Maybe Int Int) 0))
+  putStrLn (show (runKleisli (kleisliFail <+> kleisliIncrement) 1))
+  putStrLn (show (runKleisli (first kleisliIncrement) (1, "a")))
+  putStrLn (show (runKleisli (second kleisliIncrement) ("a", 1)))
+  putStrLn (show (runKleisli (kleisliIncrement *** kleisliDouble) (1, 2)))
+  putStrLn (show (runKleisli (kleisliIncrement &&& kleisliDouble) 2))
+  putStrLn (show (runKleisli (left kleisliIncrement) (Left 1 :: Either Int Int)))
+  putStrLn (show (runKleisli (left kleisliIncrement) (Right 2 :: Either Int Int)))
+  putStrLn (show (runKleisli (right kleisliIncrement) (Left 2 :: Either Int Int)))
+  putStrLn (show (runKleisli (right kleisliIncrement) (Right 1 :: Either Int Int)))
+  putStrLn (show (runKleisli (kleisliIncrement +++ kleisliDouble) (Left 1 :: Either Int Int)))
+  putStrLn (show (runKleisli (kleisliIncrement +++ kleisliDouble) (Right 2 :: Either Int Int)))
+  putStrLn (show (runKleisli (kleisliIncrement ||| kleisliDouble) (Left 1 :: Either Int Int)))
+  putStrLn (show (runKleisli (kleisliIncrement ||| kleisliDouble) (Right 2 :: Either Int Int)))
+  putStrLn (show (runKleisli app (kleisliIncrement, 4)))
+  putStrLn (show (runArrowMonadKleisli (ArrowMonad (Kleisli (\_ -> Just 3)))))
+  putStrLn (show (runArrowMonadKleisli (emptyArrowMonadKleisli <|> ArrowMonad (Kleisli (\_ -> Just 4)))))
+  putStrLn (show (runArrowMonadKleisli (ArrowMonad (Kleisli (\_ -> Just 2)) >>= (\x -> ArrowMonad (Kleisli (\_ -> Just (x + 3)))))))
+  putStrLn (show (runArrowMonadKleisli (mplus mzeroArrowMonadKleisli (ArrowMonad (Kleisli (\_ -> Just 5))))))
+  putStrLn (show (loopIncrement 41))

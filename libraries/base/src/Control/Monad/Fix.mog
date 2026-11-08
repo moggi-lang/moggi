@@ -1,0 +1,69 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- Monadic fixpoints.
+--
+-- For a detailed discussion, see Levent Erkök's thesis,
+-- /Value Recursion in Monadic Computations/, Oregon Graduate Institute, 2002.
+module Control.Monad.Fix
+  ( MonadFix(mfix)
+  , fix
+  ) where
+
+import Control.Monad (Monad)
+import Data.Bool (Bool(..))
+import Data.Function (const, fix)
+import Data.Functor.Identity (Identity, runIdentity)
+import Moggi.Internal.Prim (mfixPure#)
+import Moggi.Internal.IO (mfixIO#)
+import Data.Maybe (Maybe, isJust, fromJust)
+import Data.Ord (Down(..))
+import Data.Either (Either(Left, Right), isRight)
+import Moggi.Err (error)
+import System.IO (IO)
+
+-- | Monads having fixed points with a \'knot-tying\' semantics.
+-- Instances of 'MonadFix' should satisfy the following laws:
+--
+-- [Purity]
+--      @'mfix' ('Control.Monad.return' . h)  =  'Control.Monad.return' ('fix' h)@
+--
+-- [Left shrinking (or Tightening)]
+--      @'mfix' (\x -> a >>= \y -> f x y)  =  a >>= \y -> 'mfix' (\x -> f x y)@
+--
+-- [Sliding]
+--      @'mfix' ('Control.Monad.liftM' h . f)  =  'Control.Monad.liftM' h ('mfix' (f . h))@,
+--      for strict @h@.
+--
+-- [Nesting]
+--      @'mfix' (\x -> 'mfix' (\y -> f x y))  =  'mfix' (\x -> f x x)@
+--
+-- This class is used in the translation of the recursive @do@ notation.
+class Monad m => MonadFix m where
+  -- | The fixed point of a monadic computation.
+  -- @'mfix' f@ executes the action @f@ only once, with the eventual
+  -- output fed back as the input.  Hence @f@ should not be strict,
+  -- for then @'mfix' f@ would diverge.
+  mfix :: (a -> m a) -> m a
+
+instance MonadFix IO where
+  mfix = mfixIO#
+
+instance MonadFix Identity where
+  mfix f = mfixPure# f (const True) runIdentity
+
+instance MonadFix Maybe where
+  mfix f = mfixPure# f isJust fromJust
+
+-- | The right side of an 'Either' the test accepted, i.e. one that cannot be
+-- 'Left'. 'mfix' projects only after its test has answered 'Right'.
+eitherRight :: Either e a -> a
+eitherRight mx = case mx of
+  Right x -> x
+  Left _ -> error "Control.Monad.Fix.mfix: the recursive value is not a Right"
+
+instance MonadFix (Either e) where
+  mfix f = mfixPure# f isRight eitherRight
+
+instance MonadFix Down where
+  mfix f = mfixPure# f (const True) (\value -> case value of
+    Down x -> x)

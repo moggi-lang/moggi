@@ -1,0 +1,23 @@
+Just 4
+Just 5
+Just 5
+Just 5
+Just 5
+Nothing
+Nothing
+7
+7
+7
+7
+identity-left (>>>) at (->): True (7 inputs)
+identity-right (>>>) at (->): True (7 inputs)
+identity-left (<<<) at (->): True (7 inputs)
+identity-right (<<<) at (->): True (7 inputs)
+associativity (>>>) at (->): True (7 inputs)
+associativity (<<<) at (->): True (7 inputs)
+identity-left (>>>) at Fun: True (7 inputs)
+identity-right (>>>) at Fun: True (7 inputs)
+associativity (>>>) at Fun: True (7 inputs)
+identity-left (>>>) at Kleisli Maybe: True (7 inputs)
+associativity (>>>) at Kleisli Maybe: True (7 inputs)
+7
