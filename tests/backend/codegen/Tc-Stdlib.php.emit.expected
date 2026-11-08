@@ -2,10 +2,11 @@
 
 namespace Tc\Stdlib;
 
-const __MOGGI_MAP = [[35 => 0, 36 => 0, 37 => 0, 41 => 1, 42 => 1, 46 => 2, 47 => 2, 51 => 3, 52 => 3, 53 => 3, 54 => 3, 58 => 4, 59 => 4, 63 => 5, 67 => 6, 68 => 6, 69 => 6, 70 => 6, 75 => 7, 76 => 7, 81 => 8, 82 => 8], ['Tc\\Stdlib\\mapLookupDemo' => 0, 'Tc\\Stdlib\\mapSizeDemo' => 1, 'Tc\\Stdlib\\setMemberDemo' => 2, 'Tc\\Stdlib\\setUnionDemo' => 3, 'Tc\\Stdlib\\clampDemo' => 4, 'Tc\\Stdlib\\charDemo' => 5, 'Tc\\Stdlib\\altMaybeDemo' => 6, 'Tc\\Stdlib\\altListDemo' => 7, 'Tc\\Stdlib\\pairDemo' => 8], [], [], [[0, 0, 14, 3], [1, 0, 17, 15], [2, 0, 20, 17], [3, 0, 24, 3], [4, 0, 27, 13], [5, 0, 30, 12], [6, 0, 33, 16], [7, 0, 36, 15], [8, 0, 39, 12]], ['Tc.Stdlib.mapLookupDemo', 'Tc.Stdlib.mapSizeDemo', 'Tc.Stdlib.setMemberDemo', 'Tc.Stdlib.setUnionDemo', 'Tc.Stdlib.clampDemo', 'Tc.Stdlib.charDemo', 'Tc.Stdlib.altMaybeDemo', 'Tc.Stdlib.altListDemo', 'Tc.Stdlib.pairDemo'], ['tests/backend/codegen/Tc-Stdlib.mog']];
+const __MOGGI_MAP = [[36 => 0, 37 => 0, 38 => 0, 42 => 1, 43 => 1, 47 => 2, 48 => 2, 52 => 3, 53 => 3, 54 => 3, 55 => 3, 59 => 4, 60 => 4, 64 => 5, 68 => 6, 69 => 6, 70 => 6, 71 => 6, 76 => 7, 77 => 7, 82 => 8, 83 => 8], ['Tc\\Stdlib\\mapLookupDemo' => 0, 'Tc\\Stdlib\\mapSizeDemo' => 1, 'Tc\\Stdlib\\setMemberDemo' => 2, 'Tc\\Stdlib\\setUnionDemo' => 3, 'Tc\\Stdlib\\clampDemo' => 4, 'Tc\\Stdlib\\charDemo' => 5, 'Tc\\Stdlib\\altMaybeDemo' => 6, 'Tc\\Stdlib\\altListDemo' => 7, 'Tc\\Stdlib\\pairDemo' => 8], [], [], [[0, 0, 14, 3], [1, 0, 17, 15], [2, 0, 20, 17], [3, 0, 24, 3], [4, 0, 27, 13], [5, 0, 30, 12], [6, 0, 33, 16], [7, 0, 36, 15], [8, 0, 39, 12]], ['Tc.Stdlib.mapLookupDemo', 'Tc.Stdlib.mapSizeDemo', 'Tc.Stdlib.setMemberDemo', 'Tc.Stdlib.setUnionDemo', 'Tc.Stdlib.clampDemo', 'Tc.Stdlib.charDemo', 'Tc.Stdlib.altMaybeDemo', 'Tc.Stdlib.altListDemo', 'Tc.Stdlib.pairDemo'], ['tests/backend/codegen/Tc-Stdlib.mog']];
 
 require_once __DIR__ . '/../../../libraries/base/src/Control/Applicative.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Char.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/Double.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Eq.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/List.php';
 require_once __DIR__ . '/../../../libraries/containers/src/Data/Map.php';

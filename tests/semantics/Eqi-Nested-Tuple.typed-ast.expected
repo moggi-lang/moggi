@@ -6,7 +6,7 @@ program
   class EqI a b
     method eqI :: OrderingI a b -> Bool
     method eqPairI :: Tuple2 OrderingI a b Tuple2 OrderingI a b Bool -> Bool
-  function eqI :: OrderingI t15 t15 -> Bool
+  function eqI :: OrderingI t4 t4 -> Bool
     pat_var _p0
     case
       variable _p0
@@ -19,7 +19,7 @@ program
       alt
         pat_con GTI
         constructor_ref False
-  function eqPairI :: Tuple2 OrderingI t25 t25 Tuple2 OrderingI t25 t25 Bool -> Bool
+  function eqPairI :: Tuple2 OrderingI t4 t4 Tuple2 OrderingI t4 t4 Bool -> Bool
     pat_var _p0
     case
       variable _p0
