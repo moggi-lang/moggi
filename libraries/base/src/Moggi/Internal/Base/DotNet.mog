@@ -49,19 +49,14 @@ offsetByCodePoints s i n = case intCompare# n 0 of
 
 -- | One self-recursive walk that stops on its own: a pair of helpers calling
 -- each other would not be a tail call, and a long count would keep one stack
--- frame per scalar. Both stopping conditions fold into one budget, because the
--- tail-call rewrite only follows a self call that is a whole match arm: a match
--- nested in another arm hides the call, and then the walk really does cost one
--- stack frame per scalar, which a long string overflows.
+-- frame per scalar. The inner match is a tail arm, so the tail-call rewrite
+-- follows the recall through it and the walk becomes a loop.
 offsetByCodePointsFrom :: String -> Int -> Int -> Int -> Int
-offsetByCodePointsFrom s i n end =
-  let left = intSub# end i
-      budget = case intCompare# left n of
-        LT -> left
-        _ -> n
-  in case intCompare# budget 0 of
-    GT -> offsetByCodePointsFrom s (intAdd# i (utf16WidthAt s i)) (intSub# budget 1) end
+offsetByCodePointsFrom s i n end = case intCompare# i end of
+  LT -> case intCompare# n 0 of
+    GT -> offsetByCodePointsFrom s (intAdd# i (utf16WidthAt s i)) (intSub# n 1) end
     _ -> i
+  _ -> i
 
 -- | The scalars come out right to left and are flipped at the end, so the walk
 -- is a tail call however long the string is.
