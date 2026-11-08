@@ -1,0 +1,30 @@
+import Data.Type.Bool (Not, (&&), (||), If)
+import Data.Type.Equality ((:~:), castWith, Refl)
+import Data.Bool (Bool(..))
+import Data.Eq
+import Data.Ord (Ordering(..))
+import Text.Show
+
+-- A type function is observed through a proof that its application is the type
+-- expected: each of these only typechecks once the equation has reduced. The
+-- `Bool`-kinded results are shown as proofs; `If` returns a type, so its result
+-- is spent on a value with `castWith`.
+
+notProof :: Not 'False :~: 'True
+notProof = Refl
+
+andProof :: ('True && 'False) :~: 'False
+andProof = Refl
+
+orProof :: ('False || 'True) :~: 'True
+orProof = Refl
+
+ifProof :: If 'True Int Int :~: Int
+ifProof = Refl
+
+main :: IO ()
+main = do
+  putStrLn (show (castWith ifProof 7))
+  putStrLn (show notProof)
+  putStrLn (show andProof)
+  putStrLn (show orProof)

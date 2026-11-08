@@ -1,0 +1,47 @@
+import Data.Type.Ord (Compare, OrdCond, OrderingI(..), (<=?), Max, Min)
+import Data.Type.Equality ((:~:), castWith, Refl)
+import Data.Eq
+import Data.Ord (Ordering(..))
+import Text.Show
+
+-- `Compare` is the ordering primitive: the compiler answers for literal
+-- arguments, and `OrdCond` selects on that answer. A comparison proof has
+-- `Ordering` kind, so it is shown rather than spent; `OrdCond` returns a type,
+-- which `castWith` carries a value across.
+
+ltProof :: Compare 3 5 :~: 'LT
+ltProof = Refl
+
+eqProof :: Compare 5 5 :~: 'EQ
+eqProof = Refl
+
+gtProof :: Compare 7 5 :~: 'GT
+gtProof = Refl
+
+condProof :: OrdCond 'GT Int Int Int :~: Int
+condProof = Refl
+
+leProof :: (3 <=? 5) :~: 'True
+leProof = Refl
+
+maxProof :: Max 3 5 :~: 5
+maxProof = Refl
+
+minProof :: Min 3 5 :~: 3
+minProof = Refl
+
+main :: IO ()
+main = do
+  putStrLn (show ltProof)
+  putStrLn (show eqProof)
+  putStrLn (show gtProof)
+  putStrLn (show (castWith condProof 4))
+  putStrLn (show leProof)
+  putStrLn (show maxProof)
+  putStrLn (show minProof)
+  putStrLn (show LTI)
+  putStrLn (show EQI)
+  putStrLn (show GTI)
+  putStrLn (show (LTI == LTI))
+  putStrLn (show (EQI == EQI))
+  putStrLn (show (LTI == GTI))

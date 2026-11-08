@@ -1,0 +1,85 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+--
+-- Module      :  Data.Type.Ord
+-- License     :  BSD-style (see the LICENSE file in the distribution)
+--
+-- Stability   :  experimental
+-- Portability :  non-portable
+--
+-- Type-level ordering.
+module Data.Type.Ord
+  ( Compare
+  , OrderingI(..)
+  , type (<=)
+  , type (<=?)
+  , type (>=)
+  , type (>=?)
+  , type (>)
+  , type (>?)
+  , type (<)
+  , type (<?)
+  , Max
+  , Min
+  , OrdCond
+  ) where
+
+import Data.Bool (Bool(..))
+import Data.Eq (Eq(..))
+import Data.Ord (Ordering(..))
+import Text.Show (Show(..))
+
+-- | Lifted 'Ordering' with the two compared types as witnesses: the
+-- constructors are the three answers, and the types they relate are the ones
+-- the comparison was made at.
+data OrderingI a b where
+  LTI :: OrderingI a b
+  EQI :: OrderingI a a
+  GTI :: OrderingI a b
+
+instance Show (OrderingI a b) where
+  show LTI = "LTI"
+  show EQI = "EQI"
+  show GTI = "GTI"
+
+instance Eq (OrderingI a b) where
+  (==) LTI LTI = True
+  (==) EQI EQI = True
+  (==) GTI GTI = True
+  (==) _ _ = False
+
+-- | Type-level comparison of two types of the same kind. The compiler answers
+-- for `Nat` and `Symbol` literals and leaves every other application stuck.
+type family Compare (a :: k) (b :: k) :: Ordering
+
+-- | 'OrdCond' @o l e g@ chooses between @l@, @e@ and @g@ according to the
+-- 'Ordering' @o@.
+type family OrdCond (o :: Ordering) (l :: k) (e :: k) (g :: k) :: k where
+  OrdCond 'LT l _ _ = l
+  OrdCond 'EQ _ e _ = e
+  OrdCond 'GT _ _ g = g
+
+type a <= b = OrdCond (Compare a b) 'True 'True 'False
+
+type a < b = OrdCond (Compare a b) 'True 'False 'False
+
+type a >= b = OrdCond (Compare a b) 'False 'True 'True
+
+type a > b = OrdCond (Compare a b) 'False 'False 'True
+
+-- | Comparison @(<=)@ of comparable types, as a function.
+type a <=? b = OrdCond (Compare a b) 'True 'True 'False
+
+-- | Comparison @(>=)@ of comparable types, as a function.
+type a >=? b = OrdCond (Compare a b) 'False 'True 'True
+
+-- | Comparison @(<)@ of comparable types, as a function.
+type a <? b = OrdCond (Compare a b) 'True 'False 'False
+
+-- | Comparison @(>)@ of comparable types, as a function.
+type a >? b = OrdCond (Compare a b) 'False 'False 'True
+
+-- | Maximum between two comparable types.
+type Max a b = OrdCond (Compare a b) b b a
+
+-- | Minimum between two comparable types.
+type Min a b = OrdCond (Compare a b) a a b
