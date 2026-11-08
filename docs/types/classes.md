@@ -268,10 +268,25 @@ An associated type is **not injective**: `Element c` being `Bool` does not tell
 the compiler that `c` is `Bool`. A function may therefore go from the container
 to its element type, but not back from the element type to a unique container.
 
+### Closed families
+
+A family may also be declared on its own, with all of its equations written
+once. `Data.Type.Bool` and `Data.Type.Ord` are built this way:
+
+```moggi
+type family Not (x :: Bool) where
+  Not 'True = 'False
+  Not 'False = 'True
+```
+
+An application reduces wherever types meet — in a signature, in an instance
+head, or in another family's equation — so `Not 'True` and `'False` are
+interchangeable types.
+
 Limits of the mechanism:
 
-* Only class-associated families exist. There is no standalone `type family`
-  declaration, no closed family, and no injectivity annotation.
+* There is no injectivity annotation: `Element c` being `Bool` never tells the
+  compiler what `c` is.
 * A family's kind may be fixed in the class (`type Rep a :: Type -> Type`); the
   equations are written per instance.
 * An instance must define every associated type the class declares.
@@ -309,9 +324,11 @@ type without `Show` would be rejected at its own instance.
 * **No functional dependencies.** `class Convert a b | a -> b` is a parse error.
   Encode the relationship with an associated type, or fix the second parameter
   with a signature.
-* **No quantified or equality constraints** in signatures, and no class-level
-  `deriving` clauses (`deriving` is a data-declaration or standalone form; see
-  [Deriving](../deriving.md)).
+* **No quantified constraints** (`forall a. C a => …` inside a constraint).
+  Equality constraints work: `Data.Type.Equality`'s
+  `gcastWith :: (a :~: b) -> ((a ~ b) => r) -> r` is written with one. There are
+  no class-level `deriving` clauses (`deriving` is a data-declaration or
+  standalone form; see [Deriving](../deriving.md)).
 * **No overlap pragmas.** Selection is by specificity; equally specific
   instances are ambiguous.
 * **A method has at most one default**, and its body is one definition whose
