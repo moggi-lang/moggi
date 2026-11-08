@@ -1,21 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 -- |
--- What the process was started with and the variables in its environment.
---
--- 'getArgs' is the argument list without the program name, 'getProgName' is
--- that name, and the lookups differ in what happens when a variable is not set:
--- 'lookupEnv' answers 'Nothing', 'getEnvDefault' answers the caller's fallback,
--- and 'getEnv' raises an 'IOError' whose type is
--- 'System.IO.Error.doesNotExistErrorType'.
---
--- A variable that is set to the empty string is not an unset variable: it comes
--- back as @'Just' \"\"@ from 'lookupEnv', as the empty string from 'getEnv', and
--- in 'getEnvironment' as an entry with an empty value. 'setEnv' can give a
--- variable that value, so the empty string and absence stay distinguishable.
---
--- 'setEnv', 'unsetEnv', 'withArgs' and 'withProgName' change what this program
--- reads back from here on. Nothing outside the program observes the change,
--- because an environment is per process and a Moggi program starts no other.
+-- Miscellaneous information about the system environment.
 module System.Environment
   ( getArgs
   , getProgName
@@ -39,7 +24,7 @@ import Data.List (elem, (++))
 import Data.Num
 import Data.Maybe
 import Data.String (String, drop, length, singleton, splitOn, take)
-import Moggi.Internal.Base
+import Moggi.Internal.Base hiding (take, drop, unpack)
 import Moggi.Internal.Prim
 import Moggi.IO.Exception (IOErrorType(InvalidArgument))
 import System.IO.Base (IO)
@@ -67,11 +52,12 @@ getProgName = do
     [] -> ""
     name : _ -> name)
 
--- | The absolute path of the program's executable, as the host reports it.
+-- | Returns the absolute pathname of the current executable,
+-- or @argv[0]@ if the operating system does not provide a reliable
+-- way to query the current executable.
 --
--- A backend that runs the program inside a virtual machine answers the path of
--- that machine's launcher, because that is the executable the operating system
--- started.
+-- Note that for scripts and interactive sessions, this is the path to
+-- the interpreter.
 getExecutablePath :: IO String
 getExecutablePath = platformExecutablePath#
 
