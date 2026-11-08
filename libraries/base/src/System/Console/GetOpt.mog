@@ -1,0 +1,252 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module System.Console.GetOpt
+  ( -- * GetOpt
+    getOpt
+  , getOpt'
+  , usageInfo
+  , ArgOrder(..)
+  , OptDescr(..)
+  , ArgDescr(..)
+  ) where
+
+import Data.Bool
+import Data.Char (Char)
+import Data.Eq
+import Data.Functor (Functor(map))
+import Data.Int (Int)
+import Data.List ((:), any, break, concatMap, filter, foldl, replicate, zipWith3)
+import Data.Maybe (Maybe(..))
+import Data.Num
+import Data.Ord
+import Data.Semigroup
+import Data.String (String, length, lines, pack, singleton, take, unlines, unpack)
+import Data.Tuple (fst, snd)
+
+-- | What to do with arguments that are not options.
+data ArgOrder a
+  = RequireOrder
+  | Permute
+  | ReturnInOrder (String -> a)
+
+-- | Whether an option takes an argument, and what to build from it.
+data ArgDescr a
+  = NoArg a
+  | ReqArg (String -> a) String
+  | OptArg (Maybe String -> a) String
+
+-- | One option: its short characters, its long names (without the @--@), how it
+-- takes an argument, and the line of help text for it.
+data OptDescr a = Option [Char] [String] (ArgDescr a) String
+
+instance Functor ArgOrder where
+  map _ RequireOrder = RequireOrder
+  map _ Permute = Permute
+  map f (ReturnInOrder g) = ReturnInOrder (\x -> f (g x))
+
+instance Functor OptDescr where
+  map f (Option sos los ad descr) = Option sos los (map f ad) descr
+
+instance Functor ArgDescr where
+  map f (NoArg a) = NoArg (f a)
+  map f (ReqArg g s) = ReqArg (\x -> f (g x)) s
+  map f (OptArg g s) = OptArg (\x -> f (g x)) s
+
+-- | How one command-line argument was read.
+data OptKind a
+  = Opt a
+  | UnreqOpt String
+  | NonOpt String
+  | EndOfOpts
+  | OptErr String
+
+-- | The options, the non-options, and the error messages, in the order they
+-- were found. Unrecognized options are reported as errors here.
+getOpt :: ArgOrder a -> [OptDescr a] -> [String] -> ([a], [String], [String])
+getOpt ordering optDescr args = case getOpt' ordering optDescr args of
+  (os, xs, us, es) -> (os, xs, es <> map errUnrec us)
+
+-- | Like 'getOpt', but the unrecognized options come back as their own list
+-- instead of being turned into error messages.
+getOpt' :: ArgOrder a -> [OptDescr a] -> [String] -> ([a], [String], [String], [String])
+getOpt' ordering optDescr args = case args of
+  [] -> ([], [], [], [])
+  arg : rest -> step ordering optDescr arg rest
+
+step :: ArgOrder a -> [OptDescr a] -> String -> [String] -> ([a], [String], [String], [String])
+step ordering optDescr arg rest = case getNext arg rest optDescr of
+  (kind, rest') -> case kind of
+    Opt o -> consOpt o (getOpt' ordering optDescr rest')
+    UnreqOpt u -> consUnreq u (getOpt' ordering optDescr rest')
+    NonOpt x -> case ordering of
+      RequireOrder -> ([], x : rest', [], [])
+      Permute -> consNonOpt x (getOpt' ordering optDescr rest')
+      ReturnInOrder f -> consOpt (f x) (getOpt' ordering optDescr rest')
+    EndOfOpts -> case ordering of
+      ReturnInOrder f -> (map f rest', [], [], [])
+      _ -> ([], rest', [], [])
+    OptErr e -> consErr e (getOpt' ordering optDescr rest')
+
+consOpt :: a -> ([a], [String], [String], [String]) -> ([a], [String], [String], [String])
+consOpt o (os, xs, us, es) = (o : os, xs, us, es)
+
+consUnreq :: String -> ([a], [String], [String], [String]) -> ([a], [String], [String], [String])
+consUnreq u (os, xs, us, es) = (os, xs, u : us, es)
+
+consNonOpt :: String -> ([a], [String], [String], [String]) -> ([a], [String], [String], [String])
+consNonOpt x (os, xs, us, es) = (os, x : xs, us, es)
+
+consErr :: String -> ([a], [String], [String], [String]) -> ([a], [String], [String], [String])
+consErr e (os, xs, us, es) = (os, xs, us, e : es)
+
+-- | Read one argument: the end-of-options marker, a long option, a cluster of
+-- short options, or a non-option.
+getNext :: String -> [String] -> [OptDescr a] -> (OptKind a, [String])
+getNext arg rest optDescr = case unpack arg of
+  '-' : '-' : [] -> (EndOfOpts, rest)
+  '-' : '-' : xs -> longOpt (pack xs) rest optDescr
+  '-' : x : xs -> shortOpt x (pack xs) rest optDescr
+  _ -> (NonOpt arg, rest)
+
+longOpt :: String -> [String] -> [OptDescr a] -> (OptKind a, [String])
+longOpt ls rs optDescr = long options ads optStr (unpack ls) argChars rs
+  where
+    parts = break (\c -> c == '=') (unpack ls)
+    optName = pack (fst parts)
+    argChars = snd parts
+    optStr = "--" <> optName
+    named p = filter (\o -> any p (longNames o)) optDescr
+    exact = named (\x -> x == optName)
+    options = case exact of
+      [] -> named (\x -> isPrefixChars (unpack optName) (unpack x))
+      _ -> exact
+    ads = map optArgDescr options
+
+longNames :: OptDescr a -> [String]
+longNames (Option _ los _ _) = los
+
+optArgDescr :: OptDescr a -> ArgDescr a
+optArgDescr (Option _ _ ad _) = ad
+
+isPrefixChars :: [Char] -> [Char] -> Bool
+isPrefixChars prefix s = case prefix of
+  [] -> True
+  c : cs -> case s of
+    [] -> False
+    d : ds -> case c == d of
+      True -> isPrefixChars cs ds
+      False -> False
+
+long :: [OptDescr a] -> [ArgDescr a] -> String -> [Char] -> [Char] -> [String] -> (OptKind a, [String])
+long options ads optStr rawChars argChars rs = case ads of
+  _ : _ : _ -> (OptErr (errAmbig options optStr), rs)
+  [NoArg a] -> case argChars of
+    [] -> (Opt a, rs)
+    _ -> (OptErr (errNoArg optStr), rs)
+  [ReqArg f d] -> case argChars of
+    [] -> case rs of
+      [] -> (OptErr (errReq d optStr), [])
+      r : rest -> (Opt (f r), rest)
+    _ -> (Opt (f (pack (dropOne argChars))), rs)
+  [OptArg f _] -> case argChars of
+    [] -> (Opt (f Nothing), rs)
+    _ -> (Opt (f (Just (pack (dropOne argChars)))), rs)
+  _ -> (UnreqOpt ("--" <> pack rawChars), rs)
+
+dropOne :: [Char] -> [Char]
+dropOne cs = case cs of
+  [] -> []
+  _ : rest -> rest
+
+shortOpt :: Char -> String -> [String] -> [OptDescr a] -> (OptKind a, [String])
+shortOpt y ys rs optDescr = short options ads optStr (unpack ys) rs
+  where
+    options = filter (\o -> any (\s -> s == y) (shortNames o)) optDescr
+    ads = map optArgDescr options
+    optStr = "-" <> singleton y
+
+shortNames :: OptDescr a -> [Char]
+shortNames (Option sos _ _ _) = sos
+
+short :: [OptDescr a] -> [ArgDescr a] -> String -> [Char] -> [String] -> (OptKind a, [String])
+short options ads optStr ys rs = case ads of
+  _ : _ : _ -> (OptErr (errAmbig options optStr), rs)
+  NoArg a : _ -> case ys of
+    [] -> (Opt a, rs)
+    _ -> (Opt a, pack ('-' : ys) : rs)
+  ReqArg f d : _ -> case ys of
+    [] -> case rs of
+      [] -> (OptErr (errReq d optStr), [])
+      r : rest -> (Opt (f r), rest)
+    _ -> (Opt (f (pack ys)), rs)
+  OptArg f _ : _ -> case ys of
+    [] -> (Opt (f Nothing), rs)
+    _ -> (Opt (f (Just (pack ys))), rs)
+  [] -> case ys of
+    [] -> (UnreqOpt optStr, rs)
+    _ -> (UnreqOpt optStr, pack ('-' : ys) : rs)
+
+-- | The help table: the header line, then one row per option.
+usageInfo :: String -> [OptDescr a] -> String
+usageInfo header optDescr = unlines (header : table)
+  where
+    rows = concatMap fmtOpt optDescr
+    shorts = map rowShort rows
+    longs = map rowLong rows
+    docs = map rowDoc rows
+    shortWidth = maxWidth shorts
+    longWidth = maxWidth longs
+    table = zipWith3 (\s l d -> "  " <> flushLeft shortWidth s <> "  " <> flushLeft longWidth l <> "  " <> d) shorts longs docs
+
+rowShort :: (String, String, String) -> String
+rowShort (s, _, _) = s
+
+rowLong :: (String, String, String) -> String
+rowLong (_, l, _) = l
+
+rowDoc :: (String, String, String) -> String
+rowDoc (_, _, d) = d
+
+maxWidth :: [String] -> Int
+maxWidth xs = case xs of
+  [] -> 0
+  x : rest -> foldl (\w y -> case length y > w of
+    True -> length y
+    False -> w) (length x) rest
+
+flushLeft :: Int -> String -> String
+flushLeft n s = take n (s <> pack (replicate (n - length s) ' '))
+
+fmtOpt :: OptDescr a -> [(String, String, String)]
+fmtOpt (Option sos los ad descr) = case lines descr of
+  [] -> [(sosFmt, losFmt, "")]
+  d : ds -> (sosFmt, losFmt, d) : map (\d' -> ("", "", d')) ds
+  where
+    sosFmt = sepBy ',' (map (fmtShort ad) sos)
+    losFmt = sepBy ',' (map (fmtLong ad) los)
+
+sepBy :: Char -> [String] -> String
+sepBy _ [] = ""
+sepBy _ [x] = x
+sepBy ch (x : xs) = x <> pack [ch, ' '] <> sepBy ch xs
+
+fmtShort :: ArgDescr a -> Char -> String
+fmtShort (NoArg _) so = "-" <> singleton so
+fmtShort (ReqArg _ ad) so = "-" <> singleton so <> " " <> ad
+fmtShort (OptArg _ ad) so = "-" <> singleton so <> "[" <> ad <> "]"
+
+fmtLong :: ArgDescr a -> String -> String
+fmtLong (NoArg _) lo = "--" <> lo
+fmtLong (ReqArg _ ad) lo = "--" <> lo <> "=" <> ad
+fmtLong (OptArg _ ad) lo = "--" <> lo <> "[=" <> ad <> "]"
+
+errAmbig :: [OptDescr a] -> String -> String
+errAmbig ods optStr = usageInfo ("option `" <> optStr <> "' is ambiguous; could be one of:") ods
+
+errReq :: String -> String -> String
+errReq d optStr = "option `" <> optStr <> "' requires an argument " <> d <> "\n"
+
+errNoArg :: String -> String
+errNoArg optStr = "option `" <> optStr <> "' doesn't allow an argument\n"
+
+errUnrec :: String -> String
+errUnrec optStr = "unrecognized option `" <> optStr <> "'\n"
