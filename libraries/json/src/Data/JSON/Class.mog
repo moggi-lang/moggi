@@ -16,7 +16,7 @@ module Data.JSON.Class
   ) where
 
 import Data.Bool
-import Moggi.Internal.Base
+import Moggi.Internal.Base hiding (take, drop, unpack)
 import Data.Char
 import Data.Double
 import Data.Either

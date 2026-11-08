@@ -71,7 +71,7 @@ import Data.Maybe (Maybe(..))
 import Data.Semigroup
 import Data.String (String, isPrefixOf, isSuffixOf, singleton, splitOn)
 import Data.Tuple (fst, snd)
-import Moggi.Internal.Base
+import Moggi.Internal.Base hiding (take, drop, unpack)
 import System.Environment (getEnv)
 import System.FilePath.Units (dropUnits, takeUnits, unitsLength)
 import System.IO.Base (FilePath, IO)
