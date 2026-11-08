@@ -86,7 +86,7 @@ function runBackendCases(array $cases, string $backend, bool $multiBackend = fal
         try {
             $outcome = runTestCase($case, $backend, projectRootPath());
         } catch (\Throwable $e) {
-            $outcome = ['passed' => false, 'message' => \get_class($e) . ': ' . $e->getMessage()];
+            $outcome = ['passed' => false, 'message' => renderThrownDiagnostic($e)];
             if ($e instanceof TestFailure) {
                 $outcome = ['passed' => false, 'message' => $e->getMessage()];
             }

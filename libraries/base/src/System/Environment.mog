@@ -19,14 +19,15 @@ import Control.Applicative
 import Control.Exception (bracket_)
 import Control.Monad
 import Data.Bool
-import Data.Char (Char, chr)
-import Data.List (elem, (++))
+import Data.Char (Char, chr, toLower)
+import Data.List ((++))
 import Data.Num
 import Data.Maybe
-import Data.String (String, drop, length, singleton, splitOn, take)
-import Moggi.Internal.Base hiding (take, drop, unpack)
+import Data.String (String, drop, length, map, singleton, splitOn, take)
+import Moggi.Internal.Base hiding (take, drop, map, unpack)
 import Moggi.Internal.Prim
 import Moggi.IO.Exception (IOErrorType(InvalidArgument))
+import System.Info (os)
 import System.IO.Base (IO)
 import System.IO.Error (IOError, doesNotExistErrorType, ioError, ioeSetErrorString, mkIOError)
 
@@ -93,9 +94,31 @@ lookupEnv name = do
 lookupKey :: String -> [(String, String)] -> Maybe String
 lookupKey name entries = case entries of
   [] -> Nothing
-  (key, value) : rest -> case key == name of
+  (key, value) : rest -> case sameEnvName key name of
     True -> Just value
     False -> lookupKey name rest
+
+-- | Whether two names are the same variable to the host.
+--
+-- Windows compares environment names without regard to case — its own lookup
+-- answers for any spelling — so a lookup here does too, and so do the entries a
+-- change hides. Elsewhere a name is exactly the text it is spelled with.
+sameEnvName :: String -> String -> Bool
+sameEnvName a b = case os == "mingw32" of
+  True -> foldedName a == foldedName b
+  False -> a == b
+
+-- | Whether @name@ is among @names@, by the rule 'sameEnvName' states.
+namesKey :: String -> [String] -> Bool
+namesKey name names = case names of
+  [] -> False
+  other : rest -> case sameEnvName other name of
+    True -> True
+    False -> namesKey name rest
+
+-- | Every character lowercased: the form Windows compares names in.
+foldedName :: String -> String
+foldedName s = map toLower s
 
 -- | @setEnv name value@ sets the variable to @value@, including the empty
 -- string.
@@ -182,7 +205,7 @@ overlayEntries overlay = collected overlay []
 collected :: [String] -> [String] -> [(String, String)]
 collected overlay seen = case overlay of
   [] -> []
-  entry : rest -> case elem (entryKey entry) seen of
+  entry : rest -> case namesKey (entryKey entry) seen of
     True -> collected rest seen
     False -> case entryIsSet entry of
       True -> divvy entry : collected rest (entryKey entry : seen)
@@ -191,7 +214,7 @@ collected overlay seen = case overlay of
 hostEntries :: [String] -> [String] -> [(String, String)]
 hostEntries hidden host = case host of
   [] -> []
-  entry : rest -> case elem (entryKey entry) hidden of
+  entry : rest -> case namesKey (entryKey entry) hidden of
     True -> hostEntries hidden rest
     False -> divvy entry : hostEntries hidden rest
 

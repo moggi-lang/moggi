@@ -100,7 +100,7 @@ $compileFixture = static function () use ($javac, $jar, $fixture, $tree, $assert
         'fixture javac failed: ' . ($javacResult['stderr'] ?? '') . ($javacResult['stdout'] ?? ''),
     );
     $jarResult = runCompiledProcess(
-        [$jar, '--create', '--file', $tree . '/jvm/hello-1.0.0.jar', '-C', $tree . '/classes', '.'],
+        [$jar, 'cf', $tree . '/jvm/hello-1.0.0.jar', '-C', $tree . '/classes', '.'],
         120,
         \getenv(),
         $fixture,
