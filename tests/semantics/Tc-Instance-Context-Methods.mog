@@ -1,0 +1,15 @@
+-- Inside `instance (C a, W a) => C [a]`, the method being defined recurses at
+-- the head (`keep :: [a] -> [a]`), while `w` comes from the declared context at
+-- the head variable's type (`a`).
+class W a where
+  w :: a -> a
+
+class C a where
+  keep :: a -> a
+  viaW :: a -> a
+
+instance (C a, W a) => C [a] where
+  keep xs = keep xs
+  viaW xs = case xs of
+    [] -> xs
+    y : ys -> w y : ys

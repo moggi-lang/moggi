@@ -1,0 +1,32 @@
+program
+  class W a
+    method w :: a -> a
+  class C a
+    method keep :: a -> a
+    method viaW :: a -> a
+  function keep :: __Dict_C -> __Dict_W -> [t3] -> [t3]
+    pat_var __ev_C
+    pat_var __ev_W_1
+    pat_var xs
+    apply
+      evidence_method C.keep evidence= nullary=0
+        instance [a]
+      variable xs
+  function viaW :: __Dict_C -> __Dict_W -> [t3] -> [t3]
+    pat_var __ev_C
+    pat_var __ev_W_1
+    pat_var xs
+    case
+      variable xs
+      alt
+        pat_nil
+        variable xs
+      alt
+        pat_cons
+          pat_var y
+          pat_var ys
+        intrinsic listCons#
+          apply
+            evidence_method W.w evidence=__ev_W_1 nullary=0
+            variable y
+          variable ys
