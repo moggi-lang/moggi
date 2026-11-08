@@ -56,6 +56,7 @@ module System.IO
   , withFile
   , openTempFile
   , openBinaryTempFile
+  , fixIO
   ) where
 
 import Control.Applicative hiding (empty)
@@ -71,6 +72,7 @@ import Moggi.Internal.Base
 import Text.Show
 import Text.Read
 import System.IO.Base (IO, FilePath)
+import Moggi.Internal.IO (mfixIO#)
 import Moggi.Internal.Prim
 import System.IO.Types
 
@@ -168,6 +170,10 @@ withFile p mode use =
 -- collide; remove it with 'System.Directory.removeFile' when done.
 openTempFile :: FilePath -> String -> IO (FilePath, Handle)
 
--- | Moggi has no text/binary mode split, so this is 'openTempFile'.
+-- | Like 'openTempFile'.
 openBinaryTempFile :: FilePath -> String -> IO (FilePath, Handle)
 openBinaryTempFile dir template = openTempFile dir template
+
+-- | The fixed point of the 'IO' monad.
+fixIO :: (a -> IO a) -> IO a
+fixIO f = mfixIO# f

@@ -4,10 +4,14 @@
 -- The prefix says what the type no longer promises: a function that uses these
 -- can perform effects, so its type is not a description of what it does.
 module System.IO.Unsafe
-  ( unsafePerformIO
+  (
+    -- * Unsafe 'System.IO.IO' operations
+    unsafePerformIO
+  , unsafeFixIO
   ) where
 
 import Moggi.Internal.Base
+import Moggi.Internal.IO (mfixIO#)
 import Moggi.Internal.Prim
 import System.IO.Base (IO)
 
@@ -21,3 +25,7 @@ import System.IO.Base (IO)
 -- it with the rest of the program except the demand for its result.
 unsafePerformIO :: IO a -> a
 unsafePerformIO action = unsafePerformIO# action
+
+-- | The fixed point of the 'IO' monad, as 'System.IO.fixIO'.
+unsafeFixIO :: (a -> IO a) -> IO a
+unsafeFixIO f = mfixIO# f

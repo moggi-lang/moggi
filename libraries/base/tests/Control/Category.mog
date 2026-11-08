@@ -1,0 +1,127 @@
+import Prelude hiding (id, (.), map)
+import Control.Arrow (Kleisli(Kleisli), runKleisli)
+import Control.Category
+
+newtype Fun a b = Fun (a -> b)
+
+runFun :: Fun a b -> a -> b
+runFun f x = case f of
+  Fun g -> g x
+
+instance Category Fun where
+  id = Fun (\x -> x)
+  (.) (Fun f) (Fun g) = Fun (\x -> f (g x))
+
+identity :: Kleisli Maybe Int Int
+identity = id
+
+increment :: Kleisli Maybe Int Int
+increment = Kleisli (\x -> Just (x + 1))
+
+failAt :: Kleisli Maybe Int Int
+failAt = Kleisli (\_ -> Nothing)
+
+funIdentity :: Fun Int Int
+funIdentity = id
+
+funIncrement :: Fun Int Int
+funIncrement = Fun (\x -> x + 1)
+
+funDouble :: Fun Int Int
+funDouble = Fun (\x -> x * 2)
+
+funMinusThree :: Fun Int Int
+funMinusThree = Fun (\x -> x - 3)
+
+idFn :: Int -> Int
+idFn = id
+
+incFn :: Int -> Int
+incFn = \x -> x + 1
+
+doubleFn :: Int -> Int
+doubleFn = \x -> x * 2
+
+minusThreeFn :: Int -> Int
+minusThreeFn = \x -> x - 3
+
+-- Every law below is checked at each of these inputs, so a law that happens to
+-- hold at one convenient value cannot pass on its own.
+inputs :: [Int]
+inputs = [negate 3, negate 1, 0, 1, 2, 7, 42]
+
+implFns :: [Int -> Int]
+implFns = [incFn, doubleFn, minusThreeFn]
+
+funFns :: [Fun Int Int]
+funFns = [funIncrement, funDouble, funMinusThree]
+
+law :: String -> (Int -> Bool) -> IO ()
+law label holds =
+  putStrLn (label <> ": " <> show (all holds inputs) <> " (" <> show (length inputs) <> " inputs)")
+
+implIdentityLeft :: Int -> Bool
+implIdentityLeft x = all (\f -> (idFn >>> f) x == f x) implFns
+
+implIdentityRight :: Int -> Bool
+implIdentityRight x = all (\f -> (f >>> idFn) x == f x) implFns
+
+implIdentityLeftBack :: Int -> Bool
+implIdentityLeftBack x = all (\f -> (idFn <<< f) x == f x) implFns
+
+implIdentityRightBack :: Int -> Bool
+implIdentityRightBack x = all (\f -> (f <<< idFn) x == f x) implFns
+
+implAssociativity :: Int -> Bool
+implAssociativity x =
+  all (\f -> all (\g -> all (\h -> ((f >>> g) >>> h) x == (f >>> (g >>> h)) x) implFns) implFns) implFns
+
+implAssociativityBack :: Int -> Bool
+implAssociativityBack x =
+  all (\f -> all (\g -> all (\h -> ((f <<< g) <<< h) x == (f <<< (g <<< h)) x) implFns) implFns) implFns
+
+funIdentityLeft :: Int -> Bool
+funIdentityLeft x = all (\f -> runFun (funIdentity >>> f) x == runFun f x) funFns
+
+funIdentityRight :: Int -> Bool
+funIdentityRight x = all (\f -> runFun (f >>> funIdentity) x == runFun f x) funFns
+
+funAssociativity :: Int -> Bool
+funAssociativity x =
+  all (\f -> all (\g -> all (\h -> runFun ((f >>> g) >>> h) x == runFun (f >>> (g >>> h)) x) funFns) funFns) funFns
+
+kleisliIdentityLeft :: Int -> Bool
+kleisliIdentityLeft x = runKleisli (identity >>> increment) x == runKleisli increment x
+
+kleisliAssociativity :: Int -> Bool
+kleisliAssociativity x =
+  runKleisli ((increment >>> identity) >>> increment) x
+    == runKleisli (increment >>> (identity >>> increment)) x
+    && runKleisli ((identity >>> increment) >>> failAt) x
+      == runKleisli (identity >>> (increment >>> failAt)) x
+
+main :: IO ()
+main = do
+  putStrLn (show (runKleisli identity 4))
+  putStrLn (show (runKleisli (increment >>> identity) 4))
+  putStrLn (show (runKleisli (identity >>> increment) 4))
+  putStrLn (show (runKleisli (increment <<< identity) 4))
+  putStrLn (show (runKleisli (identity <<< increment) 4))
+  putStrLn (show (runKleisli (failAt >>> increment) 4))
+  putStrLn (show (runKleisli (increment >>> failAt) 4))
+  putStrLn (show (runFun (funIncrement <<< funDouble) 3))
+  putStrLn (show (runFun funIdentity 7))
+  putStrLn (show ((incFn <<< doubleFn) 3))
+  putStrLn (show (idFn 7))
+  law "identity-left (>>>) at (->)" implIdentityLeft
+  law "identity-right (>>>) at (->)" implIdentityRight
+  law "identity-left (<<<) at (->)" implIdentityLeftBack
+  law "identity-right (<<<) at (->)" implIdentityRightBack
+  law "associativity (>>>) at (->)" implAssociativity
+  law "associativity (<<<) at (->)" implAssociativityBack
+  law "identity-left (>>>) at Fun" funIdentityLeft
+  law "identity-right (>>>) at Fun" funIdentityRight
+  law "associativity (>>>) at Fun" funAssociativity
+  law "identity-left (>>>) at Kleisli Maybe" kleisliIdentityLeft
+  law "associativity (>>>) at Kleisli Maybe" kleisliAssociativity
+  putStrLn (show ((incFn . doubleFn) 3))

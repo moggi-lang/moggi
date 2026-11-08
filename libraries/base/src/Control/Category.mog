@@ -1,0 +1,80 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- Categories: composable morphisms with an identity.
+--
+-- A category is a type of morphisms between two objects. 'id' is the morphism
+-- that does nothing, and '(.)' composes two compatible morphisms. The methods
+-- satisfy the identity and associativity laws.
+module Control.Category
+  ( Category(..)
+  , (>>>)
+  , (<<<)
+  ) where
+
+infixr 9 .
+infixr 1 >>>, <<<
+
+-- | A class for categories.
+--
+-- In mathematics, a /category/ is defined as a collection of /objects/ and a collection
+-- of /morphisms/ between objects, together with an /identity morphism/ 'id' for every
+-- object and an operation '(.)' that /composes/ compatible morphisms.
+--
+-- This class is defined in an analogous way. The collection of morphisms is represented
+-- by a type parameter @cat@, which has kind @Type -> Type -> Type@: @cat a b@ is a
+-- morphism from @a@ to @b@.
+--
+-- ==== __Examples__
+--
+-- As the method names suggest, there's a category of functions:
+--
+-- @
+-- instance Category (->) where
+--   id = \\x -> x
+--   f . g = \\x -> f (g x)
+-- @
+--
+-- Isomorphisms form a category as well:
+--
+-- @
+-- data Iso a b = Iso (a -> b) (b -> a)
+--
+-- instance Category Iso where
+--   id = Iso id id
+--   Iso f1 g1 . Iso f2 g2 = Iso (f1 . f2) (g2 . g1)
+-- @
+--
+-- Natural transformations are another important example:
+--
+-- @
+-- newtype f ~> g = NatTransform (forall x. f x -> g x)
+--
+-- instance Category (~>) where
+--   id = NatTransform id
+--   NatTransform f . NatTransform g = NatTransform (f . g)
+-- @
+class Category cat where
+  -- | The identity morphism. Implementations should satisfy two laws:
+  --
+  -- [Right identity] @f '.' 'id'  =  f@
+  -- [Left identity]  @'id' '.' f  =  f@
+  --
+  -- These essentially state that 'id' should "do nothing".
+  id :: cat a a
+
+  -- | Morphism composition. Implementations should satisfy the law:
+  --
+  -- [Associativity]  @f '.' (g '.' h)  =  (f '.' g) '.' h@
+  --
+  -- This means that the way morphisms are grouped is irrelevant, so it is unambiguous
+  -- to write a composition of morphisms as @f '.' g '.' h@, without parentheses.
+  (.) :: cat b c -> cat a b -> cat a c
+
+-- | Compose left to right: @f '>>>' g@ is @g '.' f@.
+(>>>) :: Category cat => cat a b -> cat b c -> cat a c
+(>>>) f g = g . f
+
+-- | Compose right to left: a synonym for '(.)' that makes the direction
+-- explicit.
+(<<<) :: Category cat => cat b c -> cat a b -> cat a c
+(<<<) f g = f . g

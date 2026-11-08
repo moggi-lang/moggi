@@ -1,0 +1,23 @@
+import Prelude hiding (map)
+import Control.Applicative
+import Control.Arrow
+import Data.Functor (Functor(map))
+
+-- A wrapped arrow is the arrow carried as an applicative: every class the
+-- wrapper has is exercised here through its function arrow instance.
+
+increment :: Int -> Int
+increment x = x + 1
+
+double :: Int -> Int
+double x = x * 2
+
+runWrapped :: WrappedArrow (->) a b -> a -> b
+runWrapped wrapped = case wrapped of
+  WrapArrow f -> f
+
+main :: IO ()
+main = do
+  putStrLn (show (runWrapped (map double (WrapArrow increment)) 3))
+  putStrLn (show (runWrapped (pure 7 :: WrappedArrow (->) () Int) ()))
+  putStrLn (show (runWrapped (liftA2 (\a b -> a + b) (WrapArrow increment) (WrapArrow double)) 3))

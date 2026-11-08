@@ -1,0 +1,37 @@
+import Prelude
+import Control.Exception (ErrorCall(..), try)
+import System.IO.Unsafe (unsafeFixIO)
+
+-- The step returns the function it is defining; the knot is tied when the
+-- action publishes its result, so the recursive calls in the body run later.
+factorialIO :: IO (Int -> Int)
+factorialIO = unsafeFixIO (\rec -> pure (\n -> case n <= 1 of
+  True -> 1
+  False -> n * rec (n - 1)))
+
+-- A result the action computes without reading its argument is the answer.
+fixedValue :: IO Int
+fixedValue = unsafeFixIO (\_ -> pure 7)
+
+-- The action demands the function while it is still being defined, so the read
+-- happens before publication and reports the black hole.
+strictAction :: IO (Int -> Int)
+strictAction = unsafeFixIO (\rec -> do
+  y <- pure (rec 5)
+  pure (\x -> y + x))
+
+strictOutcome :: IO (Either ErrorCall ())
+strictOutcome = try (do
+  f <- strictAction
+  putStrLn (show (f 1)))
+
+main :: IO ()
+main = do
+  f <- factorialIO
+  putStrLn (show (f 5))
+  value <- fixedValue
+  putStrLn (show value)
+  outcome <- strictOutcome
+  case outcome of
+    Left (ErrorCall message) -> putStrLn message
+    Right _ -> putStrLn "the black hole was not reported"

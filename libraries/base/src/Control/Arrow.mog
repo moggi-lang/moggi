@@ -1,0 +1,400 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- Basic arrow definitions, based on
+--
+--  * /Generalising Monads to Arrows/, by John Hughes,
+--    /Science of Computer Programming/ 37, pp67-111, May 2000.
+--
+-- plus a couple of definitions ('returnA' and 'loop') from
+--
+--  * /A New Notation for Arrows/, by Ross Paterson, in /ICFP 2001/,
+--    Firenze, Italy, pp229-240.
+module Control.Arrow
+  ( -- *  Arrows
+    Arrow(..),
+    Kleisli(..),
+    -- **  Derived combinators
+    returnA,
+    (^>>),
+    (>>^),
+    (>>>),
+    (<<<),
+    -- **  Right-to-left variants
+    (<<^),
+    (^<<),
+    -- *  Monoid operations
+    ArrowZero(..),
+    ArrowPlus(..),
+    -- *  Conditionals
+    ArrowChoice(..),
+    -- *  Arrow application
+    ArrowApply(..),
+    ArrowMonad(..),
+    leftApp,
+    -- *  Feedback
+    ArrowLoop(..)
+    ) where
+
+import Control.Applicative
+import Control.Category
+import Control.Monad
+import Data.Bool (Bool(..))
+import Data.Either
+import Data.Function (const)
+import Data.Functor
+import Data.Kind (Type)
+import Data.Tuple (fst, snd)
+import Moggi.Internal.Prim (mfixPure#)
+
+infixr 5 <+>
+infixr 3 ***
+infixr 3 &&&
+infixr 2 +++
+infixr 2 |||
+infixr 1 ^>>, >>^
+infixr 1 ^<<, <<^
+
+-- | The basic arrow class.
+--
+-- Instances should satisfy the following laws:
+--
+--  * @'arr' id = 'id'@
+--
+--  * @'arr' (f >>> g) = 'arr' f >>> 'arr' g@
+--
+--  * @'first' ('arr' f) = 'arr' ('first' f)@
+--
+--  * @'first' (f >>> g) = 'first' f >>> 'first' g@
+--
+--  * @'first' f >>> 'arr' 'fst' = 'arr' 'fst' >>> f@
+--
+--  * @'first' f >>> 'arr' ('id' *** g) = 'arr' ('id' *** g) >>> 'first' f@
+--
+--  * @'first' ('first' f) >>> 'arr' assoc = 'arr' assoc >>> 'first' f@
+--
+-- where
+--
+-- > assoc ((a,b),c) = (a,(b,c))
+--
+-- The other combinators have sensible default definitions,
+-- which may be overridden for efficiency.
+class Category a => Arrow a where
+  -- | Lift a pure function into the arrow.
+  arr :: (b -> c) -> a b c
+
+  -- | Apply the arrow to the first component of a pair and copy the second
+  -- component through unchanged.
+  first :: a b c -> a (b, d) (c, d)
+  first f = f *** id
+
+  -- | Apply the arrow to the second component of a pair and copy the first
+  -- component through unchanged.
+  second :: a b c -> a (d, b) (d, c)
+  second f = id *** f
+
+  -- | Run two arrows on the two components of a pair.
+  (***) :: a b c -> a b' c' -> a (b, b') (c, c')
+  f *** g = first f >>> arr arrowSwap >>> first g >>> arr arrowSwap
+
+  -- | Feed one input to both arrows and pair their results.
+  (&&&) :: a b c -> a b c' -> a b (c, c')
+  f &&& g = arr (\b -> (b, b)) >>> f *** g
+
+-- | Pair a value with itself. Used by the default arrow combinators.
+arrowSwap :: (a, b) -> (b, a)
+arrowSwap pair = case pair of
+  (a, b) -> (b, a)
+
+-- | An arrow made from a function returning a monadic result.
+newtype Kleisli (m :: Type -> Type) a b = Kleisli { runKleisli :: a -> m b }
+
+-- | Extract the function an arrow wraps.
+runKleisli :: Kleisli m a b -> a -> m b
+runKleisli k = case k of
+  Kleisli f -> f
+
+instance Functor m => Functor (Kleisli m a) where
+  map f (Kleisli k) = Kleisli (\x -> map f (k x))
+
+instance Applicative m => Applicative (Kleisli m a) where
+  pure x = Kleisli (\_ -> pure x)
+  (<*>) (Kleisli f) (Kleisli g) = Kleisli (\x -> f x <*> g x)
+  (*>) (Kleisli f) (Kleisli g) = Kleisli (\x -> f x *> g x)
+  (<*) (Kleisli f) (Kleisli g) = Kleisli (\x -> f x <* g x)
+
+instance Alternative m => Alternative (Kleisli m a) where
+  empty = Kleisli (\_ -> empty)
+  (<|>) (Kleisli f) (Kleisli g) = Kleisli (\x -> f x <|> g x)
+
+instance Monad m => Monad (Kleisli m a) where
+  (>>=) (Kleisli f) k = Kleisli (\x -> f x >>= (\a -> runKleisli (k a) x))
+
+instance MonadPlus m => MonadPlus (Kleisli m a) where
+  mzero = Kleisli (\_ -> mzero)
+  mplus (Kleisli f) (Kleisli g) = Kleisli (\x -> mplus (f x) (g x))
+
+instance Monad m => Category (Kleisli m) where
+  id = Kleisli (\b -> pure b)
+  (.) (Kleisli f) (Kleisli g) = Kleisli (\b -> g b >>= f)
+
+instance Monad m => Arrow (Kleisli m) where
+  arr f = Kleisli (\b -> pure (f b))
+  first (Kleisli f) = Kleisli (\pair -> case pair of
+    (b, d) -> f b >>= (\c -> pure (c, d)))
+  second (Kleisli f) = Kleisli (\pair -> case pair of
+    (d, b) -> f b >>= (\c -> pure (d, c)))
+  (***) (Kleisli f) (Kleisli g) =
+    Kleisli (\pair -> case pair of
+      (b, b') -> f b >>= (\c -> g b' >>= (\c' -> pure (c, c'))))
+  (&&&) (Kleisli f) (Kleisli g) =
+    Kleisli (\b -> f b >>= (\c -> g b >>= (\c' -> pure (c, c'))))
+
+-- | An arrow whose result can fail.
+class Arrow a => ArrowZero a where
+  -- | The arrow that fails without producing a result.
+  zeroArrow :: a b c
+
+instance MonadPlus m => ArrowZero (Kleisli m) where
+  zeroArrow = Kleisli (\_ -> mzero)
+
+-- | A monoid on arrows.
+class ArrowZero a => ArrowPlus a where
+  -- | An associative operation with identity 'zeroArrow'.
+  (<+>) :: a b c -> a b c -> a b c
+
+instance MonadPlus m => ArrowPlus (Kleisli m) where
+  (<+>) (Kleisli f) (Kleisli g) = Kleisli (\x -> mplus (f x) (g x))
+
+-- | Choice, for arrows that support it.  This class underlies the
+-- @if@ and @case@ constructs in arrow notation.
+--
+-- Instances should satisfy the following laws:
+--
+--  * @'left' ('arr' f) = 'arr' ('left' f)@
+--
+--  * @'left' (f >>> g) = 'left' f >>> 'left' g@
+--
+--  * @f >>> 'arr' 'Left' = 'arr' 'Left' >>> 'left' f@
+--
+--  * @'left' f >>> 'arr' ('id' +++ g) = 'arr' ('id' +++ g) >>> 'left' f@
+--
+--  * @'left' ('left' f) >>> 'arr' assocsum = 'arr' assocsum >>> 'left' f@
+--
+-- where
+--
+-- > assocsum (Left (Left x)) = Left x
+-- > assocsum (Left (Right y)) = Right (Left y)
+-- > assocsum (Right z) = Right (Right z)
+--
+-- The other combinators have sensible default definitions, which may
+-- be overridden for efficiency.
+class Arrow a => ArrowChoice a where
+  -- | Feed marked inputs through the argument arrow, passing the
+  --   rest through unchanged to the output.
+  left :: a b c -> a (Either b d) (Either c d)
+  left f = f +++ id
+
+  -- | A mirror image of 'left'.
+  --
+  --   The default definition may be overridden with a more efficient
+  --   version if desired.
+  right :: a b c -> a (Either d b) (Either d c)
+  right f = id +++ f
+
+  -- | Split the input between the two argument arrows, retagging
+  --   and merging their outputs.
+  --   Note that this is in general not a functor.
+  --
+  --   The default definition may be overridden with a more efficient
+  --   version if desired.
+  (+++) :: a b c -> a b' c' -> a (Either b b') (Either c c')
+  f +++ g = left f >>> arr arrowMirror >>> left g >>> arr arrowMirror
+
+  -- | Fanin: Split the input between the two argument arrows and
+  --   merge their outputs.
+  --
+  --   The default definition may be overridden with a more efficient
+  --   version if desired.
+  (|||) :: a b d -> a c d -> a (Either b c) d
+  f ||| g = f +++ g >>> arr arrowUntag
+
+-- | Swap the sides of an 'Either'. Used by the default choice combinators.
+arrowMirror :: Either a b -> Either b a
+arrowMirror value = case value of
+  Left a -> Right a
+  Right b -> Left b
+
+-- | Remove the side tag from an 'Either'. Used by the default choice
+-- combinators.
+arrowUntag :: Either a a -> a
+arrowUntag value = case value of
+  Left a -> a
+  Right a -> a
+
+instance Monad m => ArrowChoice (Kleisli m) where
+  left (Kleisli f) =
+    Kleisli (\value -> case value of
+      Left b -> f b >>= (\c -> pure (Left c))
+      Right d -> pure (Right d))
+  right (Kleisli f) =
+    Kleisli (\value -> case value of
+      Left d -> pure (Left d)
+      Right b -> f b >>= (\c -> pure (Right c)))
+  (+++) (Kleisli f) (Kleisli g) =
+    Kleisli (\value -> case value of
+      Left b -> f b >>= (\c -> pure (Left c))
+      Right b' -> g b' >>= (\c' -> pure (Right c')))
+  (|||) (Kleisli f) (Kleisli g) =
+    Kleisli (\value -> case value of
+      Left b -> f b
+      Right c -> g c)
+
+-- | Some arrows allow application of arrow inputs to other inputs.
+-- Instances should satisfy the following laws:
+--
+--  * @'first' ('arr' (\\x -> 'arr' (\\y -> (x,y)))) >>> 'app' = 'id'@
+--
+--  * @'first' ('arr' (g >>>)) >>> 'app' = 'second' g >>> 'app'@
+--
+--  * @'first' ('arr' (>>> h)) >>> 'app' = 'app' >>> h@
+--
+-- Such arrows are equivalent to monads (see 'ArrowMonad').
+class Arrow a => ArrowApply a where
+  -- | Apply the arrow in the first component to the value in the second.
+  app :: a (a b c, b) c
+
+instance Monad m => ArrowApply (Kleisli m) where
+  app = Kleisli (\pair -> case pair of
+    (Kleisli f, x) -> f x)
+
+-- | An arrow turned into a monad: run it with the unit value as input.
+newtype ArrowMonad (a :: Type -> Type -> Type) b = ArrowMonad (a () b)
+
+instance Arrow a => Functor (ArrowMonad a) where
+  map f (ArrowMonad m) = ArrowMonad (m >>> arr f)
+
+instance Arrow a => Applicative (ArrowMonad a) where
+  pure x = ArrowMonad (arr (\_ -> x))
+  (<*>) (ArrowMonad f) (ArrowMonad x) =
+    ArrowMonad ((f &&& x) >>> arr (\pair -> case pair of
+      (g, y) -> g y))
+
+instance ArrowApply a => Monad (ArrowMonad a) where
+  (>>=) (ArrowMonad m) f =
+    ArrowMonad (m >>> arr (\x -> case f x of ArrowMonad h -> (h, ())) >>> app)
+
+instance ArrowPlus a => Alternative (ArrowMonad a) where
+  empty = ArrowMonad zeroArrow
+  (<|>) (ArrowMonad x) (ArrowMonad y) = ArrowMonad (x <+> y)
+
+instance (ArrowApply a, ArrowPlus a) => MonadPlus (ArrowMonad a)
+
+-- | The identity arrow.
+returnA :: Arrow a => a b b
+returnA = id
+
+-- | Precomposition with a pure function.
+(^>>) :: Arrow a => (b -> c) -> a c d -> a b d
+f ^>> a = arr f >>> a
+
+-- | Postcomposition with a pure function.
+(>>^) :: Arrow a => a b c -> (c -> d) -> a b d
+a >>^ f = a >>> arr f
+
+-- | Precomposition with a pure function, written right to left.
+(<<^) :: Arrow a => a c d -> (b -> c) -> a b d
+a <<^ f = a <<< arr f
+
+-- | Postcomposition with a pure function, written right to left.
+(^<<) :: Arrow a => (c -> d) -> a b c -> a b d
+f ^<< a = arr f <<< a
+
+-- | Functions are the arrow that carries no effect: composition is function
+-- composition, 'arr' is application, and 'first' passes the second component
+-- through unchanged.
+instance Category (->) where
+  id = \x -> x
+  (.) f g = \x -> f (g x)
+
+instance Arrow (->) where
+  arr f = f
+  first f = \pair -> case pair of
+    (b, d) -> (f b, d)
+  second f = \pair -> case pair of
+    (d, b) -> (d, f b)
+  (***) f g = \pair -> case pair of
+    (b, b') -> (f b, g b')
+  (&&&) f g = \b -> (f b, g b)
+
+instance ArrowChoice (->) where
+  left f = \value -> case value of
+    Left b -> Left (f b)
+    Right d -> Right d
+  right f = \value -> case value of
+    Left d -> Left d
+    Right b -> Right (f b)
+  (+++) f g = \value -> case value of
+    Left b -> Left (f b)
+    Right b' -> Right (g b')
+  (|||) f g = \value -> case value of
+    Left b -> f b
+    Right c -> g c
+
+instance ArrowApply (->) where
+  app = \pair -> case pair of
+    (f, x) -> f x
+
+-- | Any 'ArrowApply' arrow can choose on 'Either' with this definition of
+-- 'left'.
+leftApp :: ArrowApply a => a b c -> a (Either b d) (Either c d)
+leftApp f =
+  arr (\value -> case value of
+    Left b -> (arr (\_ -> b) >>> f >>> arr Left, ())
+    Right d -> (arr (\_ -> d) >>> arr Right, ()))
+  >>> app
+
+-- | The 'loop' operator expresses computations in which an output value
+-- is fed back as input, although the computation occurs only once.
+-- 'loop' should satisfy the following laws:
+--
+-- [/extension/]
+--      @'loop' ('arr' f) = 'arr' (\\ b -> 'fst' ('fix' (\\ (c,d) -> f (b,d))))@
+--
+-- [/left tightening/]
+--      @'loop' ('first' h >>> f) = h >>> 'loop' f@
+--
+-- [/right tightening/]
+--      @'loop' (f >>> 'first' h) = 'loop' f >>> h@
+--
+-- [/sliding/]
+--      @'loop' (f >>> 'arr' ('id' *** k)) = 'loop' ('arr' ('id' *** k) >>> f)@
+--
+-- [/vanishing/]
+--      @'loop' ('loop' f) = 'loop' ('arr' unassoc >>> f >>> 'arr' assoc)@
+--
+-- [/superposing/]
+--      @'second' ('loop' f) = 'loop' ('arr' assoc >>> 'second' f >>> 'arr' unassoc)@
+--
+-- where
+--
+-- > assoc ((a,b),c) = (a,(b,c))
+-- > unassoc (a,(b,c)) = ((a,b),c)
+class Arrow a => ArrowLoop a where
+  -- | Feed the second output component back as the second input component.
+  loop :: a (b, d) (c, d) -> a b c
+
+instance ArrowLoop (->) where
+  loop f = \input -> fst (mfixPure# (\feedback -> f (input, feedback)) (const True) snd)
+
+instance Arrow a => Functor (WrappedArrow a b) where
+  map f (WrapArrow arrow) = WrapArrow (arrow >>> arr f)
+
+instance Arrow a => Applicative (WrappedArrow a b) where
+  pure x = WrapArrow (arr (\_ -> x))
+  liftA2 f (WrapArrow g) (WrapArrow h) =
+    WrapArrow ((g &&& h) >>> arr (\pair -> case pair of
+      (x, y) -> f x y))
+
+instance (ArrowZero a, ArrowPlus a) => Alternative (WrappedArrow a b) where
+  empty = WrapArrow zeroArrow
+  (<|>) (WrapArrow f) (WrapArrow g) = WrapArrow (f <+> g)

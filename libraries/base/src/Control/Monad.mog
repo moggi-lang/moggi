@@ -15,33 +15,46 @@
 -- compiling; new code does not need them. The same is true of the class
 -- 'MonadPlus' and its two methods, which say what 'Alternative' already says.
 module Control.Monad
-  ( Monad((>>=), (>>))
+  (
+    -- * Functor and monad classes
+    Functor(..)
+  , Monad((>>=), (>>))
   , MonadPlus(mzero, mplus)
+
+  -- * Functions
+
+  -- ** Basic @Monad@ functions
   , void
   , (=<<)
   , (>=>)
   , (<=<)
-  , join
   , forever
+  , join
+
+  -- ** Generalisations of list functions
+  , msum
+  , mfilter
+  , filterM
+  , mapAndUnzipM
+  , zipWithM
+  , zipWithM_
+  , foldM
+  , foldM_
+  , replicateM
+  , replicateM_
+
+  -- ** Conditional execution of monadic expressions
   , guard
   , when
   , unless
+
+  -- ** Monadic lifting operators
   , liftM
   , liftM2
   , liftM3
   , liftM4
   , liftM5
-  , mapAndUnzipM
   , ap
-  , foldM
-  , foldM_
-  , filterM
-  , zipWithM
-  , zipWithM_
-  , replicateM
-  , replicateM_
-  , msum
-  , mfilter
   , WrappedMonad(WrapMonad)
   , unwrapMonad
   ) where
