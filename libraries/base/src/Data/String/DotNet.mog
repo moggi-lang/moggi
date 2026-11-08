@@ -1,11 +1,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 module Data.String.DotNet
   ( singleton
-  , unpack
   , pack
   , length
-  , take
-  , drop
   , reverse
   , isPrefixOf
   , isSuffixOf
@@ -34,8 +31,6 @@ foreign dotnet function rawConvertFromUtf32 "System.Char:ConvertFromUtf32" :: In
 
 foreign dotnet function rawUtf16Length "System.String.get_Length" :: String -> Int32
 
-foreign dotnet function rawConvertToUtf32At "System.Char:ConvertToUtf32" :: String -> Int32 -> Int32
-
 foreign dotnet function rawCharAt "System.String.get_Chars" :: String -> Int32 -> Char
 
 foreign dotnet function rawIsHighSurrogate "System.Char:IsHighSurrogate" :: Char -> Bool
@@ -49,6 +44,14 @@ foreign dotnet function rawStartsWith "System.String.StartsWith" :: String -> St
 foreign dotnet function rawEndsWith "System.String.EndsWith" :: String -> String -> Bool
 
 foreign dotnet function rawIndexOfFrom "System.String.IndexOf" :: String -> String -> Int32 -> Int32
+
+foreign dotnet type StringBuilder "System.Text.StringBuilder"
+
+foreign dotnet function newStringBuilder "System.Text.StringBuilder:__con" :: String -> StringBuilder
+
+foreign dotnet function sbAppend "System.Text.StringBuilder.Append" :: StringBuilder -> String -> StringBuilder
+
+foreign dotnet function sbToString "System.Text.StringBuilder.ToString" :: StringBuilder -> String
 
 singleton c = rawConvertFromUtf32 (int32FromInt# (charToInt# c))
 
@@ -71,39 +74,20 @@ utf16WidthAt s i =
       EQ -> 1
       GT -> 1
 
-offsetByCodePoints :: String -> Int -> Int -> Int
-offsetByCodePoints s i n = case intCompare# n 0 of
-  EQ -> i
-  LT -> i
-  GT -> offsetByCodePointsStep s i n
-
-offsetByCodePointsStep :: String -> Int -> Int -> Int
-offsetByCodePointsStep s i n =
-  let end = utf16Length s in
-  case intCompare# i end of
-    EQ -> i
-    GT -> i
-    LT -> offsetByCodePointsAfter s i n end
-
-offsetByCodePointsAfter :: String -> Int -> Int -> Int -> Int
-offsetByCodePointsAfter s i n end = case intCompare# n 0 of
-  EQ -> i
-  LT -> i
-  GT -> offsetByCodePointsStep s (i + utf16WidthAt s i) (n - 1)
-
+-- | Scalars go into one builder left to right, so a long build stays linear
+-- and in constant stack.
 pack :: [Char] -> String
-pack xs = case xs of
-  [] -> ""
-  c : cs -> singleton c <> pack cs
+pack xs = sbToString (packBuilder xs (newStringBuilder ""))
 
-unpack :: String -> [Char]
-unpack s =
-  let convertToUtf32At i = int32ToInt# (rawConvertToUtf32At s (int32FromInt# i))
-      unpackAt i end = case intCompare# i end of
-        EQ -> []
-        GT -> []
-        LT -> chr (convertToUtf32At i) : unpackAt (i + utf16WidthAt s i) end
-  in unpackAt 0 (utf16Length s)
+packBuilder :: [Char] -> StringBuilder -> StringBuilder
+packBuilder xs sb = case xs of
+  [] -> sb
+  c : cs -> packBuilder cs (sbAppend sb (singleton c))
+
+reverseOnto :: [a] -> [a] -> [a]
+reverseOnto xs acc = case xs of
+  [] -> acc
+  x : rest -> reverseOnto rest (x : acc)
 
 splitOn :: String -> String -> [String]
 splitOn sep s =
@@ -118,39 +102,21 @@ splitOn sep s =
     _ -> splitOnAt 0
 
 length :: String -> Int
-length s =
-  let codePointCountGo i endBound acc = case intCompare# i endBound of
-        EQ -> acc
-        GT -> acc
-        LT -> codePointCountGo (i + utf16WidthAt s i) endBound (acc + 1)
-  in codePointCountGo 0 (utf16Length s) 0
-
-take :: Int -> String -> String
-take n s =
-  let end = offsetByCodePoints s 0 n
-  in substringLen s 0 end
-
-drop :: Int -> String -> String
-drop n s =
-  let len = length s
-      dropFrom start = substringLen s start (intSub# (utf16Length s) start)
-  in case intCompare# n len of
-    LT -> dropFrom (offsetByCodePoints s 0 n)
-    EQ -> ""
-    GT -> ""
+length s = codePointCountGo s 0 (utf16Length s) 0
+-- | A top-level loop rather than a closure: the scalar walk of a long string
+-- must run in constant stack, and only an entry's tail call becomes one.
+codePointCountGo :: String -> Int -> Int -> Int -> Int
+codePointCountGo s i endBound acc = case intCompare# i endBound of
+  EQ -> acc
+  GT -> acc
+  LT -> codePointCountGo s (i + utf16WidthAt s i) endBound (acc + 1)
 
 -- | Reverse by Unicode scalar. The reversed scalars have to be rebuilt one at
 -- a time: the BCL reverses a `char[]` in place, and a list cannot be handed to
--- a foreign call, so `System.Array.Reverse` is not reachable from here.
+-- a foreign call, so `System.Array.Reverse` is not reachable from here. Both
+-- halves of the round trip are loops, so long strings stay on the heap.
 reverse :: String -> String
-reverse s =
-  let reverseChars cs acc = case cs of
-        [] -> acc
-        c : rest -> reverseChars rest (c : acc)
-      packChars cs = case cs of
-        [] -> ""
-        c : rest -> stringAppend# (singleton c) (packChars rest)
-  in packChars (reverseChars (unpack s) [])
+reverse s = pack (reverseOnto (unpack s) [])
 
 isPrefixOf :: String -> String -> Bool
 isPrefixOf prefix s = rawStartsWith s prefix

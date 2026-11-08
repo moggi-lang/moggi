@@ -1,9 +1,56 @@
 -- Text.Read: the 'Read' instances for types whose modules sit below
--- 'Data.String'. 'Bool' reads what 'Show' writes (@"True"@ and @"False"@).
+-- 'Data.String'. 'Bool' reads what 'Show' writes (@\"True\"@ and @\"False\"@),
+-- and the precedence parser 'readPrec' composes the same parses.
 
 import Text.Read
+import Data.Functor.Classes (readData)
+import Data.Int (Int8, Int16)
+import Data.Word (Word, Word8, Word16, Word32)
+import Numeric.Natural (Natural)
+
+firstParse :: Read a => ReadPrec a -> String -> Maybe a
+firstParse p s = case readPrec_to_S p 0 s of
+  [] -> Nothing
+  (x, _) : _ -> Just x
+
+readPrecBool :: String -> Maybe Bool
+readPrecBool s = firstParse readPrec s
+
+parensBool :: String -> Maybe Bool
+parensBool s = firstParse (parens readPrec) s
+
+readDataBool :: String -> Maybe Bool
+readDataBool s = firstParse (readData readPrec) s
+
+readListPrecBool :: String -> Maybe [Bool]
+readListPrecBool s = firstParse readListPrec s
+
+contextAt :: String -> Maybe Int
+contextAt s = firstParse minPrec s
 
 main :: IO ()
 main = do
   putStrLn (show (read "True" :: Bool))
   putStrLn (show (read "False" :: Bool))
+  putStrLn (show (readPrecBool "True"))
+  putStrLn (show (parensBool "(False)"))
+  putStrLn (show (readDataBool "True"))
+  putStrLn (show (readListPrecBool "[True,False]"))
+  putStrLn (show (contextAt ""))
+  putStrLn (show (read "123456789012345678901234567890" :: Integer))
+  putStrLn (show (read "-42" :: Integer))
+  putStrLn (show (read "200" :: Word8))
+  putStrLn (show (read "70000" :: Word16))
+  putStrLn (show (read "4294967296" :: Word32))
+  putStrLn (show (read "-1" :: Word))
+  putStrLn (show (read "127" :: Int8))
+  putStrLn (show (read "128" :: Int8))
+  putStrLn (show (read "-129" :: Int16))
+  putStrLn (show (read "123" :: Natural))
+  putStrLn (show (read "1.5" :: Double))
+  putStrLn (show (read "-2.5e3" :: Double))
+  putStrLn (show (read "1e-3" :: Double))
+  putStrLn (show (read "3.0E2" :: Double))
+  putStrLn (show (read "LT" :: Ordering))
+  putStrLn (case read "()" :: () of () -> "unit")
+  putStrLn (show (readMaybe "abc" :: Maybe Word8))

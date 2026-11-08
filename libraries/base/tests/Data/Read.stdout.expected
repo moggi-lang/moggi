@@ -1,2 +1,24 @@
 True
 False
+Just True
+Just False
+Just True
+Just [True,False]
+Just 0
+123456789012345678901234567890
+-42
+200
+4464
+0
+18446744073709551615
+127
+-128
+-129
+123
+1.5
+-2500.0
+1.0e-3
+300.0
+LT
+unit
+Nothing

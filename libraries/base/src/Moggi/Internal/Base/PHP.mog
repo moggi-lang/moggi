@@ -1,0 +1,40 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Moggi.Internal.Base.PHP
+  ( unpack
+  , take
+  , drop
+  ) where
+
+import Moggi.Internal.Prim
+
+-- Scalar-aware calls via PHP mbstring / IntlChar foreigns, no PHP helpers.
+
+foreign php function mbStrLen "mb_strlen" :: String -> String -> Int
+
+foreign php function mbSubstr "mb_substr" :: String -> Int -> Int -> String -> String
+
+foreign php function mbStrSplit "mb_str_split" :: String -> Int -> String -> [String]
+
+foreign php function rawMapOrd "array_map" :: String -> [String] -> [Char]
+
+utf8 = "UTF-8"
+
+unpack s = rawMapOrd "IntlChar::ord" (mbStrSplit s 1 utf8)
+
+-- A negative length is not "zero chars" to `mb_substr`: it means "all but the
+-- last |n|", so the sign has to be rejected before the call.
+take :: Int -> String -> String
+take n s = case intCompare# n 0 of
+  GT -> mbSubstr s 0 n utf8
+  _ -> ""
+
+drop :: Int -> String -> String
+drop n s =
+  let dropFrom k =
+        let len = mbStrLen s utf8
+        in case intCompare# k len of
+          LT -> mbSubstr s k (intSub# len k) utf8
+          _ -> ""
+  in case intCompare# n 0 of
+    GT -> dropFrom n
+    _ -> s

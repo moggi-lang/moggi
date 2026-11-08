@@ -1,0 +1,75 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Moggi.Internal.Base.JVM
+  ( unpack
+  , take
+  , drop
+  ) where
+
+import Moggi.Internal.Prim
+
+-- Ordinary JDK FFI only (no moggi.rt.StringOps).
+-- Width-exact signatures: JDK String/Character APIs are int32-based.
+
+foreign jvm function rawUtf16Length "java.lang.String.length" :: String -> Int32
+
+foreign jvm function rawCodePointCount "java.lang.String.codePointCount" :: String -> Int32 -> Int32 -> Int32
+
+foreign jvm function rawOffsetByCodePoints "java.lang.String.offsetByCodePoints" :: String -> Int32 -> Int32 -> Int32
+
+foreign jvm function rawCodePointAt "java.lang.String.codePointAt" :: String -> Int32 -> Int32
+
+foreign jvm function rawSubstring "java.lang.String.substring" :: String -> Int32 -> Int32 -> String
+
+utf16Length s = int32ToInt# (rawUtf16Length s)
+
+offsetByCodePoints s a b = int32ToInt# (rawOffsetByCodePoints s (int32FromInt# a) (int32FromInt# b))
+
+substring s a b = rawSubstring s (int32FromInt# a) (int32FromInt# b)
+
+-- | The scalars come out right to left and are flipped at the end, so the walk
+-- is a tail call however long the string is.
+unpack :: String -> [Char]
+unpack s = unpackFrom s 0 (utf16Length s) []
+
+unpackFrom :: String -> Int -> Int -> [Char] -> [Char]
+unpackFrom s i endBound acc = case intCompare# i endBound of
+  EQ -> reverseOnto acc []
+  _ -> unpackFrom s (offsetByCodePoints s i 1) endBound (codePointAt s i : acc)
+
+codePointAt :: String -> Int -> Char
+codePointAt s i = intToChar# (int32ToInt# (rawCodePointAt s (int32FromInt# i)))
+
+reverseOnto :: [a] -> [a] -> [a]
+reverseOnto xs acc = case xs of
+  [] -> acc
+  x : rest -> reverseOnto rest (x : acc)
+
+length :: String -> Int
+length s =
+  let codePointCount a b = int32ToInt# (rawCodePointCount s (int32FromInt# a) (int32FromInt# b))
+  in codePointCount 0 (utf16Length s)
+
+-- `offsetByCodePoints` reads "n scalars from 0", which is an unchecked index:
+-- a count past the end throws, and a negative one walks off the front. Clamp
+-- here so only a positive, in-bounds count reaches it.
+take :: Int -> String -> String
+take n s =
+  let takeWithin k =
+        let len = length s
+        in case intCompare# k len of
+          LT -> substring s 0 (offsetByCodePoints s 0 k)
+          _ -> s
+  in case intCompare# n 0 of
+    GT -> takeWithin n
+    _ -> ""
+
+drop :: Int -> String -> String
+drop n s =
+  let dropWithin k =
+        let len = length s
+        in case intCompare# k len of
+          LT -> substring s (offsetByCodePoints s 0 k) (utf16Length s)
+          _ -> ""
+  in case intCompare# n 0 of
+    GT -> dropWithin n
+    _ -> s

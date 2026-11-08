@@ -14,16 +14,19 @@ module Data.Functor.Classes (
     Ord1(..), compare1,
     Read1(..), readsPrec1,
     liftReadListDefault,
+    liftReadListPrecDefault,
     Show1(..), showsPrec1,
     -- ** For binary constructors
     Eq2(..), eq2,
     Ord2(..), compare2,
     Read2(..), readsPrec2,
     liftReadList2Default,
+    liftReadListPrec2Default,
     Show2(..), showsPrec2,
     -- * Helper functions
     -- $example
     readsData,
+    readData,
     readsUnaryWith,
     readsBinaryWith,
     showsUnaryWith,
@@ -48,7 +51,7 @@ import Data.Ord
 import Data.Proxy (Proxy(Proxy))
 import Data.Functor.Identity (Identity(..))
 import Data.Tuple (Solo(MkSolo), Tuple2, Tuple3, Tuple4)
-import Text.Read (Read, ReadS, lex, readParen, readListDefault, readsPrec)
+import Text.Read (Read, ReadPrec, ReadS, lex, parens, prec, readParen, readListDefault, readPrec_to_S, readS_to_Prec, readsPrec, (<++>))
 import Moggi.Internal.Base
 import Moggi.Internal.Prim
 import Text.Show (Show, ShowS, showChar, showList, showListWith, showParen, showString, showsPrec)
@@ -79,6 +82,12 @@ class (forall a. Read a => Read (f a)) => Read1 f where
   liftReadList :: (Int -> ReadS a) -> ReadS [a] -> ReadS [f a]
   liftReadList rp rl = readListParses (liftReadsPrec rp rl 0)
 
+  liftReadPrec :: ReadPrec a -> ReadPrec [a] -> ReadPrec (f a)
+  liftReadPrec rp rl = readS_to_Prec (\d -> liftReadsPrec (readPrec_to_S rp) (readPrec_to_S rl 0) d)
+
+  liftReadListPrec :: ReadPrec a -> ReadPrec [a] -> ReadPrec [f a]
+  liftReadListPrec rp rl = liftReadListPrecDefault rp rl
+
 -- | The standard reader of a lifted type constructor.
 readsPrec1 :: (Read1 f, Read a) => Int -> ReadS (f a)
 readsPrec1 prec = liftReadsPrec (\d s -> readsPrec d s) readListDefault prec
@@ -86,6 +95,10 @@ readsPrec1 prec = liftReadsPrec (\d s -> readsPrec d s) readListDefault prec
 -- | The list reader built from a lifted element reader.
 liftReadListDefault :: Read1 f => (Int -> ReadS a) -> ReadS [a] -> ReadS [f a]
 liftReadListDefault rp rl = readListParses (liftReadsPrec rp rl 0)
+
+-- | The list parser built from a lifted element parser.
+liftReadListPrecDefault :: Read1 f => ReadPrec a -> ReadPrec [a] -> ReadPrec [f a]
+liftReadListPrecDefault rp rl = readS_to_Prec (\_ -> liftReadList (readPrec_to_S rp) (readPrec_to_S rl 0))
 
 -- | Showing lifted through a type constructor: the argument renders both the
 -- elements and the list form, so a field is shown by the caller's instance.
@@ -126,6 +139,13 @@ class (forall a. Read a => Read1 (f a)) => Read2 f where
   liftReadList2 :: (Int -> ReadS a) -> ReadS [a] -> (Int -> ReadS b) -> ReadS [b] -> ReadS [f a b]
   liftReadList2 rp1 rl1 rp2 rl2 = readListParses (liftReadsPrec2 rp1 rl1 rp2 rl2 0)
 
+  liftReadPrec2 :: ReadPrec a -> ReadPrec [a] -> ReadPrec b -> ReadPrec [b] -> ReadPrec (f a b)
+  liftReadPrec2 rp1 rl1 rp2 rl2 =
+    readS_to_Prec (\d -> liftReadsPrec2 (readPrec_to_S rp1) (readPrec_to_S rl1 0) (readPrec_to_S rp2) (readPrec_to_S rl2 0) d)
+
+  liftReadListPrec2 :: ReadPrec a -> ReadPrec [a] -> ReadPrec b -> ReadPrec [b] -> ReadPrec [f a b]
+  liftReadListPrec2 rp1 rl1 rp2 rl2 = liftReadListPrec2Default rp1 rl1 rp2 rl2
+
 -- | The standard reader of a lifted binary type constructor.
 readsPrec2 :: (Read2 f, Read a, Read b) => Int -> ReadS (f a b)
 readsPrec2 prec =
@@ -135,6 +155,12 @@ readsPrec2 prec =
 liftReadList2Default :: Read2 f
   => (Int -> ReadS a) -> ReadS [a] -> (Int -> ReadS b) -> ReadS [b] -> ReadS [f a b]
 liftReadList2Default rp1 rl1 rp2 rl2 = readListParses (liftReadsPrec2 rp1 rl1 rp2 rl2 0)
+
+-- | The list parser built from both lifted element parsers.
+liftReadListPrec2Default :: Read2 f
+  => ReadPrec a -> ReadPrec [a] -> ReadPrec b -> ReadPrec [b] -> ReadPrec [f a b]
+liftReadListPrec2Default rp1 rl1 rp2 rl2 =
+  readS_to_Prec (\_ -> liftReadList2 (readPrec_to_S rp1) (readPrec_to_S rl1 0) (readPrec_to_S rp2) (readPrec_to_S rl2 0))
 
 -- | Showing lifted through a binary type constructor: one renderer per
 -- parameter, so each field is shown by the caller's instance.
@@ -153,6 +179,11 @@ showsPrec2 prec value =
 -- | Parse one constructor name, then hand it to that constructor's field reader.
 readsData :: (String -> ReadS a) -> Int -> ReadS a
 readsData reader d = readParen (d > 10) (readsDataWith reader)
+
+-- | Parse a constructor application as a composed parser: parenthesised at a
+-- deeper precedence context, bare at the top.
+readData :: ReadPrec a -> ReadPrec a
+readData p = parens (prec 0 p) <++> p
 
 -- | A unary constructor: its name, then one field at the application context.
 readsUnaryWith :: (Int -> ReadS a) -> String -> (a -> t) -> String -> ReadS t

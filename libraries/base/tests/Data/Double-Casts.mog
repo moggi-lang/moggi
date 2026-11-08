@@ -1,0 +1,66 @@
+import Data.Double (castWord64ToDouble, castDoubleToWord64, isDoubleNaN)
+import Data.Word (Word64)
+import Text.Show
+
+-- `castDoubleToWord64` reads the 64 IEEE 754 bits of a `Double` and
+-- `castWord64ToDouble` writes a 64-bit pattern back as a `Double`. Both are
+-- bit-for-bit, so a value and its pattern survive the trip unchanged - including
+-- the sign of a zero and the bits of a NaN, which `==` cannot see. The decimal
+-- patterns printed below are the IEEE 754 encoding, written unsigned.
+
+report :: String -> Bool -> IO ()
+report label b = putStrLn (label <> ": " <> show b)
+
+negZero :: Double
+negZero = negate 0.0
+
+nan :: Double
+nan = 0.0 / 0.0
+
+inf :: Double
+inf = 1.0 / 0.0
+
+-- Two `Double`s have the same bits, whether or not `==` can tell them apart.
+sameBits :: Double -> Double -> Bool
+sameBits a b = castDoubleToWord64 a == castDoubleToWord64 b
+
+main :: IO ()
+main = do
+  putStrLn (show (castDoubleToWord64 1.0))
+  putStrLn (show (castDoubleToWord64 0.5))
+  putStrLn (show (castDoubleToWord64 2.0))
+  putStrLn (show (castDoubleToWord64 (negate 1.0)))
+  putStrLn (show (castDoubleToWord64 negZero))
+  putStrLn (show (castDoubleToWord64 5.0e-324))
+  putStrLn (show (castDoubleToWord64 1.7976931348623157e308))
+  putStrLn (show (castDoubleToWord64 inf))
+  putStrLn (show (castDoubleToWord64 (negate inf)))
+  report "1.0 bits" (castDoubleToWord64 1.0 == 4607182418800017408)
+  report "0.5 bits" (castDoubleToWord64 0.5 == 4602678819172646912)
+  report "2.0 bits" (castDoubleToWord64 2.0 == 4611686018427387904)
+  report "-1.0 bits are unsigned" (castDoubleToWord64 (negate 1.0) == 13830554455654793216)
+  report "-0.0 bits" (castDoubleToWord64 negZero == 9223372036854775808)
+  report "-0.0 differs from 0.0" (castDoubleToWord64 negZero /= castDoubleToWord64 0.0)
+  report "min subnormal bits" (castDoubleToWord64 5.0e-324 == 1)
+  report "max finite bits" (castDoubleToWord64 1.7976931348623157e308 == 9218868437227405311)
+  report "inf bits" (castDoubleToWord64 inf == 9218868437227405312)
+  report "-inf bits" (castDoubleToWord64 (negate inf) == 18442240474082181120)
+  report "0.0/0.0 is nan" (isDoubleNaN nan)
+  report "1.0 round trip" (castWord64ToDouble (castDoubleToWord64 1.0) == 1.0)
+  report "1.5 round trip" (castWord64ToDouble (castDoubleToWord64 1.5) == 1.5)
+  report "2.5 round trip" (castWord64ToDouble (castDoubleToWord64 2.5) == 2.5)
+  report "0.0 round trip" (sameBits (castWord64ToDouble (castDoubleToWord64 0.0)) 0.0)
+  report "-0.0 round trip" (sameBits (castWord64ToDouble (castDoubleToWord64 negZero)) negZero)
+  report "inf round trip" (sameBits (castWord64ToDouble (castDoubleToWord64 inf)) inf)
+  report "-inf round trip" (sameBits (castWord64ToDouble (castDoubleToWord64 (negate inf))) (negate inf))
+  report "nan round trip" (sameBits (castWord64ToDouble (castDoubleToWord64 nan)) nan)
+  report "min subnormal round trip" (sameBits (castWord64ToDouble (castDoubleToWord64 5.0e-324)) 5.0e-324)
+  report "max finite round trip" (castWord64ToDouble (castDoubleToWord64 1.7976931348623157e308) == 1.7976931348623157e308)
+  report "pi round trip" (sameBits (castWord64ToDouble (castDoubleToWord64 3.141592653589793)) 3.141592653589793)
+  report "pattern 1 is min subnormal" (castWord64ToDouble (castDoubleToWord64 0.0 + 1) == 5.0e-324)
+  report "pattern 2 is twice it" (castWord64ToDouble (castDoubleToWord64 0.0 + 2) == 1.0e-323)
+  report "sign bit alone is -0.0" (castDoubleToWord64 (castWord64ToDouble 9223372036854775808) == 9223372036854775808)
+  report "max finite pattern round trip" (castDoubleToWord64 (castWord64ToDouble 9218868437227405311) == 9218868437227405311)
+  report "canonical nan pattern round trip" (castDoubleToWord64 (castWord64ToDouble 9221120237041090560) == 9221120237041090560)
+  report "all ones is nan" (isDoubleNaN (castWord64ToDouble (castDoubleToWord64 0.0 - 1)))
+  report "all ones keeps bits" (castDoubleToWord64 (castWord64ToDouble (castDoubleToWord64 0.0 - 1)) == castDoubleToWord64 0.0 - 1)

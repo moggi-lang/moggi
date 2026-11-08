@@ -13,6 +13,22 @@ inf-inf is nan: True
 recip 0 == inf: True
 signum -0.0 neg: True
 signum 0.0 pos: True
+rationalToDouble 1 2: True
+rationalToDouble 1 0: True
+rationalToDouble 0 0 is nan: True
+cast round trip 1.5: True
+cast keeps sign bit: True
+rationalToDouble 1 3: True
+rationalToDouble 2^2000 over 1: True
+rationalToDouble 1 over 2^2000: True
+rationalToDouble 1 over 2^1074: True
+rationalToDouble tie at 2^-1075: True
+rationalToDouble just above tie: True
+rationalToDouble smallest is positive: True
+min subnormal literal: True
+tiny literal: True
+rationalToDouble max finite: True
+rationalToDouble over max: True
 8.0
 0.1
 1.0e10
@@ -48,3 +64,12 @@ tanh 0 == 0: True
 pi ~ 3.141592653589793: True
 2.0
 3.141592653589793
+expm1 1e-20 == 1e-20: True
+log1p 1e-20 == 1e-20: True
+atanh 1e-20 == 1e-20: True
+tanh 1000 == 1: True
+tanh -1000 == -1: True
+asinh 1e-300 == 1e-300: True
+asinh 1e300 ~ 691.4686750787736: True
+acosh 1e300 ~ 691.4686750787736: True
+expm1 1e-3 ~ 0.0010005001667083417: True

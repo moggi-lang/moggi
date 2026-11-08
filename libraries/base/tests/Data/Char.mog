@@ -48,3 +48,7 @@ main = do
   putStrLn (show (digitToInt '5'))
   putStrLn (show (digitToInt 'f'))
   putStrLn (show (intToDigit 15))
+  putStrLn (show (lexLitChar "\\nHello"))
+  putStrLn (show (readLitChar "\\nHello"))
+  putStrLn (show (lexLitChar "\\x41!"))
+  putStrLn (show (readLitChar "\\x41!"))
