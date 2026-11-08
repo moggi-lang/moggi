@@ -1,0 +1,37 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+--
+-- Module      :  Data.Type.Bool
+-- License     :  BSD-style (see the LICENSE file in the distribution)
+--
+-- Stability   :  experimental
+-- Portability :  non-portable
+--
+-- Boolean type functions.
+module Data.Type.Bool
+  ( If
+  , type (&&)
+  , type (||)
+  , Not
+  ) where
+
+import Data.Bool (Bool(..))
+
+-- | The 'Not' type function.
+type family Not (x :: Bool) where
+  Not 'True = 'False
+  Not 'False = 'True
+
+-- | The '(&&)' type function.
+type family (x :: Bool) && (y :: Bool) where
+  'True && x = x
+  'False && _ = 'False
+
+-- | The '(||)' type function.
+type family (x :: Bool) || (y :: Bool) where
+  'True || _ = 'True
+  'False || x = x
+
+-- | 'If' @b t f@ returns @t@ when @b@ is 'True, and @f@ otherwise.
+type family If (b :: Bool) (t :: k) (f :: k) where
+  If 'True t _ = t
+  If 'False _ f = f
