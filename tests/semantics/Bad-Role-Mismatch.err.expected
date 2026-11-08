@@ -1,0 +1,4 @@
+tests/semantics/Bad-Role-Mismatch.mog:10:1: type error: role `phantom` for `a` in `Box` is weaker than the `representational` its fields need
+
+  10 | type role Box phantom
+     | ^^^^^^^^^^^^^^^^^^^^^^

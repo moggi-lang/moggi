@@ -205,7 +205,7 @@ function inferRecursiveMemberBody(TypeCheckState $state, RecursiveMember $member
         if (! $expected instanceof TArrow) {
             throw typeFail($state, "function `{$fn->name}` has too many parameters", $fn);
         }
-        $paramTypes[] = $expected->from;
+        $paramTypes[] = stripDictArgConstraints($expected->from);
         $expected = $expected->to;
     }
 
@@ -379,7 +379,7 @@ function finishRecursiveMember(TypeCheckState $state, RecursiveMember $member, a
     $allocation = $member->allocation;
     $solved = new SolvedGroup($userConstraints, $allocation->obligations());
     $fnType = $member->monotype;
-    foreach (\array_reverse($solved->dicts) as $constraint) {
+    foreach (\array_reverse(dictionaryConstraints($solved->dicts)) as $constraint) {
         $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
     }
 

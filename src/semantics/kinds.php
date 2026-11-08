@@ -207,10 +207,21 @@ function peelKind(Kind $kind, int $applied): Kind
     return $kind;
 }
 
+/**
+ * Whether two kinds agree.
+ *
+ * A declaration's generalised variable stands for every kind, so it agrees with
+ * whatever the other side says (`WrappedMonad :: k -> Type` takes its parameter
+ * at `Type -> Type` where a use applies it to a type constructor).
+ */
 function sameKind(Kind $left, Kind $right): bool
 {
     $left = pruneKind(new KindInferCtx(), $left);
     $right = pruneKind(new KindInferCtx(), $right);
+
+    if (isGeneralizedKindVar($left) || isGeneralizedKindVar($right)) {
+        return true;
+    }
 
     if ($left::class !== $right::class) {
         return false;
@@ -421,13 +432,35 @@ function inferKindApp(KindInferCtx $ctx, Ast\TypeNode $con, array $args): Kind
 function kindOfTypeConAst(KindInferCtx $ctx, string $name): Kind
 {
     if (isset($ctx->env[$name])) {
-        return pruneKind($ctx, $ctx->env[$name]);
+        return pruneKind($ctx, instantiateKindVarsIn($ctx->env[$name], $ctx));
     }
 
     $kind = freshKindVar($ctx);
     $ctx->env[$name] = $kind;
 
     return $kind;
+}
+
+/**
+ * Instantiate a declaration's generalised kind variables afresh in a local kind
+ * context, once per use.
+ *
+ * The counterpart of {@see instantiateKindVars} for the kind walks that run in
+ * their own context (`newKindInferCtx`) rather than the state's: `(==)` is
+ * declared at `k -> k -> Bool` and used at `Type -> Type` in one equation of its
+ * own definition and at `Type` in another, so each occurrence has to read the
+ * kind at one of its own.
+ */
+function instantiateKindVarsIn(Kind $kind, KindInferCtx $ctx): Kind
+{
+    return match ($kind::class) {
+        KVar::class => isGeneralizedKindVar($kind) ? freshKindVar($ctx) : $kind,
+        KArrow::class => new KArrow(
+            instantiateKindVarsIn($kind->from, $ctx),
+            instantiateKindVarsIn($kind->to, $ctx),
+        ),
+        default => $kind,
+    };
 }
 
 /** @param list<string> $params */
@@ -469,13 +502,76 @@ function inferDataKind(TypeCheckState $state, Ast\DataDecl $decl): Kind
         }
     }
 
-    return defaultUnresolvedKindVars(pruneKind($ctx, $dataKind));
+    return generalizeKindVars(pruneKind($ctx, $dataKind));
+}
+
+/**
+ * Generalize the kind variables a data declaration's inference left unconstrained.
+ *
+ * `data Proxy a = Proxy` never says what `a` is, so its kind is `forall k. k ->
+ * Type` rather than `a :: Type`, and that is what lets a parameter stand for a
+ * type constructor (`f a :~: g b` applies `(:~:)` at `k`).
+ *
+ * Every remaining variable is renamed with a `$` prefix -- a spelling no surface
+ * type variable can have -- so a use can tell a declaration's own variables from
+ * the checker's inference variables and instantiate them afresh
+ * ({@see instantiateKindVars}). The kinds are otherwise kept as inferred: a
+ * parameter the fields force to `Type` (`data List a = Nil | Cons a (List a)`)
+ * already had its variable bound to `Type` by the field walk.
+ */
+function generalizeKindVars(Kind $kind): Kind
+{
+    $names = [];
+    $rename = function (Kind $kind) use (&$rename, &$names): Kind {
+        if ($kind instanceof KVar) {
+            $names[$kind->name] ??= '$' . \count($names);
+
+            return new KVar($names[$kind->name]);
+        }
+
+        if ($kind instanceof KArrow) {
+            return new KArrow($rename($kind->from), $rename($kind->to));
+        }
+
+        return $kind;
+    };
+
+    return $rename($kind);
+}
+
+/** Whether a kind is one of the variables {@see generalizeKindVars} left open. */
+function isGeneralizedKindVar(Kind $kind): bool
+{
+    return $kind instanceof KVar && \str_starts_with($kind->name, '$');
+}
+
+/**
+ * Instantiate a declaration's generalised kind variables afresh, once per use.
+ *
+ * `(:~:) :: k -> k -> Type` must be usable at `Type` in one place and at `Type ->
+ * Type` in another -- `f :~: g` compares two type constructors, `a :~: b` two
+ * types -- so each use reads the scheme at kinds of its own rather than fixing
+ * the declaration to the first use's.
+ */
+function instantiateKindVars(TypeCheckState $state, Kind $kind): Kind
+{
+    if ($kind instanceof KVar) {
+        return isGeneralizedKindVar($kind) ? freshStateKindVar($state) : $kind;
+    }
+
+    if ($kind instanceof KArrow) {
+        return new KArrow(
+            instantiateKindVars($state, $kind->from),
+            instantiateKindVars($state, $kind->to),
+        );
+    }
+
+    return $kind;
 }
 
 /**
  * Default any kind variable left unconstrained by inference (e.g. a phantom,
- * unannotated data parameter never mentioned in a field) to `Type`, matching
- * the pre-DataKinds behavior of forcing every unannotated parameter to `Type`.
+ * unannotated class parameter never mentioned in a method) to `Type`.
  */
 function defaultUnresolvedKindVars(Kind $kind): Kind
 {
@@ -658,6 +754,7 @@ function kindOfTypeCon(TypeCheckState $state, string $name, int $appliedArgs): K
     $full = $state->kindEnvByArity[$canonical][$appliedArgs]
         ?? $state->kindEnv[$canonical]
         ?? new KType();
+    $full = instantiateKindVars($state, $full);
 
     return kindArity($full) >= $appliedArgs ? peelKind($full, $appliedArgs) : new KType();
 }
@@ -751,9 +848,20 @@ function declarationParameterKinds(TypeCheckState $state, Type $type, array $con
     }
 
     $kinds = [];
-    $kindOf = static fn (string $name): Kind => defaultUnresolvedKindVars(
-        $settled[$name] ?? $state->varKinds[$name] ?? new KType(),
-    );
+    $requirements = typeKindRequirements($state, $type);
+
+    $kindOf = static function (string $name) use ($settled, $state, $requirements): Kind {
+        $required = $requirements['vars'][$name] ?? null;
+        if ($required instanceof KArrow) {
+            return defaultUnresolvedKindVars($required);
+        }
+
+        return defaultUnresolvedKindVars(
+            $settled[$name]
+                ?? $state->varKinds[$name]
+                ?? new KType(),
+        );
+    };
     foreach (\array_keys($vars) as $name) {
         $kinds[$name] = kindToString($kindOf($name));
     }
@@ -1057,7 +1165,10 @@ function bootstrapKindEnv(TypeCheckState $state): void
 {
     static $table = null;
     if ($table === null) {
-        $table = ['List' => dataKind(1)];
+        $table = [
+            'List' => dataKind(1),
+            '->' => new KArrow(new KType(), new KArrow(new KType(), new KType())),
+        ];
         for ($arity = 2; $arity <= 64; ++$arity) {
             $table['Tuple' . $arity] = dataKind($arity);
         }

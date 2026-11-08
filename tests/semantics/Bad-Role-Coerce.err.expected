@@ -1,0 +1,4 @@
+tests/semantics/Bad-Role-Coerce.mog:14:1: type error: cannot coerce `(Tagged Bool Int)` to `(Tagged Char Int)`: their representations differ
+
+  14 | bad :: Tagged Char Int
+     | ^^^

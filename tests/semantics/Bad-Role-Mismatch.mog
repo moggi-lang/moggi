@@ -1,0 +1,10 @@
+-- A written role may strengthen what the fields need but never weaken it: a
+-- parameter a constructor field carries cannot be declared phantom, or `coerce`
+-- could swap two representations that differ.
+module Main where
+
+import Moggi.Internal.Base
+
+data Box a = Box a
+
+type role Box phantom

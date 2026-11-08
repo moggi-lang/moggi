@@ -1,0 +1,4 @@
+tests/semantics/Bad-Coerce-Representation.mog:12:1: type error: cannot coerce `A` to `B`: their representations differ
+
+  12 | bad :: B
+     | ^^^

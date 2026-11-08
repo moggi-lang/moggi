@@ -617,18 +617,57 @@ final class DataDecl extends AstNode
     }
 }
 
+/**
+ * A type synonym, or -- with `isFamily` -- a closed type family.
+ *
+ * A family has no single expansion, so its `type` is null and its equations
+ * carry the expansions: each one matches a family application whose arguments
+ * look like `lhsArgs` and stands for `rhs`. A family's parameters are the
+ * `familyParams`, which keep their kind annotations (a synonym's own
+ * parameters are bare names).
+ */
 final class TypeSynonymDecl extends AstNode
 {
     /**
      * @param list<string> $params
+     * @param list<DataParam> $familyParams
+     * @param list<array{lhs: TypeNode, rhs: TypeNode}> $familyEquations
      */
     public function __construct(
         public string $name,
-        public TypeNode $type,
+        public ?TypeNode $type,
         int $line = 0,
         int $col = 0,
         int $endCol = 0,
         public array $params = [],
+        public bool $isFamily = false,
+        public array $familyParams = [],
+        public ?KindNode $familyResultKind = null,
+        public array $familyEquations = [],
+    ) {
+        parent::__construct($line, $col, $endCol);
+    }
+}
+
+/**
+ * `type role T phantom representational` -- the role each of a type's parameters
+ * plays in its representation, written rather than inferred.
+ *
+ * A declaration can only strengthen what inference finds: a parameter a field
+ * carries may be declared representational or nominal, never phantom, because
+ * two values with different representations would then be coerced to each other.
+ * A declaration with no role in it is `type role T`, which says nothing about
+ * a parameter and means the inferred roles stay as they are.
+ */
+final class RoleDecl extends AstNode
+{
+    /** @param list<string> $roles one role per parameter, in declaration order */
+    public function __construct(
+        public string $name,
+        public array $roles,
+        int $line = 0,
+        int $col = 0,
+        int $endCol = 0,
     ) {
         parent::__construct($line, $col, $endCol);
     }

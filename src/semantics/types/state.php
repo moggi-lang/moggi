@@ -279,6 +279,18 @@ final class TypeCheckState
     /** @var array<string, bool> */
     public array $instanceLookupCache = [];
 
+    /** @var array<string, bool> */
+    public array $erasedContextClasses = [];
+
+    /** @var array<string, list<string>> */
+    public array $projectInstanceContextEvidence = [];
+
+    /** @var array<string, array<string, array<string, true>>> */
+    public array $coercionAmbientEdges = [];
+
+    /** @var array<string, DataRole> */
+    public array $constructorPositionRoles = [];
+
     /**
      * Heads that do not match an instance, keyed by class + head shape. The key
      * normalizes type variables away, so only the negative answer is reusable:
@@ -387,6 +399,20 @@ final class TypeCheckState
      * @var array<string, true>
      */
     public array $rigidVars = [];
+
+    /**
+     * Pairs of variables a written `~` constraint identified, keyed
+     * `"a\0b"` in both orders.
+     *
+     * An instance head's variables are skolems, so two of them cannot be
+     * unified; `instance a ~ b => Enum (a :~: b)` says they are nevertheless one
+     * type for that instance, and {@see equalityGiven} answers `unify` from
+     * here. The pairs are scoped like the instance's own checks, so they are
+     * part of an instance snapshot.
+     *
+     * @var array<string, true>
+     */
+    public array $equalityGivens = [];
 
     /**
      * Local equality assumptions a GADT pattern match introduced, keyed by the

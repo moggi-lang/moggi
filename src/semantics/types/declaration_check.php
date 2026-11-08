@@ -120,13 +120,14 @@ function prependEvidenceParams(Ast\FunctionDecl $fn, array $constraints): void
         return;
     }
 
+    $dictConstraints = dictionaryConstraints($constraints);
     $patterns = [];
-    foreach ($constraints as $constraint) {
+    foreach ($dictConstraints as $constraint) {
         $patterns[] = new Ast\PatVar($constraint->evidence);
     }
 
     $fn->params = [...$patterns, ...$fn->params];
-    $fn->constraints = $constraints;
+    $fn->constraints = $dictConstraints;
 }
 
 function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\FunctionDecl
@@ -179,7 +180,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
             [$fnType, $forallSkolems] = openSignatureForalls($state, $fnType);
             Kinds\assertKind($state, $fnType, new Kinds\KType(), $state->varKinds, $fn);
             $state->checkedParameterKinds[\spl_object_id($fn)] = Kinds\declarationParameterKinds($state, $fnType);
-            foreach (\array_reverse($constraints) as $constraint) {
+            foreach (\array_reverse(dictionaryConstraints($constraints)) as $constraint) {
                 $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
             }
         } finally {
@@ -212,7 +213,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
             if (! $expected instanceof TArrow) {
                 throw typeFail($state, "function `{$fn->name}` has too many parameters", $fn);
             }
-            $paramTypes[] = $expected->from;
+            $paramTypes[] = stripDictArgConstraints($expected->from);
             $expected = $expected->to;
         }
         $bodyExpected = $expected;
@@ -225,7 +226,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         }
         $expected = $fnType;
         foreach ($fn->params as $param) {
-            $paramTypes[] = $expected->from;
+            $paramTypes[] = stripDictArgConstraints($expected->from);
             $expected = $expected->to;
         }
     }
@@ -246,7 +247,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
 
     $bodyEnv = $constraintEnv === [] ? $env : [...$env, ...$constraintEnv];
     $selfType = peelDictArrows($fnType, \count($constraints));
-    $bodyEnv[$fn->name] = scheme($selfType, $skolemNames, $userConstraints, \count($constraints), $constraints);
+    $bodyEnv[$fn->name] = scheme($selfType, $skolemNames, $userConstraints, \count(dictionaryConstraints($constraints)), $constraints);
 
     $state->allocation = $allocation;
     $savedConstraintMethods = $state->constraintMethods;
@@ -302,7 +303,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         $constraints = $allocation->obligations();
         $group = new SolvedGroup($userConstraints, $constraints);
 
-        foreach (\array_reverse($constraints) as $constraint) {
+        foreach (\array_reverse(dictionaryConstraints($constraints)) as $constraint) {
             $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
         }
 
@@ -567,7 +568,7 @@ function settleCheckedBody(
             $userFnType,
             schemeBoundVars($userFnType, $state->env, $prunedUserConstraints),
             $prunedUserConstraints,
-            \count($prunedDicts),
+            \count(dictionaryConstraints($prunedDicts)),
             $prunedDicts,
         );
     $state->env[$fn->name] = $checkedScheme;
@@ -642,7 +643,7 @@ function deferDeclaration(
                 $userFnType,
                 schemeBoundVars($userFnType, $state->env, $group->user),
                 $group->user,
-                \count($group->dicts),
+                \count(dictionaryConstraints($group->dicts)),
                 $group->dicts,
             );
         }

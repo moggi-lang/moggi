@@ -68,6 +68,19 @@ function literalRole(): string
     return 'literal';
 }
 
+/**
+ * The class that carries representational equality.
+ *
+ * The library declares it with the one instance every pair the compiler's rule
+ * accepts resolves to, and `Data.Coerce.coerce` is the operation it guards. The
+ * name is a language fact rather than a library one because the checker decides
+ * the obligations itself, by the roles of the types involved.
+ */
+function coercionClass(): string
+{
+    return 'Coercible';
+}
+
 // --- The types the foreign boundary converts ----------------------------------
 
 /** The type an open connection the host owns is written with in a foreign signature. */

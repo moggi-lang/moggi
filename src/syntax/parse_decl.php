@@ -666,12 +666,19 @@ function parseDataDecl(ParserState $state): Ast\DataDecl
 }
 
 /**
- * Data/newtype head: `Foo a b` or `(f :+: g) p`.
+ * Data/newtype head: `Foo a b`, `(:~:) a b` or `(f :+: g) p`.
  *
  * @return array{0: string, 1: list<Ast\DataParam>, 2: Token}
  */
 function parseDataHead(ParserState $state): array
 {
+    if (isAt($state, TokenKind::LParen)
+        && isAt($state, TokenKind::Op, 1)
+        && isAt($state, TokenKind::RParen, 2)
+    ) {
+        return parsePrefixOperatorDataHead($state);
+    }
+
     if (isAt($state, TokenKind::LParen)) {
         return parseInfixDataHead($state);
     }
@@ -680,6 +687,25 @@ function parseDataHead(ParserState $state): array
     $params = parseDataParams($state);
 
     return [$nameToken->lexeme, $params, $nameToken];
+}
+
+/**
+ * `data (:~:) a b` — a symbolic type constructor declared with its parameters.
+ * The parameters are the ones written after the parentheses, so the declared
+ * arity is the same as for `data Foo a b`.
+ *
+ * @return array{0: string, 1: list<Ast\DataParam>, 2: Token}
+ */
+function parsePrefixOperatorDataHead(ParserState $state): array
+{
+    expect($state, TokenKind::LParen);
+    $opToken = expect($state, TokenKind::Op);
+    if (! isConstructorOperator($opToken->lexeme)) {
+        throw parseError($state, 'expected a type operator (name starting with `:`)');
+    }
+    expect($state, TokenKind::RParen);
+
+    return [$opToken->lexeme, parseDataParams($state), $opToken];
 }
 
 /**
@@ -902,7 +928,7 @@ function parseStandaloneDerivingHead(ParserState $state): array
 {
     $constraints = [];
     $before = $state->pos;
-    $firstType = parseTypeAtom($state);
+    $firstType = parseTypeInfix($state);
 
     if ($firstType instanceof Ast\TypeConstrained) {
         $constraints = $firstType->constraints;
@@ -1047,9 +1073,52 @@ function parseKindAnnotatedDataParam(ParserState $state): Ast\DataParam
 /**
  * @return Ast\TypeSynonymDecl
  */
-function parseTypeSynonymDecl(ParserState $state): Ast\TypeSynonymDecl
+function parseTypeSynonymDecl(ParserState $state): Ast\AstNode
 {
-    expect($state, TokenKind::KwType);
+    $typeToken = expect($state, TokenKind::KwType);
+    if (isAt($state, TokenKind::VarId) && peek($state)->lexeme === 'family') {
+        return parseTypeFamilyDecl($state, $typeToken);
+    }
+    if (isAt($state, TokenKind::VarId) && peek($state)->lexeme === 'role') {
+        return parseRoleDecl($state, $typeToken);
+    }
+    if (isAt($state, TokenKind::LParen)
+        && isAt($state, TokenKind::Op, 1)
+        && isAt($state, TokenKind::RParen, 2)
+    ) {
+        expect($state, TokenKind::LParen);
+        $opToken = advance($state);
+        expect($state, TokenKind::RParen);
+        $params = [];
+        while (isAt($state, TokenKind::VarId)) {
+            $params[] = advance($state)->lexeme;
+        }
+        expectOp($state, '=');
+
+        return new Ast\TypeSynonymDecl(
+            $opToken->lexeme,
+            parseType($state),
+            $opToken->line,
+            $opToken->col,
+            params: $params,
+        );
+    }
+
+    if (isAt($state, TokenKind::VarId) && isAt($state, TokenKind::Op, 1)) {
+        $left = advance($state)->lexeme;
+        $opToken = advance($state);
+        $right = expect($state, TokenKind::VarId)->lexeme;
+        expectOp($state, '=');
+
+        return new Ast\TypeSynonymDecl(
+            $opToken->lexeme,
+            parseType($state),
+            $opToken->line,
+            $opToken->col,
+            params: [$left, $right],
+        );
+    }
+
     $nameToken = expect($state, TokenKind::ConId);
     $name = $nameToken->lexeme;
     $params = [];
@@ -1060,6 +1129,194 @@ function parseTypeSynonymDecl(ParserState $state): Ast\TypeSynonymDecl
     $type = parseType($state);
 
     return new Ast\TypeSynonymDecl($name, $type, $nameToken->line, $nameToken->col, params: $params);
+}
+
+/**
+ * `type role T phantom representational` -- one role per parameter of a type
+ * declared in this module.
+ */
+function parseRoleDecl(ParserState $state, Token $typeToken): Ast\RoleDecl
+{
+    advance($state);
+    $nameToken = expect($state, TokenKind::ConId);
+    $roles = [];
+    $last = $nameToken;
+    while (isAt($state, TokenKind::VarId)
+        && \in_array(peek($state)->lexeme, ['phantom', 'representational', 'nominal'], true)
+    ) {
+        $last = advance($state);
+        $roles[] = $last->lexeme;
+    }
+
+    return new Ast\RoleDecl(
+        $nameToken->lexeme,
+        $roles,
+        $typeToken->line,
+        $typeToken->col,
+        $last->col + \strlen($last->lexeme),
+    );
+}
+
+/**
+ * `type family Not (x :: Bool) where` and its equations, or the head alone for
+ * a family with no equations (`type family Compare (a :: k) (b :: k) :: Ordering`).
+ *
+ * An equation is an indented line of its own, `Not 'True = 'False`, and its
+ * left-hand side is parsed as a type: the family's application is an ordinary
+ * type application, or an infix operator type when the family was declared with
+ * an operator name (`'True && x`).
+ */
+function parseTypeFamilyDecl(ParserState $state, Token $typeToken): Ast\TypeSynonymDecl
+{
+    advance($state);
+    [$name, $params, $nameToken] = parseTypeFamilyHead($state);
+
+    $resultKind = null;
+    if (isAt($state, TokenKind::Op, 0, '::')) {
+        advance($state);
+        $resultKind = parseKind($state);
+    }
+
+    $equations = [];
+    if (isAt($state, TokenKind::KwWhere)) {
+        advance($state);
+        $previousLine = $typeToken->line;
+        while (! isAt($state, TokenKind::Eof)) {
+            $token = peek($state);
+            if ($token->col <= $typeToken->col || $token->line <= $previousLine) {
+                break;
+            }
+            $previousLine = $token->line;
+            $lhs = parseFamilyEquationLhs($state);
+            expectOp($state, '=');
+            $rhs = parseType($state);
+            $equations[] = ['lhs' => $lhs, 'rhs' => $rhs];
+        }
+    }
+
+    return new Ast\TypeSynonymDecl(
+        $name,
+        null,
+        $nameToken->line,
+        $nameToken->col,
+        isFamily: true,
+        familyParams: $params,
+        familyResultKind: $resultKind,
+        familyEquations: $equations,
+    );
+}
+
+/**
+ * A type family's head: `Not (x :: Bool)`, `(x :: Bool) && (y :: Bool)`, or
+ * `(&&) (x :: Bool) (y :: Bool)`.
+ *
+ * @return array{0: string, 1: list<Ast\DataParam>, 2: Token}
+ */
+function parseTypeFamilyHead(ParserState $state): array
+{
+    if (isAt($state, TokenKind::LParen)
+        && isAt($state, TokenKind::Op, 1)
+        && isAt($state, TokenKind::RParen, 2)
+    ) {
+        expect($state, TokenKind::LParen);
+        $opToken = advance($state);
+        expect($state, TokenKind::RParen);
+
+        return [$opToken->lexeme, parseDataParams($state), $opToken];
+    }
+
+    if (isAt($state, TokenKind::LParen) && looksLikeKindAnnotatedDataParam($state)) {
+        $left = parseDataParamAtom($state);
+        $opToken = expect($state, TokenKind::Op);
+        if (! isConstructorOperator($opToken->lexeme) && ! isTypeLevelOperator($opToken->lexeme)) {
+            throw parseError($state, 'expected a type operator (a name starting with `:`, `~`, `&&` or `||`)');
+        }
+        $right = parseDataParamAtom($state);
+
+        return [$opToken->lexeme, [$left, $right, ...parseDataParams($state)], $opToken];
+    }
+
+    $nameToken = expect($state, TokenKind::ConId);
+
+    return [$nameToken->lexeme, parseDataParams($state), $nameToken];
+}
+
+/**
+ * An equation's left-hand side: a type application or an infix operator type.
+ *
+ * It is parsed here rather than by {@see parseType} because the rest of the
+ * language has to tell a type from a function's left-hand side
+ * (`f x = ...`), and an equation such as `If 'True t _ = t` looks exactly like
+ * one. Inside a family's equations there is no ambiguity to resolve: the `=`
+ * ends the type, so every name before it is an argument.
+ */
+function parseFamilyEquationLhs(ParserState $state): Ast\TypeNode
+{
+    $left = parseFamilyEquationAtom($state);
+
+    while (
+        isAt($state, TokenKind::Op)
+        && (isConstructorOperator(peek($state)->lexeme)
+            || isTypeLevelOperator(peek($state)->lexeme))
+    ) {
+        $opToken = advance($state);
+        $right = parseFamilyEquationAtom($state);
+        $left = new Ast\TypeApp(new Ast\TypeCon($opToken->lexeme), [$left, $right]);
+    }
+
+    return $left;
+}
+
+function parseFamilyEquationAtom(ParserState $state): Ast\TypeNode
+{
+    $head = parseTypeHead($state);
+
+    $args = [];
+    while (isFamilyEquationArgStart($state)) {
+        $args[] = parseTypeHead($state);
+    }
+
+    if ($args === []) {
+        return $head;
+    }
+
+    if ($head instanceof Ast\TypeApp) {
+        return new Ast\TypeApp($head->con, [...$head->args, ...$args]);
+    }
+
+    return new Ast\TypeApp($head, $args);
+}
+
+function isFamilyEquationArgStart(ParserState $state): bool
+{
+    if (isAt($state, TokenKind::Op) && ! isTypeLevelOperator(peek($state)->lexeme)) {
+        return false;
+    }
+
+    if (isAt($state, TokenKind::VarId) && isAt($state, TokenKind::Op, 1, '::')) {
+        return false;
+    }
+
+    return match (peek($state)->kind) {
+        TokenKind::ConId,
+        TokenKind::PromotedCon,
+        TokenKind::StringLit,
+        TokenKind::Integer,
+        TokenKind::LParen,
+        TokenKind::LBracket,
+        TokenKind::VarId => true,
+        default => false,
+    };
+}
+
+/**
+ * Spells the type-level operator a family may be named by that does not start
+ * with `:`. They are reserved where a type operator is expected, so a family
+ * named `&&` cannot be confused with an expression operator.
+ */
+function isTypeLevelOperator(string $lexeme): bool
+{
+    return $lexeme === '~' || $lexeme === '&&' || $lexeme === '||' || $lexeme === '==';
 }
 
 /**
@@ -1499,7 +1756,7 @@ function parseInstanceDecl(ParserState $state): Ast\AstNode
 
     $constraints = [];
     $before = $state->pos;
-    $firstType = parseTypeAtom($state);
+    $firstType = parseTypeInfix($state);
 
     if ($firstType instanceof Ast\TypeConstrained) {
         $constraints = $firstType->constraints;

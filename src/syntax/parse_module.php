@@ -127,6 +127,15 @@ function parseModuleExportItem(ParserState $state, ?string $section = null): arr
 {
     $start = peek($state);
 
+    if (isAt($state, TokenKind::KwType)) {
+        advance($state);
+        $item = parseModuleExportItem($state, $section);
+        $item['tag'] = 'type';
+        $item['namespace'] = 'type';
+
+        return $item;
+    }
+
     if (isAt($state, TokenKind::KwModule)) {
         advance($state);
         $path = parseModulePath($state);
@@ -425,11 +434,11 @@ function parseHidingList(ParserState $state): array
 {
     expect($state, TokenKind::KwHiding);
     expect($state, TokenKind::LParen);
-    $names = [expectImportName($state)];
+    $names = [parseImportChildName($state)];
 
     while (isAt($state, TokenKind::Comma)) {
         advance($state);
-        $names[] = expectImportName($state);
+        $names[] = parseImportChildName($state);
     }
 
     expect($state, TokenKind::RParen);

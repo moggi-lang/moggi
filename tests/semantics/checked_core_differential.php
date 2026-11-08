@@ -187,6 +187,9 @@ foreach ($prepared->units as $unitName => $unit) {
 $slotNames = static function (array $constraints): array {
     $names = [];
     foreach ($constraints as $constraint) {
+        if (Types\constraintIsErased($constraint)) {
+            continue;
+        }
         $names[] = $constraint->evidence;
     }
 
@@ -360,13 +363,17 @@ $validateRecord = static function (
     // The obligations the record publishes are the scheme's own dictionaries,
     // spelled in the variables the scheme binds. A stale spelling — the instance
     // head's pre-substitution variable — has no reading at all.
+    $runtimeDicts = \array_values(\array_filter(
+        $record->scheme->dicts,
+        static fn ($dictionary): bool => ! Types\constraintIsErased($dictionary),
+    ));
     $assert(
-        \array_column($record->evidence, 'wanted') === \array_map(constraintKey(...), $record->scheme->dicts),
+        \array_column($record->evidence, 'wanted') === \array_map(constraintKey(...), $runtimeDicts),
         "the record for `{$moduleName}::{$name}` publishes the obligations "
             . \json_encode(\array_column($record->evidence, 'wanted'))
-            . ' while its scheme takes ' . \json_encode(\array_map(constraintKey(...), $record->scheme->dicts)),
+            . ' while its scheme takes ' . \json_encode(\array_map(constraintKey(...), $runtimeDicts)),
     );
-    foreach ($record->scheme->dicts as $dictionary) {
+    foreach ($runtimeDicts as $dictionary) {
         foreach ($dictionary->args as $argument) {
             foreach (\array_keys(collectTypeVars($argument, [])) as $variable) {
                 $assert(

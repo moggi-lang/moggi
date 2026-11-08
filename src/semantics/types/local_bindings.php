@@ -167,7 +167,7 @@ function localAnnotationScheme(TypeCheckState $state, Ast\TypeNode $annot, Ast\A
     $dicts = solveConstraints($state, $user)->dicts;
 
     return [
-        scheme($body, schemeBoundVars($body, $env, $user), $user, \count($dicts), $dicts),
+        scheme($body, schemeBoundVars($body, $env, $user), $user, \count(dictionaryConstraints($dicts)), $dicts),
         $body,
     ];
 }
@@ -239,7 +239,8 @@ function functionParamTypeAsts(Ast\TypeNode $type): array
     $params = [];
     $cursor = $type;
     while ($cursor instanceof Ast\TypeArrow) {
-        $params[] = $cursor->from;
+        $from = $cursor->from;
+        $params[] = $from instanceof Ast\TypeConstrained ? $from->body : $from;
         $cursor = $cursor->to;
     }
 
@@ -451,7 +452,7 @@ function allocateDictParams(TypeCheckState $state, array $constraints): array
     $params = [];
     $abstracted = [];
     $dictTypes = [];
-    foreach ($constraints as $constraint) {
+    foreach (dictionaryConstraints($constraints) as $constraint) {
         $name = '__ev_dict' . $state->nextEvidenceParam++;
         $dictType = new TCon('__Dict_' . $constraint->class);
         $dictTypes[] = $dictType;

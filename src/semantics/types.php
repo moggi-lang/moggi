@@ -28,6 +28,7 @@ require_once __DIR__ . '/evidence_names.php';
 require_once __DIR__ . '/types/type_core.php';
 require_once __DIR__ . '/types/allocation.php';
 require_once __DIR__ . '/types/constraints.php';
+require_once __DIR__ . '/types/coercion.php';
 require_once __DIR__ . '/types/literals.php';
 require_once __DIR__ . '/types/instances.php';
 require_once __DIR__ . '/types/infer.php';
@@ -233,6 +234,9 @@ function checkRaw(
             })(),
             Ast\TypeSynonymDecl::class,
             Ast\ClassDecl::class => $items[] = $item,
+            Ast\RoleDecl::class => (function () use ($state, $item): void {
+                recordDeclaredRoles($state, $item);
+            })(),
             default => (function () use ($state, $item, &$items): void {
                 inferExpr($state, $item, $state->env);
                 assertNoPendingConstraintsInExpr($state, $item);

@@ -19,6 +19,7 @@ use Moggi\Semantics\TypeExpr\TStr;
 use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
+use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\TWord;
 use Moggi\Semantics\TypeExpr\TWord16;
 use Moggi\Semantics\TypeExpr\TWord32;
@@ -333,6 +334,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
     $mapping = $registration['mapping'];
     $state->varKinds = [...$state->varKinds, ...Kinds\typeKindRequirements($state, $headType)['vars']];
     validateInstance($state, $decl, $headType);
+    assertCoercionInstanceAllowed($state, $decl);
 
     $className = $decl->class;
     $classInfo = $state->classes[$className];
@@ -460,7 +462,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
                 $className,
                 $headType,
                 $methodInfo['kinds'] ?? [],
-                $freshened['mapping'] ?? [],
+                $mapping + ($freshened['mapping'] ?? []),
             );
         } finally {
             $state->defaultBodyOrigins = $savedDefaultOrigins;
@@ -542,7 +544,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
         'className' => $className,
         'contextParams' => \array_map(
             static fn (Ast\PendingConstraint $c): string => $c->evidence,
-            $instanceConstraints,
+            dictionaryConstraints($instanceConstraints),
         ),
     ];
 
@@ -1513,15 +1515,35 @@ function projectInstanceCandidates(TypeCheckState $state, string $className, Typ
         return $state->projectInstancesByClass[$className] ?? [];
     }
 
-    $module = instanceHeadDeclaringModule($state, $headKey);
+    /*
+     * A head that is a bare variable is indexed under `*` because it matches
+     * every head, so a lookup by a concrete head has to consult that bucket too
+     * -- otherwise `instance C a` would be recorded and never found. It goes
+     * last: a specific instance answers first, and an overlap between the two
+     * is several matches, which the caller reports as ambiguous rather than
+     * silently resolving.
+     */
+    $universal = $state->projectInstancesByClassHead[$className]['*'] ?? [];
+
+    $module = null;
+    $plainKey = $headKey;
+    $separator = \strpos($headKey, '::');
+    if ($separator !== false) {
+        $module = \substr($headKey, 0, $separator);
+        $plainKey = \substr($headKey, $separator + 2);
+    }
+    $module ??= instanceHeadDeclaringModule($state, $plainKey);
+
     if ($module !== null) {
-        $qualified = $state->projectInstancesByClassHead[$className][$module . '::' . $headKey] ?? [];
+        $qualified = $state->projectInstancesByClassHead[$className][$module . '::' . $plainKey] ?? [];
         if ($qualified !== []) {
-            return $qualified;
+            return [...$qualified, ...$universal];
         }
     }
 
-    return $state->projectInstancesByClassHead[$className][$headKey] ?? [];
+    $candidates = $state->projectInstancesByClassHead[$className][$plainKey] ?? [];
+
+    return $universal === [] ? $candidates : [...$candidates, ...$universal];
 }
 
 
@@ -1583,6 +1605,11 @@ function matchingProjectInstances(TypeCheckState $state, string $className, Type
 function findProjectInstance(TypeCheckState $state, string $className, Type $requiredHead, array $visited = []): bool
 {
     $lookupKey = instanceLookupKey($className, normalizedInstanceHead($state, $requiredHead));
+
+    if (classHasErasedContextInstance($state, $className)) {
+        $lookupKey .= '#' . ambientCoercionFingerprint($state);
+    }
+
     if (\array_key_exists($lookupKey, $state->instanceLookupCache)) {
         return $state->instanceLookupCache[$lookupKey];
     }
@@ -1591,6 +1618,36 @@ function findProjectInstance(TypeCheckState $state, string $className, Type $req
     $state->instanceLookupCache[$lookupKey] = $found;
 
     return $found;
+}
+
+/**
+ * Whether any project instance of `$className` declares a coercion constraint,
+ * whose satisfaction depends on the givens of the body being checked.
+ */
+function classHasErasedContextInstance(TypeCheckState $state, string $className): bool
+{
+    if (isset($state->erasedContextClasses[$className])) {
+        return $state->erasedContextClasses[$className];
+    }
+
+    $erased = classDeclaresErasedContextInstance($state, $className);
+
+    return $state->erasedContextClasses[$className] = $erased;
+}
+
+function classDeclaresErasedContextInstance(TypeCheckState $state, string $className): bool
+{
+    foreach ($state->projectInstancesByClass[$className] ?? [] as $instance) {
+        foreach ($instance['constraints'] ?? [] as $constraintAst) {
+            if ($constraintAst instanceof Ast\TypeApp
+                && $constraintAst->con instanceof Ast\TypeCon
+                && isCoercionClass($constraintAst->con->name)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -1766,6 +1823,41 @@ function instanceContextSatisfied(TypeCheckState $state, array $instance, array 
     }
 
     foreach ($context as $constraint) {
+        if (($constraint->class === '~' || $constraint->class === '~~')
+            && ! isset($state->classes[$constraint->class])
+        ) {
+            if (\count($constraint->args) !== 2) {
+                return false;
+            }
+            $left = prune($state, $constraint->args[0]);
+            $right = prune($state, $constraint->args[1]);
+            if ($left instanceof TVar && $right instanceof TVar) {
+                if (! equalityGiven($state, $left->name, $right->name)) {
+                    return false;
+                }
+
+                continue;
+            }
+            pushSubstFrame($state);
+            try {
+                unify($state, $left, $right, null);
+            } catch (TypeError) {
+                return false;
+            } finally {
+                popSubstFrame($state);
+            }
+
+            continue;
+        }
+
+        if (constraintIsErased($constraint)) {
+            if (coercionObligation($state, $constraint) !== CoercionObligation::Satisfied) {
+                return false;
+            }
+
+            continue;
+        }
+
         $ctxHead = prune($state, constraintHeadType($state, $constraint->args));
 
         if (typeHeadIsVariable($ctxHead)) {
@@ -1910,6 +2002,19 @@ function matchInstanceHeadVars(TypeCheckState $state, Ast\AstNode $pattern, Type
         return $mapping;
     }
 
+    if ($pattern instanceof Ast\TypeArrow) {
+        if (! $target instanceof TArrow) {
+            return null;
+        }
+        $from = matchInstanceHeadVars($state, $pattern->from, $target->from);
+        $to = matchInstanceHeadVars($state, $pattern->to, $target->to);
+        if ($from === null || $to === null) {
+            return null;
+        }
+
+        return $from + $to;
+    }
+
     return null;
 }
 
@@ -1937,6 +2042,84 @@ function flattenInstanceHeadTypeApp(Ast\TypeNode $type): ?array
     return null;
 }
 
+/**
+ * The type a declaration writes, read without the kind table.
+ *
+ * A declaration's variables are bound by the declaration: `instance Alternative (ArrowMonad a)`
+ * says `a` is a `Type -> Type -> Type` by the position it stands in, and a superclass's `f` says
+ * `Type -> Type` the same way. The kind table is keyed by variable spelling, though, and holds
+ * whatever the module reading the declaration has called `a` or `f`, so converting the declaration
+ * through that table asks about a variable it does not own and refuses the declaration at a kind it
+ * never gave itself. The shape is what naming, matching and evidence grouping ask for, so it is
+ * read from the syntax: a constructor keeps its name, every variable keeps its spelling, and only
+ * the reader's kind table goes unconsulted.
+ */
+function declarationHeadType(TypeCheckState $state, Ast\TypeNode $ast): Type
+{
+    if ($ast instanceof Ast\TypeVar) {
+        return new TVar(skolemScopedVar($state, $ast->name));
+    }
+
+    if ($ast instanceof Ast\TypeCon) {
+        return new TCon($ast->name);
+    }
+
+    if ($ast instanceof Ast\TypeApp) {
+        $flat = flattenInstanceHeadTypeApp($ast)
+            ?? throw typeFail($state, 'type is not a type constructor applied to arguments', $ast);
+
+        [$con, $args] = $flat;
+        $conType = declarationHeadType($state, $con);
+        $argTypes = [];
+        foreach ($args as $arg) {
+            $argTypes[] = declarationHeadType($state, $arg);
+        }
+
+        return match (true) {
+            $conType instanceof TVar => new TVarApp($conType->name, $argTypes),
+            $conType instanceof TPromoted => new TPromoted($conType->name, $argTypes),
+            $conType instanceof TCon => new TCon($conType->name, $argTypes, $conType->module),
+            default => throw typeFail($state, 'type is not a type constructor', $ast),
+        };
+    }
+
+    if ($ast instanceof Ast\TypeArrow) {
+        return new TArrow(
+            declarationHeadType($state, $ast->from),
+            declarationHeadType($state, $ast->to),
+        );
+    }
+
+    return match (true) {
+        $ast instanceof Ast\TypePromoted => new TPromoted($ast->name),
+        $ast instanceof Ast\TypeStringLit => new TStringLit($ast->value),
+        $ast instanceof Ast\TypeNatLit => new TNatLit(canonicalNatDigits($ast->digits)),
+        $ast instanceof Ast\TypeUnit => new TUnit(),
+        default => astType($state, $ast),
+    };
+}
+
+/**
+ * The type a declaration writes, with the kind table out of the way.
+ *
+ * Converting the declaration as usual is what normally answers, and is the only reading that
+ * expands synonyms the way a use does. A kind failure is the one case where the reading is not
+ * about this module's variables at all -- the declaration's own variable spelling met an entry the
+ * reader left in the table -- so it is answered from the shape instead.
+ */
+function declarationType(TypeCheckState $state, Ast\TypeNode $ast): Type
+{
+    try {
+        return astType($state, $ast);
+    } catch (TypeError $e) {
+        if ($e->diagnosticCode === 'unify') {
+            throw $e;
+        }
+
+        return declarationHeadType($state, $ast);
+    }
+}
+
 function instanceHeadsMatch(TypeCheckState $state, Type $requiredHead, Ast\AstNode|Type $instanceHeadAst): bool
 {
     if ($instanceHeadAst instanceof Type) {
@@ -1944,9 +2127,31 @@ function instanceHeadsMatch(TypeCheckState $state, Type $requiredHead, Ast\AstNo
     }
 
     pushSubstFrame($state);
+    $matched = false;
+    $kindFailure = false;
 
     try {
         $other = freshenTypeVars($state, astType($state, $instanceHeadAst));
+        unify($state, $requiredHead, $other, null);
+        $matched = true;
+    } catch (TypeError $e) {
+        $kindFailure = $e->diagnosticCode !== 'unify';
+    } finally {
+        popSubstFrame($state);
+    }
+
+    if ($matched) {
+        return true;
+    }
+
+    if (! $kindFailure) {
+        return false;
+    }
+
+    pushSubstFrame($state);
+
+    try {
+        $other = freshenTypeVars($state, declarationHeadType($state, $instanceHeadAst));
         unify($state, $requiredHead, $other, null);
 
         return true;
@@ -2019,6 +2224,14 @@ function instanceContextConstraints(TypeCheckState $state, Ast\InstanceDecl $dec
             throw typeFail($state, 'instance constraint must be a type class application', $decl);
         }
 
+        if (($constraint->con->name === '~' || $constraint->con->name === '~~')
+            && ! isset($state->classes[$constraint->con->name])
+        ) {
+            assertEqualityConstraintHolds($state, $constraint, $decl, $headVars);
+
+            continue;
+        }
+
         $className = $constraint->con->name;
         $classInfo = $state->classes[$className]
             ?? throw typeFail($state, "unknown class `{$className}` in instance constraint", $decl);
@@ -2054,6 +2267,12 @@ function buildInstanceConstraintEnv(TypeCheckState $state, array $constraints, T
 
         if (! $constraint instanceof Ast\TypeApp || ! $constraint->con instanceof Ast\TypeCon) {
             throw typeFail($state, 'instance constraint must be a type class application');
+        }
+
+        if (($constraint->con->name === '~' || $constraint->con->name === '~~')
+            && ! isset($state->classes[$constraint->con->name])
+        ) {
+            continue;
         }
 
         $className = $constraint->con->name;
@@ -2217,7 +2436,6 @@ function checkInstanceMethod(
     if ($extraEnv !== []) {
         $env = [...$env, ...$extraEnv];
     }
-
     $constraints = expandConstraintsWithSuperclasses($state, [
         ...$instanceConstraints,
         ...$methodUserConstraints,
@@ -2258,17 +2476,18 @@ function checkInstanceMethod(
     }
 
     $unskolemize = static fn (Type $type): Type => $skolemBack === [] ? $type : substitute($type, $skolemBack);
-    foreach (\array_reverse($constraints) as $constraint) {
+    foreach (\array_reverse(dictionaryConstraints($constraints)) as $constraint) {
         $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
     }
 
-    if ($constraints !== []) {
+    $dictConstraints = dictionaryConstraints($constraints);
+    if ($dictConstraints !== []) {
         $evidencePatterns = [];
-        foreach ($constraints as $constraint) {
+        foreach ($dictConstraints as $constraint) {
             $evidencePatterns[] = new Ast\PatVar($constraint->evidence);
         }
         $fn->params = [...$evidencePatterns, ...$fn->params];
-        $fn->constraints = $constraints;
+        $fn->constraints = $dictConstraints;
     }
 
     $expected = $fnType;
@@ -2277,10 +2496,11 @@ function checkInstanceMethod(
         if (! $expected instanceof TArrow) {
             throw typeFail($state, "method `{$fn->name}` has too many parameters", $fn);
         }
-        $paramTypes[] = $expected->from;
+        $paramTypes[] = stripDictArgConstraints($expected->from);
         $expected = $expected->to;
     }
     $bodyExpected = $expected;
+
 
     $state->pushBinderScope();
     foreach ($fn->params as $i => $param) {
@@ -2403,7 +2623,7 @@ function checkInstanceMethod(
             $peeledType,
             [],
             [...$instanceConstraints, ...$methodUserConstraints],
-            \count($constraints),
+            \count(dictionaryConstraints($constraints)),
             $constraints,
         );
     }
@@ -2476,7 +2696,7 @@ function checkInstanceMethod(
         $userType,
         $bound,
         $userObligations,
-        \count($settledConstraintList),
+        \count(dictionaryConstraints($settledConstraintList)),
         $settledConstraintList,
     );
 
@@ -2489,22 +2709,49 @@ function checkInstanceMethod(
     return $fn;
 }
 
+/**
+ * The head a constraint was resolved at, as written, for the evidence a call
+ * site carries.
+ *
+ * The declaration the solver picks names the head, because that is the spelling
+ * the instance and its evidence symbol are written in. Building the instantiated
+ * head instead would convert the whole required type at every reference, and a
+ * generic `Rep` head is large -- a derived body mentions it once per field -- so
+ * the instantiated form is reserved for the fallback, where no instance answers
+ * the constraint and there is no declaration to name.
+ */
 function findProjectInstanceHeadAst(TypeCheckState $state, string $className, Type $requiredHead): Ast\TypeNode
 {
-    $match = findProjectInstanceRecord($state, $className, $requiredHead);
-    if ($match !== null) {
-        $head = $match['instance']['instanceHead'] ?? null;
-        if ($head instanceof Ast\TypeNode) {
-            return $head;
-        }
-        if ($head instanceof Type) {
-            return internalTypeToAst($head, []);
-        }
+    $declared = instanceDeclaredHeadAst($state, $className, $requiredHead);
+    if ($declared !== null) {
+        return $declared;
     }
 
     $normalized = prune($state, normalizeType($state, prune($state, $requiredHead), reduceFamilies: true));
 
     return internalTypeToAst($normalized, $state->subst);
+}
+
+/**
+ * The head the instance for `$requiredHead` declares, for naming its evidence
+ * function.
+ *
+ * An evidence symbol is named from the declaration (`instance C (F a)` gives a
+ * name in terms of `F a`), and a reference to it has to spell the same name. The
+ * instantiated constraint can differ from the declaration, and several
+ * declarations can match one head (`C (K1 i (Maybe a))` and `C (K1 i a)` both
+ * match `C (K1 i (Maybe Int))`), so the declaration is read from the instance
+ * the solver actually picks: naming the instantiated head instead would build a
+ * symbol no declaration defines.
+ */
+function instanceDeclaredHeadAst(TypeCheckState $state, string $className, Type $requiredHead): ?Ast\TypeNode
+{
+    $declared = findProjectInstanceRecord($state, $className, $requiredHead)['instance']['instanceHead'] ?? null;
+    if ($declared instanceof Ast\TypeNode) {
+        return $declared;
+    }
+
+    return $declared instanceof Type ? internalTypeToAst($declared, []) : null;
 }
 
 /**

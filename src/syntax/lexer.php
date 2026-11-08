@@ -927,6 +927,14 @@ function lex(string $source, string $filename = ''): array
         }
 
         if ($c === '|') {
+            if ($i + 2 < $len && $source[$i + 1] === '|' && $source[$i + 2] === '|') {
+                $tokens[] = new Token(TokenKind::Op, '|||', $startLine, $startCol);
+                $i += 3;
+                $col += 3;
+
+                continue;
+            }
+
             if ($i + 1 < $len && $source[$i + 1] === '|') {
                 $tokens[] = new Token(TokenKind::Op, '||', $startLine, $startCol);
                 $i += 2;
