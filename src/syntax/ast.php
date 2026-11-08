@@ -194,6 +194,8 @@ function dump(AstNode $node, int $indent = 0): string
                     $node->derivingClasses,
                 )) . ")\n"
                 : ''),
+        RoleDecl::class => $pad . 'type role ' . $node->name
+            . (\count($node->roles) > 0 ? ' ' . \implode(' ', $node->roles) : '') . "\n",
         TypeSynonymDecl::class => $pad . 'type ' . $node->name
             . (\count($node->params) > 0 ? ' ' . \implode(' ', $node->params) : '')
             . ' = ' . dumpTypeInline($node->type) . "\n",

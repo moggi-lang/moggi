@@ -1,0 +1,17 @@
+-- The instance head's parameters are concrete rather than metavariables, so
+-- the method's `OrderingI Bool Bool` arrives already instantiated: `EQI :: 
+-- OrderingI a a` refines it because both sides are `Bool`, and `LTI`/`GTI`
+-- stay valid because they constrain neither.
+
+data OrderingI a b where
+  LTI :: OrderingI a b
+  EQI :: OrderingI a a
+  GTI :: OrderingI a b
+
+class EqI a b where
+  eqI :: OrderingI a b -> Bool
+
+instance EqI Bool Bool where
+  eqI LTI = False
+  eqI EQI = True
+  eqI GTI = False

@@ -1,0 +1,20 @@
+program
+  data OrderingI a b
+    constructor LTI :: OrderingI a b
+    constructor EQI :: OrderingI a a
+    constructor GTI :: OrderingI a b
+  class EqI a b
+    method eqI :: OrderingI a b -> Bool
+  function eqI :: OrderingI Bool Bool -> Bool
+    pat_var _p0
+    case
+      variable _p0
+      alt
+        pat_con LTI
+        constructor_ref False
+      alt
+        pat_con EQI
+        constructor_ref True
+      alt
+        pat_con GTI
+        constructor_ref False

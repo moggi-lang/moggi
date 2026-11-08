@@ -3,6 +3,7 @@
 namespace Moggi\Semantics\TypeExpr;
 
 require_once __DIR__ . '/types/type_laws.php';
+require_once __DIR__ . '/kernel.php';
 
 use Moggi\Syntax\Ast\PendingConstraint;
 
@@ -243,7 +244,10 @@ function scheme(Type $type, array $bound, array $constraints = [], ?int $runtime
         $type,
         $bound,
         $constraints,
-        $runtimeConstraintCount ?? \count($constraints),
+        $runtimeConstraintCount ?? \count(\array_filter(
+            $constraints,
+            static fn ($constraint): bool => $constraint->class !== \Moggi\Semantics\Kernel\coercionClass(),
+        )),
         schemeFreeTypeVars($type, $bound, $constraints),
         false,
         null,

@@ -22,6 +22,7 @@ use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
 function astTypeSignature(TypeCheckState $state, Ast\TypeNode $typeAst, array $expanding = [], ?Ast\AstNode $at = null): Type
 {
     [$constraintAsts, $bodyTypeAst] = splitTypeAst($typeAst);
+    $constraintAsts = dropEqualityConstraints($constraintAsts);
     if ($constraintAsts === []) {
         return astType($state, $bodyTypeAst, $expanding);
     }
@@ -29,7 +30,7 @@ function astTypeSignature(TypeCheckState $state, Ast\TypeNode $typeAst, array $e
     $signatureConstraints = parseConstraints($state, $constraintAsts, $at);
     applyConstraintVarKinds($state, $signatureConstraints);
     $result = astType($state, $bodyTypeAst, $expanding);
-    foreach (\array_reverse($signatureConstraints) as $constraint) {
+    foreach (\array_reverse(dictionaryConstraints($signatureConstraints)) as $constraint) {
         $result = new TArrow(new TCon('__Dict_' . $constraint->class), $result);
     }
 
@@ -49,6 +50,37 @@ function astTypeSignature(TypeCheckState $state, Ast\TypeNode $typeAst, array $e
 function skolemScopedVar(TypeCheckState $state, string $name): string
 {
     return $state->skolemScope[$name] ?? $name;
+}
+
+/**
+ * The type a constraint list carries for `~`: a proof obligation, not a
+ * dictionary.
+ *
+ * `(a ~ b) => r` states that `a` and `b` are the same type in `r`. Nothing
+ * about it can be passed at run time, so it contributes no argument: the type
+ * elaborates to `r`, and its sides are the same type wherever the code can use
+ * them (`gcastWith Refl x` is well typed because `Refl :: a :~: a` names one
+ * type twice). A use that would need the equality to hold for two distinct
+ * types is rejected by ordinary unification at the point the two are used
+ * together, which is the check that matters.
+ *
+ * @param list<Ast\TypeNode> $constraints
+ * @return list<Ast\TypeNode>
+ */
+function dropEqualityConstraints(array $constraints): array
+{
+    $kept = [];
+    foreach ($constraints as $constraint) {
+        if ($constraint instanceof Ast\TypeApp
+            && $constraint->con instanceof Ast\TypeCon
+            && ($constraint->con->name === '~' || $constraint->con->name === '~~')
+        ) {
+            continue;
+        }
+        $kept[] = $constraint;
+    }
+
+    return $kept;
 }
 
 function astType(TypeCheckState $state, Ast\TypeNode $type, array $expanding = []): Type
@@ -71,12 +103,55 @@ function astType(TypeCheckState $state, Ast\TypeNode $type, array $expanding = [
 
 function astTypeArrow(TypeCheckState $state, Ast\TypeArrow $type, array $expanding): Type
 {
-    $from = astType($state, $type->from, $expanding);
+    $from = $type->from instanceof Ast\TypeConstrained
+        ? dictArgType($state, $type->from, $expanding)
+        : astType($state, $type->from, $expanding);
     $to = astType($state, $type->to, $expanding);
     Kinds\assertKind($state, $from, new Kinds\KType(), $state->varKinds, $type->from);
     Kinds\assertKind($state, $to, new Kinds\KType(), $state->varKinds, $type->to);
 
     return new TArrow($from, $to);
+}
+
+/**
+ * The type of a parameter that states a context, `(C => r)`.
+ *
+ * Unlike a signature's own context, which becomes the arrows a function takes
+ * its dictionaries in, a context written on a parameter describes the argument:
+ * the caller supplies the dictionary implicitly and may use it while the
+ * argument expression is checked, so nothing is passed at run time. The
+ * constraint and the type it qualifies therefore travel as one marker
+ * (`__DictArg_C`, with the constraint's arguments and `r` itself), which
+ * {@see stripDictArgConstraints} turns back into `r` wherever the value is used.
+ *
+ * @param array<string, true> $expanding
+ */
+function dictArgType(TypeCheckState $state, Ast\TypeConstrained $type, array $expanding = []): Type
+{
+    $entries = [];
+    foreach ($type->constraints as $constraint) {
+        if ($constraint instanceof Ast\TypeApp
+            && $constraint->con instanceof Ast\TypeCon
+            && ($constraint->con->name === '~' || $constraint->con->name === '~~')
+        ) {
+            $entries[] = [$constraint->con->name, [
+                astType($state, $constraint->args[0], $expanding),
+                astType($state, $constraint->args[1], $expanding),
+            ]];
+
+            continue;
+        }
+
+        $parsed = parseConstraints($state, [$constraint]);
+        $entries[] = [$parsed[0]->class, $parsed[0]->args];
+    }
+
+    $result = astType($state, $type->body, $expanding);
+    foreach (\array_reverse($entries) as [$class, $args]) {
+        $result = new TCon('__DictArg_' . $class, [...$args, $result]);
+    }
+
+    return $result;
 }
 
 function resolveQualifiedType(TypeCheckState $state, string $module, string $name, array $expanding, Ast\AstNode|Ast\TypeNode|null $at = null): Type
@@ -97,6 +172,10 @@ function resolveQualifiedType(TypeCheckState $state, string $module, string $nam
     $prim = resolveMagicHashTypeIfInScope($state, $name, $expanding, $at);
     if ($prim !== null) {
         return $prim;
+    }
+
+    if (isTypeFamilyDeclared($state, $name)) {
+        return new TCon($name);
     }
 
     if (isset($state->typeSynonyms[$name])) {
@@ -207,6 +286,10 @@ function resolveTypeCon(TypeCheckState $state, string $name, array $expanding, A
 
     rejectIfKindNameUsedAsType($state, $name, $at);
 
+    if (isTypeFamilyDeclared($state, $name)) {
+        return new TCon($name);
+    }
+
     if (isset($state->typeSynonyms[$name])) {
         if (isset($expanding[$name])) {
             throw typeFail($state, "cyclic type synonym `{$name}`", $at);
@@ -312,6 +395,16 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
 
     if ($con instanceof Ast\TypeQualified) {
         resolveQualifiedType($state, $con->module, $con->name, $expanding, $con);
+    }
+
+    if (isTypeFamilyDeclared($state, $baseName)) {
+        $args = [];
+        foreach ($argAsts as $argAst) {
+            $args[] = astType($state, $argAst, $expanding);
+        }
+        applyTypeAppKinds($state, $baseName, $args, $argAsts, $con, isVarHead: false);
+
+        return new TCon($baseName, $args);
     }
 
     if (isset($state->typeSynonyms[$baseName])) {
@@ -524,6 +617,11 @@ function applyTypeHeadToArgAsts(
  * Incremental kind rule for each argument: `f :: k1 -> k2`, `a :: k1` ⊢ `f a :: k2`.
  * Kind variables are introduced when the head kind is not yet an arrow.
  *
+ * A declared head's kind is instantiated here, per use, so a variable the
+ * declaration generalised stands for whatever this application needs: `(:~:)`
+ * is applied at `Type` and at `Type -> Type` in one signature without either
+ * use fixing the declaration to it.
+ *
  * @param list<Type> $args
  * @param list<Ast\TypeNode> $argAsts
  */
@@ -541,7 +639,10 @@ function applyTypeAppKinds(
         }
         $headKind = $state->varKinds[$headName];
     } else {
-        $headKind = $state->kindEnv[$headName] ?? new Kinds\KType();
+        $headKind = Kinds\instantiateKindVars(
+            $state,
+            $state->kindEnv[$headName] ?? new Kinds\KType(),
+        );
     }
 
     $label = $isVarHead ? "type variable `{$headName}`" : "type constructor `{$headName}`";
@@ -578,11 +679,9 @@ function applyTypeAppKinds(
         checkTypeAppArgKind($state, $arg, Kinds\pruneKind($ctx, $argExpected), $argAsts[$i], $headAt);
 
         $ctx = Kinds\kindInferCtxFromState($state);
+        $headKind = Kinds\pruneKind($ctx, $result);
         if ($isVarHead) {
-            $headKind = Kinds\pruneKind($ctx, $state->varKinds[$headName]);
-            $state->varKinds[$headName] = $headKind;
-        } else {
-            $headKind = Kinds\pruneKind($ctx, $result);
+            $state->varKinds[$headName] = Kinds\pruneKind($ctx, $state->varKinds[$headName]);
         }
     }
 }

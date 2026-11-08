@@ -39,6 +39,10 @@ function validateItem(Ast\AstNode $item, string $source, string $filename): void
 
 function validateTypeSynonym(Ast\TypeSynonymDecl $item, string $source, string $filename): void
 {
+    if ($item->type === null) {
+        return;
+    }
+
     $head = synonymHead($item->type);
     if ($head !== null && canonicalTypeConName($head) === $item->name) {
         return;
@@ -424,6 +428,12 @@ function validateIoIntrinsic(Ast\IntrinsicCall $expr, string $source, string $fi
         }
         validateIoActionArgs($expr->args[0], $source, $filename);
         validateIoBindContinuation($expr->args[1], $source, $filename);
+
+        return;
+    }
+
+    if ($role === 'io-mfix') {
+        validateIoBindContinuation($expr->args[0], $source, $filename);
 
         return;
     }

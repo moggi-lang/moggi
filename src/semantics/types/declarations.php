@@ -113,6 +113,15 @@ function declaresAnotherModule(TypeCheckState $state, string $name): bool
         && $declaredIn !== $here;
 }
 
+/**
+ * Register a data or newtype declaration, its constructors and their kinds.
+ *
+ * The `paramKinds` entry keeps the kind scheme, so an importer rebuilds the
+ * same poly-kinded declaration ({@see Kinds\kindFromDataInfo}). The walk over
+ * the constructors reads one instantiation of that scheme instead: a
+ * parameter's kind variable is then a variable of this declaration's own check,
+ * and a use elsewhere cannot bind it.
+ */
 function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
 {
     assertNotInstanceHeadMarkerName($state, $decl->name, $decl, 'data type');
@@ -179,9 +188,13 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
         Kinds\peelParamKinds($dataKind, \count($params)),
     ) ?: [];
     $state->data[$decl->name]['paramKinds'] = $paramKinds;
+    $localParamKinds = \array_combine(
+        $params,
+        Kinds\peelParamKinds(Kinds\instantiateKindVars($state, $dataKind), \count($params)),
+    ) ?: [];
 
     $kindScope = Kinds\pushKindScope($state);
-    $state->varKinds = [...$state->varKinds, ...$paramKinds];
+    $state->varKinds = [...$state->varKinds, ...$localParamKinds];
 
     try {
         foreach ($decl->constructors as $ctor) {
@@ -241,6 +254,7 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
         Kinds\restoreKindScope($state, $kindScope);
     }
 
+    dataParameterRoles($state, $decl->name);
     registerRecordFieldSelectors($state, $decl);
 }
 
@@ -467,6 +481,10 @@ function gadtConstructorShape(
     $dictTypes = [];
     $dictNames = [];
     foreach ($context as $i => $constraint) {
+        if (constraintIsErased($constraint)) {
+            continue;
+        }
+
         $dictTypes[] = new TCon('__Dict_' . $constraint->class);
         $dictNames[] = gadtContextFieldName($i, $constraint->class);
     }
@@ -497,6 +515,12 @@ function gadtConstructorShape(
 
 function registerTypeSynonym(TypeCheckState $state, Ast\TypeSynonymDecl $decl): void
 {
+    if ($decl->isFamily) {
+        registerTypeFamily($state, $decl);
+
+        return;
+    }
+
     $name = $decl->name;
 
     assertNotInstanceHeadMarkerName($state, $name, $decl, 'type synonym');
@@ -539,6 +563,186 @@ function registerTypeSynonym(TypeCheckState $state, Ast\TypeSynonymDecl $decl): 
     $state->typeSynonyms[$name] = synonymEntry($decl->type, $decl->params, $body, $kind);
 }
 
+/**
+ * Register a closed type family: its parameters' kinds, the kind its
+ * application has, and the equations that reduce it.
+ *
+ * The entry lives in `typeSynonyms` because that is the table the module system
+ * carries whole from the declaring module to an importer, which is what a family
+ * needs: an importer must see the equations to reduce the family, not just its
+ * kind. The `family` key is what tells the two apart (`typeSynonyms` entries
+ * without it expand, entries with it reduce).
+ *
+ * An equation is kind checked against the declared parameter and result kinds,
+ * so `Not 'Red = ...` in a family over `Bool` is refused where it is written
+ * rather than where it is used. Either side may be a kind variable of the
+ * declaration (`(l :: k)`), which every occurrence shares and every use
+ * instantiates afresh.
+ */
+function registerTypeFamily(TypeCheckState $state, Ast\TypeSynonymDecl $decl): void
+{
+    $name = $decl->name;
+
+    assertNotInstanceHeadMarkerName($state, $name, $decl, 'type family');
+
+    if (isMagicHashName($name)) {
+        throw typeFail($state, "type family `{$name}` uses the reserved `#` suffix", $decl);
+    }
+
+    if (isset($state->typeSynonyms[$name]) || isset($state->data[$name])) {
+        throw typeFail($state, "duplicate type declaration `{$name}`", $decl);
+    }
+
+    $kindVars = [];
+    $kindFromAst = function (Ast\KindNode $kindAst) use (&$kindFromAst, &$kindVars): Kinds\Kind {
+        return match ($kindAst::class) {
+            Ast\KindType::class => new Kinds\KType(),
+            Ast\KindArrow::class => new Kinds\KArrow(
+                $kindFromAst($kindAst->from),
+                $kindFromAst($kindAst->to),
+            ),
+            Ast\KindCon::class => \ctype_lower($kindAst->name[0])
+                ? ($kindVars[$kindAst->name] ??= new Kinds\KVar('$k$' . $kindAst->name))
+                : new Kinds\KCon($kindAst->name),
+            default => throw new \InvalidArgumentException('unknown kind in type family'),
+        };
+    };
+
+    $paramNames = [];
+    $paramKinds = [];
+    foreach ($decl->familyParams as $param) {
+        $paramNames[] = $param->name;
+        $paramKinds[] = $param->kind instanceof Ast\KindInfer
+            ? new Kinds\KVar('$k$' . $param->name)
+            : $kindFromAst($param->kind);
+    }
+    $inference = Kinds\newKindInferCtx($state);
+    $resultKind = $decl->familyResultKind === null
+        ? Kinds\freshKindVar($inference)
+        : $kindFromAst($decl->familyResultKind);
+
+    $familyKind = static function (array $paramKinds, Kinds\Kind $resultKind): Kinds\Kind {
+        $kind = $resultKind;
+        for ($i = \count($paramKinds) - 1; $i >= 0; --$i) {
+            $kind = new Kinds\KArrow($paramKinds[$i], $kind);
+        }
+
+        return $kind;
+    };
+
+    Kinds\registerTypeKind($state, $name, Kinds\generalizeKindVars($familyKind($paramKinds, $resultKind)));
+    $inference->env = $state->kindEnv;
+
+    $equations = [];
+    try {
+        foreach ($decl->familyEquations as $equation) {
+            [$headName, $lhsArgs] = flattenFamilyEquationLhs($equation['lhs'])
+                ?? throw typeFail($state, "cannot read the left-hand side of a `{$name}` equation", $equation['lhs']);
+            if ($headName !== $name) {
+                throw typeFail($state, "an equation of `{$name}` must start with `{$name}`", $equation['lhs']);
+            }
+            if (\count($lhsArgs) !== \count($paramNames)) {
+                throw typeFail(
+                    $state,
+                    "`{$name}` takes " . \count($paramNames) . ' argument(s), but this equation writes '
+                        . \count($lhsArgs),
+                    $equation['lhs'],
+                );
+            }
+            checkFamilyEquationKinds($inference, $lhsArgs, $equation['rhs'], $paramKinds, $resultKind);
+            $equations[] = ['lhsArgs' => $lhsArgs, 'rhs' => $equation['rhs']];
+        }
+    } catch (\InvalidArgumentException $e) {
+        throw typeFail($state, "kind error in type family `{$name}`: " . $e->getMessage(), $decl);
+    }
+
+    $paramKinds = \array_map(
+        static fn (Kinds\Kind $kind): Kinds\Kind => Kinds\pruneKind($inference, $kind),
+        $paramKinds,
+    );
+    $resultKind = Kinds\defaultUnresolvedKindVars(Kinds\pruneKind($inference, $resultKind));
+
+    $kind = Kinds\generalizeKindVars($familyKind($paramKinds, $resultKind));
+
+    Kinds\registerTypeKind($state, $name, $kind);
+    $state->typeSynonyms[$name] = [
+        'params' => $paramNames,
+        'rhs' => null,
+        'body' => null,
+        'kind' => $kind,
+        'family' => ['params' => $paramNames, 'equations' => $equations],
+    ];
+}
+
+/**
+ * The family name and argument patterns of an equation's left-hand side, or
+ * null when it is not an application of a named type.
+ *
+ * @return array{0: string, 1: list<Ast\TypeNode>}|null
+ */
+function flattenFamilyEquationLhs(Ast\TypeNode $lhs): ?array
+{
+    $args = [];
+    while ($lhs instanceof Ast\TypeApp) {
+        for ($i = \count($lhs->args) - 1; $i >= 0; --$i) {
+            $args[] = $lhs->args[$i];
+        }
+        $lhs = $lhs->con;
+    }
+
+    if (! $lhs instanceof Ast\TypeCon) {
+        return null;
+    }
+
+    return [$lhs->name, \array_reverse($args)];
+}
+
+/**
+ * Kind check one equation: an argument pattern has the kind its parameter stands
+ * at, and the right-hand side has the family's result kind.
+ *
+ * The walk shares the declaration's inference context, so what one equation says
+ * about the result kind constrains the next; the pattern variables it binds are
+ * the equation's own and are restored before the next equation is read.
+ *
+ * @param list<Ast\TypeNode> $lhsArgs
+ * @param list<Kinds\Kind> $paramKinds
+ */
+function checkFamilyEquationKinds(
+    Kinds\KindInferCtx $ctx,
+    array $lhsArgs,
+    Ast\TypeNode $rhs,
+    array $paramKinds,
+    Kinds\Kind $resultKind,
+): void {
+    $savedVarKinds = $ctx->varKinds;
+    try {
+        $ctx->varKinds = [];
+        foreach ($lhsArgs as $i => $pattern) {
+            bindFamilyPatternKindVars($ctx, $pattern);
+            Kinds\unifyKind($ctx, Kinds\inferKindAst($ctx, $pattern), $paramKinds[$i]);
+        }
+        Kinds\unifyKind($ctx, Kinds\inferKindAst($ctx, $rhs), $resultKind);
+    } finally {
+        $ctx->varKinds = $savedVarKinds;
+    }
+}
+
+/**
+ * Give every variable an equation's pattern mentions a kind variable of its own.
+ *
+ * A pattern variable stands for any type, so its kind is whatever the pattern's
+ * position asks for — `(f a) == (g b)` compares two applications at the kind
+ * their heads have, which the pattern itself is the only witness of. Binding `f`
+ * to `Type` instead would make every application pattern ill kinded.
+ */
+function bindFamilyPatternKindVars(Kinds\KindInferCtx $ctx, Ast\TypeNode $pattern): void
+{
+    foreach (\array_keys(typeAstVars($pattern)) as $name) {
+        $ctx->varKinds[$name] = Kinds\freshKindVar($ctx);
+    }
+}
+
 function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $module = ''): void
 {
     $name = $decl->name;
@@ -565,6 +769,7 @@ function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $modul
     foreach ($params as $param) {
         $paramKinds[$param['name']] = Kinds\classParamKind($state, $param, $decl);
     }
+
     $kindScope = Kinds\pushKindScope($state);
     $state->varKinds = [...$state->varKinds, ...$paramKinds];
 
@@ -586,7 +791,7 @@ function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $modul
             applyConstraintVarKinds($state, $methodUserConstraints);
             $methodType = astType($state, $bodyTypeAst);
             Kinds\assertKind($state, $methodType, new Kinds\KType(), $state->varKinds, $method->type);
-            foreach (\array_reverse($methodUserConstraints) as $constraint) {
+            foreach (\array_reverse(dictionaryConstraints($methodUserConstraints)) as $constraint) {
                 $methodType = new TArrow(new TCon('__Dict_' . $constraint->class), $methodType);
             }
 
@@ -942,38 +1147,39 @@ function classMethodExportSchemes(TypeCheckState $state, Ast\ClassDecl $classDec
         ),
     ];
 
-    applyConstraintVarKinds($state, $classConstraints);
-
     $savedVarKinds = $state->varKinds;
-    foreach ($classInfo['params'] as $param) {
-        $state->varKinds[$param['name']] = Kinds\classParamKind($state, $param, $classDecl);
+
+    try {
+        foreach ($classInfo['params'] as $param) {
+            $state->varKinds[$param['name']] = Kinds\classParamKind($state, $param, $classDecl);
+        }
+
+        $schemes = [];
+        foreach ($classInfo['methods'] as $methodName => $methodInfo) {
+            $methodLocalConstraints = $methodInfo['userConstraints'] ?? [];
+            $freshened = freshenTypeWithConstraints($state, $methodInfo['type'], [
+                ...$methodLocalConstraints,
+                ...$classConstraints,
+            ]);
+            $methodType = peelDictArrows(
+                $freshened['type'],
+                \count($methodLocalConstraints),
+            );
+            $bound = schemeBoundVars($methodType, [], $freshened['constraints']);
+            $methodDicts = expandConstraintsWithSuperclasses($state, $freshened['constraints']);
+            $schemes[$methodName] = scheme(
+                prune($state, $methodType),
+                $bound,
+                $freshened['constraints'],
+                \count($methodDicts),
+                $methodDicts,
+            )->asClassMethod($className);
+        }
+
+        return $schemes;
+    } finally {
+        $state->varKinds = $savedVarKinds;
     }
-
-    $schemes = [];
-    foreach ($classInfo['methods'] as $methodName => $methodInfo) {
-        $methodLocalConstraints = $methodInfo['userConstraints'] ?? [];
-        $freshened = freshenTypeWithConstraints($state, $methodInfo['type'], [
-            ...$methodLocalConstraints,
-            ...$classConstraints,
-        ]);
-        $methodType = peelDictArrows(
-            $freshened['type'],
-            \count($methodLocalConstraints),
-        );
-        $bound = schemeBoundVars($methodType, [], $freshened['constraints']);
-        $methodDicts = expandConstraintsWithSuperclasses($state, $freshened['constraints']);
-        $schemes[$methodName] = scheme(
-            prune($state, $methodType),
-            $bound,
-            $freshened['constraints'],
-            \count($methodDicts),
-            $methodDicts,
-        )->asClassMethod($className);
-    }
-
-    $state->varKinds = $savedVarKinds;
-
-    return $schemes;
 }
 
 function registerClassMethodExportSchemes(TypeCheckState $state, Ast\ClassDecl $classDecl): void
@@ -1105,7 +1311,7 @@ function registerInferredSignatureScheme(TypeCheckState $state, Ast\FunctionDecl
         $userFnType,
         schemeBoundVars($userFnType, $state->env, $userConstraints),
         $userConstraints,
-        \count($constraints),
+        \count(dictionaryConstraints($userConstraints)),
         $constraints,
     );
 
@@ -1148,11 +1354,11 @@ function registerFunctionScheme(TypeCheckState $state, Ast\FunctionDecl $fn): vo
         Kinds\restoreKindScope($state, $kindScope);
     }
     $fnType = $userFnType;
-    foreach (\array_reverse($userConstraints) as $constraint) {
+    foreach (\array_reverse(dictionaryConstraints($userConstraints)) as $constraint) {
         $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
     }
     $expected = peelForalls($fnType);
-    $paramCount = \count($fn->params) + \count($userConstraints);
+    $paramCount = \count($fn->params) + \count(dictionaryConstraints($userConstraints));
     for ($i = 0; $i < $paramCount; ++$i) {
         if (! $expected instanceof TArrow) {
             throw typeFail($state, "function `{$fn->name}` has too many parameters", $fn);
@@ -1164,7 +1370,7 @@ function registerFunctionScheme(TypeCheckState $state, Ast\FunctionDecl $fn): vo
         $userFnType,
         schemeBoundVars($userFnType, $state->env, $userConstraints),
         $userConstraints,
-        \count($constraints),
+        \count(dictionaryConstraints($userConstraints)),
         $constraints,
     );
     $wrapper = trivialIntrinsicWrapper($fn);

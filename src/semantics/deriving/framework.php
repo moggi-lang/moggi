@@ -696,6 +696,7 @@ function snapshotInstanceState(TypeCheckState $state): array
         'instanceLookupCache' => $state->instanceLookupCache,
         'instanceMappingCache' => $state->instanceMappingCache,
         'associatedEquations' => $state->associatedEquations,
+        'equalityGivens' => $state->equalityGivens,
     ];
 }
 
@@ -710,6 +711,7 @@ function restoreInstanceState(TypeCheckState $state, array $saved): void
     $state->instanceLookupCache = $saved['instanceLookupCache'];
     $state->instanceMappingCache = $saved['instanceMappingCache'];
     $state->associatedEquations = $saved['associatedEquations'];
+    $state->equalityGivens = $saved['equalityGivens'] ?? [];
 }
 
 /**

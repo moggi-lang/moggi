@@ -620,6 +620,10 @@ function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode $expr):
 
             return $expr;
         })(),
+        Ast\ConstructorRef::class,
+        Ast\Variable::class,
+        Ast\OperatorRef::class,
+        Ast\QualifiedRef::class => tryResolveValueEvidence($state, $expr),
         default => $expr,
     };
 }
@@ -684,8 +688,14 @@ function tryResolveRecordEvidence(TypeCheckState $state, Ast\RecordCon $expr): v
     }
 
     clearPendingConstraints($state, $expr);
-    foreach ($evidence as $i => $ev) {
-        $name = gadtContextFieldName($i, $constraints[$i]->class);
+    $next = 0;
+    foreach ($constraints as $i => $constraint) {
+        if (constraintIsErased($constraint)) {
+            continue;
+        }
+
+        $ev = $evidence[$next++];
+        $name = gadtContextFieldName($i, $constraint->class);
         foreach ($expr->fields as $field) {
             if ($field->name === $name) {
                 continue 2;
@@ -755,7 +765,11 @@ function tryResolveValueEvidence(TypeCheckState $state, Ast\AstNode $expr): Ast\
 
         return $expr;
     }
-    if (! $expr instanceof Ast\Variable && ! $expr instanceof Ast\OperatorRef && ! $expr instanceof Ast\QualifiedRef) {
+    if (! $expr instanceof Ast\Variable
+        && ! $expr instanceof Ast\OperatorRef
+        && ! $expr instanceof Ast\QualifiedRef
+        && ! $expr instanceof Ast\ConstructorRef
+    ) {
         return $expr;
     }
 

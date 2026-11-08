@@ -1,0 +1,13 @@
+-- A `Coercible` obligation is decided from how the two types are represented,
+-- so a pair whose representations differ is refused rather than coerced.
+module Main where
+
+import Data.Coerce (Coercible, coerce)
+import Moggi.Internal.Base
+
+data A = A
+
+data B = B
+
+bad :: B
+bad = coerce A

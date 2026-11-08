@@ -55,6 +55,7 @@ function typeSchemes(): array
     $natural = new TCon('Natural');
     $a = new TVar('a');
     $b = new TVar('b');
+    $c = new TVar('c');
     $listA = new TCon('List', [$a]);
     $maybeA = new TCon('Maybe', [$a]);
 
@@ -203,6 +204,8 @@ function typeSchemes(): array
         'doubleCosh#' => scheme(new TArrow($float, $float), []),
         'doubleFromInteger#' => scheme(new TArrow($integer, $float), []),
         'doubleToInt#' => scheme(new TArrow($float, $int), []),
+        'castWord64ToDouble#' => scheme(new TArrow(new TWord64(), $float), []),
+        'castDoubleToWord64#' => scheme(new TArrow($float, new TWord64()), []),
         'orderingEq#' => scheme(new TArrow($ordering, new TArrow($ordering, $bool)), []),
         'orderingNe#' => scheme(new TArrow($ordering, new TArrow($ordering, $bool)), []),
         'orderingCompare#' => scheme(new TArrow($ordering, new TArrow($ordering, $ordering)), []),
@@ -228,6 +231,25 @@ function typeSchemes(): array
         'maybeCompare#' => scheme(new TArrow($maybeA, new TArrow($maybeA, $ordering)), ['a']),
         'error#' => scheme(new TArrow($str, $a), ['a']),
         'fix#' => scheme(new TArrow(new TArrow($a, $a), $a), ['a']),
+        'coerce#' => scheme(
+            new TArrow(new TVar('a'), new TVar('b')),
+            ['a', 'b'],
+            [new \Moggi\Syntax\Ast\PendingConstraint(
+                \Moggi\Semantics\Kernel\coercionClass(),
+                [new TVar('a'), new TVar('b')],
+            )],
+        ),
+        'mfixPure#' => scheme(
+            new TArrow(
+                new TArrow($a, $b),
+                new TArrow(new TArrow($b, $bool), new TArrow(new TArrow($b, $a), $b)),
+            ),
+            ['a', 'b'],
+        ),
+        'mfixIO#' => scheme(
+            new TArrow(new TArrow($a, new TCon('IO', [$a])), new TCon('IO', [$a])),
+            ['a'],
+        ),
         'exceptionWrap#' => scheme(
             new TArrow($str, new TArrow($str, new TArrow($a, new TCon('SomeException', [])))),
             ['a'],
@@ -639,6 +661,7 @@ function ioPrimopRoles(): array
 
     return $table ??= [
         'ioPure#' => 'io-pure',
+        'mfixIO#' => 'io-mfix',
         'ioBind#' => 'io-bind',
         'exceptionThrowIo#' => 'io-throw',
         'exceptionCatch#' => 'io-catch',

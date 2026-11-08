@@ -141,6 +141,11 @@ function existentialEscapeMessage(TVar $existential): string
  * signature is rigid (`Expr a$sk`), and matching `Lit :: Expr Int` there is not
  * a mismatch but a proof. A flexible variable still unifies the ordinary way —
  * the branch can only be as general as the variable it met.
+ *
+ * Applying a type constructor is injective, so `f a ~ g b` proves `f ~ g` as
+ * well as `a ~ b`. Both heads are rigid when a proof such as `inner` takes
+ * `f a :~: g b` apart, and the equality between them is the same local
+ * assumption as any other.
  */
 function unifyGadtResult(TypeCheckState $state, Type $expected, Type $result, ?Ast\AstNode $at = null): void
 {
@@ -179,9 +184,11 @@ function unifyGadtResult(TypeCheckState $state, Type $expected, Type $result, ?A
     }
 
     if ($expected instanceof TVarApp && $result instanceof TVarApp
-        && $expected->name === $result->name
         && \count($expected->args) === \count($result->args)
     ) {
+        if ($expected->name !== $result->name) {
+            unifyGadtResult($state, new TVar($expected->name), new TVar($result->name), $at);
+        }
         foreach ($expected->args as $i => $arg) {
             unifyGadtResult($state, $arg, $result->args[$i], $at);
         }
@@ -284,6 +291,19 @@ function bindGadtContextFields(
     $subpatterns = [];
     $fieldNames = [];
     foreach ($constraints as $i => $constraint) {
+        if (constraintIsErased($constraint)) {
+            $ambient = new Ast\PendingConstraint(
+                $constraint->class,
+                $constraint->args,
+                '',
+            );
+            $state->ambientConstraints[] = $ambient;
+            $state->ambientConstraintsByClass[$constraint->class][] = $ambient;
+            $state->gadtAmbientConstraints[] = $ambient;
+
+            continue;
+        }
+
         $name = $constraint->evidence;
         $binder = new Ast\PatVar($name, $pattern->line, $pattern->col, $pattern->endCol);
         $binder->binderId = ++$state->nextBinderId;

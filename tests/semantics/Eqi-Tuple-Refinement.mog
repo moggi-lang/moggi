@@ -1,0 +1,17 @@
+-- A constructor that refines the instance's rigid head variables is matched
+-- from a multi-equation method. The equations are checked through a tuple
+-- pattern, so `EQI` has to refine `b` with `a` through that binding rather
+-- than meet a fresh variable.
+
+data OrderingI a b where
+  LTI :: OrderingI a b
+  EQI :: OrderingI a a
+  GTI :: OrderingI a b
+
+class EqI a b where
+  eqI :: OrderingI a b -> Bool
+
+instance EqI a a where
+  eqI LTI = False
+  eqI EQI = True
+  eqI GTI = False

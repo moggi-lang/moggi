@@ -24,7 +24,10 @@ use function Moggi\Semantics\TypeExpr\scheme;
  * A field whose name an imported binding already holds keeps that binding and
  * gets no selector here: field names are a namespace of their own (`x.field`
  * resolves on the receiver's type), and a name that is already a value cannot
- * be replaced by one silently. A field only some of a type's constructors carry
+ * be replaced by one silently. A parameter of constructor kind (`f` in `data
+ * Rec f = Rec (f Int)`) has no plain type variable for a selector to name, while
+ * one whose kind is still a variable -- a phantom, generalised to `forall k. k`
+ * -- does. A field only some of a type's constructors carry
  * gets a selector too, one that takes the receiver apart by the constructor the
  * field belongs to; building it on any other constructor is a match failure, so
  * the declaration stays honest about which values it accepts. A GADT constructor's fields are left out, since
@@ -36,7 +39,7 @@ function registerRecordFieldSelectors(TypeCheckState $state, Ast\DataDecl $decl)
     $params = $state->data[$decl->name]['params'];
 
     foreach ($state->data[$decl->name]['paramKinds'] ?? [] as $kind) {
-        if (! $kind instanceof Kinds\KType) {
+        if (! $kind instanceof Kinds\KType && ! $kind instanceof Kinds\KVar) {
             $state->data[$decl->name]['fieldSelectors'] = $selectors;
 
             return;

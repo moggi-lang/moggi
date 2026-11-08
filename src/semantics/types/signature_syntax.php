@@ -98,7 +98,9 @@ function signatureTypeAst(Type $type, array $known, array $subst = []): Ast\Type
 /** Names the checker owns, which no signature would ever quantify over. */
 function isInternalTypeConName(string $name): bool
 {
-    return \str_starts_with($name, '__Dict_') || isMagicHashName($name);
+    return \str_starts_with($name, '__Dict_')
+        || \str_starts_with($name, '__DictArg_')
+        || isMagicHashName($name);
 }
 
 /**

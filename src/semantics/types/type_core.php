@@ -541,6 +541,59 @@ function freshenTypeWithConstraintsKeeping(TypeCheckState $state, Type $type, ar
     ];
 }
 
+/**
+ * Whether a type is a stated context, `(C => r)`, carried as `__DictArg_C` with
+ * the constraint's arguments followed by `r`.
+ */
+function isDictArgConstraint(Type $type): bool
+{
+    return $type instanceof TCon && \str_starts_with($type->name, '__DictArg_');
+}
+
+/** The class a stated context names; `~` for an equality. */
+function dictArgClass(TCon $type): string
+{
+    return \substr($type->name, \strlen('__DictArg_'));
+}
+
+/** @return list<Type> */
+function dictArgConstraintArgs(TCon $type): array
+{
+    return \array_slice($type->args, 0, -1);
+}
+
+/** The type the argument is checked at once its stated context is given. */
+function dictArgBody(TCon $type): Type
+{
+    return $type->args[\count($type->args) - 1];
+}
+
+/** (C => r) is r wherever a value is used: the dictionary is never passed. */
+function stripDictArgConstraints(Type $type): Type
+{
+    while ($type instanceof TCon && isDictArgConstraint($type)) {
+        $type = dictArgBody($type);
+    }
+
+    return $type;
+}
+
+/** The written form of a stated context, `Show a` or `a ~ b`. */
+function dictArgConstraintText(TCon $type): string
+{
+    $args = \array_map(
+        static fn (Type $arg): string => typeToStringArgument($arg, []),
+        dictArgConstraintArgs($type),
+    );
+    $class = dictArgClass($type);
+
+    if ($class === '~' || $class === '~~') {
+        return ($args[0] ?? '?') . ' ' . $class . ' ' . ($args[1] ?? '?');
+    }
+
+    return \trim($class . ' ' . \implode(' ', $args));
+}
+
 /** Peel leading `__Dict_*` arrows that encode method-local constraints. */
 function peelDictArrows(Type $type, int $count): Type
 {
@@ -660,10 +713,22 @@ function substituteVarApp(TVarApp $type, array $mapping): Type
         : applyArgsToHead($head, $args);
 }
 
-/** @param array<string, Type> $mapping */
+/**
+ * Replace each mapped variable, walking the node through the one table of
+ * heads. An empty mapping still validates the head: no law may read a node the
+ * table does not know as a leaf.
+ *
+ * @param array<string, Type> $mapping
+ */
 
 function substitute(Type $type, array $mapping): Type
 {
+    if ($mapping === []) {
+        typeChildren($type);
+
+        return $type;
+    }
+
     return match ($type::class) {
         TVar::class => $mapping[$type->name] ?? $type,
         TVarApp::class => substituteVarApp($type, $mapping),
@@ -945,6 +1010,60 @@ function typeConModulesMatch(TCon $left, TCon $right): bool
     return $left->module === null || $right->module === null || $left->module === $right->module;
 }
 
+/**
+ * Whether a written equality constraint has already said two variables are one
+ * type.
+ *
+ * An instance head's variables are skolems: `unify` refuses to identify two of
+ * them because nothing outside the instance chooses them. A context such as
+ * `instance a ~ b => Enum (a :~: b)` is the exception -- it is the declaration
+ * stating that, for this instance, they are the same type -- so the pair is
+ * recorded where the constraint is read and unify answers for it here. The
+ * variables stay distinct names, which is what keeps the instance head
+ * `a :~: b` as written, while any question about their identity succeeds.
+ */
+function equalityGiven(TypeCheckState $state, string $left, string $right): bool
+{
+    if ($left === $right) {
+        return true;
+    }
+
+    $leftBase = equalityGivenName($left);
+    $rightBase = equalityGivenName($right);
+    $bothSkolems = $left !== $leftBase && $right !== $rightBase;
+    if ($leftBase === $rightBase && ! $bothSkolems) {
+        return true;
+    }
+
+    return isset($state->equalityGivens[$leftBase . "\0" . $rightBase]);
+}
+
+/** Both directions of a given, so neither order can miss it. */
+function recordEqualityGiven(TypeCheckState $state, string $left, string $right): void
+{
+    $left = equalityGivenName($left);
+    $right = equalityGivenName($right);
+    if ($left === $right) {
+        return;
+    }
+
+    $state->equalityGivens[$left . "\0" . $right] = true;
+    $state->equalityGivens[$right . "\0" . $left] = true;
+}
+
+/**
+ * The variable a given about a skolem speaks about.
+ *
+ * An instance's methods are checked against a skolemized copy of the head's
+ * variables -- `t269` becomes `t269$sk277` -- so a pair the context recorded
+ * must be recognized in that spelling as well. The suffix names the skolem, not
+ * another variable, so the pair still says those two are the same type.
+ */
+function equalityGivenName(string $name): string
+{
+    return \preg_replace('/\$sk[0-9]+$/', '', $name) ?? $name;
+}
+
 function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at = null): void
 {
     $left = prune($state, $left);
@@ -964,6 +1083,9 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
             $leftRigid = isset($state->rigidVars[$left->name]);
             $rightRigid = isset($state->rigidVars[$right->name]);
             if ($leftRigid && $rightRigid) {
+                if (equalityGiven($state, $left->name, $right->name)) {
+                    return;
+                }
                 if (isset($state->gadtExistentials[$left->name])) {
                     throw typeFail($state, existentialEscapeMessage($left), $at, 'unify');
                 }
@@ -1018,6 +1140,24 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
 
     $left = normalizeType($state, $left, reduceFamilies: false);
     $right = normalizeType($state, $right, reduceFamilies: false);
+
+    if ($left instanceof TCon) {
+        $reduced = reduceTypeFamily($state, $left);
+        if ($reduced !== null && typeToString($reduced) !== typeToString($left)) {
+            unify($state, $reduced, $right, $at);
+
+            return;
+        }
+    }
+
+    if ($right instanceof TCon) {
+        $reduced = reduceTypeFamily($state, $right);
+        if ($reduced !== null && typeToString($reduced) !== typeToString($right)) {
+            unify($state, $left, $reduced, $at);
+
+            return;
+        }
+    }
 
     if ($left instanceof TCon && isset($state->associatedFamilies[$left->name])) {
         $reduced = reduceAssociatedFamily($state, $left);
@@ -1089,6 +1229,12 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
                 unify($state, $arg, $right->args[$i], $at);
             }
 
+            return;
+        }
+
+        $promoted = $left instanceof TPromoted ? $left : $right;
+        $other = $left instanceof TPromoted ? $right : $left;
+        if ($promoted->args === [] && $other instanceof TCon && $other->args === [] && $promoted->name === $other->name) {
             return;
         }
 
@@ -1167,6 +1313,25 @@ function unifyVarApp(TypeCheckState $state, TVarApp $app, Type $other, ?Ast\AstN
 
         if (\count($app->args) < \count($other->args)) {
             unifyHktSplitVarHead($state, $app, $other, $at);
+
+            return;
+        }
+
+        throw typeFail($state, formatUnifyError($state, $app, $other), $at, 'unify');
+    }
+
+    if ($other instanceof TArrow) {
+        if (\count($app->args) === 2) {
+            unify($state, new TVar($app->name), new TCon('->'), $at);
+            unify($state, $app->args[0], $other->from, $at);
+            unify($state, $app->args[1], $other->to, $at);
+
+            return;
+        }
+
+        if (\count($app->args) === 1) {
+            unify($state, new TVar($app->name), new TCon('->', [$other->from]), $at);
+            unify($state, $app->args[0], $other->to, $at);
 
             return;
         }
@@ -1568,6 +1733,10 @@ function zonkInferredTypesInExpr(TypeCheckState $state, Ast\AstNode $expr): void
             }
         })(),
         Ast\FieldAccess::class => zonkInferredTypesInExpr($state, $expr->object),
+        Ast\ConstructorRef::class,
+        Ast\Variable::class,
+        Ast\OperatorRef::class,
+        Ast\QualifiedRef::class => null,
         default => null,
     };
 }
@@ -1861,6 +2030,10 @@ function typeToStringArgument(Type $type, array $rename = []): string
 /** @param array<string, string> $rename */
 function typeToString(Type $type, array $rename = []): string
 {
+    if (isDictArgConstraint($type)) {
+        return '(' . dictArgConstraintText($type) . ') => ' . typeToString(dictArgBody($type), $rename);
+    }
+
     return match ($type::class) {
         TInt::class => 'Int',
         TStr::class => 'String',
@@ -1889,6 +2062,13 @@ function typeToString(Type $type, array $rename = []): string
         TStringLit::class => \json_encode($type->value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         TNatLit::class => $type->digits,
         TCon::class => (static function () use ($type, $rename): string {
+            if ($type->name === '->') {
+                if (\count($type->args) === 2) {
+                    return typeToStringDomain($type->args[0], $rename) . ' -> ' . typeToString($type->args[1], $rename);
+                }
+
+                return '(->)';
+            }
             if ($type->name === 'List' && \count($type->args) === 1) {
                 return '[' . typeToString($type->args[0], $rename) . ']';
             }

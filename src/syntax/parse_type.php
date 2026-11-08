@@ -36,6 +36,12 @@ function parseKindAtom(ParserState $state): Ast\KindNode
         return new Ast\KindType();
     }
 
+    if (isAt($state, TokenKind::VarId)) {
+        $token = advance($state);
+
+        return new Ast\KindCon($token->lexeme, $token->line, $token->col, $token->col + \max(0, \strlen($token->lexeme) - 1));
+    }
+
     if (isAt($state, TokenKind::ConId)) {
         $token = advance($state);
 
@@ -45,20 +51,27 @@ function parseKindAtom(ParserState $state): Ast\KindNode
     throw unexpected($state, 'kind');
 }
 
-function parseType(ParserState $state): Ast\TypeNode
+/**
+ * `$anyOperator` widens what may continue a type infix: inside parentheses
+ * every operator but the ones that structure a type counts, so an application
+ * such as `(3 <=? 5)` parses as one type. Outside them the operator has to be
+ * a constructor operator or one of the compiler's type-level operators, since
+ * there `|` and `=` still separate declarations.
+ */
+function parseType(ParserState $state, bool $anyOperator = false): Ast\TypeNode
 {
     if (isForallStart($state)) {
         return parseForall($state);
     }
 
-    $first = parseTypeInfix($state);
+    $first = parseTypeInfix($state, $anyOperator);
 
     if (isAt($state, TokenKind::Comma)) {
         $before = $state->pos;
         $constraints = [$first];
         while (isAt($state, TokenKind::Comma)) {
             advance($state);
-            $constraints[] = parseTypeInfix($state);
+            $constraints[] = parseTypeInfix($state, $anyOperator);
         }
 
         if (isAt($state, TokenKind::Op) && peek($state)->lexeme === '=>') {
@@ -88,13 +101,13 @@ function parseType(ParserState $state): Ast\TypeNode
 /**
  * @return Ast\TypeNode
  */
-function parseTypeNoConstraint(ParserState $state): Ast\TypeNode
+function parseTypeNoConstraint(ParserState $state, bool $anyOperator = false): Ast\TypeNode
 {
     if (isForallStart($state)) {
         return parseForall($state);
     }
 
-    $first = parseTypeInfix($state);
+    $first = parseTypeInfix($state, $anyOperator);
 
     if (isAt($state, TokenKind::Op, 0, '->')) {
         advance($state);
@@ -111,13 +124,13 @@ function parseTypeNoConstraint(ParserState $state): Ast\TypeNode
  *
  * @return Ast\TypeNode
  */
-function parseTypeInfix(ParserState $state): Ast\TypeNode
+function parseTypeInfix(ParserState $state, bool $anyOperator = false): Ast\TypeNode
 {
     $left = parseTypeAtom($state);
 
     while (
         isAt($state, TokenKind::Op)
-        && isConstructorOperator(peek($state)->lexeme)
+        && canContinueTypeInfix(peek($state)->lexeme, $anyOperator)
     ) {
         $opToken = advance($state);
         $right = parseTypeAtom($state);
@@ -131,6 +144,25 @@ function parseTypeInfix(ParserState $state): Ast\TypeNode
     }
 
     return $left;
+}
+
+/**
+ * Whether an operator token continues a type written infix.
+ *
+ * Constructor operators (`:+:`) and the compiler's type-level operators (`~`,
+ * `&&`, `||`, `==`) always do. Inside parentheses every other operator does
+ * too, except the ones that structure a type themselves (`->`, `=>`, `::`) or
+ * separate declarations (`=`, `|`, `\\`, `@`, `.`): `(3 <=? 5)` is one applied
+ * type, while in `data T = A Int | B` the `|` still ends the constructor.
+ */
+function canContinueTypeInfix(string $lexeme, bool $anyOperator): bool
+{
+    if (isConstructorOperator($lexeme) || isTypeLevelOperator($lexeme)) {
+        return true;
+    }
+
+    return $anyOperator
+        && ! \in_array($lexeme, ['->', '=>', '::', '=', '|', '\\', '@', '.'], true);
 }
 
 /**
@@ -270,6 +302,13 @@ function parseTypeHead(ParserState $state): Ast\TypeNode
             return new Ast\TypeUnit();
         }
 
+        if (isAt($state, TokenKind::Op, 0, '->') && isAt($state, TokenKind::RParen, 1)) {
+            $opToken = advance($state);
+            expect($state, TokenKind::RParen);
+
+            return withTypeLocation(new Ast\TypeCon('->'), $opToken);
+        }
+
         if (
             isAt($state, TokenKind::Op)
             && isConstructorOperator(peek($state)->lexeme)
@@ -291,12 +330,12 @@ function parseTypeHead(ParserState $state): Ast\TypeNode
         }
 
         $saved = $state->pos;
-        $first = parseTypeNoConstraint($state);
+        $first = parseTypeNoConstraint($state, true);
         if (isAt($state, TokenKind::Comma)) {
             $elements = [$first];
             while (isAt($state, TokenKind::Comma)) {
                 advance($state);
-                $elements[] = parseTypeNoConstraint($state);
+                $elements[] = parseTypeNoConstraint($state, true);
             }
             expect($state, TokenKind::RParen);
 

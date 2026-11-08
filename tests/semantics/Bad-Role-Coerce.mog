@@ -1,0 +1,15 @@
+-- A declared `nominal` role forbids `coerce` from changing that parameter even
+-- when the representations would otherwise agree.
+module Main where
+
+import Data.Bool (Bool(..))
+import Data.Char (Char)
+import Data.Coerce (Coercible, coerce)
+import Moggi.Internal.Base
+
+data Tagged tag value = Tagged value
+
+type role Tagged nominal representational
+
+bad :: Tagged Char Int
+bad = coerce (Tagged 5 :: Tagged Bool Int)

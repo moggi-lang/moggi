@@ -259,7 +259,7 @@ function foreignIsMagicHashAlias(TypeCheckState $state, Ast\TypeNode $type): boo
     }
 
     $syn = $state->typeSynonyms[$name];
-    if ($syn['params'] !== []) {
+    if ($syn['params'] !== [] || $syn['rhs'] === null) {
         return false;
     }
 

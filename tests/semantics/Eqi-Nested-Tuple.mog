@@ -1,0 +1,21 @@
+-- The refinement has to travel two levels down: the outer tuple alternative
+-- names `EQI` in its first component and again inside the nested pair, and
+-- `EQI` refines `b` with `a` through both bindings rather than meeting a fresh
+-- variable at either level.
+
+data OrderingI a b where
+  LTI :: OrderingI a b
+  EQI :: OrderingI a a
+  GTI :: OrderingI a b
+
+class EqI a b where
+  eqI :: OrderingI a b -> Bool
+  eqPairI :: (OrderingI a b, (OrderingI a b, Bool)) -> Bool
+
+instance EqI a a where
+  eqI LTI = False
+  eqI EQI = True
+  eqI GTI = False
+  eqPairI (EQI, (EQI, True)) = True
+  eqPairI (LTI, (LTI, False)) = True
+  eqPairI (outer, (inner, flag)) = False

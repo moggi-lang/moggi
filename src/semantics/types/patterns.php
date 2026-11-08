@@ -400,7 +400,7 @@ function bindConPattern(TypeCheckState $state, Ast\PatCon $pattern, Type $expect
         if (! $result instanceof TArrow) {
             throw typeFail($state, "constructor {$pattern->name} applied to too many arguments", $pattern);
         }
-        [$argType, $env] = bindPattern($state, $arg, $result->from, $env, generalize: false, constraints: $constraints);
+        [$argType, $env] = bindPattern($state, $arg, stripDictArgConstraints($result->from), $env, generalize: false, constraints: $constraints);
         $result = $result->to;
     }
 
@@ -455,7 +455,7 @@ function bindGadtConPattern(
         if (! $result instanceof TArrow) {
             throw typeFail($state, "constructor {$pattern->name} applied to too many arguments", $pattern);
         }
-        [$argType, $env] = bindPattern($state, $arg, $result->from, $env, generalize: false, constraints: $constraints);
+        [$argType, $env] = bindPattern($state, $arg, stripDictArgConstraints($result->from), $env, generalize: false, constraints: $constraints);
         $result = $result->to;
     }
 
@@ -525,15 +525,22 @@ function bindConsPattern(TypeCheckState $state, Ast\PatCons $pattern, Type $expe
 
 function bindTuplePattern(TypeCheckState $state, Ast\PatTuple $pattern, Type $expected, array $env, bool $generalize, array $constraints = []): array
 {
+    $pruned = prune($state, $expected);
+    $components = $pruned instanceof TCon && $pruned->name === 'Tuple' . \count($pattern->elements)
+        ? $pruned->args
+        : null;
+
     $parts = [];
-    foreach ($pattern->elements as $element) {
-        $part = freshType($state);
+    foreach ($pattern->elements as $i => $element) {
+        $part = $components[$i] ?? freshType($state);
         [$_, $env] = bindPattern($state, $element, $part, $env, generalize: false, constraints: $constraints);
         $parts[] = $part;
     }
 
-    $tupleType = \count($parts) === 0 ? new TUnit() : new TCon('Tuple' . \count($parts), $parts);
-    unify($state, $expected, $tupleType);
+    if ($components === null) {
+        $tupleType = \count($parts) === 0 ? new TUnit() : new TCon('Tuple' . \count($parts), $parts);
+        unify($state, $expected, $tupleType);
+    }
     if ($generalize) {
         $env = generalizePatternBindings($state, $pattern, $env, $constraints);
     }
@@ -564,7 +571,7 @@ function bindRecordPattern(TypeCheckState $state, Ast\PatRecord $pattern, Type $
         if (! $result instanceof TArrow) {
             throw typeFail($state, "constructor {$pattern->name} applied to too many arguments", $pattern);
         }
-        [$_, $env] = bindPattern($state, $subpattern, $result->from, $env, generalize: false, constraints: $constraints);
+        [$_, $env] = bindPattern($state, $subpattern, stripDictArgConstraints($result->from), $env, generalize: false, constraints: $constraints);
         $result = $result->to;
     }
 

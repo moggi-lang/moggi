@@ -56,12 +56,16 @@ function applyEvidenceMethodInfo(TypeCheckState $state, Ast\AstNode &$expr, arra
     $methodNullary = $methodType !== null
         && ! (peelForalls(prune($state, $methodType)) instanceof TArrow);
 
+    $instanceHeadAst = ($info['implicit'] ?? false)
+        ? ($info['instanceHeadAst'] ?? null)
+        : null;
+
     $method = new Ast\EvidenceMethod(
         $info['class'],
         $info['method'],
         $info['evidence'],
         $methodNullary,
-        ($info['implicit'] ?? false) ? ($info['instanceHeadAst'] ?? null) : null,
+        $instanceHeadAst,
         $info['contextEvidence'] ?? [],
         $expr->line,
         $expr->col,
@@ -133,6 +137,14 @@ function parseConstraints(TypeCheckState $state, array $constraints, ?AstNode $a
             throw typeFail($state, 'constraint must be a class application', $at);
         }
 
+        if (($constraint->con->name === '~' || $constraint->con->name === '~~')
+            && ! isset($state->classes[$constraint->con->name])
+        ) {
+            assertEqualityConstraintHolds($state, $constraint, $at);
+
+            continue;
+        }
+
         $className = $constraint->con->name;
         if (! isset($state->classes[$className])) {
             throw typeFail(
@@ -178,6 +190,57 @@ function parseConstraints(TypeCheckState $state, array $constraints, ?AstNode $a
     }
 
     return $parsed;
+}
+
+/**
+ * Check a written equality constraint and make its two sides one type.
+ *
+ * `~` names no dictionary: it states that its sides are the same type, so the
+ * only thing to do is unify them where the constraint is written. `~~` states
+ * the same thing without asking the two sides to share a kind, so it is handled
+ * here too. That is what
+ * lets `instance a ~ b => Enum (a :~: b)` define `toEnum 0 = Refl` -- inside the
+ * instance `a` and `b` are one type, so `Refl :: a :~: a` has the instance's
+ * result type -- and the same reading serves a constructor context
+ * (`MkT :: (a ~ Int) => a -> T`).
+ *
+ * `$headVars` maps the instance head as written to the freshened head the
+ * instance is checked at, so the sides are unified at the types the instance
+ * actually uses. An instance head's own variables are skolems -- nothing outside
+ * the instance chooses them -- but a written `~` between two of them says they
+ * are one type, so those two stop being distinct skolems before unifying.
+ *
+ * @param array<string, Type> $headVars
+ */
+function assertEqualityConstraintHolds(
+    TypeCheckState $state,
+    Ast\TypeApp $constraint,
+    ?AstNode $at = null,
+    array $headVars = [],
+): void {
+    if (\count($constraint->args) !== 2) {
+        throw typeFail($state, 'an equality constraint compares exactly two types', $at ?? $constraint);
+    }
+
+    $left = prune($state, instantiateContextArg($state, $constraint->args[0], $headVars));
+    $right = prune($state, instantiateContextArg($state, $constraint->args[1], $headVars));
+
+    if ($left instanceof TVar && $right instanceof TVar && $left->name !== $right->name) {
+        recordEqualityGiven($state, $left->name, $right->name);
+
+        return;
+    }
+
+    try {
+        unify($state, $left, $right, $at ?? $constraint);
+    } catch (\Throwable) {
+        throw typeFail(
+            $state,
+            'equality constraint `' . typeToString($left) . ' ' . $constraint->con->name . ' '
+                . typeToString($right) . '` does not hold',
+            $at ?? $constraint,
+        );
+    }
 }
 
 /**
@@ -433,7 +496,7 @@ function constraintsWithPositionalEvidence(array $constraints): array
         $constraints[$i] = new Ast\PendingConstraint(
             $constraint->class,
             $constraint->args,
-            evidenceParamName($constraint->class, $i),
+            constraintIsErased($constraint) ? '' : evidenceParamName($constraint->class, $i),
             $constraint->implicit,
             $constraint->instanceHeadAst,
         );
@@ -655,7 +718,7 @@ function constraintFromSuperclassAst(TypeCheckState $state, Ast\TypeNode $super,
     foreach ($classInfo['params'] as $j => $param) {
         $argAst = $substituted->args[$j]
             ?? throw typeFail($state, "class `{$className}` applied to too few arguments");
-        $args[] = astType($state, $argAst);
+        $args[] = declarationType($state, $argAst);
     }
 
     return new Ast\PendingConstraint($className, $args);
@@ -748,6 +811,10 @@ function resolveConstraintEvidence(TypeCheckState $state, array $constraints, ?A
 {
     $exprs = [];
     foreach ($constraints as $constraint) {
+        if (constraintIsErased($constraint)) {
+            continue;
+        }
+
         $className = $constraint->class;
         $classInfo = $state->classes[$className] ?? throw typeFail($state, "unknown class `{$className}`", $at);
 
@@ -1122,6 +1189,10 @@ function constraintInstanceHead(TypeCheckState $state, Ast\PendingConstraint $co
         return null;
     }
 
+    if (isCoercionClass($constraint->class)) {
+        return null;
+    }
+
     try {
         $head = instanceHeadFromConstraintArgs($state, $classInfo['params'], $constraint->args);
     } catch (TypeError) {
@@ -1149,6 +1220,14 @@ function tryResolveEvidenceExprs(
 ): ?array {
     $exprs = [];
     foreach ($constraints as $constraint) {
+        if (constraintIsErased($constraint)) {
+            if (coercionObligation($state, $constraint) !== CoercionObligation::Satisfied) {
+                return null;
+            }
+
+            continue;
+        }
+
         $resolved = constraintInstanceHead($state, $constraint);
         if ($resolved === null) {
             return null;
@@ -1307,7 +1386,8 @@ function evidenceEntryConstraint(TypeCheckState $state, AstNode $entry): ?array
  */
 function instanceConstraintArgsFromHeadAst(TypeCheckState $state, Ast\TypeNode $headAst): array
 {
-    $head = prune($state, astType($state, $headAst));
+    $head = prune($state, declarationType($state, $headAst));
+
     if ($head instanceof TCon && $head->name === Ast\instanceHeadMarker()) {
         return $head->args;
     }
@@ -1416,6 +1496,12 @@ function prependEvidenceToCall(TypeCheckState $state, Ast\AstNode $expr, array $
         return $fn;
     }
 
+    if ($expr instanceof Ast\Infix && $expr->resolvedIntrinsic === null && $expr->compilerIntrinsic === null) {
+        $applied = new Ast\Apply(new Ast\Variable($expr->operator), $expr->left, $expr->line, $expr->col, $expr->endCol);
+
+        return new Ast\Apply($applied, $expr->right, $expr->line, $expr->col, $expr->endCol);
+    }
+
     if (! $expr instanceof Ast\Apply) {
         throw new \InvalidArgumentException('prependEvidenceToCall expects a call or reference, got ' . $expr::class);
     }
@@ -1462,6 +1548,33 @@ function classNameForAmbientEvidence(TypeCheckState $state, string $evidenceName
 }
 
 /**
+ * The ambient dictionaries a context resolution can name, as one key.
+ *
+ * A context resolves to variables for the givens of the body it is resolved
+ * in, so two bodies with different givens cannot share an answer.
+ */
+function ambientEvidenceFingerprint(TypeCheckState $state): string
+{
+    $parts = [];
+    foreach ([...$state->gadtAmbientConstraints, ...$state->ambientConstraints] as $ambient) {
+        if (isset($ambient->class, $ambient->evidence)) {
+            $parts[] = $ambient->class . ':' . $ambient->evidence;
+        }
+    }
+
+    return \implode('|', $parts);
+}
+
+/**
+ * A standalone copy of an evidence node, so one cached answer can be handed to
+ * several call sites without them sharing the node.
+ */
+function cloneEvidenceNode(Ast\AstNode $node): Ast\AstNode
+{
+    return \unserialize(\serialize($node));
+}
+
+/**
  * Dictionaries that a project instance needs from its context
  * (`Eq Int` + `Ord Int` when selecting `Ord (Min Int)`).
  *
@@ -1474,6 +1587,13 @@ function resolveProjectInstanceContextEvidence(
     ?Ast\AstNode $at = null,
 ): array {
     $headType = $head instanceof Type ? prune($state, $head) : prune($state, astType($state, $head));
+
+    $key = $className . '|' . freshenStableTypeKey($headType) . '#' . ambientEvidenceFingerprint($state);
+    $cached = $state->projectInstanceContextEvidence[$key] ?? null;
+    if ($cached !== null) {
+        return \array_map(cloneEvidenceNode(...), \array_map(\unserialize(...), $cached));
+    }
+
     $match = findProjectInstanceRecord($state, $className, $headType);
     if ($match === null) {
         return [];
@@ -1533,6 +1653,8 @@ function resolveProjectInstanceContextEvidence(
             );
         }
     }
+
+    $state->projectInstanceContextEvidence[$key] = \array_map(\serialize(...), $exprs);
 
     return $exprs;
 }
@@ -1802,7 +1924,9 @@ function assertPendingDictsConsistentInExpr(TypeCheckState $state, Ast\AstNode $
         $constraintClasses = [];
         $constraintVars = [];
         foreach ($pending as $constraint) {
-            $constraintClasses[$constraint->class] = true;
+            if (! constraintIsErased($constraint)) {
+                $constraintClasses[$constraint->class] = true;
+            }
             foreach ($constraint->args as $arg) {
                 $constraintVars += typeVars($arg);
             }
@@ -1830,6 +1954,14 @@ function assertPendingDictsConsistentInExpr(TypeCheckState $state, Ast\AstNode $
 function constraintsResolvable(TypeCheckState $state, array $constraints): bool
 {
     foreach ($constraints as $constraint) {
+        if (constraintIsErased($constraint)) {
+            if (coercionObligation($state, $constraint) !== CoercionObligation::Satisfied) {
+                return false;
+            }
+
+            continue;
+        }
+
         $resolved = constraintInstanceHead($state, $constraint);
         if ($resolved === null) {
             return false;

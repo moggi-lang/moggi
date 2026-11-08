@@ -40,6 +40,13 @@ function normalizeType(
             : new TArrow($from, $to);
     }
 
+    if ($type instanceof TCon && $type->name === '->' && \count($type->args) === 2) {
+        return new TArrow(
+            normalizeType($state, $type->args[0], $expanding, $reduceFamilies),
+            normalizeType($state, $type->args[1], $expanding, $reduceFamilies),
+        );
+    }
+
     if (! $type instanceof TCon) {
         return mapTypeChildren(
             $type,
@@ -58,6 +65,15 @@ function normalizeType(
     }
     if ($changed) {
         $type = new TCon($type->name, $args);
+    }
+
+    $familyReduced = reduceTypeFamily($state, $type);
+    if ($familyReduced !== null) {
+        return normalizeType($state, $familyReduced, $expanding, $reduceFamilies);
+    }
+
+    if (isTypeFamilyDeclared($state, $type->name)) {
+        return $type;
     }
 
     if ($reduceFamilies) {
@@ -199,7 +215,27 @@ function matchAssociatedTypePattern(TypeCheckState $state, Ast\TypeNode $pattern
     $target = prune($state, $target);
 
     if ($pattern instanceof Ast\TypeVar) {
+        if ($pattern->name === '_') {
+            return [];
+        }
+
         return [$pattern->name => $target];
+    }
+
+    if ($pattern instanceof Ast\TypePromoted) {
+        return $target instanceof TPromoted
+            && $target->name === $pattern->name
+            && $target->args === []
+            ? []
+            : null;
+    }
+
+    if ($pattern instanceof Ast\TypeStringLit) {
+        return $target instanceof TStringLit && $target->value === $pattern->value ? [] : null;
+    }
+
+    if ($pattern instanceof Ast\TypeNatLit) {
+        return $target instanceof TNatLit && $target->digits === $pattern->digits ? [] : null;
     }
 
     if ($pattern instanceof Ast\TypeUnit) {
@@ -242,6 +278,103 @@ function matchAssociatedTypePattern(TypeCheckState $state, Ast\TypeNode $pattern
     }
 
     return null;
+}
+
+/** Whether a name denotes a declared closed type family. */
+function isTypeFamilyDeclared(TypeCheckState $state, string $name): bool
+{
+    return isset($state->typeSynonyms[$name]['family']);
+}
+
+/**
+ * Reduce a closed type family application, or nothing when it is stuck.
+ *
+ * Equations are tried in the order the declaration writes them and the first
+ * match wins. That order is the whole semantics of a closed family, and it is
+ * what makes `a ~ a` followed by `_ ~ _` decidable: the catch-all is simply the
+ * last equation to be tried.
+ *
+ * `Compare` is reduced by the compiler once its equations (there are none) fail:
+ * ordering two literals has no finite set of equations, so the ordering
+ * primitive is built in wherever the name is declared. It answers for `Nat` and
+ * `Symbol` literals and is otherwise stuck, like any application whose equations
+ * do not match.
+ */
+function reduceTypeFamily(TypeCheckState $state, TCon $type): ?Type
+{
+    $family = $state->typeSynonyms[$type->name]['family'] ?? null;
+    if ($family === null) {
+        return null;
+    }
+
+    $arity = \count($family['params']);
+    if (\count($type->args) < $arity) {
+        return null;
+    }
+
+    $headArgs = \array_slice($type->args, 0, $arity);
+    $remaining = \array_slice($type->args, $arity);
+
+    foreach ($family['equations'] as $equation) {
+        $mapping = matchAssociatedEquationArgs($state, $equation['lhsArgs'], $headArgs);
+        if ($mapping === null) {
+            continue;
+        }
+
+        $astMapping = [];
+        foreach ($mapping as $var => $matched) {
+            $astMapping[$var] = internalTypeToAst($matched, $state->subst);
+        }
+        $rhsAst = substituteTypeAstParams($equation['rhs'], $astMapping);
+        $reduced = typeAstToInternalForNormalize($state, $rhsAst, []);
+
+        if ($remaining !== []) {
+            $reduced = prune($state, $reduced);
+            if (! $reduced instanceof TCon) {
+                throw typeFail(
+                    $state,
+                    "type family `{$type->name}` reduced to a non-constructor type that cannot take arguments",
+                );
+            }
+            $reduced = new TCon($reduced->name, [...$reduced->args, ...$remaining]);
+        }
+
+        return $reduced;
+    }
+
+    if ($type->name === 'Compare' && \count($headArgs) === 2) {
+        return compareTypeLiterals($headArgs[0], $headArgs[1]);
+    }
+
+    return null;
+}
+
+/** The `Ordering` a comparison of two type literals has, or nothing when they do not compare. */
+function compareTypeLiterals(Type $left, Type $right): ?TPromoted
+{
+    if ($left instanceof TNatLit && $right instanceof TNatLit) {
+        $order = compareNatDigits($left->digits, $right->digits);
+
+        return new TPromoted($order < 0 ? 'LT' : ($order > 0 ? 'GT' : 'EQ'));
+    }
+
+    if ($left instanceof TStringLit && $right instanceof TStringLit) {
+        $order = \strcmp($left->value, $right->value);
+
+        return new TPromoted($order < 0 ? 'LT' : ($order > 0 ? 'GT' : 'EQ'));
+    }
+
+    return null;
+}
+
+/** Compare two canonical digit strings as natural numbers. */
+function compareNatDigits(string $left, string $right): int
+{
+    if (\strlen($left) !== \strlen($right)) {
+        return \strlen($left) <=> \strlen($right);
+    }
+
+    return \strcmp($left, $right) <=> 0;
 }
 
 /**

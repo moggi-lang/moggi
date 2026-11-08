@@ -84,7 +84,7 @@ function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env, ?Type 
         Ast\FieldAccess::class => inferFieldAccess($state, $expr, $env),
         Ast\RecordUpdate::class => inferRecordUpdate($state, $expr, $env),
         Ast\QualifiedRef::class => inferQualifiedRef($state, $expr, $env),
-        Ast\TypeAsc::class => inferTypeAsc($state, $expr, $env),
+        Ast\TypeAsc::class => inferTypeAsc($state, $expr, $env, $expected),
         Ast\ExprHole::class => inferHole($state, $expr),
         Ast\IntrinsicCall::class => inferIntrinsic($state, $expr, $env),
         Ast\ForeignCall::class => inferForeignCall($state, $expr, $env),
@@ -178,11 +178,14 @@ function annotateExprType(TypeCheckState $state, Ast\AstNode $expr, Type $type):
     publishInferredType($state, $expr, $type);
 }
 
-function inferTypeAsc(TypeCheckState $state, Ast\TypeAsc $expr, array $env): Type
+function inferTypeAsc(TypeCheckState $state, Ast\TypeAsc $expr, array $env, ?Type $expected = null): Type
 {
-    $exprType = inferExpr($state, $expr->expr, $env);
     $annotType = astType($state, $expr->type);
+    $exprType = inferExpr($state, $expr->expr, $env, $annotType);
     unify($state, $exprType, $annotType, $expr);
+    if ($expected !== null) {
+        unify($state, $annotType, $expected, $expr);
+    }
 
     return prune($state, $annotType);
 }
@@ -416,6 +419,45 @@ function inferEvidenceMethod(TypeCheckState $state, Ast\AstNode $expr): Type
 }
 
 /**
+ * The ambient evidence a stated context (`(C => r)`) hands the argument.
+ *
+ * The dictionary is never passed: the caller supplies it implicitly, which is
+ * what lets the argument expression use the context it was written with —
+ * `gcastWith p (coerce x)` needs the equality in scope, and `gcastWith Refl x`
+ * needs `a ~ b` to make `x` the right type. An equality is taken as the two
+ * types being the one type; a class is installed as a given.
+ *
+ * @return array{ambient: list<Ast\PendingConstraint>, byClass: array<string, list<Ast\PendingConstraint>>}
+ */
+function installDictArgGiven(TypeCheckState $state, TCon $constraint, ?Ast\AstNode $at = null): array
+{
+    $saved = [
+        'ambient' => $state->ambientConstraints,
+        'byClass' => $state->ambientConstraintsByClass,
+    ];
+
+    if (\in_array(dictArgClass($constraint), ['~', '~~'], true)) {
+        [$left, $right] = dictArgConstraintArgs($constraint) + [null, null];
+        unify($state, $left, $right, $at);
+
+        return $saved;
+    }
+
+    $given = new Ast\PendingConstraint(dictArgClass($constraint), dictArgConstraintArgs($constraint), '');
+    $state->ambientConstraints[] = $given;
+    $state->ambientConstraintsByClass[$given->class][] = $given;
+
+    return $saved;
+}
+
+/** @param array{ambient: list<Ast\PendingConstraint>, byClass: array<string, list<Ast\PendingConstraint>>} $saved */
+function restoreDictArgGiven(TypeCheckState $state, array $saved): void
+{
+    $state->ambientConstraints = $saved['ambient'];
+    $state->ambientConstraintsByClass = $saved['byClass'];
+}
+
+/**
  * The type of an application: unify the argument against the callee's domain and
  * park whatever the callee owes as an obligation.
  *
@@ -426,6 +468,23 @@ function inferEvidenceMethod(TypeCheckState $state, Ast\AstNode $expr): Type
 function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
 {
     $fnType = prune($state, inferMethodByArgument($state, $expr, $env));
+
+    if ($fnType instanceof TArrow && $fnType->from instanceof TCon && isDictArgConstraint($fnType->from)) {
+        $constraint = $fnType->from;
+        $savedGivens = installDictArgGiven($state, $constraint, $expr);
+        try {
+            $argType = prune($state, takeKnownOperandType($state, $expr->argument) ?? inferExpr($state, $expr->argument, $env));
+            unify($state, dictArgBody($constraint), $argType, $expr);
+        } finally {
+            restoreDictArgGiven($state, $savedGivens);
+        }
+
+        parkApplyConstraints($state, $expr);
+        propagateCallMetadata($expr);
+
+        return $fnType->to;
+    }
+
     $argType = prune($state, takeKnownOperandType($state, $expr->argument) ?? inferExpr($state, $expr->argument, $env));
 
     if ($argType instanceof TCon && \str_starts_with($argType->name, '__Dict_')) {
@@ -970,6 +1029,9 @@ function describeUnresolvedConstraints(TypeCheckState $state, array $constraints
             static fn (Type $arg): Type => prune($state, $arg),
             $constraint->args,
         );
+        if (isCoercionClass($class) && \count($args) === 2) {
+            return coercionMessage($state, $args);
+        }
         $rename = friendlyTypeVarNames($args);
         $parts = \array_map(static fn (Type $arg): string => typeToStringArgument($arg, $rename), $args);
         $rendered[$class . ' ' . \implode(' ', $parts)] = $class . (($parts === []) ? '' : ' ' . \implode(' ', $parts));

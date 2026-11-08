@@ -1,0 +1,46 @@
+program
+  data OrderingI a b
+    constructor LTI :: OrderingI a b
+    constructor EQI :: OrderingI a a
+    constructor GTI :: OrderingI a b
+  class EqI a b
+    method eqI :: OrderingI a b -> Bool
+    method eqPairI :: Tuple2 OrderingI a b Tuple2 OrderingI a b Bool -> Bool
+  function eqI :: OrderingI t15 t15 -> Bool
+    pat_var _p0
+    case
+      variable _p0
+      alt
+        pat_con LTI
+        constructor_ref False
+      alt
+        pat_con EQI
+        constructor_ref True
+      alt
+        pat_con GTI
+        constructor_ref False
+  function eqPairI :: Tuple2 OrderingI t25 t25 Tuple2 OrderingI t25 t25 Bool -> Bool
+    pat_var _p0
+    case
+      variable _p0
+      alt
+        pat_tuple
+          pat_con EQI
+          pat_tuple
+            pat_con EQI
+            pat_con True
+        constructor_ref True
+      alt
+        pat_tuple
+          pat_con LTI
+          pat_tuple
+            pat_con LTI
+            pat_con False
+        constructor_ref True
+      alt
+        pat_tuple
+          pat_var outer
+          pat_tuple
+            pat_var inner
+            pat_var flag
+        constructor_ref False

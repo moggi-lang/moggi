@@ -36,6 +36,10 @@ function validateItem(Ast\AstNode $item, string $source, string $filename): void
 
 function validateTypeSynonym(Ast\TypeSynonymDecl $item, string $source, string $filename): void
 {
+    if ($item->type === null) {
+        return;
+    }
+
     if (synonymHead($item->type) !== null
         && canonicalTypeConName(synonymHead($item->type)) === $item->name) {
         return;

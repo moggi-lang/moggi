@@ -995,6 +995,15 @@ program
             pat_wild _
           pat_wild _
         variable x
+  function readPrec :: ReadPrec Color
+    apply
+      variable readS_to_Prec
+      evidence_method Read.readsPrec evidence= nullary=0
+        instance Color
+  function readListPrec :: ReadPrec [Color]
+    apply
+      variable readListPrecDefault
+      evidence_ref Read Color
   function cmp :: Ordering
     apply
       apply
