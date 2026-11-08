@@ -1,0 +1,54 @@
+import System.IO
+import Text.Printf
+import Data.Either (Either(..))
+import Data.Int (Int8)
+import Data.Word (Word8)
+
+-- `hPrintf` is pinned to `IO ()`: its result is the write itself, and a
+-- discarded result leaves the element type open.
+writeToHandle :: IO ()
+writeToHandle = hPrintf stdout "%s-%d\n" "handle" (2 :: Int)
+
+-- `printf` itself is the write: pinning the result to `IO ()` selects the
+-- `IO` result instance instead of leaving the element type open.
+ioPrintf :: IO ()
+ioPrintf = printf "printf as an IO action: %d-%s\n" (1 :: Int) "seven"
+
+main :: IO ()
+main = do
+  putStr (printf "%s, %d, %.4f\n" "hello" (123 :: Int) (3.14159 :: Double))
+  putStr (printf "%d %i %u\n" (42 :: Int) (-7 :: Integer) (9 :: Integer))
+  putStr (printf "[%6d] [%-6d] [%06d] [%12d]\n" (42 :: Int) (42 :: Int) (42 :: Int) (42 :: Int))
+  putStr (printf "[%+d] [% d] [%+d]\n" (5 :: Int) (5 :: Int) (-5 :: Int))
+  putStr (printf "%x %X %o %b\n" (255 :: Int) (255 :: Int) (8 :: Int) (5 :: Int))
+  putStr (printf "%#x %#o %#b\n" (255 :: Int) (8 :: Int) (5 :: Int))
+  putStr (printf "%.3d [%8.3d] [%08.3d]\n" (7 :: Int) (7 :: Int) (7 :: Int))
+  putStr (printf "%s|%8s|%-8s|%.3s\n" "ab" "ab" "ab" "abcdef")
+  putStr (printf "%c%c|%3c|\n" 'o' 'k' 'z')
+  putStr (printf "100%%\n")
+  putStr (printf "%e %E\n" (1234.5 :: Double) (1234.5 :: Double))
+  putStr (printf "%g %G\n" (0.0001 :: Double) (0.0001 :: Double))
+  putStr (printf "%f|%.2f|[%8.2f]|[%-8.2f]|%.12f\n" (2.5 :: Double) (2.5 :: Double) (2.5 :: Double) (2.5 :: Double) (1.5 :: Double))
+  putStr (printf "[%*d] [%.*f] [%*.*f]\n" (6 :: Int) (42 :: Int) (3 :: Int) (2.3456 :: Double) (9 :: Int) (2 :: Int) (2.3456 :: Double))
+  putStr (printf "%d %s %d %s\n" (1 :: Int) "two" (3 :: Integer) "four")
+  putStr (printf "no arguments 100%%\n")
+  ioPrintf
+  writeToHandle
+  putStrLn (printf "%ld%lu\n" (1234567890123 :: Int) (987654321 :: Int))
+  putStr (printf "%v %v %v %v\n" (7 :: Int) 'x' (3.5 :: Double) "text")
+  putStr (printf "%hhd %hhu %hu %lu %llu %Lu\n" (300 :: Int) (-1 :: Int) (-1 :: Int) (-1 :: Int) (-1 :: Int) (-1 :: Int))
+  putStr (printf "%hhx %hx %lx %llx\n" (255 :: Int) (65535 :: Int) (4294967295 :: Int) (7 :: Int))
+  putStr (printf "%u %u\n" (-1 :: Int8) (255 :: Word8))
+  putStr (printf "%#f %#g\n" (2.0 :: Double) (100.0 :: Double))
+  putStrLn (fpModifiers (parseFormat (1 :: Int) "llx tail"))
+  putStrLn (show (fpChar (parseFormat (1 :: Int) "llx tail")))
+  putStrLn (fpRest (parseFormat (1 :: Int) "llx tail"))
+  putStrLn (show (fmtChar (vFmt 'd' (FieldFormat Nothing Nothing Nothing Nothing False "" 'v'))))
+  putStrLn (show (fmtChar (vFmt 'd' (FieldFormat Nothing Nothing Nothing Nothing False "" 'x'))))
+  putStrLn (show (toChar 'q'))
+  putStrLn (show (fromChar 'q' :: Char))
+  putStrLn (formatChar 'A' (FieldFormat (Just 4) Nothing Nothing Nothing False "" 'c') "")
+  putStrLn (formatInt (255 :: Int) (FieldFormat Nothing Nothing Nothing Nothing True "" 'x') "")
+  putStrLn (formatInteger (255 :: Integer) (FieldFormat Nothing Nothing Nothing Nothing True "" 'o') "")
+  putStrLn (formatRealFloat (2.5 :: Double) (FieldFormat Nothing (Just 2) Nothing Nothing False "" 'f') "")
+  putStrLn (formatString ['a', 'b', 'c', 'd', 'e', 'f'] (FieldFormat Nothing (Just 3) Nothing Nothing False "" 's') "")
