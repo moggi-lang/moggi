@@ -123,6 +123,53 @@ function findCallDefiningTemp(array $items, int $tempId): ?IR\Stmt
     return null;
 }
 
+/**
+ * The statements a match arm answers with, when the arm ends by naming the
+ * value of a nested match it just ran: `t5 = match ...` then `t2 = t5`. The
+ * nested match itself is what a tail call may sit in, one level further in.
+ *
+ * @param list<IR\Stmt> $items
+ */
+function nestedMatchInArm(array $items, int $matchDest): ?IR\MatchStmt
+{
+    $last = $items[\count($items) - 1] ?? null;
+    if (! ($last instanceof IR\Assign) || $last->dest !== $matchDest || ! ($last->value instanceof IR\Temp)) {
+        return null;
+    }
+
+    $prev = $items[\count($items) - 2] ?? null;
+
+    return $prev instanceof IR\MatchStmt && $prev->dest === $last->value->id ? $prev : null;
+}
+
+/**
+ * The recall arguments of a match's one recursive arm, when exactly one arm
+ * recurses. The nested shape reaches the same answer through a match whose
+ * arms answer with an inner match, so both plan finders go through here.
+ *
+ * @return list<IR\Operand>|null
+ */
+function onlyRecursiveArmArgs(string $name, array $params, IR\MatchStmt|IR\MatchReturn $match): ?array
+{
+    $dest = $match instanceof IR\MatchStmt ? $match->dest : -1;
+    $recursiveArgs = null;
+
+    foreach ($match->arms as $arm) {
+        $call = tailSelfCallInBlock($name, $params, $arm->body->items, $dest);
+        if ($call === null) {
+            continue;
+        }
+
+        if ($recursiveArgs !== null) {
+            return null;
+        }
+
+        $recursiveArgs = $call;
+    }
+
+    return $recursiveArgs;
+}
+
 /** @param list<IR\Stmt> $items @return list<IR\Stmt>|null */
 function tailSelfCallInBlock(string $name, array $params, array $items, int $matchDest): ?array
 {
@@ -145,6 +192,10 @@ function tailSelfCallInBlock(string $name, array $params, array $items, int $mat
             if ($prev !== null && $prev instanceof IR\Call && $prev->dest === $last->value->id) {
                 return tailSelfCallFromCall($prev, $name, $params);
             }
+
+            if ($prev instanceof IR\MatchStmt && $prev->dest === $last->value->id) {
+                return onlyRecursiveArmArgs($name, $params, $prev);
+            }
         }
 
         return tailSelfCallFromRetValue($last->value, $name, $params, $items);
@@ -156,6 +207,10 @@ function tailSelfCallInBlock(string $name, array $params, array $items, int $mat
 
     if ($last instanceof IR\Call && $last->dest === $matchDest) {
         return tailSelfCallFromCall($last, $name, $params);
+    }
+
+    if ($last instanceof IR\MatchReturn) {
+        return onlyRecursiveArmArgs($name, $params, $last);
     }
 
     return null;
@@ -286,7 +341,18 @@ function convertTailRecMatchReturn(string $name, array $params, IR\MatchReturn $
     $arms = [];
 
     foreach ($match->arms as $arm) {
-        $call = tailSelfCallInBlock($name, $params, $arm->body->items, -1);
+        $items = $arm->body->items;
+        $nested = $items[\count($items) - 1] ?? null;
+        if ($nested instanceof IR\MatchReturn && onlyRecursiveArmArgs($name, $params, $nested) !== null) {
+            $arms[] = preserveMatchArm($arm, new IR\Block([
+                ...\array_slice($items, 0, -1),
+                convertTailRecMatchReturn($name, $params, $nested),
+            ]));
+
+            continue;
+        }
+
+        $call = tailSelfCallInBlock($name, $params, $items, -1);
         if ($call === null) {
             $arms[] = $arm;
 
@@ -294,7 +360,7 @@ function convertTailRecMatchReturn(string $name, array $params, IR\MatchReturn $
         }
 
         $arms[] = preserveMatchArm($arm, new IR\Block([
-            ...stripRecursiveTail($arm->body->items, -1, $name),
+            ...stripRecursiveTail($items, -1, $name),
             new IR\TailRecall($call),
         ]));
     }
@@ -309,6 +375,19 @@ function convertTailRecMatch(string $name, array $params, IR\MatchStmt $match): 
 
     foreach ($match->arms as $arm) {
         $items = $arm->body->items;
+        $nested = nestedMatchInArm($items, $dest);
+        if ($nested !== null && onlyRecursiveArmArgs($name, $params, $nested) !== null) {
+            $arms[] = preserveMatchArm($arm, new IR\Block([
+                // Drop both the nested match and the assignment that names its
+                // result: the converted match returns instead, so running the
+                // original first would still make the call the rewrite removes.
+                ...\array_slice($items, 0, -2),
+                convertTailRecMatch($name, $params, $nested),
+            ]));
+
+            continue;
+        }
+
         $call = tailSelfCallInBlock($name, $params, $items, $dest);
         if ($call !== null) {
             $arms[] = preserveMatchArm($arm, new IR\Block([
