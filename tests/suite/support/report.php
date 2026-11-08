@@ -54,6 +54,19 @@ function writeCaseLog(string $name, string $message): ?string
     return $path;
 }
 
+/**
+ * A throwable thrown out of a case, as the runner should report it.
+ *
+ * A compiler diagnostic is not a crash: it already renders with its location and caret, so the
+ * recap says where the error is instead of naming the class and dropping the position.
+ */
+function renderThrownDiagnostic(\Throwable $e): string
+{
+    return \method_exists($e, 'display')
+        ? (string) $e->display()
+        : \get_class($e) . ': ' . $e->getMessage();
+}
+
 /** A case's message as printable lines — the whole message, in every block that prints one. */
 function messageLines(string $message): array
 {

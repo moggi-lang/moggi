@@ -67,6 +67,18 @@ jobs:
           distribution: graalvm
           java-version: '21'
 
+      # The compiler, cache and repl cases compile jvm code on every leg, and the
+      # jvm backend emits class-file version 65, so the JDK that verifies a
+      # `foreign jvm` member is the 21 one on every leg too. Windows would
+      # otherwise answer with the image's Java 8, which has no `String.lines`
+      # and a `jar` without long options.
+      - name: Set up a JDK for the other backends' jvm legs
+        if: matrix.backend != 'jvm'
+        uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
       # Maven installation and dependency repository (jvm only).
       - name: Cache Maven installation
         if: matrix.backend == 'jvm'

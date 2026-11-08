@@ -29,6 +29,7 @@ try {
     $mavenTree = $work . '/maven-tree';
     $mavenClasses = $work . '/maven-classes';
     \mkdir($mavenTree, 0777, true);
+    \mkdir($mavenClasses, 0777, true);
     \mkdir($work . '/maven-src/acme', 0777, true);
     \file_put_contents(
         $work . '/maven-src/acme/Hello.java',
