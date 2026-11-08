@@ -1,0 +1,215 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- Module      :  Type.Reflection
+-- Stability   :  stable
+-- Portability :  non-portable (requires GADTs and compiler support)
+--
+-- Type-indexed type representations: a 'TypeRep' names a type as a value, so a
+-- program can ask what a type is and take it apart.
+--
+-- A representation is a heading 'TyCon' applied to argument representations.
+-- The compiler builds one for a type it knows; the 'Typeable' constraint is how
+-- a function receives one from its caller.
+--
+-- Note: the representation is a plain structure behind a phantom index, so it
+-- can be built, named and taken apart, but it carries no kind information:
+-- @eqTypeRep@, @decTypeRep@, @typeRepKind@ and the @App@/@Con@/@Fun@ views
+-- arrive with kind-indexed representations. Every type is 'Typeable' once the
+-- compiler answers the constraint itself; until then the instances below cover
+-- the builtin types.
+module Type.Reflection
+  ( -- * The Typeable class
+    Typeable
+  , typeRep
+  , typeOf
+
+    -- * Propositional equality
+  , (:~:)(Refl)
+  , (:~~:)(HRefl)
+
+    -- * Type representations
+  , TypeRep
+  , typeRepTyCon
+  , rnfTypeRep
+  , splitApps
+
+    -- ** Quantified
+  , SomeTypeRep(..)
+  , someTypeRepTyCon
+  , rnfSomeTypeRep
+
+    -- * Type constructors
+  , TyCon
+  , tyConPackage
+  , tyConModule
+  , tyConName
+  , rnfTyCon
+
+    -- * Module names
+  , Module
+  , moduleName
+  , modulePackage
+  , rnfModule
+  ) where
+
+import Data.List (reverse)
+import Data.Type.Equality ((:~:)(..), (:~~:)(..))
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+
+-- | The name of a representation: the package a constructor came from and the
+-- module within it, as the compiler records them.
+data Module = Module String String
+
+-- | The module's name, such as @Data.Int@.
+moduleName :: Module -> String
+moduleName m = case m of
+  Module n _ -> n
+
+-- | The package the module belongs to.
+modulePackage :: Module -> String
+modulePackage m = case m of
+  Module _ p -> p
+
+rnfModule :: Module -> ()
+rnfModule _ = ()
+
+-- | A type constructor: where it came from and what it is called.
+data TyCon = TyCon Module String
+
+tyConPackage :: TyCon -> String
+tyConPackage t = case t of
+  TyCon m _ -> modulePackage m
+
+tyConModule :: TyCon -> String
+tyConModule t = case t of
+  TyCon m _ -> moduleName m
+
+tyConName :: TyCon -> String
+tyConName t = case t of
+  TyCon _ n -> n
+
+rnfTyCon :: TyCon -> ()
+rnfTyCon _ = ()
+
+-- | The shape of a representation, independent of the type it names: a
+-- constructor, an application of one representation to another, or a function.
+--
+-- This is the structure the compiler emits for a type; 'TypeRep' adds the type
+-- index a program reasons with, so the index costs nothing at run time.
+data Rep
+  = RepCon TyCon
+  | RepApp Rep Rep
+  | RepFun Rep Rep
+
+-- | A representation of the type @a@.
+--
+-- The index is the type being described, so a 'TypeRep' for @Int@ and one for
+-- @Bool@ are different types even though they share a runtime shape.
+data TypeRep a where
+  TypeRep :: Rep -> TypeRep a
+
+-- | What the type is, as a value. The compiler answers a @Typeable a@
+-- obligation from the type it resolved @a@ to.
+class Typeable a where
+  typeRepOf :: TypeRep a
+
+-- | The representation of the type this call is instantiated at.
+typeRep :: Typeable a => TypeRep a
+typeRep = typeRepOf
+
+-- | The representation of the argument's type.
+typeOf :: Typeable a => a -> TypeRep a
+typeOf _ = typeRep
+
+-- | The constructor at the head of a representation: @Maybe@ for
+-- @Maybe Int@, and @(->)@ for @Int -> Bool@.
+typeRepTyCon :: TypeRep a -> TyCon
+typeRepTyCon tr = case tr of
+  TypeRep r -> headTyCon r
+
+headTyCon :: Rep -> TyCon
+headTyCon r = case r of
+  RepCon tc -> tc
+  RepApp f _ -> headTyCon f
+  RepFun _ _ -> functionTyCon
+
+-- | The built-in constructors a program cannot name itself: functions and lists
+-- have no declaration to take a name from.
+functionTyCon :: TyCon
+functionTyCon = TyCon (Module "GHC.Types" "base") "->"
+
+listTyCon :: TyCon
+listTyCon = TyCon (Module "GHC.Types" "base") "[]"
+
+-- | A representation with the head and its arguments apart: the constructor
+-- alone, and one 'SomeTypeRep' per argument in the order written.
+splitApps :: TypeRep a -> (TyCon, [SomeTypeRep])
+splitApps tr = case tr of
+  TypeRep r -> case peel r [] of
+    (head, args) -> (headTyCon head, args)
+
+peel :: Rep -> [SomeTypeRep] -> (Rep, [SomeTypeRep])
+peel r acc = case r of
+  RepApp f x -> peel f (SomeTypeRep (TypeRep x) : acc)
+  RepFun _ _ -> (r, reverse acc)
+  RepCon _ -> (r, reverse acc)
+
+rnfTypeRep :: TypeRep a -> ()
+rnfTypeRep _ = ()
+
+-- | A representation whose type is not known statically — what a program has
+-- after taking one apart.
+data SomeTypeRep where
+  SomeTypeRep :: TypeRep a -> SomeTypeRep
+
+someTypeRepTyCon :: SomeTypeRep -> TyCon
+someTypeRepTyCon s = case s of
+  SomeTypeRep t -> typeRepTyCon t
+
+rnfSomeTypeRep :: SomeTypeRep -> ()
+rnfSomeTypeRep _ = ()
+
+-- --- The builtin types -------------------------------------------------------
+--
+-- Each instance is the representation of one type: its constructor's name, and
+-- for a type with parameters, the representation of each argument.
+
+intTyCon :: TyCon
+intTyCon = TyCon (Module "Data.Int" "base") "Int"
+
+boolTyCon :: TyCon
+boolTyCon = TyCon (Module "Data.Bool" "base") "Bool"
+
+charTyCon :: TyCon
+charTyCon = TyCon (Module "Data.Char" "base") "Char"
+
+doubleTyCon :: TyCon
+doubleTyCon = TyCon (Module "Data.Double" "base") "Double"
+
+unitTyCon :: TyCon
+unitTyCon = TyCon (Module "GHC.Types" "base") "()"
+
+maybeTyCon :: TyCon
+maybeTyCon = TyCon (Module "Data.Maybe" "base") "Maybe"
+
+instance Typeable Int where
+  typeRepOf = TypeRep (RepCon intTyCon)
+
+instance Typeable Bool where
+  typeRepOf = TypeRep (RepCon boolTyCon)
+
+instance Typeable Char where
+  typeRepOf = TypeRep (RepCon charTyCon)
+
+instance Typeable Double where
+  typeRepOf = TypeRep (RepCon doubleTyCon)
+
+instance Typeable () where
+  typeRepOf = TypeRep (RepCon unitTyCon)
+
+-- A container's representation is its constructor applied to its argument's,
+-- so `instance Typeable a => Typeable [a]` needs the argument's representation
+-- from its own context. That instance is what the compiler answers itself; it
+-- is not written here because a constrained instance whose method consults its
+-- own context is not accepted yet.
