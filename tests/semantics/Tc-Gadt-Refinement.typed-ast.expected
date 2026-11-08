@@ -296,7 +296,7 @@ program
     constructor Leaf :: a -> Tree f a
     constructor Branch :: f a -> Tree f a -> Tree f a
     deriving (Functor, Foldable)
-  function map :: __Dict_Functor -> t99 -> t87 -> Tree t82 t99 -> Tree t82 t87
+  function map :: __Dict_Functor -> t97 -> t85 -> Tree t80 t97 -> Tree t80 t85
     pat_var __ev_Functor
     pat_var __f
     pat_var __x
@@ -328,7 +328,7 @@ program
                 instance Tree f
               variable __f
             variable __v1
-  function foldr :: __Dict_Foldable -> t204 -> t149 -> t149 -> t149 -> Tree t116 t204 -> t149
+  function foldr :: __Dict_Foldable -> t189 -> t134 -> t134 -> t134 -> Tree t114 t189 -> t134
     pat_var __ev_Foldable
     pat_var __f
     pat_var __z
@@ -361,7 +361,7 @@ program
                 variable __z
               variable __v1
           variable __v0
-  function fold :: __Dict_Foldable -> __Dict_Semigroup -> __Dict_Monoid -> Tree t116 t216 -> t216
+  function fold :: __Dict_Foldable -> __Dict_Semigroup -> __Dict_Monoid -> Tree t114 t201 -> t201
     pat_var __ev_Foldable
     pat_var __ev_Semigroup_1
     pat_var __ev_Monoid_2
@@ -378,7 +378,7 @@ program
           pat_var x
           variable x
       variable t
-  function foldMap :: __Dict_Foldable -> __Dict_Semigroup -> __Dict_Monoid -> t342 -> t347 -> Tree t116 t342 -> t347
+  function foldMap :: __Dict_Foldable -> __Dict_Semigroup -> __Dict_Monoid -> t327 -> t332 -> Tree t114 t327 -> t332
     pat_var __ev_Foldable
     pat_var __ev_Semigroup_1
     pat_var __ev_Monoid_2
@@ -401,7 +401,7 @@ program
               variable acc
         evidence_method Monoid.mempty evidence=__ev_Monoid_2 nullary=1
       variable t
-  function foldl :: __Dict_Foldable -> t411 -> t408 -> t411 -> t411 -> Tree t116 t408 -> t411
+  function foldl :: __Dict_Foldable -> t396 -> t393 -> t396 -> t396 -> Tree t114 t393 -> t396
     pat_var __ev_Foldable
     pat_var f
     pat_var z
@@ -434,7 +434,7 @@ program
                         variable x
             variable t
       variable z
-  function toList :: __Dict_Foldable -> Tree t116 t441 -> [t441]
+  function toList :: __Dict_Foldable -> Tree t114 t426 -> [t426]
     pat_var __ev_Foldable
     pat_var t
     apply
@@ -450,7 +450,7 @@ program
               variable xs
         list
       variable t
-  function null :: __Dict_Foldable -> Tree t116 t502 -> Bool
+  function null :: __Dict_Foldable -> Tree t114 t487 -> Bool
     pat_var __ev_Foldable
     pat_var t
     apply
@@ -464,7 +464,7 @@ program
             constructor_ref False
         constructor_ref True
       variable t
-  function length :: __Dict_Foldable -> Tree t116 t561 -> Int
+  function length :: __Dict_Foldable -> Tree t114 t546 -> Int
     pat_var __ev_Foldable
     pat_var t
     apply
@@ -480,7 +480,7 @@ program
               integer 1
         integer 0
       variable t
-  function elem :: __Dict_Foldable -> __Dict_Eq -> t679 -> Tree t116 t679 -> Bool
+  function elem :: __Dict_Foldable -> __Dict_Eq -> t664 -> Tree t114 t664 -> Bool
     pat_var __ev_Foldable
     pat_var __ev_Eq_1
     pat_var x
@@ -498,7 +498,7 @@ program
               variable x
             variable y
       variable t
-  function maximum :: __Dict_Foldable -> __Dict_Eq -> __Dict_Ord -> Tree t116 t756 -> t756
+  function maximum :: __Dict_Foldable -> __Dict_Eq -> __Dict_Ord -> Tree t114 t741 -> t741
     pat_var __ev_Foldable
     pat_var __ev_Eq_1
     pat_var __ev_Ord_2
@@ -557,7 +557,7 @@ program
                 variable __ev_Ord_2
               variable x
             variable xs
-  function minimum :: __Dict_Foldable -> __Dict_Eq -> __Dict_Ord -> Tree t116 t837 -> t837
+  function minimum :: __Dict_Foldable -> __Dict_Eq -> __Dict_Ord -> Tree t114 t822 -> t822
     pat_var __ev_Foldable
     pat_var __ev_Eq_1
     pat_var __ev_Ord_2
@@ -616,7 +616,7 @@ program
                 variable __ev_Ord_2
               variable x
             variable xs
-  function sum :: __Dict_Foldable -> __Dict_Num -> Tree t116 t850 -> t850
+  function sum :: __Dict_Foldable -> __Dict_Num -> Tree t114 t835 -> t835
     pat_var __ev_Foldable
     pat_var __ev_Num_1
     pat_var t
@@ -638,7 +638,7 @@ program
           intrinsic intToInteger#
             integer 0
       variable t
-  function product :: __Dict_Foldable -> __Dict_Num -> Tree t116 t920 -> t920
+  function product :: __Dict_Foldable -> __Dict_Num -> Tree t114 t905 -> t905
     pat_var __ev_Foldable
     pat_var __ev_Num_1
     pat_var t
@@ -660,7 +660,7 @@ program
           intrinsic intToInteger#
             integer 1
       variable t
-  function foldr1 :: __Dict_Foldable -> t1040 -> t1040 -> t1040 -> Tree t116 t1040 -> t1040
+  function foldr1 :: __Dict_Foldable -> t1025 -> t1025 -> t1025 -> Tree t114 t1025 -> t1025
     pat_var __ev_Foldable
     pat_var f
     pat_var t
@@ -698,7 +698,7 @@ program
           evidence_method Foldable.toList evidence= nullary=0
             instance Tree f
           variable t
-  function foldl1 :: __Dict_Foldable -> t1116 -> t1116 -> t1116 -> Tree t116 t1116 -> t1116
+  function foldl1 :: __Dict_Foldable -> t1101 -> t1101 -> t1101 -> Tree t114 t1101 -> t1101
     pat_var __ev_Foldable
     pat_var f
     pat_var t

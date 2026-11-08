@@ -326,6 +326,9 @@ function inferOperatorRef(TypeCheckState $state, Ast\AstNode &$expr, array $env)
         throw typeFail($state, ambiguousImportMessage($expr->name, $state->ambiguousImports[$expr->name]), $expr);
     }
 
+    if ($expr->name === $state->instanceSelfMethod && $state->instanceSelfScheme !== null) {
+        $env[$expr->name] = $state->instanceSelfScheme;
+    }
     $scheme = resolveBinderScheme($state, $expr->name, $env)
         ?? $env[$expr->name]
         ?? throw typeFail(
@@ -467,13 +470,18 @@ function restoreDictArgGiven(TypeCheckState $state, array $saved): void
  */
 function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
 {
+    $argEnv = $env;
+    if ($state->instanceSelfMethod !== null && $state->instanceSelfScheme !== null) {
+        $argEnv[$state->instanceSelfMethod] = $state->instanceSelfScheme;
+    }
+
     $fnType = prune($state, inferMethodByArgument($state, $expr, $env));
 
     if ($fnType instanceof TArrow && $fnType->from instanceof TCon && isDictArgConstraint($fnType->from)) {
         $constraint = $fnType->from;
         $savedGivens = installDictArgGiven($state, $constraint, $expr);
         try {
-            $argType = prune($state, takeKnownOperandType($state, $expr->argument) ?? inferExpr($state, $expr->argument, $env));
+            $argType = prune($state, takeKnownOperandType($state, $expr->argument) ?? inferExpr($state, $expr->argument, $argEnv));
             unify($state, dictArgBody($constraint), $argType, $expr);
         } finally {
             restoreDictArgGiven($state, $savedGivens);
@@ -485,7 +493,7 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
         return $fnType->to;
     }
 
-    $argType = prune($state, takeKnownOperandType($state, $expr->argument) ?? inferExpr($state, $expr->argument, $env));
+    $argType = prune($state, takeKnownOperandType($state, $expr->argument) ?? inferExpr($state, $expr->argument, $argEnv));
 
     if ($argType instanceof TCon && \str_starts_with($argType->name, '__Dict_')) {
         return $fnType;
@@ -581,6 +589,10 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
     }
 
     $op = $expr->operator;
+
+    if ($op === $state->instanceSelfMethod && $state->instanceSelfScheme !== null) {
+        $env[$op] = $state->instanceSelfScheme;
+    }
 
     $expr->resolvedIntrinsic = null;
 

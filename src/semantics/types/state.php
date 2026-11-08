@@ -372,6 +372,20 @@ final class TypeCheckState
      */
     public array $instanceOwnMethods = [];
 
+    /**
+     * The method whose body is being checked, when it belongs to an instance.
+     *
+     * A bare reference to it denotes the instance's own method (`m` inside
+     * `instance C a => C [a]` has type `[a] -> [a]`). An applied reference is
+     * left at the class's general scheme instead, so a recursive call through
+     * the instance context (`show x` at `Show a` inside `Show [a]`) still
+     * resolves at the context's type.
+     */
+    public ?string $instanceSelfMethod = null;
+
+    /** The class's general scheme for {@see $instanceSelfMethod}. */
+    public ?\Moggi\Semantics\TypeExpr\Scheme $instanceSelfScheme = null;
+
     /** @var list<Ast\ExprHole> */
     public array $holes = [];
 

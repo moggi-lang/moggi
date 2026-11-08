@@ -82,7 +82,7 @@ program
             evidence_ref Show Pair a
         variable ls
       variable s
-  function __ev_Eq_WrappedPair_1_Op3d3d :: __Dict_Eq -> WrappedPair t57 -> WrappedPair t57 -> Bool
+  function __ev_Eq_WrappedPair_1_Op3d3d :: __Dict_Eq -> WrappedPair t55 -> WrappedPair t55 -> Bool
     pat_var __ev_Eq
     pat_con WrappedPair
       pat_var __v0
@@ -93,7 +93,7 @@ program
         evidence_method Eq.== evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
-  function __ev_Eq_WrappedPair_1_Op2f3d :: __Dict_Eq -> WrappedPair t57 -> WrappedPair t57 -> Bool
+  function __ev_Eq_WrappedPair_1_Op2f3d :: __Dict_Eq -> WrappedPair t55 -> WrappedPair t55 -> Bool
     pat_var __ev_Eq
     pat_con WrappedPair
       pat_var __v0
@@ -104,7 +104,7 @@ program
         evidence_method Eq./= evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
-  function __ev_Show_WrappedPair_1_showsPrec :: __Dict_Show -> Int -> WrappedPair t72 -> String -> String
+  function __ev_Show_WrappedPair_1_showsPrec :: __Dict_Show -> Int -> WrappedPair t70 -> String -> String
     pat_var __ev_Show
     pat_var __v0
     pat_con WrappedPair
@@ -117,14 +117,14 @@ program
           variable __v0
         variable __v1
       variable __v2
-  function __ev_Show_WrappedPair_1_show :: __Dict_Show -> WrappedPair t72 -> String
+  function __ev_Show_WrappedPair_1_show :: __Dict_Show -> WrappedPair t70 -> String
     pat_var __ev_Show
     pat_con WrappedPair
       pat_var __v0
     apply
       evidence_method Show.show evidence=__ev_Show nullary=0
       variable __v0
-  function __ev_Show_WrappedPair_1_showList :: __Dict_Show -> [WrappedPair t72] -> String -> String
+  function __ev_Show_WrappedPair_1_showList :: __Dict_Show -> [WrappedPair t70] -> String -> String
     pat_var __ev_Show
     pat_var ls
     pat_var s

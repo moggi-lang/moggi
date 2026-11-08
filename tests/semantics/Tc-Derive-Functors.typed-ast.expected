@@ -537,7 +537,7 @@ program
           apply
             variable __f
             variable __v1
-  function __ev_Foldable_Pair_1_foldr :: t512 -> t509 -> t509 -> t509 -> Pair t476 t512 -> t509
+  function __ev_Foldable_Pair_1_foldr :: t499 -> t496 -> t496 -> t496 -> Pair t476 t499 -> t496
     pat_var __f
     pat_var __z
     pat_var __x
@@ -552,7 +552,7 @@ program
             variable __f
             variable __v1
           variable __z
-  function __ev_Foldable_Pair_1_fold :: __Dict_Semigroup -> __Dict_Monoid -> Pair t476 t513 -> t513
+  function __ev_Foldable_Pair_1_fold :: __Dict_Semigroup -> __Dict_Monoid -> Pair t476 t500 -> t500
     pat_var __ev_Semigroup
     pat_var __ev_Monoid_1
     pat_var t
@@ -568,7 +568,7 @@ program
           pat_var x
           variable x
       variable t
-  function __ev_Foldable_Pair_1_foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t542 -> t547 -> Pair t476 t542 -> t547
+  function __ev_Foldable_Pair_1_foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t529 -> t534 -> Pair t476 t529 -> t534
     pat_var __ev_Semigroup
     pat_var __ev_Monoid_1
     pat_var f
@@ -590,7 +590,7 @@ program
               variable acc
         evidence_method Monoid.mempty evidence=__ev_Monoid_1 nullary=1
       variable t
-  function __ev_Foldable_Pair_1_foldl :: t562 -> t559 -> t562 -> t562 -> Pair t476 t559 -> t562
+  function __ev_Foldable_Pair_1_foldl :: t549 -> t546 -> t549 -> t549 -> Pair t476 t546 -> t549
     pat_var f
     pat_var z
     pat_var t
@@ -622,7 +622,7 @@ program
                         variable x
             variable t
       variable z
-  function __ev_Foldable_Pair_1_toList :: Pair t476 t582 -> [t582]
+  function __ev_Foldable_Pair_1_toList :: Pair t476 t569 -> [t569]
     pat_var t
     apply
       apply
@@ -637,7 +637,7 @@ program
               variable xs
         list
       variable t
-  function __ev_Foldable_Pair_1_null :: Pair t476 t594 -> Bool
+  function __ev_Foldable_Pair_1_null :: Pair t476 t581 -> Bool
     pat_var t
     apply
       apply
@@ -650,7 +650,7 @@ program
             constructor_ref False
         constructor_ref True
       variable t
-  function __ev_Foldable_Pair_1_length :: Pair t476 t604 -> Int
+  function __ev_Foldable_Pair_1_length :: Pair t476 t591 -> Int
     pat_var t
     apply
       apply
@@ -665,7 +665,7 @@ program
               integer 1
         integer 0
       variable t
-  function __ev_Foldable_Pair_1_elem :: __Dict_Eq -> t624 -> Pair t476 t624 -> Bool
+  function __ev_Foldable_Pair_1_elem :: __Dict_Eq -> t611 -> Pair t476 t611 -> Bool
     pat_var __ev_Eq
     pat_var x
     pat_var t
@@ -682,7 +682,7 @@ program
               variable x
             variable y
       variable t
-  function __ev_Foldable_Pair_1_maximum :: __Dict_Eq -> __Dict_Ord -> Pair t476 t652 -> t652
+  function __ev_Foldable_Pair_1_maximum :: __Dict_Eq -> __Dict_Ord -> Pair t476 t639 -> t639
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var t
@@ -740,7 +740,7 @@ program
                 variable __ev_Ord_1
               variable x
             variable xs
-  function __ev_Foldable_Pair_1_minimum :: __Dict_Eq -> __Dict_Ord -> Pair t476 t684 -> t684
+  function __ev_Foldable_Pair_1_minimum :: __Dict_Eq -> __Dict_Ord -> Pair t476 t671 -> t671
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var t
@@ -798,7 +798,7 @@ program
                 variable __ev_Ord_1
               variable x
             variable xs
-  function __ev_Foldable_Pair_1_sum :: __Dict_Num -> Pair t476 t697 -> t697
+  function __ev_Foldable_Pair_1_sum :: __Dict_Num -> Pair t476 t684 -> t684
     pat_var __ev_Num
     pat_var t
     apply
@@ -819,7 +819,7 @@ program
           intrinsic intToInteger#
             integer 0
       variable t
-  function __ev_Foldable_Pair_1_product :: __Dict_Num -> Pair t476 t718 -> t718
+  function __ev_Foldable_Pair_1_product :: __Dict_Num -> Pair t476 t705 -> t705
     pat_var __ev_Num
     pat_var t
     apply
@@ -840,7 +840,7 @@ program
           intrinsic intToInteger#
             integer 1
       variable t
-  function __ev_Foldable_Pair_1_foldr1 :: t740 -> t740 -> t740 -> Pair t476 t740 -> t740
+  function __ev_Foldable_Pair_1_foldr1 :: t727 -> t727 -> t727 -> Pair t476 t727 -> t727
     pat_var f
     pat_var t
     let
@@ -877,7 +877,7 @@ program
           evidence_method Foldable.toList evidence= nullary=0
             instance Pair a
           variable t
-  function __ev_Foldable_Pair_1_foldl1 :: t767 -> t767 -> t767 -> Pair t476 t767 -> t767
+  function __ev_Foldable_Pair_1_foldl1 :: t754 -> t754 -> t754 -> Pair t476 t754 -> t754
     pat_var f
     pat_var t
     case
@@ -923,7 +923,7 @@ program
               variable go
               variable x
             variable xs
-  function __ev_Traversable_Pair_1_traverse :: __Dict_Functor -> __Dict_Applicative -> t831 -> t797 t798 -> Pair t780 t831 -> t797 Pair t780 t798
+  function __ev_Traversable_Pair_1_traverse :: __Dict_Functor -> __Dict_Applicative -> t815 -> t781 t782 -> Pair t767 t815 -> t781 Pair t767 t782
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var __f
@@ -949,7 +949,7 @@ program
           apply
             variable __f
             variable __v1
-  function __ev_Traversable_Pair_1_sequenceA :: __Dict_Functor -> __Dict_Applicative -> Pair t780 t844 t845 -> t844 Pair t780 t845
+  function __ev_Traversable_Pair_1_sequenceA :: __Dict_Functor -> __Dict_Applicative -> Pair t767 t828 t829 -> t828 Pair t767 t829
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var t
@@ -965,7 +965,7 @@ program
           pat_var x
           variable x
       variable t
-  function __ev_Traversable_Pair_1_mapM :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> t895 -> t896 t897 -> Pair t780 t895 -> t896 Pair t780 t897
+  function __ev_Traversable_Pair_1_mapM :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> t879 -> t880 t881 -> Pair t767 t879 -> t880 Pair t767 t881
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var __ev_Monad_2
@@ -981,7 +981,7 @@ program
           variable __ev_Applicative_1
         variable f
       variable t
-  function __ev_Traversable_Pair_1_sequence :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> Pair t780 t954 t955 -> t954 Pair t780 t955
+  function __ev_Traversable_Pair_1_sequence :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> Pair t767 t938 t939 -> t938 Pair t767 t939
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var __ev_Monad_2
@@ -1001,7 +1001,7 @@ program
       field  :: Tree a
       field  :: Tree a
     deriving (Functor, Foldable, Traversable)
-  function __ev_Functor_Tree_map :: t1016 -> t1012 -> Tree t1016 -> Tree t1012
+  function __ev_Functor_Tree_map :: t1000 -> t996 -> Tree t1000 -> Tree t996
     pat_var __f
     pat_var __x
     case
@@ -1033,7 +1033,7 @@ program
                 instance Tree
               variable __f
             variable __v1
-  function __ev_Foldable_Tree_foldr :: t1048 -> t1044 -> t1044 -> t1044 -> Tree t1048 -> t1044
+  function __ev_Foldable_Tree_foldr :: t1032 -> t1028 -> t1028 -> t1028 -> Tree t1032 -> t1028
     pat_var __f
     pat_var __z
     pat_var __x
@@ -1066,7 +1066,7 @@ program
                 variable __z
               variable __v1
           variable __v0
-  function __ev_Foldable_Tree_fold :: __Dict_Semigroup -> __Dict_Monoid -> Tree t1055 -> t1055
+  function __ev_Foldable_Tree_fold :: __Dict_Semigroup -> __Dict_Monoid -> Tree t1039 -> t1039
     pat_var __ev_Semigroup
     pat_var __ev_Monoid_1
     pat_var t
@@ -1082,7 +1082,7 @@ program
           pat_var x
           variable x
       variable t
-  function __ev_Foldable_Tree_foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t1079 -> t1084 -> Tree t1079 -> t1084
+  function __ev_Foldable_Tree_foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t1063 -> t1068 -> Tree t1063 -> t1068
     pat_var __ev_Semigroup
     pat_var __ev_Monoid_1
     pat_var f
@@ -1104,7 +1104,7 @@ program
               variable acc
         evidence_method Monoid.mempty evidence=__ev_Monoid_1 nullary=1
       variable t
-  function __ev_Foldable_Tree_foldl :: t1096 -> t1093 -> t1096 -> t1096 -> Tree t1093 -> t1096
+  function __ev_Foldable_Tree_foldl :: t1080 -> t1077 -> t1080 -> t1080 -> Tree t1077 -> t1080
     pat_var f
     pat_var z
     pat_var t
@@ -1136,7 +1136,7 @@ program
                         variable x
             variable t
       variable z
-  function __ev_Foldable_Tree_toList :: Tree t1112 -> [t1112]
+  function __ev_Foldable_Tree_toList :: Tree t1096 -> [t1096]
     pat_var t
     apply
       apply
@@ -1151,7 +1151,7 @@ program
               variable xs
         list
       variable t
-  function __ev_Foldable_Tree_null :: Tree t1121 -> Bool
+  function __ev_Foldable_Tree_null :: Tree t1105 -> Bool
     pat_var t
     apply
       apply
@@ -1164,7 +1164,7 @@ program
             constructor_ref False
         constructor_ref True
       variable t
-  function __ev_Foldable_Tree_length :: Tree t1128 -> Int
+  function __ev_Foldable_Tree_length :: Tree t1112 -> Int
     pat_var t
     apply
       apply
@@ -1179,7 +1179,7 @@ program
               integer 1
         integer 0
       variable t
-  function __ev_Foldable_Tree_elem :: __Dict_Eq -> t1145 -> Tree t1145 -> Bool
+  function __ev_Foldable_Tree_elem :: __Dict_Eq -> t1129 -> Tree t1129 -> Bool
     pat_var __ev_Eq
     pat_var x
     pat_var t
@@ -1196,7 +1196,7 @@ program
               variable x
             variable y
       variable t
-  function __ev_Foldable_Tree_maximum :: __Dict_Eq -> __Dict_Ord -> Tree t1165 -> t1165
+  function __ev_Foldable_Tree_maximum :: __Dict_Eq -> __Dict_Ord -> Tree t1149 -> t1149
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var t
@@ -1254,7 +1254,7 @@ program
                 variable __ev_Ord_1
               variable x
             variable xs
-  function __ev_Foldable_Tree_minimum :: __Dict_Eq -> __Dict_Ord -> Tree t1194 -> t1194
+  function __ev_Foldable_Tree_minimum :: __Dict_Eq -> __Dict_Ord -> Tree t1178 -> t1178
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var t
@@ -1312,7 +1312,7 @@ program
                 variable __ev_Ord_1
               variable x
             variable xs
-  function __ev_Foldable_Tree_sum :: __Dict_Num -> Tree t1207 -> t1207
+  function __ev_Foldable_Tree_sum :: __Dict_Num -> Tree t1191 -> t1191
     pat_var __ev_Num
     pat_var t
     apply
@@ -1333,7 +1333,7 @@ program
           intrinsic intToInteger#
             integer 0
       variable t
-  function __ev_Foldable_Tree_product :: __Dict_Num -> Tree t1224 -> t1224
+  function __ev_Foldable_Tree_product :: __Dict_Num -> Tree t1208 -> t1208
     pat_var __ev_Num
     pat_var t
     apply
@@ -1354,7 +1354,7 @@ program
           intrinsic intToInteger#
             integer 1
       variable t
-  function __ev_Foldable_Tree_foldr1 :: t1243 -> t1243 -> t1243 -> Tree t1243 -> t1243
+  function __ev_Foldable_Tree_foldr1 :: t1227 -> t1227 -> t1227 -> Tree t1227 -> t1227
     pat_var f
     pat_var t
     let
@@ -1391,7 +1391,7 @@ program
           evidence_method Foldable.toList evidence= nullary=0
             instance Tree
           variable t
-  function __ev_Foldable_Tree_foldl1 :: t1264 -> t1264 -> t1264 -> Tree t1264 -> t1264
+  function __ev_Foldable_Tree_foldl1 :: t1248 -> t1248 -> t1248 -> Tree t1248 -> t1248
     pat_var f
     pat_var t
     case
@@ -1437,7 +1437,7 @@ program
               variable go
               variable x
             variable xs
-  function __ev_Traversable_Tree_traverse :: __Dict_Functor -> __Dict_Applicative -> t1323 -> t1288 t1289 -> Tree t1323 -> t1288 Tree t1289
+  function __ev_Traversable_Tree_traverse :: __Dict_Functor -> __Dict_Applicative -> t1307 -> t1272 t1273 -> Tree t1307 -> t1272 Tree t1273
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var __f
@@ -1489,7 +1489,7 @@ program
                 variable __ev_Applicative_1
               variable __f
             variable __v1
-  function __ev_Traversable_Tree_sequenceA :: __Dict_Functor -> __Dict_Applicative -> Tree t1347 t1348 -> t1347 Tree t1348
+  function __ev_Traversable_Tree_sequenceA :: __Dict_Functor -> __Dict_Applicative -> Tree t1331 t1332 -> t1331 Tree t1332
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var t
@@ -1505,7 +1505,7 @@ program
           pat_var x
           variable x
       variable t
-  function __ev_Traversable_Tree_mapM :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> t1385 -> t1386 t1387 -> Tree t1385 -> t1386 Tree t1387
+  function __ev_Traversable_Tree_mapM :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> t1369 -> t1370 t1371 -> Tree t1369 -> t1370 Tree t1371
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var __ev_Monad_2
@@ -1521,7 +1521,7 @@ program
           variable __ev_Applicative_1
         variable f
       variable t
-  function __ev_Traversable_Tree_sequence :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> Tree t1432 t1433 -> t1432 Tree t1433
+  function __ev_Traversable_Tree_sequence :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> Tree t1416 t1417 -> t1416 Tree t1417
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var __ev_Monad_2
@@ -1538,7 +1538,7 @@ program
     constructor Phantom
       field  :: a
     deriving (Functor, Foldable, Traversable)
-  function __ev_Functor_Phantom_1_map :: t1487 -> t1484 -> Phantom t1479 t1487 -> Phantom t1479 t1484
+  function __ev_Functor_Phantom_1_map :: t1471 -> t1468 -> Phantom t1463 t1471 -> Phantom t1463 t1468
     pat_var __f
     pat_var __x
     case
@@ -1549,7 +1549,7 @@ program
         apply
           constructor_ref Phantom
           variable __v0
-  function __ev_Foldable_Phantom_1_foldr :: t1528 -> t1525 -> t1525 -> t1525 -> Phantom t1492 t1528 -> t1525
+  function __ev_Foldable_Phantom_1_foldr :: t1499 -> t1496 -> t1496 -> t1496 -> Phantom t1476 t1499 -> t1496
     pat_var __f
     pat_var __z
     pat_var __x
@@ -1559,7 +1559,7 @@ program
         pat_con Phantom
           pat_var __v0
         variable __z
-  function __ev_Foldable_Phantom_1_fold :: __Dict_Semigroup -> __Dict_Monoid -> Phantom t1492 t1529 -> t1529
+  function __ev_Foldable_Phantom_1_fold :: __Dict_Semigroup -> __Dict_Monoid -> Phantom t1476 t1500 -> t1500
     pat_var __ev_Semigroup
     pat_var __ev_Monoid_1
     pat_var t
@@ -1575,7 +1575,7 @@ program
           pat_var x
           variable x
       variable t
-  function __ev_Foldable_Phantom_1_foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t1558 -> t1563 -> Phantom t1492 t1558 -> t1563
+  function __ev_Foldable_Phantom_1_foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t1529 -> t1534 -> Phantom t1476 t1529 -> t1534
     pat_var __ev_Semigroup
     pat_var __ev_Monoid_1
     pat_var f
@@ -1597,7 +1597,7 @@ program
               variable acc
         evidence_method Monoid.mempty evidence=__ev_Monoid_1 nullary=1
       variable t
-  function __ev_Foldable_Phantom_1_foldl :: t1578 -> t1575 -> t1578 -> t1578 -> Phantom t1492 t1575 -> t1578
+  function __ev_Foldable_Phantom_1_foldl :: t1549 -> t1546 -> t1549 -> t1549 -> Phantom t1476 t1546 -> t1549
     pat_var f
     pat_var z
     pat_var t
@@ -1629,7 +1629,7 @@ program
                         variable x
             variable t
       variable z
-  function __ev_Foldable_Phantom_1_toList :: Phantom t1492 t1598 -> [t1598]
+  function __ev_Foldable_Phantom_1_toList :: Phantom t1476 t1569 -> [t1569]
     pat_var t
     apply
       apply
@@ -1644,7 +1644,7 @@ program
               variable xs
         list
       variable t
-  function __ev_Foldable_Phantom_1_null :: Phantom t1492 t1610 -> Bool
+  function __ev_Foldable_Phantom_1_null :: Phantom t1476 t1581 -> Bool
     pat_var t
     apply
       apply
@@ -1657,7 +1657,7 @@ program
             constructor_ref False
         constructor_ref True
       variable t
-  function __ev_Foldable_Phantom_1_length :: Phantom t1492 t1620 -> Int
+  function __ev_Foldable_Phantom_1_length :: Phantom t1476 t1591 -> Int
     pat_var t
     apply
       apply
@@ -1672,7 +1672,7 @@ program
               integer 1
         integer 0
       variable t
-  function __ev_Foldable_Phantom_1_elem :: __Dict_Eq -> t1640 -> Phantom t1492 t1640 -> Bool
+  function __ev_Foldable_Phantom_1_elem :: __Dict_Eq -> t1611 -> Phantom t1476 t1611 -> Bool
     pat_var __ev_Eq
     pat_var x
     pat_var t
@@ -1689,7 +1689,7 @@ program
               variable x
             variable y
       variable t
-  function __ev_Foldable_Phantom_1_maximum :: __Dict_Eq -> __Dict_Ord -> Phantom t1492 t1668 -> t1668
+  function __ev_Foldable_Phantom_1_maximum :: __Dict_Eq -> __Dict_Ord -> Phantom t1476 t1639 -> t1639
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var t
@@ -1747,7 +1747,7 @@ program
                 variable __ev_Ord_1
               variable x
             variable xs
-  function __ev_Foldable_Phantom_1_minimum :: __Dict_Eq -> __Dict_Ord -> Phantom t1492 t1700 -> t1700
+  function __ev_Foldable_Phantom_1_minimum :: __Dict_Eq -> __Dict_Ord -> Phantom t1476 t1671 -> t1671
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var t
@@ -1805,7 +1805,7 @@ program
                 variable __ev_Ord_1
               variable x
             variable xs
-  function __ev_Foldable_Phantom_1_sum :: __Dict_Num -> Phantom t1492 t1713 -> t1713
+  function __ev_Foldable_Phantom_1_sum :: __Dict_Num -> Phantom t1476 t1684 -> t1684
     pat_var __ev_Num
     pat_var t
     apply
@@ -1826,7 +1826,7 @@ program
           intrinsic intToInteger#
             integer 0
       variable t
-  function __ev_Foldable_Phantom_1_product :: __Dict_Num -> Phantom t1492 t1734 -> t1734
+  function __ev_Foldable_Phantom_1_product :: __Dict_Num -> Phantom t1476 t1705 -> t1705
     pat_var __ev_Num
     pat_var t
     apply
@@ -1847,7 +1847,7 @@ program
           intrinsic intToInteger#
             integer 1
       variable t
-  function __ev_Foldable_Phantom_1_foldr1 :: t1756 -> t1756 -> t1756 -> Phantom t1492 t1756 -> t1756
+  function __ev_Foldable_Phantom_1_foldr1 :: t1727 -> t1727 -> t1727 -> Phantom t1476 t1727 -> t1727
     pat_var f
     pat_var t
     let
@@ -1884,7 +1884,7 @@ program
           evidence_method Foldable.toList evidence= nullary=0
             instance Phantom a
           variable t
-  function __ev_Foldable_Phantom_1_foldl1 :: t1783 -> t1783 -> t1783 -> Phantom t1492 t1783 -> t1783
+  function __ev_Foldable_Phantom_1_foldl1 :: t1754 -> t1754 -> t1754 -> Phantom t1476 t1754 -> t1754
     pat_var f
     pat_var t
     case
@@ -1930,7 +1930,7 @@ program
               variable go
               variable x
             variable xs
-  function __ev_Traversable_Phantom_1_traverse :: __Dict_Functor -> __Dict_Applicative -> t1848 -> t1814 t1815 -> Phantom t1797 t1848 -> t1814 Phantom t1797 t1815
+  function __ev_Traversable_Phantom_1_traverse :: __Dict_Functor -> __Dict_Applicative -> t1816 -> t1782 t1783 -> Phantom t1768 t1816 -> t1782 Phantom t1768 t1783
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var __f
@@ -1949,7 +1949,7 @@ program
           apply
             evidence_method Applicative.pure evidence=__ev_Applicative_1 nullary=0
             variable __v0
-  function __ev_Traversable_Phantom_1_sequenceA :: __Dict_Functor -> __Dict_Applicative -> Phantom t1797 t1858 t1859 -> t1858 Phantom t1797 t1859
+  function __ev_Traversable_Phantom_1_sequenceA :: __Dict_Functor -> __Dict_Applicative -> Phantom t1768 t1826 t1827 -> t1826 Phantom t1768 t1827
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var t
@@ -1965,7 +1965,7 @@ program
           pat_var x
           variable x
       variable t
-  function __ev_Traversable_Phantom_1_mapM :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> t1909 -> t1910 t1911 -> Phantom t1797 t1909 -> t1910 Phantom t1797 t1911
+  function __ev_Traversable_Phantom_1_mapM :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> t1877 -> t1878 t1879 -> Phantom t1768 t1877 -> t1878 Phantom t1768 t1879
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var __ev_Monad_2
@@ -1981,7 +1981,7 @@ program
           variable __ev_Applicative_1
         variable f
       variable t
-  function __ev_Traversable_Phantom_1_sequence :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> Phantom t1797 t1968 t1969 -> t1968 Phantom t1797 t1969
+  function __ev_Traversable_Phantom_1_sequence :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> Phantom t1768 t1936 t1937 -> t1936 Phantom t1768 t1937
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var __ev_Monad_2
@@ -2000,7 +2000,7 @@ program
       field  :: a
       field  :: Int
     deriving (Functor, Foldable, Traversable)
-  function __ev_Functor_Multi_map :: t2029 -> t2027 -> Multi t2029 -> Multi t2027
+  function __ev_Functor_Multi_map :: t1997 -> t1995 -> Multi t1997 -> Multi t1995
     pat_var __f
     pat_var __x
     case
@@ -2021,7 +2021,7 @@ program
               variable __f
               variable __v1
           variable __v2
-  function __ev_Foldable_Multi_foldr :: t2053 -> t2051 -> t2051 -> t2051 -> Multi t2053 -> t2051
+  function __ev_Foldable_Multi_foldr :: t2021 -> t2019 -> t2019 -> t2019 -> Multi t2021 -> t2019
     pat_var __f
     pat_var __z
     pat_var __x
@@ -2041,7 +2041,7 @@ program
               variable __f
               variable __v1
             variable __z
-  function __ev_Foldable_Multi_fold :: __Dict_Semigroup -> __Dict_Monoid -> Multi t2054 -> t2054
+  function __ev_Foldable_Multi_fold :: __Dict_Semigroup -> __Dict_Monoid -> Multi t2022 -> t2022
     pat_var __ev_Semigroup
     pat_var __ev_Monoid_1
     pat_var t
@@ -2057,7 +2057,7 @@ program
           pat_var x
           variable x
       variable t
-  function __ev_Foldable_Multi_foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t2078 -> t2083 -> Multi t2078 -> t2083
+  function __ev_Foldable_Multi_foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t2046 -> t2051 -> Multi t2046 -> t2051
     pat_var __ev_Semigroup
     pat_var __ev_Monoid_1
     pat_var f
@@ -2079,7 +2079,7 @@ program
               variable acc
         evidence_method Monoid.mempty evidence=__ev_Monoid_1 nullary=1
       variable t
-  function __ev_Foldable_Multi_foldl :: t2095 -> t2092 -> t2095 -> t2095 -> Multi t2092 -> t2095
+  function __ev_Foldable_Multi_foldl :: t2063 -> t2060 -> t2063 -> t2063 -> Multi t2060 -> t2063
     pat_var f
     pat_var z
     pat_var t
@@ -2111,7 +2111,7 @@ program
                         variable x
             variable t
       variable z
-  function __ev_Foldable_Multi_toList :: Multi t2111 -> [t2111]
+  function __ev_Foldable_Multi_toList :: Multi t2079 -> [t2079]
     pat_var t
     apply
       apply
@@ -2126,7 +2126,7 @@ program
               variable xs
         list
       variable t
-  function __ev_Foldable_Multi_null :: Multi t2120 -> Bool
+  function __ev_Foldable_Multi_null :: Multi t2088 -> Bool
     pat_var t
     apply
       apply
@@ -2139,7 +2139,7 @@ program
             constructor_ref False
         constructor_ref True
       variable t
-  function __ev_Foldable_Multi_length :: Multi t2127 -> Int
+  function __ev_Foldable_Multi_length :: Multi t2095 -> Int
     pat_var t
     apply
       apply
@@ -2154,7 +2154,7 @@ program
               integer 1
         integer 0
       variable t
-  function __ev_Foldable_Multi_elem :: __Dict_Eq -> t2144 -> Multi t2144 -> Bool
+  function __ev_Foldable_Multi_elem :: __Dict_Eq -> t2112 -> Multi t2112 -> Bool
     pat_var __ev_Eq
     pat_var x
     pat_var t
@@ -2171,7 +2171,7 @@ program
               variable x
             variable y
       variable t
-  function __ev_Foldable_Multi_maximum :: __Dict_Eq -> __Dict_Ord -> Multi t2164 -> t2164
+  function __ev_Foldable_Multi_maximum :: __Dict_Eq -> __Dict_Ord -> Multi t2132 -> t2132
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var t
@@ -2229,7 +2229,7 @@ program
                 variable __ev_Ord_1
               variable x
             variable xs
-  function __ev_Foldable_Multi_minimum :: __Dict_Eq -> __Dict_Ord -> Multi t2193 -> t2193
+  function __ev_Foldable_Multi_minimum :: __Dict_Eq -> __Dict_Ord -> Multi t2161 -> t2161
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var t
@@ -2287,7 +2287,7 @@ program
                 variable __ev_Ord_1
               variable x
             variable xs
-  function __ev_Foldable_Multi_sum :: __Dict_Num -> Multi t2206 -> t2206
+  function __ev_Foldable_Multi_sum :: __Dict_Num -> Multi t2174 -> t2174
     pat_var __ev_Num
     pat_var t
     apply
@@ -2308,7 +2308,7 @@ program
           intrinsic intToInteger#
             integer 0
       variable t
-  function __ev_Foldable_Multi_product :: __Dict_Num -> Multi t2223 -> t2223
+  function __ev_Foldable_Multi_product :: __Dict_Num -> Multi t2191 -> t2191
     pat_var __ev_Num
     pat_var t
     apply
@@ -2329,7 +2329,7 @@ program
           intrinsic intToInteger#
             integer 1
       variable t
-  function __ev_Foldable_Multi_foldr1 :: t2242 -> t2242 -> t2242 -> Multi t2242 -> t2242
+  function __ev_Foldable_Multi_foldr1 :: t2210 -> t2210 -> t2210 -> Multi t2210 -> t2210
     pat_var f
     pat_var t
     let
@@ -2366,7 +2366,7 @@ program
           evidence_method Foldable.toList evidence= nullary=0
             instance Multi
           variable t
-  function __ev_Foldable_Multi_foldl1 :: t2263 -> t2263 -> t2263 -> Multi t2263 -> t2263
+  function __ev_Foldable_Multi_foldl1 :: t2231 -> t2231 -> t2231 -> Multi t2231 -> t2231
     pat_var f
     pat_var t
     case
@@ -2412,7 +2412,7 @@ program
               variable go
               variable x
             variable xs
-  function __ev_Traversable_Multi_traverse :: __Dict_Functor -> __Dict_Applicative -> t2321 -> t2335 t2289 -> Multi t2321 -> t2335 Multi t2289
+  function __ev_Traversable_Multi_traverse :: __Dict_Functor -> __Dict_Applicative -> t2289 -> t2303 t2257 -> Multi t2289 -> t2303 Multi t2257
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var __f
@@ -2445,7 +2445,7 @@ program
           apply
             evidence_method Applicative.pure evidence=__ev_Applicative_1 nullary=0
             variable __v2
-  function __ev_Traversable_Multi_sequenceA :: __Dict_Functor -> __Dict_Applicative -> Multi t2336 t2337 -> t2336 Multi t2337
+  function __ev_Traversable_Multi_sequenceA :: __Dict_Functor -> __Dict_Applicative -> Multi t2304 t2305 -> t2304 Multi t2305
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var t
@@ -2461,7 +2461,7 @@ program
           pat_var x
           variable x
       variable t
-  function __ev_Traversable_Multi_mapM :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> t2374 -> t2375 t2376 -> Multi t2374 -> t2375 Multi t2376
+  function __ev_Traversable_Multi_mapM :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> t2342 -> t2343 t2344 -> Multi t2342 -> t2343 Multi t2344
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var __ev_Monad_2
@@ -2477,7 +2477,7 @@ program
           variable __ev_Applicative_1
         variable f
       variable t
-  function __ev_Traversable_Multi_sequence :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> Multi t2421 t2422 -> t2421 Multi t2422
+  function __ev_Traversable_Multi_sequence :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> Multi t2389 t2390 -> t2389 Multi t2390
     pat_var __ev_Functor
     pat_var __ev_Applicative_1
     pat_var __ev_Monad_2
@@ -2494,7 +2494,7 @@ program
     constructor Compose
       field  :: f a
     deriving (Functor)
-  function __ev_Functor_Compose_1_map :: __Dict_Functor -> t2482 -> t2474 -> Compose t2469 t2482 -> Compose t2469 t2474
+  function __ev_Functor_Compose_1_map :: __Dict_Functor -> t2450 -> t2442 -> Compose t2437 t2450 -> Compose t2437 t2442
     pat_var __ev_Functor
     pat_var __f
     pat_var __x
@@ -2514,7 +2514,7 @@ program
     constructor Nest
       field  :: Maybe Maybe a
     deriving (Eq, Show, Functor, Foldable)
-  function __ev_Eq_Nest_1_Op3d3d :: __Dict_Eq -> Nest t2490 -> Nest t2490 -> Bool
+  function __ev_Eq_Nest_1_Op3d3d :: __Dict_Eq -> Nest t2458 -> Nest t2458 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -2534,7 +2534,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_Nest_1_Op2f3d :: __Dict_Eq -> Nest t2490 -> Nest t2490 -> Bool
+  function __ev_Eq_Nest_1_Op2f3d :: __Dict_Eq -> Nest t2458 -> Nest t2458 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -2561,7 +2561,7 @@ program
       alt
         pat_con False
         constructor_ref True
-  function showsPrec :: __Dict_Show -> Int -> Nest t2520 -> String -> String
+  function showsPrec :: __Dict_Show -> Int -> Nest t2488 -> String -> String
     pat_var __ev_Show
     pat_var __d
     pat_var __x
@@ -2594,7 +2594,7 @@ program
                     variable __f0
                   variable __r
           variable __s
-  function show :: __Dict_Show -> Nest t2520 -> String
+  function show :: __Dict_Show -> Nest t2488 -> String
     pat_var __ev_Show
     pat_var x
     apply
@@ -2604,7 +2604,7 @@ program
           evidence_ref Show Nest a
         variable x
       string ""
-  function showList :: __Dict_Show -> [Nest t2520] -> String -> String
+  function showList :: __Dict_Show -> [Nest t2488] -> String -> String
     pat_var __ev_Show
     pat_var ls
     pat_var s
@@ -2617,7 +2617,7 @@ program
             evidence_ref Show Nest a
         variable ls
       variable s
-  function __ev_Functor_Nest_map :: t2567 -> t2565 -> Nest t2567 -> Nest t2565
+  function __ev_Functor_Nest_map :: t2533 -> t2531 -> Nest t2533 -> Nest t2531
     pat_var __f
     pat_var __x
     case
@@ -2636,7 +2636,7 @@ program
                   instance Maybe
                 variable __f
             variable __v0
-  function __ev_Foldable_Nest_foldr :: t2597 -> t2601 -> t2601 -> t2601 -> Nest t2597 -> t2601
+  function __ev_Foldable_Nest_foldr :: t2563 -> t2567 -> t2567 -> t2567 -> Nest t2563 -> t2567
     pat_var __f
     pat_var __z
     pat_var __x
@@ -2663,7 +2663,7 @@ program
                   variable __x
             variable __z
           variable __v0
-  function __ev_Foldable_Nest_fold :: __Dict_Semigroup -> __Dict_Monoid -> Nest t2607 -> t2607
+  function __ev_Foldable_Nest_fold :: __Dict_Semigroup -> __Dict_Monoid -> Nest t2573 -> t2573
     pat_var __ev_Semigroup
     pat_var __ev_Monoid_1
     pat_var t
@@ -2679,7 +2679,7 @@ program
           pat_var x
           variable x
       variable t
-  function __ev_Foldable_Nest_foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t2631 -> t2636 -> Nest t2631 -> t2636
+  function __ev_Foldable_Nest_foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t2597 -> t2602 -> Nest t2597 -> t2602
     pat_var __ev_Semigroup
     pat_var __ev_Monoid_1
     pat_var f
@@ -2701,7 +2701,7 @@ program
               variable acc
         evidence_method Monoid.mempty evidence=__ev_Monoid_1 nullary=1
       variable t
-  function __ev_Foldable_Nest_foldl :: t2648 -> t2645 -> t2648 -> t2648 -> Nest t2645 -> t2648
+  function __ev_Foldable_Nest_foldl :: t2614 -> t2611 -> t2614 -> t2614 -> Nest t2611 -> t2614
     pat_var f
     pat_var z
     pat_var t
@@ -2733,7 +2733,7 @@ program
                         variable x
             variable t
       variable z
-  function __ev_Foldable_Nest_toList :: Nest t2664 -> [t2664]
+  function __ev_Foldable_Nest_toList :: Nest t2630 -> [t2630]
     pat_var t
     apply
       apply
@@ -2748,7 +2748,7 @@ program
               variable xs
         list
       variable t
-  function __ev_Foldable_Nest_null :: Nest t2673 -> Bool
+  function __ev_Foldable_Nest_null :: Nest t2639 -> Bool
     pat_var t
     apply
       apply
@@ -2761,7 +2761,7 @@ program
             constructor_ref False
         constructor_ref True
       variable t
-  function __ev_Foldable_Nest_length :: Nest t2680 -> Int
+  function __ev_Foldable_Nest_length :: Nest t2646 -> Int
     pat_var t
     apply
       apply
@@ -2776,7 +2776,7 @@ program
               integer 1
         integer 0
       variable t
-  function __ev_Foldable_Nest_elem :: __Dict_Eq -> t2697 -> Nest t2697 -> Bool
+  function __ev_Foldable_Nest_elem :: __Dict_Eq -> t2663 -> Nest t2663 -> Bool
     pat_var __ev_Eq
     pat_var x
     pat_var t
@@ -2793,7 +2793,7 @@ program
               variable x
             variable y
       variable t
-  function __ev_Foldable_Nest_maximum :: __Dict_Eq -> __Dict_Ord -> Nest t2717 -> t2717
+  function __ev_Foldable_Nest_maximum :: __Dict_Eq -> __Dict_Ord -> Nest t2683 -> t2683
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var t
@@ -2851,7 +2851,7 @@ program
                 variable __ev_Ord_1
               variable x
             variable xs
-  function __ev_Foldable_Nest_minimum :: __Dict_Eq -> __Dict_Ord -> Nest t2746 -> t2746
+  function __ev_Foldable_Nest_minimum :: __Dict_Eq -> __Dict_Ord -> Nest t2712 -> t2712
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var t
@@ -2909,7 +2909,7 @@ program
                 variable __ev_Ord_1
               variable x
             variable xs
-  function __ev_Foldable_Nest_sum :: __Dict_Num -> Nest t2759 -> t2759
+  function __ev_Foldable_Nest_sum :: __Dict_Num -> Nest t2725 -> t2725
     pat_var __ev_Num
     pat_var t
     apply
@@ -2930,7 +2930,7 @@ program
           intrinsic intToInteger#
             integer 0
       variable t
-  function __ev_Foldable_Nest_product :: __Dict_Num -> Nest t2776 -> t2776
+  function __ev_Foldable_Nest_product :: __Dict_Num -> Nest t2742 -> t2742
     pat_var __ev_Num
     pat_var t
     apply
@@ -2951,7 +2951,7 @@ program
           intrinsic intToInteger#
             integer 1
       variable t
-  function __ev_Foldable_Nest_foldr1 :: t2795 -> t2795 -> t2795 -> Nest t2795 -> t2795
+  function __ev_Foldable_Nest_foldr1 :: t2761 -> t2761 -> t2761 -> Nest t2761 -> t2761
     pat_var f
     pat_var t
     let
@@ -2988,7 +2988,7 @@ program
           evidence_method Foldable.toList evidence= nullary=0
             instance Nest
           variable t
-  function __ev_Foldable_Nest_foldl1 :: t2816 -> t2816 -> t2816 -> Nest t2816 -> t2816
+  function __ev_Foldable_Nest_foldl1 :: t2782 -> t2782 -> t2782 -> Nest t2782 -> t2782
     pat_var f
     pat_var t
     case
@@ -3039,7 +3039,7 @@ program
       field  :: a
       field  :: b
     deriving (Eq, Ord, Bounded)
-  function __ev_Eq_BPair_2_Op3d3d :: __Dict_Eq -> __Dict_Eq -> BPair t2832 t2833 -> BPair t2832 t2833 -> Bool
+  function __ev_Eq_BPair_2_Op3d3d :: __Dict_Eq -> __Dict_Eq -> BPair t2798 t2799 -> BPair t2798 t2799 -> Bool
     pat_var __ev_Eq
     pat_var __ev_Eq_1
     pat_var __l
@@ -3070,7 +3070,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_BPair_2_Op2f3d :: __Dict_Eq -> __Dict_Eq -> BPair t2832 t2833 -> BPair t2832 t2833 -> Bool
+  function __ev_Eq_BPair_2_Op2f3d :: __Dict_Eq -> __Dict_Eq -> BPair t2798 t2799 -> BPair t2798 t2799 -> Bool
     pat_var __ev_Eq
     pat_var __ev_Eq_1
     pat_var __l
@@ -3108,7 +3108,7 @@ program
       alt
         pat_con False
         constructor_ref True
-  function compare :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t2864 t2865 -> BPair t2864 t2865 -> Ordering
+  function compare :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t2830 t2831 -> BPair t2830 t2831 -> Ordering
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var __ev_Eq_2
@@ -3156,7 +3156,7 @@ program
               alt
                 pat_con GT
                 constructor_ref GT
-  function < :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t2864 t2865 -> BPair t2864 t2865 -> Bool
+  function < :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t2830 t2831 -> BPair t2830 t2831 -> Bool
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var __ev_Eq_2
@@ -3176,7 +3176,7 @@ program
       alt
         pat_wild _
         constructor_ref False
-  function <= :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t2864 t2865 -> BPair t2864 t2865 -> Bool
+  function <= :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t2830 t2831 -> BPair t2830 t2831 -> Bool
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var __ev_Eq_2
@@ -3196,7 +3196,7 @@ program
       alt
         pat_wild _
         constructor_ref True
-  function > :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t2864 t2865 -> BPair t2864 t2865 -> Bool
+  function > :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t2830 t2831 -> BPair t2830 t2831 -> Bool
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var __ev_Eq_2
@@ -3216,7 +3216,7 @@ program
       alt
         pat_wild _
         constructor_ref False
-  function >= :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t2864 t2865 -> BPair t2864 t2865 -> Bool
+  function >= :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t2830 t2831 -> BPair t2830 t2831 -> Bool
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var __ev_Eq_2
@@ -3236,7 +3236,7 @@ program
       alt
         pat_wild _
         constructor_ref True
-  function max :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t2864 t2865 -> BPair t2864 t2865 -> BPair t2864 t2865
+  function max :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t2830 t2831 -> BPair t2830 t2831 -> BPair t2830 t2831
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var __ev_Eq_2
@@ -3256,7 +3256,7 @@ program
       alt
         pat_con False
         variable x
-  function min :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t2864 t2865 -> BPair t2864 t2865 -> BPair t2864 t2865
+  function min :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t2830 t2831 -> BPair t2830 t2831 -> BPair t2830 t2831
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var __ev_Eq_2
@@ -3276,7 +3276,7 @@ program
       alt
         pat_con False
         variable y
-  function minBound :: __Dict_Bounded -> __Dict_Bounded -> BPair t3061 t3062
+  function minBound :: __Dict_Bounded -> __Dict_Bounded -> BPair t3015 t3016
     pat_var __ev_Bounded
     pat_var __ev_Bounded_1
     apply
@@ -3284,7 +3284,7 @@ program
         constructor_ref BPair
         evidence_method Bounded.minBound evidence=__ev_Bounded nullary=1
       evidence_method Bounded.minBound evidence=__ev_Bounded_1 nullary=1
-  function maxBound :: __Dict_Bounded -> __Dict_Bounded -> BPair t3061 t3062
+  function maxBound :: __Dict_Bounded -> __Dict_Bounded -> BPair t3015 t3016
     pat_var __ev_Bounded
     pat_var __ev_Bounded_1
     apply

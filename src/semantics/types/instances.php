@@ -309,7 +309,12 @@ function instanceMethodSchemes(TypeCheckState $state, Ast\InstanceDecl $decl): a
             continue;
         }
 
-        $expectedType = freshenTypeVars($state, substitute($methodInfo['type'], $mapping));
+        $expectedType = freshenTypeWithConstraintsKeeping(
+            $state,
+            substitute($methodInfo['type'], $mapping),
+            [],
+            typeVars($headType),
+        )['type'];
         $schemes[$methodName] = scheme(prune($state, $expectedType), []);
         $provided[$methodName] = true;
     }
@@ -2411,6 +2416,114 @@ function instanceHeadIsGadt(TypeCheckState $state, Type $headType): bool
     return false;
 }
 
+/**
+ * The class parameters of an instance's own methods, read at the instance head.
+ *
+ * A method body's reference to one of its own class's methods denotes the
+ * method at the instance head, not the class's general scheme: `m` inside
+ * `instance C a => C [a]` has type `[a] -> [a]`. The head variables are the
+ * rigid ones the body is checked under, so the skolem map applied here is the
+ * same one applied to `$fnType`.
+ *
+ * @param array<string, TVar> $headSkolems
+ * @return list<Type>
+ */
+function ownMethodHeadArguments(
+    TypeCheckState $state,
+    string $className,
+    ?Type $headType,
+    array $headSkolems,
+): array {
+    if ($headType === null) {
+        return [];
+    }
+
+    $params = $state->classes[$className]['params'] ?? [];
+    if ($params === []) {
+        return [];
+    }
+
+    $headType = prune($state, $headType);
+    $args = [];
+    foreach ($params as $i => $param) {
+        $headArg = \count($params) === 1
+            ? $headType
+            : ($headType instanceof TCon ? ($headType->args[$i] ?? null) : null);
+        if (! $headArg instanceof Type) {
+            return [];
+        }
+        if ($headSkolems !== []) {
+            $headArg = substitute($headArg, $headSkolems);
+        }
+        $args[] = prune($state, $headArg);
+    }
+
+    return $args;
+}
+
+/**
+ * A class method's scheme with its class parameters replaced by the head's.
+ *
+ * The method's own variables stay quantified; only the class parameters the
+ * substitution names become the instance's types, so `map` inside
+ * `instance Functor (Pair a)` still has its element types polymorphic while
+ * `f` is `Pair a`.
+ *
+ * The scheme is already freshened, so the variables standing for the class
+ * parameters are the ones its own class constraint names -- not the source
+ * spelling `a`.
+ *
+ * @param list<Type> $headArgs
+ */
+function specialiseOwnMethodScheme(
+    TypeCheckState $state,
+    Scheme $scheme,
+    string $className,
+    array $headArgs,
+): Scheme {
+    if ($headArgs === []) {
+        return $scheme;
+    }
+
+    $paramVars = null;
+    foreach ($scheme->constraints as $constraint) {
+        if ($constraint->class === $className && \count($constraint->args) === \count($headArgs)) {
+            $paramVars = $constraint->args;
+
+            break;
+        }
+    }
+    if ($paramVars === null) {
+        return $scheme;
+    }
+
+    $subst = [];
+    foreach ($paramVars as $i => $var) {
+        if ($var instanceof TVar) {
+            $subst[$var->name] = $headArgs[$i];
+        }
+    }
+    if ($subst === []) {
+        return $scheme;
+    }
+
+    $constrained = substitutePendingConstraints($scheme->constraints, $subst);
+    $dicts = substitutePendingConstraints($scheme->dicts, $subst);
+    $bound = \array_values(\array_filter(
+        $scheme->bound,
+        static fn (string $name): bool => ! isset($subst[$name]),
+    ));
+    $out = scheme(
+        prune($state, substitute($scheme->type, $subst)),
+        $bound,
+        $constrained,
+        $scheme->runtimeConstraintCount,
+        $dicts,
+    );
+
+    return $scheme->class !== null ? $out->asClassMethod($scheme->class) : $out;
+}
+
 function checkInstanceMethod(
     TypeCheckState $state,
     Ast\FunctionDecl $fn,
@@ -2426,8 +2539,12 @@ function checkInstanceMethod(
     $state->subst = [];
     $savedInstanceHead = $state->instanceHeadInScope;
     $savedInstanceOwnMethods = $state->instanceOwnMethods;
+    $savedInstanceSelfMethod = $state->instanceSelfMethod;
+    $savedInstanceSelfScheme = $state->instanceSelfScheme;
     $state->instanceHeadInScope = $headType;
     $state->instanceOwnMethods = [];
+    $state->instanceSelfMethod = $fn->name;
+    $state->instanceSelfScheme = null;
     $env = $state->env;
     $savedClassMethod = (($state->env[$fn->name] ?? null)?->classMethod ?? false)
         ? $state->env[$fn->name]
@@ -2593,19 +2710,28 @@ function checkInstanceMethod(
     if ($className !== '') {
         $state->instanceOwnMethods = ownClassMethodNames($state, $className);
         $ownSchemes = ownClassMethodSchemes($state, $className);
+        $ownHeadArgs = ownMethodHeadArguments($state, $className, $headType, $headSkolems);
         foreach ($state->instanceOwnMethods as $methodName => $_) {
             unset(
                 $state->constraintMethods[$methodName],
                 $state->constraintMethodAmbiguities[$methodName],
             );
-            $scheme = $ownSchemes[$methodName] ?? null;
+            $genericScheme = $ownSchemes[$methodName] ?? null;
+            $selfIsFunction = $genericScheme !== null
+                && prune($state, $genericScheme->type) instanceof TArrow;
+            $scheme = $genericScheme === null || $methodName !== $fn->name || ! $selfIsFunction
+                ? $genericScheme
+                : specialiseOwnMethodScheme($state, $genericScheme, $className, $ownHeadArgs);
+            if ($methodName === $fn->name) {
+                $state->instanceSelfScheme = $genericScheme;
+            }
             if ($scheme !== null) {
                 $env[$methodName] = $scheme;
                 $existing = $state->env[$methodName] ?? null;
                 if ($existing === null
                     || ! ($existing->classMethod ?? false)
-                    || $existing->class === $scheme->class) {
-                    $state->env[$methodName] = $scheme;
+                    || $existing->class === $genericScheme->class) {
+                    $state->env[$methodName] = $genericScheme;
                 }
             } elseif (isset($state->env[$methodName])) {
                 $env[$methodName] = $state->env[$methodName];
@@ -2624,7 +2750,7 @@ function checkInstanceMethod(
     }
     $state->ambientConstraintsByClass = $byClass;
 
-    if ($savedClassMethod !== null) {
+    if ($savedClassMethod !== null && ! isset($env[$fn->name])) {
         $env[$fn->name] = $savedClassMethod;
     } elseif (! isset($env[$fn->name])) {
         $env[$fn->name] = scheme(
@@ -2710,6 +2836,8 @@ function checkInstanceMethod(
 
     $state->instanceHeadInScope = $savedInstanceHead;
     $state->instanceOwnMethods = $savedInstanceOwnMethods;
+    $state->instanceSelfMethod = $savedInstanceSelfMethod;
+    $state->instanceSelfScheme = $savedInstanceSelfScheme;
     $state->rigidVars = $savedRigidVars;
     $state->skolemScope = $savedSkolemScope;
     $state->popBinderScope();

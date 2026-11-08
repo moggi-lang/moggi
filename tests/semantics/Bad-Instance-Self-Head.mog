@@ -1,0 +1,10 @@
+-- A bare reference to the method being defined is the instance's own method,
+-- at the instance head: here `[a] -> [a]`, not the class's `a -> a`.
+class C a where
+  m :: a -> a
+
+data G = MkG
+
+instance C a => C [a] where
+  m = case m of
+    MkG -> MkG

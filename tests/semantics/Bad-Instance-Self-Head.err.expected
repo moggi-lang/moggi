@@ -1,0 +1,4 @@
+tests/semantics/Bad-Instance-Self-Head.mog:8:17: type error: could not unify `[a] -> [a]` with `G`
+
+   8 | instance C a => C [a] where
+     |                 ^
