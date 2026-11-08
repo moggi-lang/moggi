@@ -123,11 +123,14 @@ Only synchronous exceptions exist: `throw`, `throwIO`, `catch`, `bracket`,
 `finally`, and friends, but no async exceptions, no `mask`, and no
 `ExceptionContext`.
 
-- The `Exception` superclass is `Show` only — there is no `Typeable`, hence no
-  `Data.Dynamic` and no `cast`. Exceptions are matched by a stable string tag
-  naming the type. Writing an instance still requires `toException` and
-  `fromException` bodies where `base` needs none (the compiler cannot
-  synthesize the tag yet); take care to keep the tag equal to the type name.
+- The `Exception` superclass is `Show` only. `Type.Reflection` provides a
+  `Typeable` class and type representations, but the compiler does not yet
+  answer a `Typeable` obligation from the type it is instantiated at, so
+  `Exception` carries no `Typeable` and there is no `Data.Dynamic` or `cast`.
+  Exceptions are matched by a stable string tag naming the type. Writing an
+  instance still requires `toException` and `fromException` bodies where `base`
+  needs none (the compiler cannot synthesize the tag yet); take care to keep the
+  tag equal to the type name.
 - There is no `HasCallStack` mechanism and no `CallStack`/`SrcLoc` types yet,
   so `throw` and `error` carry no call stack. Uncaught reports still print
   backend frames; the report header reads `moggi: <Tag>: <display>`.

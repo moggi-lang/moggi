@@ -1,0 +1,12 @@
+module Main where
+
+import Type.Reflection
+
+main :: IO ()
+main = do
+  putStrLn (tyConModule (typeRepTyCon (typeOf (1 :: Int))))
+  putStrLn (tyConName (typeRepTyCon (typeOf (1 :: Int))))
+  putStrLn (tyConPackage (typeRepTyCon (typeOf (1 :: Int))))
+  putStrLn (tyConName (typeRepTyCon (typeOf True)))
+  putStrLn (tyConModule (typeRepTyCon (typeOf 'x')))
+  putStrLn (tyConName (typeRepTyCon (typeOf ())))
