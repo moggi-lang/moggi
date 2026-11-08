@@ -80,7 +80,7 @@ function runTestCase(TestCase $case, string $backend, string $projectRoot): arra
         $outcome = $case->buildOnly
             ? runExampleBuild($case, $backend, $case->project)
             : ($case->scriptCase
-                ? runStandaloneTest($case->input)
+                ? runStandaloneTest($case->input, $backend)
                 : ($case->project
                     ? runProjectCase($case, $backend, $projectRoot)
                     : runFixtureCase($case, $backend, $projectRoot)));

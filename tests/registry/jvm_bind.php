@@ -1,5 +1,7 @@
 <?php declare(strict_types=1);
 
+// backends: jvm
+
 /**
  * The JVM binding: `moggi bind jvm:com.acme:hello` inspects a fixture JAR
  * and generates `Maven.Com.Acme.Hello`, which must compile and run on the

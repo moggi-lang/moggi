@@ -1,5 +1,7 @@
 <?php declare(strict_types=1);
 
+// backends: jvm dotnet
+
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
@@ -56,11 +58,30 @@ $assert(
  * - JVM: every runtime class must parse as a classfile and pass the verifier. `javap` reads the
  *   same bytes the verifier does but does not type-check the bytecode, so each class is launched
  *   under `-Xverify:all` and must stop at the missing `main` rather than at a `VerifyError`.
+ *
+ * Only the backend the suite is running is exercised: `--backend jvm` never looks for `ilasm` and
+ * `--backend dotnet` never looks for a JDK, so a toolchain the run does not need cannot fail it.
  */
-$ilasm = resolveIlasmExecutable();
-$javap = findJavapBinary();
-if ($ilasm === null && $javap === null) {
-    \fwrite(STDERR, "needs `ilasm` (the .NET backend's assembler) or `javap`, and this machine has neither\n");
+$selected = null;
+foreach ($argv ?? [] as $index => $arg) {
+    if ($arg === '--backend' && isset($argv[$index + 1])) {
+        $selected = $argv[$index + 1];
+    }
+}
+$wantDotnet = $selected === null || $selected === 'dotnet';
+$wantJvm = $selected === null || $selected === 'jvm';
+
+$ilasm = $wantDotnet ? resolveIlasmExecutable() : null;
+$javap = $wantJvm ? findJavapBinary() : null;
+if (($wantDotnet && $ilasm === null) || ($wantJvm && $javap === null)) {
+    $missing = [];
+    if ($wantDotnet && $ilasm === null) {
+        $missing[] = '`ilasm` (the .NET backend\'s assembler)';
+    }
+    if ($wantJvm && $javap === null) {
+        $missing[] = '`javap` (the JVM verifier driver)';
+    }
+    \fwrite(STDERR, 'needs ' . \implode(' and ', $missing) . "\n");
     exit(2);
 }
 
@@ -220,5 +241,12 @@ if ($javap !== null) {
     }
 }
 
-echo "managed runtime: " . ($ilasm !== null ? 'ilasm assembled it warning-free' : 'ilasm not available')
-    . ', ' . ($javap !== null ? 'javap parsed it' : 'javap not available') . "\n";
+echo 'managed runtime: '
+    . ($wantDotnet
+        ? ($ilasm !== null ? 'ilasm assembled it warning-free' : 'ilasm not available')
+        : 'dotnet not selected')
+    . ', '
+    . ($wantJvm
+        ? ($javap !== null ? 'javap parsed it' : 'javap not available')
+        : 'jvm not selected')
+    . "\n";
