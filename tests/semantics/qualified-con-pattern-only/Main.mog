@@ -1,0 +1,13 @@
+module Main where
+
+import Lib qualified as L
+
+area :: L.Shape -> Int
+area shape = case shape of
+  L.Circle r -> r
+  L.Square r -> r
+
+main :: IO ()
+main = do
+  putStrLn (show (area (L.Circle 3)))
+  putStrLn (show (area (L.Square 4)))

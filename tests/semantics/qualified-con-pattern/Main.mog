@@ -1,0 +1,18 @@
+module Main where
+
+import Lib as L
+
+area :: L.Shape -> Int
+area shape = case shape of
+  L.Circle r -> r
+  L.Square r -> r
+
+sumPoint :: L.Point -> Int
+sumPoint point = case point of
+  L.Point { px = a, py = b } -> a + b
+
+main :: IO ()
+main = do
+  putStrLn (show (area (L.Circle 3)))
+  putStrLn (show (area (L.Square 4)))
+  putStrLn (show (sumPoint (L.Point 3 4)))

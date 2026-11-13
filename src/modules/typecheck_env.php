@@ -49,7 +49,11 @@ function updateProjectClassesForModule(
             throw new Types\TypeError("unknown module `{$targetName}`");
         }
 
-        mergeExportedTypes($state, $units[$targetName], $units);
+        if ($import->qualifiedOnly) {
+            continue;
+        }
+
+        mergeExportedTypes($state, $units[$targetName], $units, $import);
     }
 
     foreach ($unit['program']->items as $item) {
@@ -70,6 +74,7 @@ function updateProjectClassesForModule(
         }
 
         if ($item instanceof Ast\TypeSynonymDecl) {
+            \Moggi\Semantics\Registry\shadowImportedType($state, $item->name);
             Types\registerTypeSynonym($state, $item);
         }
 
@@ -107,34 +112,75 @@ function applyDeclaredRoles(Types\TypeCheckState $state, array $unit): void
     }
 }
 
-function mergeExportedTypes(Types\TypeCheckState $state, array $unit, array $units = []): void
-{
+function mergeExportedTypes(
+    Types\TypeCheckState $state,
+    array $unit,
+    array $units = [],
+    ?Ast\ImportDecl $import = null,
+): void {
+    $selectedData = null;
+    $selectedSynonyms = null;
     if (isset($unit['localTypes'])) {
         $exports = $unit['exports'] ?? collectExports($unit['program'], $unit['localTypes'], $units, $unit['program']->module);
-        foreach ($exports['data'] as $name => $info) {
-            $declaredIn = \is_array($info) ? ($info['declaringModule'] ?? null) : null;
-            $seenIn = $state->data[$name]['declaringModule'] ?? null;
-            if (\is_string($declaredIn) && $declaredIn !== ''
-                && \is_string($seenIn) && $seenIn !== ''
-                && $declaredIn !== $seenIn
-            ) {
-                throw new Types\TypeError(
-                    "`{$name}` names two declarations in this module's imports: "
-                        . "`{$seenIn}::{$name}` and `{$declaredIn}::{$name}`; "
-                        . 'import one of those modules qualified',
-                );
+        if ($import !== null) {
+            $selectedData = [];
+            $selectedSynonyms = [];
+            $hiding = \array_fill_keys($import->hiding, true);
+            if ($import->kind === 'named') {
+                foreach ($import->items as $item) {
+                    $name = $item->name;
+                    $localName = $item->asName ?? $name;
+                    if (isset($hiding[$localName])) {
+                        continue;
+                    }
+                    if (isset($exports['data'][$name])) {
+                        $selectedData[$localName] = $exports['data'][$name];
+                    }
+                    if (isset($exports['typeSynonyms'][$name])) {
+                        $selectedSynonyms[$localName] = $exports['typeSynonyms'][$name];
+                    }
+                }
+            } else {
+                foreach ($exports['data'] as $name => $info) {
+                    if (! isset($hiding[$name])) {
+                        $selectedData[$name] = $info;
+                    }
+                }
+                foreach ($exports['typeSynonyms'] as $name => $type) {
+                    if (! isset($hiding[$name])) {
+                        $selectedSynonyms[$name] = $type;
+                    }
+                }
             }
-
+        }
+        foreach ($exports['data'] as $name => $info) {
+            if ($selectedData !== null && ! isset($selectedData[$name])) {
+                continue;
+            }
+            $declaredIn = \is_array($info) ? ($info['declaringModule'] ?? null) : null;
+            if (! \is_string($declaredIn) || $declaredIn === '') {
+                $declaredIn = \is_array($info) ? (($info['result'] ?? null)?->module ?? null) : null;
+            }
             if (! isset($state->data[$name])) {
                 $state->data[$name] = $info;
                 $state->data[$name]['imported'] = true;
             }
-            $state->data[$name]['declaringModule'] ??= $unit['program']->module;
-            Kinds\registerTypeKind($state, $name, Kinds\kindFromDataInfo($info));
+            $state->data[$name]['declaringModule'] ??= \is_string($declaredIn) && $declaredIn !== ''
+                ? $declaredIn
+                : $unit['program']->module;
+            Kinds\registerTypeKind(
+                $state,
+                $name,
+                Kinds\kindFromDataInfo($info),
+                $state->data[$name]['declaringModule'] ?? null,
+            );
             Kinds\installPromotedFromDataInfo($state, $name, $info);
         }
 
         foreach ($exports['typeSynonyms'] as $name => $type) {
+            if ($selectedSynonyms !== null && ! isset($selectedSynonyms[$name])) {
+                continue;
+            }
             if (! isset($state->typeSynonyms[$name])) {
                 $state->typeSynonyms[$name] = $type;
             }
@@ -488,6 +534,25 @@ function classModuleValueOrigins(array $units, string $moduleName, array $names)
         foreach ($selected['origins'] as $name => $origin) {
             if (isset($names[$name])) {
                 $origins[$name] ??= $origin;
+            }
+        }
+    }
+
+    // A record field's selector is a value the module defines under the field's
+    // own name, but no item spells it: the check generates it from the
+    // declaration. A class default body written in the module can name one
+    // (`Data`'s `gmapQr` names the `Qr` selector `unQr`), so the declaration's
+    // field names answer for it too.
+    foreach ($unit['program']->items as $item) {
+        if (! $item instanceof Ast\DataDecl) {
+            continue;
+        }
+        foreach ($item->constructors as $ctor) {
+            foreach ($ctor->fields as $field) {
+                $name = $field->name;
+                if (isset($names[$name]) && ! isset($origins[$name])) {
+                    $origins[$name] = exportOrigin($moduleName, $namespace, $name);
+                }
             }
         }
     }
@@ -871,7 +936,7 @@ function indexProjectInstances(array $projectInstances): array
         $byClass[$className][] = $instance;
         $byClassHead[$className][$headKey][] = $instance;
 
-        $headModule = $instance['headModule'] ?? null;
+        $headModule = $instance['headDeclaringModule'] ?? $instance['headModule'] ?? null;
         if ($headModule !== null && $headModule !== '') {
             $byClassHead[$className][$headModule . '::' . $headKey][] = $instance;
         }
@@ -933,7 +998,7 @@ function ambiguousTypeNamesFromRecords(array $projectInstances): array
     $modules = [];
     foreach ($projectInstances as $instance) {
         $name = \Moggi\Semantics\Registry\instanceHeadSpelling($instance['instanceHead'] ?? null);
-        $headModule = $instance['headModule'] ?? null;
+        $headModule = $instance['headDeclaringModule'] ?? $instance['headModule'] ?? null;
         if ($name === null || ! \is_string($headModule) || $headModule === '') {
             continue;
         }

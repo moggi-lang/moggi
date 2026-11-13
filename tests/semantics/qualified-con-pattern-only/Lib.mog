@@ -1,0 +1,3 @@
+module Lib (Shape(..)) where
+
+data Shape = Circle Int | Square Int
