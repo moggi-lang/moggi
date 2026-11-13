@@ -585,3 +585,10 @@ instance Num a => Num (Product a) where
   signum a = Product (signum (getProduct a))
   fromInteger n = Product (fromInteger n)
 
+-- | @'()'@ is a unit for '(<>)': there is only one value to combine.
+instance Semigroup () where
+  _ <> _ = ()
+
+-- | The unit type's 'Monoid', whose 'mempty' is @'()'@.
+instance Monoid () where
+  mempty = ()
