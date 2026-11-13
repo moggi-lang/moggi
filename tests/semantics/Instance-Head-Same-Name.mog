@@ -1,0 +1,18 @@
+module Main where
+
+import Moggi.Internal.Base
+import Data.Monoid
+import Data.Monoid qualified as Monoid
+import Data.Semigroup
+
+-- `First` and `Last` are declared twice in base: `Data.Monoid` has its own
+-- Maybe-carrying newtypes, `Data.Semigroup` re-exports the kernel's
+-- wrapper-free ones. They are different types with different instances, so a
+-- qualified `Monoid.First` has to reach the `Data.Monoid` type and its
+-- `Show`/`Eq` instances rather than the kernel's.
+main :: IO ()
+main = do
+  putStrLn (show (Monoid.First (Just 6)))
+  putStrLn (show (Monoid.Last (Just 7)))
+  putStrLn (show (Monoid.First (Just 6) == Monoid.First (Just 6)))
+  putStrLn (show (Monoid.First (Just 6) == Monoid.First (Just 8)))

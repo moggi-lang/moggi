@@ -3,7 +3,7 @@ program
     constructor MyInt
       field  :: Int
     deriving (via (Int) Eq)
-  function == :: __Dict_Eq -> MyInt -> MyInt -> Bool
+  function == :: __Dict_Eq Int -> MyInt -> MyInt -> Bool
     pat_var __ev_Eq
     pat_con MyInt
       pat_var __v0
@@ -14,7 +14,7 @@ program
         evidence_method Eq.== evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
-  function /= :: __Dict_Eq -> MyInt -> MyInt -> Bool
+  function /= :: __Dict_Eq Int -> MyInt -> MyInt -> Bool
     pat_var __ev_Eq
     pat_con MyInt
       pat_var __v0

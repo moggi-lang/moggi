@@ -1,5 +1,5 @@
 program
-  function inferredPair :: __Dict_Show -> __Dict_Show -> a -> b -> Tuple2 String String
+  function inferredPair :: __Dict_Show a -> __Dict_Show b -> a -> b -> Tuple2 String String
     pat_var __ev_Show
     pat_var __ev_Show_1
     pat_var n

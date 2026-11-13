@@ -92,6 +92,19 @@ final class TypeCheckState
      */
     public array $qualifiedEnv = [];
 
+    /**
+     * The data declarations and synonyms each import prefix reaches, keyed by
+     * prefix then type name. Keeping these apart from `$data` is what lets
+     * `Data.Monoid.First` and `Data.Semigroup.First` resolve to different
+     * declarations even though a bare spelling denotes only one of them.
+     *
+     * @var array<string, array<string, array<string, mixed>>>
+     */
+    public array $qualifiedData = [];
+
+    /** @var array<string, array<string, array<string, mixed>>> */
+    public array $qualifiedTypeSynonyms = [];
+
     /** @var array<string, mixed> */
     public array $intrinsicWrappers = [];
 
@@ -218,6 +231,15 @@ final class TypeCheckState
     public array $kindEnvByArity = [];
 
     /**
+     * The kind table cut by declaring module: `kindEnvByModule[module][name]` is
+     * the kind `module` declared `name` with. A local declaration shadows an
+     * imported name (`type TypeRep = …` beside base's `TypeRep`), which removes
+     * the name from the unqualified tables above; a qualified reference still
+     * names the imported declaration and still needs its kind.
+     */
+    public array $kindEnvByModule = [];
+
+    /**
      * DataKinds: promoted data constructors keyed by name.
      * - Nullary: `{data: string}` — kind is the parent datatype.
      * - With fields: `{data: string, argKinds: list<Kind>}` — unsaturated kind is
@@ -340,6 +362,9 @@ final class TypeCheckState
 
     /** @var array<string, array<string, list<array<string, mixed>>>> */
     public array $projectInstancesByClassHead = [];
+
+    /** @var array<string, true> type names the visible instances declare in more than one module */
+    public array $ambiguousTypeNames = [];
 
     public ?string $currentModule = null;
 

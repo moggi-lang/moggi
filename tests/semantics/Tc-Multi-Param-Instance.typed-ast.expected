@@ -9,7 +9,7 @@ program
     pat_var x
     pat_var y
     string "int-int"
-  function __ev_Both_h_c1eec47d7456f341_both :: Maybe t2 -> Maybe t3 -> String
+  function __ev_Both_h_ef5228de1a3b4d15_both :: Maybe t2 -> Maybe t3 -> String
     pat_var x
     pat_var y
     string "maybe-maybe"
@@ -42,7 +42,7 @@ program
       apply
         constructor_ref Just
         constructor_ref True
-  function generic :: __Dict_Both -> a -> b -> String
+  function generic :: __Dict_Both a b -> a -> b -> String
     pat_var __ev_Both
     pat_var x
     pat_var y

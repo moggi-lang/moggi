@@ -21,7 +21,7 @@ program
       evidence_method Tag.tag evidence= nullary=0
         instance Bool
       variable x
-  function start :: __Dict_Eq -> __Dict_Num -> __Dict_Tag -> __Dict_Label -> a -> String
+  function start :: __Dict_Eq a -> __Dict_Num a -> __Dict_Tag a -> __Dict_Label a -> a -> String
     pat_var __ev_Eq
     pat_var __ev_Num_1
     pat_var __ev_Tag_2
@@ -59,7 +59,7 @@ program
               evidence_method Num.fromInteger evidence=__ev_Num_1 nullary=0
               intrinsic intToInteger#
                 integer 1
-  function hop :: __Dict_Tag -> __Dict_Label -> __Dict_Eq -> __Dict_Num -> a -> String
+  function hop :: __Dict_Tag a -> __Dict_Label a -> __Dict_Eq a -> __Dict_Num a -> a -> String
     pat_var __ev_Tag
     pat_var __ev_Label_1
     pat_var __ev_Eq_2

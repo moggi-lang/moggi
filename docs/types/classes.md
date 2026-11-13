@@ -204,8 +204,25 @@ main = putStrLn (c (1 :: Int))
 int
 ```
 
-There are no overlap pragmas. If two instances are equally specific the call is
-ambiguous and reported as such.
+There are no overlap pragmas. If instances are equally specific the call is
+ambiguous, and the error names every colliding declaration with the line each is
+written on, so the collision can be read off the report instead of guessed at.
+Every instance that matches the use site is considered when deciding that,
+however many there are; one whose own class context cannot be discharged is not
+a contender, so a more specific instance that does not apply never hides the tie
+behind it.
+
+Two modules may declare the same type name — `base` has both `Data.Monoid.First`
+and `Data.Semigroup`'s kernel `First` — and those are different types with
+different instances. An instance matches the type whose module it was declared
+for, so `Monoid.First` in a module that imports both still reaches
+`Data.Monoid`'s `Show` instance.
+
+An instance context can only require things the head determines: every variable
+in `instance (D a) => C (f a)` has to appear in `C (f a)`. A context that names
+a variable the head never binds (`instance D x => C (Box Unit)`) could never be
+discharged, so it is a compile error at the declaration rather than a silent
+"assumed to hold".
 
 **Advanced from here.** The remaining sections go beyond everyday use: a
 relationship between two types, type-level functions per instance, and how a

@@ -1,0 +1,28 @@
+-- A candidate skipped as dominated, then a strictly more specific arrival.
+--
+-- In declaration order: `C (f Unit)` answers `C (Maybe Unit)`; the universal
+-- `C (f a)` is dominated and skipped without its context being consulted;
+-- `C (Maybe a)` is equally specific to the incumbent; `C (Maybe Unit)` subsumes
+-- that equality set, so no tie survives. Selection is unchanged, so the first
+-- applicable instance is still the one used.
+data Box a = Box a
+
+data Unit = Unit
+
+class C a where
+  c :: a -> String
+
+instance C (f Unit) where
+  c _ = "first: f Unit"
+
+instance C (f a) where
+  c _ = "universal: f a"
+
+instance C (Maybe a) where
+  c _ = "maybe: Maybe a"
+
+instance C (Maybe Unit) where
+  c _ = "maybe: Maybe Unit"
+
+main :: IO ()
+main = putStrLn (c (Just Unit))

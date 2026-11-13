@@ -1,5 +1,5 @@
 program
-  function checkEq :: __Dict_Eq -> a -> a -> Bool
+  function checkEq :: __Dict_Eq a -> a -> a -> Bool
     pat_var __ev_Eq
     pat_var x
     pat_var y

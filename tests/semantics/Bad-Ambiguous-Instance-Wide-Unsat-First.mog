@@ -1,0 +1,55 @@
+-- The same tie, with the more specific but undischargeable instance declared first.
+--
+-- Candidate order must not decide the answer: `C (Box Unit)` is skipped wherever
+-- it appears, so the twelve `fN Unit` heads are still the contenders and the
+-- report names the first two of them.
+data Box a = Box a
+
+data Unit = Unit
+
+class C a where
+  c :: a -> String
+
+class D a
+
+instance D (Box Unit) => C (Box Unit) where
+  c _ = "box-unit"
+
+instance C (f1 Unit) where
+  c _ = "f1"
+
+instance C (f2 Unit) where
+  c _ = "f2"
+
+instance C (f3 Unit) where
+  c _ = "f3"
+
+instance C (f4 Unit) where
+  c _ = "f4"
+
+instance C (f5 Unit) where
+  c _ = "f5"
+
+instance C (f6 Unit) where
+  c _ = "f6"
+
+instance C (f7 Unit) where
+  c _ = "f7"
+
+instance C (f8 Unit) where
+  c _ = "f8"
+
+instance C (f9 Unit) where
+  c _ = "f9"
+
+instance C (f10 Unit) where
+  c _ = "f10"
+
+instance C (f11 Unit) where
+  c _ = "f11"
+
+instance C (f12 Unit) where
+  c _ = "f12"
+
+main :: String
+main = c (Box Unit)

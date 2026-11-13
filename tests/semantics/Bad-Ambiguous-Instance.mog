@@ -1,0 +1,21 @@
+-- Two instances of equal specificity at one use site.
+--
+-- `C (f Unit)` and `C (Box a)` both answer `C (Box Unit)`, and neither head is
+-- more specific than the other: the first fixes an argument to `Unit`, the
+-- second fixes the constructor. The resolver cannot choose between them, so it
+-- reports both declarations rather than taking whichever is written first.
+data Box a = Box a
+
+data Unit = Unit
+
+class C a where
+  c :: a -> String
+
+instance C (f Unit) where
+  c _ = "f Unit"
+
+instance C (Box a) where
+  c _ = "Box a"
+
+main :: String
+main = c (Box Unit)

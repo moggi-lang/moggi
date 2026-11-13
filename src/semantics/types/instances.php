@@ -257,7 +257,7 @@ function instanceMethodSchemes(TypeCheckState $state, Ast\InstanceDecl $decl): a
         }
     }
 
-    $headType = freshenTypeVars($state, astType($state, $decl->head));
+    $headType = freshenTypeVars($state, astType($state, $decl->head), keepKinds: true);
     $mapping = instanceParamMapping($state, $classInfo['params'], $headType, $decl);
 
     $schemes = [];
@@ -468,6 +468,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
                 $headType,
                 $methodInfo['kinds'] ?? [],
                 $mapping + ($freshened['mapping'] ?? []),
+                $decl->head,
             );
         } finally {
             $state->defaultBodyOrigins = $savedDefaultOrigins;
@@ -530,7 +531,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
         'module' => $state->currentModule ?? '',
     ];
 
-    $headAst = internalTypeToAst($headType, []);
+    $headAst = $decl->head instanceof TypeNode ? $decl->head : internalTypeToAst($headType, []);
     $evidenceIndex = \count($state->instanceEvidence);
     $methodMap = [];
     foreach ($functions as $fn) {
@@ -538,9 +539,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
             $methodMap[$fn->name] = $fn->name;
         }
     }
-    $evidenceHeadAst = $decl->head instanceof TypeNode
-        ? $decl->head
-        : $headAst;
+    $evidenceHeadAst = $headAst;
     $evName = evidenceFunctionName($className, $evidenceHeadAst);
     $state->instanceEvidence[] = [
         'evidenceName' => $evName,
@@ -747,6 +746,7 @@ function collectPatternBoundNames(Ast\AstNode $pattern, array &$bound): void
                 collectPatternBoundNames($field->pattern, $bound);
             }
         })(),
+        Ast\PatView::class => collectPatternBoundNames($pattern->pattern, $bound),
         default => null,
     };
 }
@@ -1142,7 +1142,10 @@ function constraintProvableFrom(
                 continue;
             }
 
-            $bindings = matchConstraintPattern($state, $headPattern, $head);
+            $matchPattern = $headPattern->con->name === $className && \count($headPattern->args) === 1
+                ? $headPattern->args[0]
+                : $headPattern;
+            $bindings = matchConstraintPattern($state, $matchPattern, $head);
             if ($bindings === null) {
                 continue;
             }
@@ -1407,6 +1410,13 @@ function instanceHeadIndexKeyFromAst(Ast\AstNode $headAst): string
     if ($headAst instanceof Ast\TypeCon) {
         return $headAst->name;
     }
+    if ($headAst instanceof Ast\TypeArrow) {
+        // A function head has a spelling of its own, like any constructor: an
+        // arrow-headed instance answers arrow heads, and a universal (`*`)
+        // instance such as `Typeable (f a)` stays behind it instead of
+        // colliding with it in one bucket.
+        return '->';
+    }
     if ($headAst instanceof Ast\TypePromoted) {
         return $headAst->name;
     }
@@ -1465,6 +1475,9 @@ function instanceHeadIndexKeyFromType(Type $head): string
 {
     if ($head instanceof TCon) {
         return $head->module === null ? $head->name : $head->module . '::' . $head->name;
+    }
+    if ($head instanceof TArrow) {
+        return '->';
     }
     if ($head instanceof TUnit) {
         return '()';
@@ -1601,10 +1614,40 @@ function instanceHeadNamesAnotherDeclaration(TypeCheckState $state, string $head
 function matchingProjectInstances(TypeCheckState $state, string $className, Type $requiredHead): \Generator
 {
     foreach (projectInstanceCandidates($state, $className, $requiredHead) as $instance) {
-        if (instanceHeadsMatch($state, $requiredHead, $instance['instanceHead'])) {
+        if (instanceHeadsMatch(
+            $state,
+            $requiredHead,
+            $instance['instanceHead'],
+            instanceHeadMatchModule($state, $instance),
+        )) {
             yield $instance;
         }
     }
+}
+
+/**
+ * The module an instance head's spelling names, when that spelling is ambiguous.
+ *
+ * Two modules may declare the same type name -- `First` exists in both
+ * `Data.Monoid` and `Moggi.Internal.Data.Semigroup` -- and the two are different
+ * types with different instances. `Show (First Int)` can then only be compared
+ * with the instance head `Show (First a)` through the module each side means: the
+ * wanted type carries its own module, and the record carries the module that
+ * declares its head. A name declared once is not ambiguous and keeps matching by
+ * spelling alone, exactly as before.
+ *
+ * @param array<string, mixed> $instance
+ */
+function instanceHeadMatchModule(TypeCheckState $state, array $instance): ?string
+{
+    $name = \Moggi\Semantics\Registry\instanceHeadSpelling($instance['instanceHead'] ?? null);
+    if ($name === null || ! isset($state->ambiguousTypeNames[$name])) {
+        return null;
+    }
+
+    $module = $instance['headDeclaringModule'] ?? null;
+
+    return \is_string($module) && $module !== '' ? $module : null;
 }
 
 function findProjectInstance(TypeCheckState $state, string $className, Type $requiredHead, array $visited = []): bool
@@ -1708,6 +1751,354 @@ function findProjectInstanceRecord(TypeCheckState $state, string $className, Typ
 }
 
 /**
+ * Report every instance that answers `$requiredHead` and is equally specific to
+ * the most specific one, so the use site has no way to choose between them.
+ *
+ * Selection itself is unchanged: the instance `findProjectInstanceRecord()`
+ * would have taken is still the one taken. This only turns a silent pick
+ * between equals into a diagnostic naming all the colliding declarations.
+ *
+ * The tie is decided in one streaming pass over the candidates the instance
+ * bucket matched, with fixed state: the most specific *applicable* candidate
+ * seen so far plus the applicable candidates that are exactly as specific as
+ * it. A candidate whose own context cannot be discharged never takes a slot, so
+ * a more specific but unsatisfiable instance arriving after an equal pair
+ * cannot hide their tie. One that subsumes the incumbent replaces it and starts
+ * a fresh equality set; one the incumbent subsumes is dropped; anything else
+ * joins the set. There is no cap on how many candidates are considered.
+ */
+function assertProjectInstanceUnambiguous(
+    TypeCheckState $state,
+    string $className,
+    Type $requiredHead,
+    ?Ast\AstNode $at = null,
+): void {
+    $incumbent = null;
+
+    /** @var list<array<string, mixed>> $ties */
+    $ties = [];
+
+    // The check is diagnostic: it must leave the typing state exactly as it
+    // found it, including the fresh-variable counter the typed-AST output is
+    // numbered with, so a program compiles byte-for-byte as it did before.
+    $savedFresh = $state->fresh;
+    $savedKindFresh = $state->kindFresh;
+    $savedEvidenceParams = $state->nextEvidenceParam;
+
+    pushSubstFrame($state);
+
+    try {
+        foreach (matchingProjectInstances($state, $className, $requiredHead) as $instance) {
+            // A head the incumbent subsumes cannot win, and its context cannot
+            // matter, so it is skipped before the cheaper comparison is spent on it.
+            if ($incumbent !== null && instanceStrictlyMoreSpecific($incumbent, $instance)) {
+                continue;
+            }
+
+            // A candidate whose own context cannot be discharged does not answer
+            // the use site: it is not a contender, whether it arrives first or last.
+            if (! instanceAnswersHead($state, $instance, $requiredHead)) {
+                continue;
+            }
+
+            if ($incumbent === null) {
+                $incumbent = $instance;
+
+                continue;
+            }
+
+            if (instanceStrictlyMoreSpecific($instance, $incumbent)) {
+                $incumbent = $instance;
+                $ties = [];
+
+                continue;
+            }
+
+            if (instanceStrictlyMoreSpecific($incumbent, $instance)) {
+                continue;
+            }
+
+            // Neither head subsumes the other, so the two are equally specific.
+            if (instanceRecordsAreSameDeclaration($instance, $incumbent)) {
+                continue;
+            }
+
+            $superseded = false;
+            foreach ($ties as $tie) {
+                if (instanceRecordsAreSameDeclaration($instance, $tie)) {
+                    $superseded = true;
+
+                    break;
+                }
+                if (instanceStrictlyMoreSpecific($tie, $instance)) {
+                    $superseded = true;
+
+                    break;
+                }
+            }
+            if ($superseded) {
+                continue;
+            }
+
+            $kept = [];
+            foreach ($ties as $tie) {
+                if (! instanceStrictlyMoreSpecific($instance, $tie)) {
+                    $kept[] = $tie;
+                }
+            }
+            $kept[] = $instance;
+            $ties = $kept;
+        }
+    } finally {
+        popSubstFrame($state);
+        $state->fresh = $savedFresh;
+        $state->kindFresh = $savedKindFresh;
+        $state->nextEvidenceParam = $savedEvidenceParams;
+    }
+
+    if ($incumbent === null || $ties === []) {
+        return;
+    }
+
+    // Two instances written for different constructors that happen to share a
+    // short name (`Monoid.First`, `Semigroup.First`) are name resolution, not a
+    // specificity tie.
+    $constructor = instanceHeadConstructorKey($incumbent);
+    if ($constructor !== null) {
+        $ties = \array_values(\array_filter(
+            $ties,
+            static function (array $tie) use ($constructor): bool {
+                $key = instanceHeadConstructorKey($tie);
+
+                return $key === null || $key === $constructor;
+            },
+        ));
+        if ($ties === []) {
+            return;
+        }
+    }
+
+    $wanted = typeToString($requiredHead);
+    throw typeFail(
+        $state,
+        'ambiguous instance for `' . $className . ' ' . (\str_contains($wanted, ' ') ? '(' . $wanted . ')' : $wanted) . '`: '
+            . instanceConflictText($state, $incumbent, $ties)
+            . ' are equally specific, so the use site cannot choose between them',
+        $at,
+    );
+}
+
+/**
+ * The collision, written out: every declaration named with the line it is on.
+ *
+ * @param list<array<string, mixed>> $ties
+ */
+function instanceConflictText(TypeCheckState $state, array $incumbent, array $ties): string
+{
+    $parts = [
+        '`' . instanceDeclarationText($state, $incumbent) . '` at '
+            . instanceDeclarationSite($state, $incumbent),
+    ];
+    foreach ($ties as $tie) {
+        $parts[] = '`' . instanceDeclarationText($state, $tie) . '` at '
+            . instanceDeclarationSite($state, $tie);
+    }
+
+    if (\count($parts) === 1) {
+        return $parts[0];
+    }
+
+    $last = \array_pop($parts);
+
+    return \implode(', ', $parts) . ' and ' . $last;
+}
+
+/** Whether an instance's own context can be discharged at `$requiredHead`. */
+function instanceAnswersHead(TypeCheckState $state, array $instance, Type $requiredHead): bool
+{
+    $mapping = instanceMappingForUse($state, $instance, $requiredHead);
+    if ($mapping === null) {
+        return false;
+    }
+
+    return instanceContextSatisfied($state, $instance, $mapping);
+}
+
+/** Whether two records describe the same declaration: a duplicate is not a tie. */
+function instanceRecordsAreSameDeclaration(array $a, array $b): bool
+{
+    return ($a['module'] ?? '') === ($b['module'] ?? '')
+        && ($a['line'] ?? 0) === ($b['line'] ?? 0)
+        && ($a['col'] ?? 0) === ($b['col'] ?? 0)
+        && ($a['class'] ?? '') === ($b['class'] ?? '')
+        && instanceHeadConstructorKey($a) === instanceHeadConstructorKey($b);
+}
+
+/**
+ * The constructor an instance head names, qualified when the declaration
+ * qualifies it (`Monoid::First` vs `Semigroup::First`), or null for a variable
+ * head, which stands for every constructor and so competes with all of them.
+ */
+function instanceHeadConstructorKey(array $instance): ?string
+{
+    $head = $instance['instanceHead'] ?? null;
+    if (! $head instanceof Ast\TypeNode) {
+        return null;
+    }
+
+    $con = $head;
+    while ($con instanceof Ast\TypeApp) {
+        $con = $con->con;
+    }
+
+    if ($con instanceof Ast\TypeVar || $con instanceof Ast\TypeKindAnnot) {
+        return null;
+    }
+
+    if ($con instanceof Ast\TypeQualified) {
+        return $con->module . '::' . $con->name;
+    }
+
+    $name = $con instanceof Ast\TypeCon || $con instanceof Ast\TypePromoted ? $con->name : null;
+    if ($name === null) {
+        return null;
+    }
+
+    return ($instance['headDeclaringModule'] ?? $instance['headModule'] ?? '') . '::' . $name;
+}
+
+/**
+ * Whether `$a`'s head is strictly more specific than `$b`'s.
+ *
+ * A head is more specific than another when the other's written head could be
+ * one of its instances but not the reverse: `Maybe a` beats `f a`, while
+ * `f Unit` and `Box a` beat neither. The comparison is on the written heads, so
+ * it reads no kinds and cannot disturb the inference state of the use site.
+ */
+function instanceStrictlyMoreSpecific(array $a, array $b): bool
+{
+    $aHead = $a['instanceHead'] ?? null;
+    $bHead = $b['instanceHead'] ?? null;
+    if (! $aHead instanceof Ast\TypeNode || ! $bHead instanceof Ast\TypeNode) {
+        return false;
+    }
+
+    return instanceHeadPatternMatches($bHead, $aHead) && ! instanceHeadPatternMatches($aHead, $bHead);
+}
+
+/**
+ * Whether `$target` is an instance of the head pattern `$pattern`
+ * (`pattern`'s variables stand for anything).
+ *
+ * A variable head takes the arguments the pattern does not name, mirroring how
+ * `matchInstanceHeadVars()` reads a wanted head: `f a` matches `F Int a`.
+ */
+function instanceHeadPatternMatches(Ast\TypeNode $pattern, Ast\TypeNode $target): bool
+{
+    if ($pattern instanceof Ast\TypeVar || $pattern instanceof Ast\TypeKindAnnot) {
+        return true;
+    }
+
+    if ($pattern instanceof Ast\TypeUnit) {
+        return $target instanceof Ast\TypeUnit;
+    }
+
+    if ($pattern instanceof Ast\TypeArrow) {
+        return $target instanceof Ast\TypeArrow
+            && instanceHeadPatternMatches($pattern->from, $target->from)
+            && instanceHeadPatternMatches($pattern->to, $target->to);
+    }
+
+    if ($pattern instanceof Ast\TypeCon || $pattern instanceof Ast\TypeQualified
+        || $pattern instanceof Ast\TypePromoted
+    ) {
+        return match (true) {
+            $target instanceof Ast\TypeCon => $target->name === $pattern->name,
+            $target instanceof Ast\TypePromoted => $target->name === $pattern->name,
+            default => false,
+        };
+    }
+
+    if (! $pattern instanceof Ast\TypeApp) {
+        return false;
+    }
+
+    if (! $target instanceof Ast\TypeApp) {
+        return false;
+    }
+
+    $patternHead = $pattern->con;
+    if ($patternHead instanceof Ast\TypeVar || $patternHead instanceof Ast\TypeKindAnnot) {
+        // A variable head absorbs the arguments the pattern leaves out.
+        $targetArgs = \count($target->args);
+        $patternArgs = \count($pattern->args);
+        if ($patternArgs > $targetArgs) {
+            return false;
+        }
+        $offset = $targetArgs - $patternArgs;
+        foreach ($pattern->args as $i => $arg) {
+            if (! instanceHeadPatternMatches($arg, $target->args[$offset + $i])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    if (! instanceHeadPatternMatches($patternHead, $target->con)) {
+        return false;
+    }
+
+    if (\count($pattern->args) !== \count($target->args)) {
+        return false;
+    }
+
+    foreach ($pattern->args as $i => $arg) {
+        if (! instanceHeadPatternMatches($arg, $target->args[$i])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/** The declaration an ambiguous-instance diagnostic names. */
+function instanceDeclarationText(TypeCheckState $state, array $instance): string
+{
+    $parts = [];
+    foreach ($instance['constraints'] ?? [] as $constraint) {
+        if ($constraint instanceof Ast\TypeNode) {
+            $parts[] = Ast\dumpTypeInline($constraint);
+        }
+    }
+
+    $head = $instance['instanceHead'] ?? null;
+    $headText = $head instanceof Ast\TypeNode ? Ast\dumpTypeInline($head) : '?';
+
+    return 'instance ' . ($parts === [] ? '' : '(' . \implode(', ', $parts) . ') => ')
+        . $instance['class'] . ' ' . (\str_contains($headText, ' ') ? '(' . $headText . ')' : $headText);
+}
+
+/** `module:line:col` of an instance declaration, as a diagnostic cites it. */
+function instanceDeclarationSite(TypeCheckState $state, array $instance): string
+{
+    $head = $instance['instanceHead'] ?? null;
+    $module = (string) ($instance['module'] ?? '');
+    $file = $instance['sourceFile'] ?? ($head instanceof Ast\AstNode ? $head->sourceFile : null);
+    $line = (int) ($instance['line'] ?? ($head instanceof Ast\AstNode ? $head->line : 0));
+    $col = (int) ($instance['col'] ?? ($head instanceof Ast\AstNode ? $head->col : 0));
+    if ($line > 0) {
+        // The declaration's own file when the parser recorded it; the file being
+        // compiled when the instance lives in it; the module name otherwise.
+        $where = $file ?? ($module === (string) $state->currentModule ? $state->filename : $module);
+
+        return ($where === '' ? '' : $where . ':') . $line . ':' . $col;
+    }
+
+    return $module === '' ? 'an unknown location' : $module;
+}
+
+/**
  * Freshen-stable type key for instance caches. Fresh `tN` names must not
  * fragment the cache (that re-rendered huge TupleN heads on every lookup).
  * Concrete args (Int vs Bool) stay distinct so context-sensitive results remain sound.
@@ -1778,7 +2169,12 @@ function instanceMappingForUse(TypeCheckState $state, array $instance, Type $req
     }
 
     $wantedHead = prune($state, $requiredHead);
-    $headVarMapping = matchInstanceHeadVars($state, $instance['instanceHead'], $wantedHead);
+    $headVarMapping = matchInstanceHeadVars(
+        $state,
+        $instance['instanceHead'],
+        $wantedHead,
+        instanceHeadMatchModule($state, $instance),
+    );
     if ($headVarMapping === null) {
         $state->instanceMappingCache[$cacheKey] = null;
 
@@ -1909,11 +2305,17 @@ function instanceContextRequirements(TypeCheckState $state, array $instance, arr
 /**
  * @return array<string, Type>|null
  */
-function matchInstanceHeadVars(TypeCheckState $state, Ast\AstNode $pattern, Type $target): ?array
-{
+function matchInstanceHeadVars(
+    TypeCheckState $state,
+    Ast\AstNode $pattern,
+    Type $target,
+    ?string $headModule = null,
+): ?array {
+    $headModuleOverride = $headModule;
+
     $target = prune($state, $target);
 
-    if ($pattern instanceof Ast\TypeVar) {
+    if ($pattern instanceof Ast\TypeVar || $pattern instanceof Ast\TypeKindAnnot) {
         return [$pattern->name => $target];
     }
 
@@ -1942,15 +2344,39 @@ function matchInstanceHeadVars(TypeCheckState $state, Ast\AstNode $pattern, Type
         return $target instanceof TUnit ? [] : null;
     }
 
-    if ($pattern instanceof Ast\TypeCon) {
+    if ($pattern instanceof Ast\TypeQualified) {
+        $module = $state->qualifiedModules[$pattern->module] ?? $pattern->module;
         if ($target instanceof TCon) {
-            return $target->name === $pattern->name ? [] : null;
+            return $target->name === $pattern->name
+                && ($target->module === null || $target->module === $module) ? [] : null;
         }
         if ($target instanceof TPromoted) {
             return $target->name === $pattern->name ? [] : null;
         }
 
-        return [];
+        return null;
+    }
+
+    if ($pattern instanceof Ast\TypeCon) {
+        if ($target instanceof TCon) {
+            if ($target->name !== $pattern->name || $target->args !== []) {
+                return null;
+            }
+            $module = $headModuleOverride ?? instanceHeadDeclaringModule($state, $pattern->name);
+
+            return $module !== null && $target->module !== null && $module !== $target->module
+                ? null : [];
+        }
+        if ($target instanceof TPromoted) {
+            return $target->name === $pattern->name ? [] : null;
+        }
+
+        $primitive = primitiveTypeRepresentationOf($pattern->name);
+        if ($primitive !== null && samePrimitiveType($primitive, $target)) {
+            return [];
+        }
+
+        return null;
     }
 
     if ($pattern instanceof Ast\TypeApp) {
@@ -1960,10 +2386,61 @@ function matchInstanceHeadVars(TypeCheckState $state, Ast\AstNode $pattern, Type
         }
         [$headCon, $patternArgs] = $flat;
         $headName = null;
+        $headModule = null;
         if ($headCon instanceof Ast\TypeCon) {
             $headName = $headCon->name;
+            $headModule = $headModuleOverride ?? instanceHeadDeclaringModule($state, $headName);
+        } elseif ($headCon instanceof Ast\TypeQualified) {
+            $headName = $headCon->name;
+            $headModule = qualifiedTypeDeclaringModule($state, $headCon->module, $headName)
+                ?? $state->qualifiedModules[$headCon->module]
+                ?? $headCon->module;
         } elseif ($headCon instanceof Ast\TypePromoted) {
             $headName = $headCon->name;
+        }
+        if ($headCon instanceof Ast\TypeVar) {
+            // A variable head stands for a type constructor of any arity, so a
+            // pattern `f a` matches `F Int a` by splitting off the arguments the
+            // pattern does not name: `f := F Int`. This is the instance analogue
+            // of `unifyHktSplitVarHead`, and it is what lets one instance cover
+            // `Typeable (Sum Maybe Maybe)` as well as `Typeable (Sum Maybe)`.
+            $targetArgs = match (true) {
+                $target instanceof TVarApp, $target instanceof TCon => $target->args,
+                default => null,
+            };
+            if ($targetArgs === null) {
+                return null;
+            }
+            $targetCount = \count($targetArgs);
+            $patternCount = \count($patternArgs);
+            if ($patternCount > $targetCount) {
+                return null;
+            }
+            $split = $targetCount - $patternCount;
+            $targetCon = match (true) {
+                $target instanceof TVarApp => $split === 0
+                    ? new TVar($target->name)
+                    : new TVarApp($target->name, \array_slice($targetArgs, 0, $split)),
+                $target instanceof TCon => new TCon(
+                    $target->name,
+                    \array_slice($targetArgs, 0, $split),
+                    $target->module,
+                ),
+                default => null,
+            };
+            if ($targetCon === null) {
+                return null;
+            }
+            $mapping = [$headCon->name => $targetCon];
+            foreach ($patternArgs as $i => $arg) {
+                $sub = matchInstanceHeadVars($state, $arg, $targetArgs[$split + $i]);
+                if ($sub === null) {
+                    return null;
+                }
+                $mapping += $sub;
+            }
+
+            return $mapping;
         }
         if ($headName === null) {
             return null;
@@ -1988,6 +2465,9 @@ function matchInstanceHeadVars(TypeCheckState $state, Ast\AstNode $pattern, Type
         }
 
         if (! $target instanceof TCon || $target->name !== $headName) {
+            return null;
+        }
+        if ($headModule !== null && $target->module !== null && $headModule !== $target->module) {
             return null;
         }
         if (\count($patternArgs) !== \count($target->args)) {
@@ -2038,6 +2518,7 @@ function flattenInstanceHeadTypeApp(Ast\TypeNode $type): ?array
 
     if (
         $type instanceof Ast\TypeCon
+        || $type instanceof Ast\TypeQualified
         || $type instanceof Ast\TypeVar
         || $type instanceof Ast\TypePromoted
     ) {
@@ -2061,12 +2542,28 @@ function flattenInstanceHeadTypeApp(Ast\TypeNode $type): ?array
  */
 function declarationHeadType(TypeCheckState $state, Ast\TypeNode $ast): Type
 {
-    if ($ast instanceof Ast\TypeVar) {
+    if ($ast instanceof Ast\TypeVar || $ast instanceof Ast\TypeKindAnnot) {
         return new TVar(skolemScopedVar($state, $ast->name));
     }
 
     if ($ast instanceof Ast\TypeCon) {
-        return new TCon($ast->name);
+        $info = $state->data[$ast->name] ?? null;
+        $module = \is_array($info) ? ($info['declaringModule'] ?? null) : null;
+        if (! \is_string($module) || $module === '') {
+            $module = \is_array($info) ? (($info['result'] ?? null)?->module) : null;
+        }
+
+        return new TCon($ast->name, [], \is_string($module) && $module !== '' ? $module : null);
+    }
+
+    if ($ast instanceof Ast\TypeQualified) {
+        return new TCon(
+            $ast->name,
+            [],
+            qualifiedTypeDeclaringModule($state, $ast->module, $ast->name)
+                ?? $state->qualifiedModules[$ast->module]
+                ?? $ast->module,
+        );
     }
 
     if ($ast instanceof Ast\TypeApp) {
@@ -2125,10 +2622,20 @@ function declarationType(TypeCheckState $state, Ast\TypeNode $ast): Type
     }
 }
 
-function instanceHeadsMatch(TypeCheckState $state, Type $requiredHead, Ast\AstNode|Type $instanceHeadAst): bool
-{
+function instanceHeadsMatch(
+    TypeCheckState $state,
+    Type $requiredHead,
+    Ast\AstNode|Type $instanceHeadAst,
+    ?string $headModule = null,
+): bool {
     if ($instanceHeadAst instanceof Type) {
         return false;
+    }
+
+    if ($headModule !== null
+        && matchInstanceHeadVars($state, $instanceHeadAst, $requiredHead, $headModule) !== null
+    ) {
+        return true;
     }
 
     pushSubstFrame($state);
@@ -2181,7 +2688,7 @@ function instanceParamMapping(TypeCheckState $state, array $classParams, Type $h
 
     if (\count($classParams) === 1) {
         $expectedKind = Kinds\classParamKind($state, $classParams[0], $at);
-        Kinds\assertKind($state, $headType, $expectedKind, [], $at);
+        Kinds\assertKind($state, $headType, $expectedKind, $state->varKinds, $at);
 
         return [$paramNames[0] => $headType];
     }
@@ -2197,7 +2704,7 @@ function instanceParamMapping(TypeCheckState $state, array $classParams, Type $h
     $mapping = [];
     foreach ($classParams as $i => $param) {
         $expectedKind = Kinds\classParamKind($state, $param, $at);
-        Kinds\assertKind($state, $headType->args[$i], $expectedKind, [], $at);
+        Kinds\assertKind($state, $headType->args[$i], $expectedKind, $state->varKinds, $at);
         $mapping[$param['name']] = $headType->args[$i];
     }
 
@@ -2214,6 +2721,7 @@ function instanceParamMapping(TypeCheckState $state, array $classParams, Type $h
 function instanceContextConstraints(TypeCheckState $state, Ast\InstanceDecl $decl, Type $headType): array
 {
     $headVars = matchInstanceHeadVars($state, $decl->head, $headType) ?? [];
+
     $parsed = [];
     foreach ($decl->constraints as $i => $constraint) {
         if ($constraint instanceof Ast\TypeForall) {
@@ -2245,6 +2753,7 @@ function instanceContextConstraints(TypeCheckState $state, Ast\InstanceDecl $dec
         foreach ($classInfo['params'] as $j => $param) {
             $argAst = $constraint->args[$j]
                 ?? throw typeFail($state, "class `{$className}` applied to too few arguments", $decl);
+            assertContextNameIsBoundByHead($state, $className, $constraint, $argAst, $headVars, $decl);
             $args[] = instantiateContextArg($state, $argAst, $headVars);
         }
         $parsed[] = new Ast\PendingConstraint(
@@ -2255,6 +2764,43 @@ function instanceContextConstraints(TypeCheckState $state, Ast\InstanceDecl $dec
     }
 
     return $parsed;
+}
+
+/**
+ * A context requirement has to be determined by the instance head.
+ *
+ * `instance D x => C (f Unit)` names a `D x` the head never fixes, so it cannot
+ * be discharged at any use site -- the old resolver read the unresolved `x` as
+ * "assume it holds" and let the instance answer every head it matched. Say so
+ * at the declaration instead, with the variable and the class named.
+ *
+ * @param array<string, Type> $headVars
+ */
+function assertContextNameIsBoundByHead(
+    TypeCheckState $state,
+    string $className,
+    Ast\TypeNode $constraint,
+    Ast\TypeNode $argAst,
+    array $headVars,
+    Ast\InstanceDecl $decl,
+): void {
+    $requirement = Ast\dumpTypeInline($constraint);
+    $headText = Ast\dumpTypeInline($decl->head);
+    $head = $decl->class . ' ' . (\str_contains($headText, ' ') ? '(' . $headText . ')' : $headText);
+
+    foreach (typeAstVars($argAst) as $var => $_) {
+        if (isset($headVars[$var])) {
+            continue;
+        }
+
+        throw typeFail(
+            $state,
+            "instance context `{$requirement}` needs `{$className} {$var}`, but `{$var}` is not bound by "
+                . "the instance head `{$head}`; a context requirement has to come from the head, or the "
+                . 'instance can never be used (write the head so it contains `' . $var . '`)',
+            $decl,
+        );
+    }
 }
 
 /** @param list<Ast\AstNode> $constraints @return array<string, Scheme> */
@@ -2535,6 +3081,7 @@ function checkInstanceMethod(
     ?Type $headType = null,
     array $declaredKinds = [],
     array $freshening = [],
+    ?Ast\TypeNode $headAst = null,
 ): Ast\FunctionDecl {
     $state->subst = [];
     $savedInstanceHead = $state->instanceHeadInScope;
@@ -2583,12 +3130,29 @@ function checkInstanceMethod(
             $state->rigidVars[$name] = true;
         }
     }
+
+    if ($headAst !== null && $headType !== null) {
+        foreach (matchInstanceHeadVars($state, $headAst, $headType) ?? [] as $source => $matched) {
+            $pruned = prune($state, $matched);
+            if ($pruned instanceof TVar) {
+                $state->skolemScope[$source] ??= $pruned->name;
+            }
+        }
+    }
     $headSkolems = [];
     foreach (\array_keys(typeVars($fnType)) as $name) {
         if (! isset($headVars[$name]) || isset($state->rigidVars[$name]) || \preg_match('/\$sk\d+$/', $name) === 1) {
             continue;
         }
         $headSkolems[$name] = freshSkolem($state, $name);
+    }
+    if ($headAst !== null && $headType !== null && $headSkolems !== []) {
+        foreach (matchInstanceHeadVars($state, $headAst, $headType) ?? [] as $source => $matched) {
+            $pruned = prune($state, $matched);
+            if ($pruned instanceof TVar && isset($headSkolems[$pruned->name])) {
+                $state->skolemScope[$source] = $headSkolems[$pruned->name]->name;
+            }
+        }
     }
     foreach ($headSkolems as $source => $skolem) {
         $state->rigidVars[$skolem->name] = true;
@@ -2601,8 +3165,11 @@ function checkInstanceMethod(
     }
 
     $unskolemize = static fn (Type $type): Type => $skolemBack === [] ? $type : substitute($type, $skolemBack);
+    // A dictionary type carries the instance head's arguments, as every other
+    // builder of `__Dict_*` does (`type_syntax.php`, `gadt.php`,
+    // `declarations.php`): `__Dict_C t3`, not a bare `__Dict_C`.
     foreach (\array_reverse(dictionaryConstraints($constraints)) as $constraint) {
-        $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
+        $fnType = new TArrow(new TCon('__Dict_' . $constraint->class, $constraint->args), $fnType);
     }
 
     $dictConstraints = dictionaryConstraints($constraints);
@@ -2768,6 +3335,7 @@ function checkInstanceMethod(
     $state->constraintMethodAmbiguities = $savedConstraintMethodAmbiguities;
     unify($state, $bodyType, $bodyExpected, $fn);
     defaultAmbiguousNumericVars($state, $fn->body, quantifiedVars($state, $peeledType), $fn);
+    defaultAmbiguousStringVars($state, $fn->body, quantifiedVars($state, $peeledType), $fn);
     resolveDeferredInfixPrimops($state, $fn->body);
     $fn->body = resolvePendingEvidenceInExpr($state, $fn->body);
     $fn->body = tryResolveValueEvidence($state, $fn->body);
@@ -2792,7 +3360,10 @@ function checkInstanceMethod(
     $settledType = prune($state, $unskolemize($fnType));
     $userType = peelDictArrows($settledType, \count($constraints));
     $userObligations = refreshConstraintArgs($state, [...$instanceConstraints, ...$methodUserConstraints]);
-    $settledConstraintList = refreshConstraintArgs($state, $constraints);
+    $settledConstraintList = refreshConstraintArgs(
+        $state,
+        substitutePendingConstraints($constraints, $skolemBack),
+    );
     $fn->constraints = $settledConstraintList;
     $dictArgs = [];
     foreach ($settledConstraintList as $dict) {

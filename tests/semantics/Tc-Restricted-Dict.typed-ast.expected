@@ -4,7 +4,7 @@ program
   function pshow :: Int -> String
     pat_var x
     string "i"
-  function sx :: __Dict_PShow -> __Dict_Num -> a -> String
+  function sx :: __Dict_PShow a -> __Dict_Num a -> a -> String
     pat_var __ev_PShow
     pat_var __ev_Num_1
     pat_var x
@@ -18,7 +18,7 @@ program
           evidence_method Num.fromInteger evidence=__ev_Num_1 nullary=0
           intrinsic intToInteger#
             integer 1
-  function sy :: __Dict_PShow -> __Dict_Num -> a -> String
+  function sy :: __Dict_PShow a -> __Dict_Num a -> a -> String
     pat_var __ev_PShow
     pat_var __ev_Num_1
     pat_var y

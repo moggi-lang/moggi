@@ -64,7 +64,7 @@ function normalizeType(
         }
     }
     if ($changed) {
-        $type = new TCon($type->name, $args);
+        $type = new TCon($type->name, $args, $type->module);
     }
 
     $familyReduced = reduceTypeFamily($state, $type);
@@ -87,11 +87,15 @@ function normalizeType(
         return $type;
     }
 
+    $syn = $state->typeSynonyms[$type->name];
+    if (! synonymIsNamedBy($type, $syn)) {
+        return $type;
+    }
+
     if (isset($expanding[$type->name])) {
         return $type;
     }
 
-    $syn = $state->typeSynonyms[$type->name];
     $params = $syn['params'];
     $arity = \count($params);
 
@@ -165,7 +169,7 @@ function reduceAssociatedFamily(TypeCheckState $state, TCon $type): ?Type
                 "associated type `{$type->name}` reduced to a non-constructor type that cannot take arguments",
             );
         }
-        $reduced = new TCon($reduced->name, [...$reduced->args, ...$remaining]);
+        $reduced = new TCon($reduced->name, [...$reduced->args, ...$remaining], $reduced->module);
     }
 
     return $reduced;
@@ -336,7 +340,7 @@ function reduceTypeFamily(TypeCheckState $state, TCon $type): ?Type
                     "type family `{$type->name}` reduced to a non-constructor type that cannot take arguments",
                 );
             }
-            $reduced = new TCon($reduced->name, [...$reduced->args, ...$remaining]);
+            $reduced = new TCon($reduced->name, [...$reduced->args, ...$remaining], $reduced->module);
         }
 
         return $reduced;
@@ -407,6 +411,27 @@ function flattenTypeAppPattern(Ast\TypeNode $pattern): ?array
 }
 
 /**
+ * Whether the synonym table's entry for a name is the declaration this
+ * constructor names.
+ *
+ * A module may declare `type TypeRep = …` beside an imported `TypeRep` (base's
+ * `Data.Typeable` does). A type written as `I.TypeRep a` carries the module it
+ * came from, so expanding the local entry for it would substitute a different
+ * type's body.
+ *
+ * @param array<string, mixed> $syn a `typeSynonyms` entry
+ */
+function synonymIsNamedBy(TCon $type, array $syn): bool
+{
+    $declaredIn = $syn['module'] ?? null;
+    if (! \is_string($declaredIn) || $declaredIn === '' || $type->module === null) {
+        return true;
+    }
+
+    return $type->module === $declaredIn;
+}
+
+/**
  * Expand a fully-applied (or over-applied) synonym, then re-normalize.
  *
  * @param array{params: list<string>, rhs: Ast\TypeNode} $syn
@@ -431,7 +456,7 @@ function appendTypeArgs(TypeCheckState $state, Type $head, array $extra, string 
         );
     }
 
-    return new TCon($head->name, [...$head->args, ...$extra]);
+    return new TCon($head->name, [...$head->args, ...$extra], $head->module);
 }
 
 function expandSynonymInNormalizedType(
@@ -478,7 +503,7 @@ function expandSynonymInNormalizedType(
                 "type synonym `{$name}` expanded to a non-constructor type that cannot take arguments",
             );
         }
-        $head = new TCon($head->name, [...$head->args, ...$remaining]);
+        $head = new TCon($head->name, [...$head->args, ...$remaining], $head->module);
     }
 
     return normalizeType($state, $head, $rhsExpanding, $reduceFamilies);

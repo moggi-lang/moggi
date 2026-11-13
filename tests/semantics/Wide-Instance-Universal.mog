@@ -1,0 +1,59 @@
+-- A wide candidate set whose only applicable instance is the universal head.
+--
+-- The twelve `fN a` heads are all more specific than `C (f a)`, but each needs
+-- `D a`, which has no instance, so none of them answers the use site. The
+-- universal instance is what remains, and it is picked as it always was.
+module Main where
+
+import Moggi.Internal.Base
+
+data Box a = Box a
+
+data Unit = Unit
+
+class C a where
+  c :: a -> String
+
+class D a
+
+instance D a => C (f1 a) where
+  c _ = "f1"
+
+instance D a => C (f2 a) where
+  c _ = "f2"
+
+instance D a => C (f3 a) where
+  c _ = "f3"
+
+instance D a => C (f4 a) where
+  c _ = "f4"
+
+instance D a => C (f5 a) where
+  c _ = "f5"
+
+instance D a => C (f6 a) where
+  c _ = "f6"
+
+instance D a => C (f7 a) where
+  c _ = "f7"
+
+instance D a => C (f8 a) where
+  c _ = "f8"
+
+instance D a => C (f9 a) where
+  c _ = "f9"
+
+instance D a => C (f10 a) where
+  c _ = "f10"
+
+instance D a => C (f11 a) where
+  c _ = "f11"
+
+instance D a => C (f12 a) where
+  c _ = "f12"
+
+instance C (f a) where
+  c _ = "generic"
+
+main :: IO ()
+main = putStrLn (c (Box Unit))

@@ -8,6 +8,7 @@ import Data.String qualified as S
 import Data.Bits
 import Data.Either
 import Data.Monoid
+import Data.Monoid qualified as Monoid
 import Data.Semigroup
 import Data.Tuple
 import Data.Word (Word8)
@@ -67,8 +68,8 @@ main = do
   putStrLn (show (All True))
   putStrLn (show (Any False))
   putStrLn (show (Dual 5))
-  putStrLn (show (First (Just 6)))
-  putStrLn (show (Last (Just 7)))
+  putStrLn (show (Monoid.First (Just 6)))
+  putStrLn (show (Monoid.Last (Just 7)))
   putStrLn (show (Just (And (3 :: Word8))))
   putStrLn (show (Just (Ior (3 :: Word8))))
   putStrLn (show leftVal)

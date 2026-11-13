@@ -1,0 +1,4 @@
+tests/semantics/Bad-Instance-Context-Unbound.mog:16:17: type error: instance context `D x` needs `D x`, but `x` is not bound by the instance head `C (Box Unit)`; a context requirement has to come from the head, or the instance can never be used (write the head so it contains `x`)
+
+  16 | instance D x => C (Box Unit) where
+     |                 ^

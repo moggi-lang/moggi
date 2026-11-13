@@ -74,6 +74,20 @@ use function Moggi\Semantics\Types\internalTypeToAst;
 use function Moggi\Semantics\Types\typeToString;
 
 
+/**
+ * The domain of one runtime dictionary arrow: `__Dict_C`, the bare spelling a rewritten arrow may
+ * still carry, or `__Dict_C a`, the applied spelling a written `C a =>` constraint lowers to. Both
+ * name the same evidence, so a declared type's leading dictionary arrows peel in either spelling.
+ */
+function isDictionaryArrowDomain(Ast\TypeNode $type): bool
+{
+    if ($type instanceof Ast\TypeApp) {
+        $type = $type->con;
+    }
+
+    return $type instanceof Ast\TypeCon && \str_starts_with((string) $type->name, '__Dict_');
+}
+
 $assert = static function (bool $condition, string $message): void {
     if (! $condition) {
         throw new \RuntimeException($message);
@@ -336,10 +350,7 @@ $validateRecord = static function (
 
     $declaredType = $declaration->type;
     for ($peel = \count($record->evidence); $peel > 0; --$peel) {
-        if (! $declaredType instanceof Ast\TypeArrow
-            || ! $declaredType->from instanceof Ast\TypeCon
-            || ! \str_starts_with((string) $declaredType->from->name, '__Dict_')
-        ) {
+        if (! $declaredType instanceof Ast\TypeArrow || ! isDictionaryArrowDomain($declaredType->from)) {
             break;
         }
         $declaredType = $declaredType->to;

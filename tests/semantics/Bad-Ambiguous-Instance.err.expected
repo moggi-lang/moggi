@@ -1,0 +1,4 @@
+tests/semantics/Bad-Ambiguous-Instance.mog:21:8: type error: ambiguous instance for `C (Box Unit)`: `instance C (Box a)` at tests/semantics/Bad-Ambiguous-Instance.mog:17:10 and `instance C (f Unit)` at tests/semantics/Bad-Ambiguous-Instance.mog:14:10 are equally specific, so the use site cannot choose between them
+
+  21 | main = c (Box Unit)
+     |        ^^^^^^^^^^^

@@ -1,5 +1,5 @@
 program
-  function twice :: __Dict_Num -> a -> a
+  function twice :: __Dict_Num a -> a -> a
     pat_var __ev_Num
     pat_var x
     apply

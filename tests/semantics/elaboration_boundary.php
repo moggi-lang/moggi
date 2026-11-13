@@ -89,8 +89,10 @@ $expectedInfer = [
     'tryResolveValueEvidence',
 ];
 $expectedLiterals = [
-    // literal elaboration
+    // literal elaboration: one entry per literal kind, each converting through
+    // the class method its type names and nowhere else
     'elaborateNumericLiteral',
+    'elaborateStringLiteral',
 ];
 
 $inserters = static function (array $functions) use ($insertion): array {

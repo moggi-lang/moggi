@@ -2,7 +2,7 @@ program
   data DefFoo a
     constructor DefFoo
       field  :: a
-  function __ev_Eq_DefFoo_1_Op3d3d :: __Dict_Eq -> DefFoo t1 -> DefFoo t1 -> Bool
+  function __ev_Eq_DefFoo_1_Op3d3d :: __Dict_Eq t1 -> DefFoo t1 -> DefFoo t1 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -24,7 +24,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_DefFoo_1_Op2f3d :: __Dict_Eq -> DefFoo t1 -> DefFoo t1 -> Bool
+  function __ev_Eq_DefFoo_1_Op2f3d :: __Dict_Eq t1 -> DefFoo t1 -> DefFoo t1 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -53,7 +53,7 @@ program
       alt
         pat_con False
         constructor_ref True
-  function __ev_Show_DefFoo_1_showsPrec :: __Dict_Show -> Int -> DefFoo t23 -> String -> String
+  function __ev_Show_DefFoo_1_showsPrec :: __Dict_Show t23 -> Int -> DefFoo t23 -> String -> String
     pat_var __ev_Show
     pat_var __d
     pat_var __x
@@ -85,7 +85,7 @@ program
                     variable __f0
                   variable __r
           variable __s
-  function __ev_Show_DefFoo_1_show :: __Dict_Show -> DefFoo t23 -> String
+  function __ev_Show_DefFoo_1_show :: __Dict_Show t23 -> DefFoo t23 -> String
     pat_var __ev_Show
     pat_var x
     apply
@@ -95,7 +95,7 @@ program
           evidence_ref Show DefFoo a
         variable x
       string ""
-  function __ev_Show_DefFoo_1_showList :: __Dict_Show -> [DefFoo t23] -> String -> String
+  function __ev_Show_DefFoo_1_showList :: __Dict_Show t23 -> [DefFoo t23] -> String -> String
     pat_var __ev_Show
     pat_var ls
     pat_var s
@@ -111,7 +111,7 @@ program
   data StockFoo a
     constructor StockFoo
       field  :: a
-  function __ev_Eq_StockFoo_1_Op3d3d :: __Dict_Eq -> StockFoo t53 -> StockFoo t53 -> Bool
+  function __ev_Eq_StockFoo_1_Op3d3d :: __Dict_Eq t53 -> StockFoo t53 -> StockFoo t53 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -133,7 +133,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_StockFoo_1_Op2f3d :: __Dict_Eq -> StockFoo t53 -> StockFoo t53 -> Bool
+  function __ev_Eq_StockFoo_1_Op2f3d :: __Dict_Eq t53 -> StockFoo t53 -> StockFoo t53 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -162,7 +162,7 @@ program
       alt
         pat_con False
         constructor_ref True
-  function __ev_Show_StockFoo_1_showsPrec :: __Dict_Show -> Int -> StockFoo t76 -> String -> String
+  function __ev_Show_StockFoo_1_showsPrec :: __Dict_Show t76 -> Int -> StockFoo t76 -> String -> String
     pat_var __ev_Show
     pat_var __d
     pat_var __x
@@ -194,7 +194,7 @@ program
                     variable __f0
                   variable __r
           variable __s
-  function __ev_Show_StockFoo_1_show :: __Dict_Show -> StockFoo t76 -> String
+  function __ev_Show_StockFoo_1_show :: __Dict_Show t76 -> StockFoo t76 -> String
     pat_var __ev_Show
     pat_var x
     apply
@@ -204,7 +204,7 @@ program
           evidence_ref Show StockFoo a
         variable x
       string ""
-  function __ev_Show_StockFoo_1_showList :: __Dict_Show -> [StockFoo t76] -> String -> String
+  function __ev_Show_StockFoo_1_showList :: __Dict_Show t76 -> [StockFoo t76] -> String -> String
     pat_var __ev_Show
     pat_var ls
     pat_var s
@@ -271,7 +271,7 @@ program
   newtype ViaInt
     constructor ViaInt
       field  :: Int
-  function __ev_Eq_ViaInt_Op3d3d :: __Dict_Eq -> ViaInt -> ViaInt -> Bool
+  function __ev_Eq_ViaInt_Op3d3d :: __Dict_Eq Int -> ViaInt -> ViaInt -> Bool
     pat_var __ev_Eq
     pat_con ViaInt
       pat_var __v0
@@ -282,7 +282,7 @@ program
         evidence_method Eq.== evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
-  function __ev_Eq_ViaInt_Op2f3d :: __Dict_Eq -> ViaInt -> ViaInt -> Bool
+  function __ev_Eq_ViaInt_Op2f3d :: __Dict_Eq Int -> ViaInt -> ViaInt -> Bool
     pat_var __ev_Eq
     pat_con ViaInt
       pat_var __v0
@@ -293,7 +293,7 @@ program
         evidence_method Eq./= evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
-  function __ev_Show_ViaInt_showsPrec :: __Dict_Show -> Int -> ViaInt -> String -> String
+  function __ev_Show_ViaInt_showsPrec :: __Dict_Show Int -> Int -> ViaInt -> String -> String
     pat_var __ev_Show
     pat_var __v0
     pat_con ViaInt
@@ -306,14 +306,14 @@ program
           variable __v0
         variable __v1
       variable __v2
-  function __ev_Show_ViaInt_show :: __Dict_Show -> ViaInt -> String
+  function __ev_Show_ViaInt_show :: __Dict_Show Int -> ViaInt -> String
     pat_var __ev_Show
     pat_con ViaInt
       pat_var __v0
     apply
       evidence_method Show.show evidence=__ev_Show nullary=0
       variable __v0
-  function __ev_Show_ViaInt_showList :: __Dict_Show -> [ViaInt] -> String -> String
+  function __ev_Show_ViaInt_showList :: __Dict_Show Int -> [ViaInt] -> String -> String
     pat_var __ev_Show
     pat_var ls
     pat_var s

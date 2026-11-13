@@ -4,7 +4,7 @@ program
   class C a
     method keep :: a -> a
     method viaW :: a -> a
-  function keep :: __Dict_C -> __Dict_W -> [t3] -> [t3]
+  function keep :: __Dict_C t3 -> __Dict_W t3 -> [t3] -> [t3]
     pat_var __ev_C
     pat_var __ev_W_1
     pat_var xs
@@ -12,7 +12,7 @@ program
       evidence_method C.keep evidence= nullary=0
         instance [a]
       variable xs
-  function viaW :: __Dict_C -> __Dict_W -> [t3] -> [t3]
+  function viaW :: __Dict_C t3 -> __Dict_W t3 -> [t3] -> [t3]
     pat_var __ev_C
     pat_var __ev_W_1
     pat_var xs

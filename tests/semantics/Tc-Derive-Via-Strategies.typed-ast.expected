@@ -3,7 +3,7 @@ program
     constructor ViaSimple
       field  :: Int
     deriving (via (Int) Eq)
-  function __ev_Eq_ViaSimple_Op3d3d :: __Dict_Eq -> ViaSimple -> ViaSimple -> Bool
+  function __ev_Eq_ViaSimple_Op3d3d :: __Dict_Eq Int -> ViaSimple -> ViaSimple -> Bool
     pat_var __ev_Eq
     pat_con ViaSimple
       pat_var __v0
@@ -14,7 +14,7 @@ program
         evidence_method Eq.== evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
-  function __ev_Eq_ViaSimple_Op2f3d :: __Dict_Eq -> ViaSimple -> ViaSimple -> Bool
+  function __ev_Eq_ViaSimple_Op2f3d :: __Dict_Eq Int -> ViaSimple -> ViaSimple -> Bool
     pat_var __ev_Eq
     pat_con ViaSimple
       pat_var __v0
@@ -78,7 +78,7 @@ program
     constructor ViaWrapped
       field  :: Int
     deriving (via (ViaSum) Eq)
-  function __ev_Eq_ViaWrapped_Op3d3d :: __Dict_Eq -> ViaWrapped -> ViaWrapped -> Bool
+  function __ev_Eq_ViaWrapped_Op3d3d :: __Dict_Eq ViaSum -> ViaWrapped -> ViaWrapped -> Bool
     pat_var __ev_Eq
     pat_con ViaWrapped
       pat_var __v0
@@ -93,7 +93,7 @@ program
       apply
         constructor_ref ViaSum
         variable __v1
-  function __ev_Eq_ViaWrapped_Op2f3d :: __Dict_Eq -> ViaWrapped -> ViaWrapped -> Bool
+  function __ev_Eq_ViaWrapped_Op2f3d :: __Dict_Eq ViaSum -> ViaWrapped -> ViaWrapped -> Bool
     pat_var __ev_Eq
     pat_con ViaWrapped
       pat_var __v0
@@ -161,7 +161,7 @@ program
     constructor ViaOuter
       field  :: ViaInner
     deriving (via (Int) Eq)
-  function __ev_Eq_ViaOuter_Op3d3d :: __Dict_Eq -> ViaOuter -> ViaOuter -> Bool
+  function __ev_Eq_ViaOuter_Op3d3d :: __Dict_Eq Int -> ViaOuter -> ViaOuter -> Bool
     pat_var __ev_Eq
     pat_con ViaOuter
       pat_con ViaInner
@@ -174,7 +174,7 @@ program
         evidence_method Eq.== evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
-  function __ev_Eq_ViaOuter_Op2f3d :: __Dict_Eq -> ViaOuter -> ViaOuter -> Bool
+  function __ev_Eq_ViaOuter_Op2f3d :: __Dict_Eq Int -> ViaOuter -> ViaOuter -> Bool
     pat_var __ev_Eq
     pat_con ViaOuter
       pat_con ViaInner
@@ -199,7 +199,7 @@ program
     constructor ViaUser
       field  :: Int
     deriving (via (Int) ViaEq)
-  function __ev_ViaEq_ViaUser_Op3d3d3d :: __Dict_ViaEq -> ViaUser -> ViaUser -> Bool
+  function __ev_ViaEq_ViaUser_Op3d3d3d :: __Dict_ViaEq Int -> ViaUser -> ViaUser -> Bool
     pat_var __ev_ViaEq
     pat_con ViaUser
       pat_var __v0

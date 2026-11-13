@@ -6,6 +6,7 @@ namespace Moggi\Semantics\Types;
 use Moggi\Semantics\Kernel;
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\TArrow;
+use Moggi\Semantics\TypeExpr\TStr;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TForall;
 use Moggi\Semantics\TypeExpr\TVar;
@@ -42,8 +43,9 @@ function synonymEntry(
     array $params = [],
     ?Type $body = null,
     ?Kinds\Kind $kind = null,
+    ?string $module = null,
 ): array {
-    return ['params' => $params, 'rhs' => $rhs, 'body' => $body, 'kind' => $kind];
+    return ['params' => $params, 'rhs' => $rhs, 'body' => $body, 'kind' => $kind, 'module' => $module];
 }
 
 /**
@@ -485,7 +487,7 @@ function gadtConstructorShape(
             continue;
         }
 
-        $dictTypes[] = new TCon('__Dict_' . $constraint->class);
+        $dictTypes[] = new TCon('__Dict_' . $constraint->class, $constraint->args);
         $dictNames[] = gadtContextFieldName($i, $constraint->class);
     }
 
@@ -560,7 +562,13 @@ function registerTypeSynonym(TypeCheckState $state, Ast\TypeSynonymDecl $decl): 
 
     Kinds\registerTypeKind($state, $name, $kind);
 
-    $state->typeSynonyms[$name] = synonymEntry($decl->type, $decl->params, $body, $kind);
+    $state->typeSynonyms[$name] = synonymEntry(
+        $decl->type,
+        $decl->params,
+        $body,
+        $kind,
+        $state->currentModule ?? $state->module ?? null,
+    );
 }
 
 /**
@@ -603,7 +611,7 @@ function registerTypeFamily(TypeCheckState $state, Ast\TypeSynonymDecl $decl): v
             ),
             Ast\KindCon::class => \ctype_lower($kindAst->name[0])
                 ? ($kindVars[$kindAst->name] ??= new Kinds\KVar('$k$' . $kindAst->name))
-                : new Kinds\KCon($kindAst->name),
+                : Kinds\namedKind($kindAst->name),
             default => throw new \InvalidArgumentException('unknown kind in type family'),
         };
     };
@@ -762,6 +770,8 @@ function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $modul
             'name' => $param->name,
             'kind' => $param->kind,
             'resolvedKind' => $inferredKinds[$param->name],
+            'polyKinded' => $param->kind instanceof Ast\KindCon
+                && Kinds\isKindVariableName($param->kind->name),
         ];
     }
 
@@ -769,6 +779,21 @@ function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $modul
     foreach ($params as $param) {
         $paramKinds[$param['name']] = Kinds\classParamKind($state, $param, $decl);
     }
+
+    // A class's own methods may name the class in their constraints -- `Data`'s `gfoldl` threads
+    // `Data d =>` itself -- so the class has to be resolvable while its methods are read. The
+    // entry is provisional: the finished record (methods, roles, associated types) replaces it
+    // below, once the method walk is done.
+    $state->classes[$name] = [
+        'params' => $params,
+        'methods' => [],
+        'superclasses' => $decl->superclasses,
+        'associatedTypes' => [],
+        'minimalGroups' => $decl->minimalGroups,
+        'roles' => [],
+        'module' => $module,
+    ];
+    $state->classParamKindsCache = null;
 
     $kindScope = Kinds\pushKindScope($state);
     $state->varKinds = [...$state->varKinds, ...$paramKinds];
@@ -791,8 +816,8 @@ function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $modul
             applyConstraintVarKinds($state, $methodUserConstraints);
             $methodType = astType($state, $bodyTypeAst);
             Kinds\assertKind($state, $methodType, new Kinds\KType(), $state->varKinds, $method->type);
-            foreach (\array_reverse(dictionaryConstraints($methodUserConstraints)) as $constraint) {
-                $methodType = new TArrow(new TCon('__Dict_' . $constraint->class), $methodType);
+            if ($methodUserConstraints !== []) {
+                $methodType = wrapDictionaryConstraints($methodType, $methodUserConstraints);
             }
 
             $constraintArgTypes = [];
@@ -903,6 +928,28 @@ function impliedRole(string $method, Type $type, string $param): ?string
         && $type->to->name === $param
     ) {
         return Kernel\literalRole();
+    }
+
+    if (($type->from instanceof TStr
+            || ($type->from instanceof TCon
+                && $type->from->args === []
+                && $type->from->name === Kinds\canonicalTypeConName('String#')))
+        && $type->to instanceof TVar
+        && $type->to->name === $param
+    ) {
+        return Kernel\stringLiteralRole();
+    }
+
+    // The failure takes the kernel's string and produces the class's own type
+    // applied to a variable: `String -> m a`, the monad's answer to a pattern
+    // that does not match (`MonadFail.fail`).
+    if (($type->from instanceof TStr
+            || ($type->from instanceof TCon
+                && $type->from->args === []
+                && $type->from->name === Kinds\canonicalTypeConName('String#')))
+        && $applied($type->to) !== null
+    ) {
+        return Kernel\failRole();
     }
 
     $outer = $applied($type->from);
@@ -1353,10 +1400,7 @@ function registerFunctionScheme(TypeCheckState $state, Ast\FunctionDecl $fn): vo
     } finally {
         Kinds\restoreKindScope($state, $kindScope);
     }
-    $fnType = $userFnType;
-    foreach (\array_reverse(dictionaryConstraints($userConstraints)) as $constraint) {
-        $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
-    }
+    $fnType = wrapDictionaryConstraints($userFnType, $userConstraints);
     $expected = peelForalls($fnType);
     $paramCount = \count($fn->params) + \count(dictionaryConstraints($userConstraints));
     for ($i = 0; $i < $paramCount; ++$i) {

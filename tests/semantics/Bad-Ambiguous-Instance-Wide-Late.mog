@@ -1,0 +1,57 @@
+-- A more specific instance that cannot be discharged, declared after an equal pair.
+--
+-- The twelve `fN Unit` heads tie for `C (Box Unit)`. `C (Box Unit)` subsumes all
+-- of them, but its own context `D (Box Unit)` has no instance, so it does not
+-- answer the use site. A resolver that lets it take the "current best" slot
+-- would then find no rival and let declaration order settle the tie; the
+-- check therefore only ever holds applicable candidates, and reports f1 and f2.
+data Box a = Box a
+
+data Unit = Unit
+
+class C a where
+  c :: a -> String
+
+class D a
+
+instance C (f1 Unit) where
+  c _ = "f1"
+
+instance C (f2 Unit) where
+  c _ = "f2"
+
+instance C (f3 Unit) where
+  c _ = "f3"
+
+instance C (f4 Unit) where
+  c _ = "f4"
+
+instance C (f5 Unit) where
+  c _ = "f5"
+
+instance C (f6 Unit) where
+  c _ = "f6"
+
+instance C (f7 Unit) where
+  c _ = "f7"
+
+instance C (f8 Unit) where
+  c _ = "f8"
+
+instance C (f9 Unit) where
+  c _ = "f9"
+
+instance C (f10 Unit) where
+  c _ = "f10"
+
+instance C (f11 Unit) where
+  c _ = "f11"
+
+instance C (f12 Unit) where
+  c _ = "f12"
+
+instance D (Box Unit) => C (Box Unit) where
+  c _ = "box-unit"
+
+main :: String
+main = c (Box Unit)

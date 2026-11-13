@@ -9,6 +9,7 @@ data Flag
   | Output String
   | Name String
   | Path String
+  deriving (Eq)
 
 instance Show Flag where
   show f = case f of

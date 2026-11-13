@@ -29,9 +29,28 @@ function astTypeSignature(TypeCheckState $state, Ast\TypeNode $typeAst, array $e
 
     $signatureConstraints = parseConstraints($state, $constraintAsts, $at);
     applyConstraintVarKinds($state, $signatureConstraints);
-    $result = astType($state, $bodyTypeAst, $expanding);
-    foreach (\array_reverse(dictionaryConstraints($signatureConstraints)) as $constraint) {
-        $result = new TArrow(new TCon('__Dict_' . $constraint->class), $result);
+
+    return wrapDictionaryConstraints(astType($state, $bodyTypeAst, $expanding), $signatureConstraints);
+}
+
+/**
+ * Add a signature's dictionary parameters, inside any `forall`.
+ *
+ * A dictionary arrow outside the quantifier makes `forall a. C a => t` look like
+ * a function of the dictionary first, so parameter counting and skolemisation
+ * see a shape the declaration never wrote.
+ *
+ * @param list<Ast\PendingConstraint> $constraints
+ */
+function wrapDictionaryConstraints(Type $type, array $constraints): Type
+{
+    if ($type instanceof TForall) {
+        return new TForall($type->binders, wrapDictionaryConstraints($type->body, $constraints));
+    }
+
+    $result = $type;
+    foreach (\array_reverse(dictionaryConstraints($constraints)) as $constraint) {
+        $result = new TArrow(new TCon('__Dict_' . $constraint->class, $constraint->args), $result);
     }
 
     return $result;
@@ -87,6 +106,7 @@ function astType(TypeCheckState $state, Ast\TypeNode $type, array $expanding = [
 {
     return match ($type::class) {
         Ast\TypeVar::class => new TVar(skolemScopedVar($state, $type->name)),
+        Ast\TypeKindAnnot::class => astTypeKindAnnot($state, $type),
         Ast\TypeUnit::class => new TUnit(),
         Ast\TypeCon::class => resolveTypeCon($state, $type->name, $expanding, $type),
         Ast\TypePromoted::class => resolvePromotedType($state, $type->name, $type),
@@ -178,12 +198,16 @@ function resolveQualifiedType(TypeCheckState $state, string $module, string $nam
         return new TCon($name);
     }
 
-    if (isset($state->typeSynonyms[$name])) {
+    if (isset($state->qualifiedData[$module][$name])) {
+        return new TCon($name, [], qualifiedTypeDeclaringModule($state, $module, $name) ?? $namespace);
+    }
+
+    if (isset($state->qualifiedTypeSynonyms[$module][$name])) {
         if (isset($expanding[$name])) {
             throw typeFail($state, "cyclic type synonym `{$name}`", $at);
         }
 
-        $syn = $state->typeSynonyms[$name];
+        $syn = $state->qualifiedTypeSynonyms[$module][$name];
         if ($syn['params'] !== []) {
             throw typeFail(
                 $state,
@@ -196,15 +220,9 @@ function resolveQualifiedType(TypeCheckState $state, string $module, string $nam
         return $syn['body'] ?? astType($state, $syn['rhs'], [...$expanding, $name => true]);
     }
 
-    if (isset($state->data[$name])) {
-        $info = $state->data[$name];
-
-        return $info['result'];
-    }
-
     rejectIfKindNameUsedAsType($state, $name, $at);
 
-    return new TCon($name);
+    throw typeFail($state, "unknown type `{$module}.{$name}`", $at);
 }
 
 /**
@@ -308,6 +326,16 @@ function resolveTypeCon(TypeCheckState $state, string $name, array $expanding, A
         return $syn['body'] ?? astType($state, $syn['rhs'], [...$expanding, $name => true]);
     }
 
+    if (isset($state->data[$name])) {
+        $info = $state->data[$name];
+        $module = $info['declaringModule'] ?? null;
+        if (! \is_string($module) || $module === '') {
+            $module = ($info['result'] ?? null)?->module ?? null;
+        }
+
+        return new TCon($name, [], \is_string($module) && $module !== '' ? $module : null);
+    }
+
     if (isUndeclaredNominalTypeCon($state, $name)) {
         throw typeFail(
             $state,
@@ -323,6 +351,42 @@ function resolveTypeCon(TypeCheckState $state, string $name, array $expanding, A
     return \ctype_lower($name[0]) ? new TVar(skolemScopedVar($state, $name)) : new TCon($name);
 }
 
+/**
+ * The module that actually declares a qualified name.
+ *
+ * An import's qualified table records the declaration, not the module the
+ * import happened to name, so `NE.NonEmpty` names `Moggi.Internal.Base`'s type
+ * and `Semigroup.First` names the kernel wrapper even though both are reached
+ * through public re-export modules. The unqualified `$data` map can lose that
+ * module when one spelling has two declarations, so it is only a fallback.
+ */
+function qualifiedTypeDeclaringModule(TypeCheckState $state, string $module, string $name): ?string
+{
+    $info = $state->qualifiedData[$module][$name] ?? null;
+    if (\is_array($info)) {
+        $declaring = $info['declaringModule'] ?? null;
+        if (! \is_string($declaring) || $declaring === '') {
+            $declaring = ($info['result'] ?? null)?->module ?? null;
+        }
+        if (\is_string($declaring) && $declaring !== '') {
+            return $declaring;
+        }
+    }
+
+    $info = $state->data[$name] ?? null;
+    if (\is_array($info)) {
+        $declaring = $info['declaringModule'] ?? null;
+        if (! \is_string($declaring) || $declaring === '') {
+            $declaring = ($info['result'] ?? null)?->module ?? null;
+        }
+        if (\is_string($declaring) && $declaring !== '') {
+            return $declaring;
+        }
+    }
+
+    return null;
+}
+
 function isUndeclaredNominalTypeCon(TypeCheckState $state, string $name): bool
 {
     if (isset($state->data[$name]) || isset($state->kindEnv[$name]) || isset($state->declaredTypeNames[$name])) {
@@ -335,6 +399,25 @@ function isUndeclaredNominalTypeCon(TypeCheckState $state, string $name): bool
 /**
  * @param list<Ast\TypeNode> $argAsts
  */
+/**
+ * A type argument, where a kind name stands for itself.
+ *
+ * @c Type@, @Symbol@ and @Nat@ are kinds, but a kind is a type too: a
+ * kind-polymorphic constructor takes one as an argument (`TypeRep Type`). The
+ * rejection of a kind name where a *type* is expected stays, so a signature
+ * `f :: Type` is still an error; this is only the argument position.
+ */
+function astTypeArgument(TypeCheckState $state, Ast\TypeNode $arg, array $expanding): Type
+{
+    if ($arg instanceof Ast\TypeCon
+        && ($arg->name === 'Type' || $arg->name === 'Symbol' || $arg->name === 'Nat')
+    ) {
+        return new TCon($arg->name);
+    }
+
+    return astType($state, $arg, $expanding);
+}
+
 function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, array $expanding): Type
 {
     if ($argAsts === []) {
@@ -345,6 +428,7 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
         Ast\TypeCon::class, Ast\TypeVar::class, Ast\TypeQualified::class => $con->name,
         default => 'a type constructor',
     };
+    $qualifiedHead = null;
     foreach ($argAsts as $argAst) {
         if ($argAst instanceof Ast\TypeForall) {
             throw typeFail(
@@ -356,12 +440,15 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
         }
     }
 
-    if ($con instanceof Ast\TypeVar) {
+    if ($con instanceof Ast\TypeVar || $con instanceof Ast\TypeKindAnnot) {
         $args = [];
         foreach ($argAsts as $argAst) {
-            $args[] = astType($state, $argAst, $expanding);
+            $args[] = astTypeArgument($state, $argAst, $expanding);
         }
         $head = skolemScopedVar($state, $con->name);
+        if ($con instanceof Ast\TypeKindAnnot) {
+            $state->varKinds[$head] = signatureKind($state, $con->kind, $con);
+        }
         applyTypeAppKinds($state, $head, $args, $argAsts, $con, isVarHead: true);
 
         return new TVarApp($head, $args);
@@ -370,7 +457,7 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
     if ($con instanceof Ast\TypeCon && $con->name === Ast\instanceHeadMarker()) {
         $args = [];
         foreach ($argAsts as $argAst) {
-            $args[] = astType($state, $argAst, $expanding);
+            $args[] = astTypeArgument($state, $argAst, $expanding);
         }
 
         return new TCon(Ast\instanceHeadMarker(), $args);
@@ -394,13 +481,34 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
     };
 
     if ($con instanceof Ast\TypeQualified) {
-        resolveQualifiedType($state, $con->module, $con->name, $expanding, $con);
+        $qualifiedHead = resolveQualifiedType($state, $con->module, $con->name, $expanding, $con);
+
+        if (! $qualifiedHead instanceof TCon) {
+            throw typeFail($state, "type `{$baseName}` does not take arguments", $con);
+        }
+
+        $args = [];
+        foreach ($argAsts as $argAst) {
+            $args[] = astTypeArgument($state, $argAst, $expanding);
+        }
+
+        applyTypeAppKinds(
+            $state,
+            $qualifiedHead->name,
+            $args,
+            $argAsts,
+            $con,
+            isVarHead: false,
+            knownKind: qualifiedTypeKind($state, $qualifiedHead),
+        );
+
+        return new TCon($qualifiedHead->name, $args, $qualifiedHead->module);
     }
 
     if (isTypeFamilyDeclared($state, $baseName)) {
         $args = [];
         foreach ($argAsts as $argAst) {
-            $args[] = astType($state, $argAst, $expanding);
+            $args[] = astTypeArgument($state, $argAst, $expanding);
         }
         applyTypeAppKinds($state, $baseName, $args, $argAsts, $con, isVarHead: false);
 
@@ -413,10 +521,10 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
 
     $args = [];
     foreach ($argAsts as $argAst) {
-        $args[] = astType($state, $argAst, $expanding);
+        $args[] = astTypeArgument($state, $argAst, $expanding);
     }
 
-    $resolvedHead = resolveTypeCon($state, $baseName, $expanding, $con);
+    $resolvedHead = $qualifiedHead ?? resolveTypeCon($state, $baseName, $expanding, $con);
 
     if ($resolvedHead instanceof TVar) {
         applyTypeAppKinds($state, $resolvedHead->name, $args, $argAsts, $con, isVarHead: true);
@@ -438,6 +546,23 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
 }
 
 /**
+ * The kind a qualified head was declared with, read from its own module's table.
+ *
+ * A local synonym of the same short name shadows the imported declaration and
+ * empties the unqualified kind tables, but `I.TypeRep` still names the imported
+ * one: its kind is the one its declaring module registered.
+ */
+function qualifiedTypeKind(TypeCheckState $state, TCon $head): ?Kinds\Kind
+{
+    $module = $head->module;
+    if (! \is_string($module) || $module === '') {
+        return null;
+    }
+
+    return $state->kindEnvByModule[$module][Kinds\canonicalTypeConName($head->name)] ?? null;
+}
+
+/**
  * DataKinds: `'InfixI 'LeftAssociative` — promoted constructor as type head.
  *
  * @param list<Ast\TypeNode> $argAsts
@@ -452,7 +577,7 @@ function applyPromotedTypeApp(
 
     $args = [];
     foreach ($argAsts as $argAst) {
-        $args[] = astType($state, $argAst, $expanding);
+        $args[] = astTypeArgument($state, $argAst, $expanding);
     }
 
     applyPromotedTypeAppKinds($state, $con->name, $args, $argAsts, $con);
@@ -632,16 +757,25 @@ function applyTypeAppKinds(
     array $argAsts,
     Ast\AstNode|Ast\TypeNode $headAt,
     bool $isVarHead,
+    ?Kinds\Kind $knownKind = null,
 ): void {
     if ($isVarHead) {
         if (! isset($state->varKinds[$headName])) {
             $state->varKinds[$headName] = Kinds\freshStateKindVar($state);
         }
         $headKind = $state->varKinds[$headName];
+    } elseif ($knownKind !== null) {
+        $headKind = Kinds\instantiateKindVars($state, $knownKind);
     } else {
+        // Look the kind up by the arity being applied, as `kindOfTypeCon` does:
+        // a module-local `TypeRep` (0 parameters) and an imported one (1) share
+        // a name, and only the arity tells them apart.
+        $canonical = Kinds\canonicalTypeConName($headName);
         $headKind = Kinds\instantiateKindVars(
             $state,
-            $state->kindEnv[$headName] ?? new Kinds\KType(),
+            $state->kindEnvByArity[$canonical][\count($args)]
+                ?? $state->kindEnv[$headName]
+                ?? new Kinds\KType(),
         );
     }
 
@@ -746,6 +880,42 @@ function checkTypeAppArgKind(
  * the checker identifies variables by name, so an occurrence in the body already
  * elaborates to that name and the quantifier binds it by construction.
  */
+/**
+ * A type variable with an explicit kind annotation, `(a :: k)`, in a type.
+ *
+ * The annotation fixes the variable's kind for the rest of the signature, which
+ * is what lets `TypeRep (a :: k) -> TypeRep k` say that the representation's
+ * index and its kind are related. A lowercase kind name is a kind variable and
+ * is stored under its own spelling, so a type position writing the same name
+ * (`TypeRep k`) denotes that kind rather than a fresh one.
+ */
+function astTypeKindAnnot(TypeCheckState $state, Ast\TypeKindAnnot $type): Type
+{
+    $name = skolemScopedVar($state, $type->name);
+    $state->varKinds[$name] = signatureKind($state, $type->kind, $type);
+
+    return new TVar($name);
+}
+
+/**
+ * A kind annotation written in a type: `Type` is the kind of ordinary types,
+ * a lowercase name binds (or reuses) a kind variable, and an arrow composes.
+ */
+function signatureKind(TypeCheckState $state, Ast\KindNode $kind, ?Ast\AstNode $at = null): Kinds\Kind
+{
+    return match ($kind::class) {
+        Ast\KindType::class => new Kinds\KType(),
+        Ast\KindCon::class => Kinds\isKindVariableName($kind->name)
+            ? ($state->varKinds[$kind->name] ??= Kinds\freshStateKindVar($state))
+            : Kinds\namedKind($kind->name),
+        Ast\KindArrow::class => new Kinds\KArrow(
+            signatureKind($state, $kind->from, $at),
+            signatureKind($state, $kind->to, $at),
+        ),
+        default => throw typeFail($state, 'unknown kind', $at ?? ($kind instanceof Ast\AstNode ? $kind : null)),
+    };
+}
+
 function astTypeForall(TypeCheckState $state, Ast\TypeForall $type, array $expanding): Type
 {
     $binders = [];
@@ -754,13 +924,22 @@ function astTypeForall(TypeCheckState $state, Ast\TypeForall $type, array $expan
         $saved[$name] = $state->varKinds[$name] ?? null;
         $kindAst = $type->kinds[$i] ?? null;
         $state->varKinds[$name] = $kindAst === null
-            ? new Kinds\KType()
+            ? Kinds\freshStateKindVar($state)
             : Kinds\astKind($state, $kindAst, $type);
-        $binders[] = new ForallBinder($name, $state->varKinds[$name]);
+        $binders[$name] = true;
     }
 
     try {
         $body = astType($state, $type->body, $expanding);
+        $resolvedBinders = [];
+        foreach (\array_keys($binders) as $binder) {
+            $ctx = Kinds\kindInferCtxFromState($state);
+            $resolvedBinders[] = new ForallBinder(
+                $binder,
+                Kinds\defaultUnresolvedKindVars(Kinds\pruneKind($ctx, $state->varKinds[$binder])),
+            );
+        }
+        $binders = $resolvedBinders;
     } finally {
         foreach ($saved as $name => $kind) {
             if ($kind === null) {

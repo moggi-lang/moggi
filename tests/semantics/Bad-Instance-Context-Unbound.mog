@@ -1,0 +1,20 @@
+-- A context variable the instance head never binds.
+--
+-- `instance D x => C (Box Unit)` asks for `D x` at every use site, but `x` is
+-- not determined by `C (Box Unit)`, so the requirement can never be discharged.
+-- The old resolver read the unresolved `x` as "assume it holds" and let the
+-- instance answer; the declaration is reported instead.
+class D a
+
+class C a where
+  c :: a -> String
+
+data Box a = Box a
+
+data Unit = Unit
+
+instance D x => C (Box Unit) where
+  c _ = "box"
+
+main :: String
+main = c (Box Unit)

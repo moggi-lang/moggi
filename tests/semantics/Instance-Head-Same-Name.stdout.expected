@@ -1,0 +1,4 @@
+First {getFirst = Just 6}
+Last {getLast = Just 7}
+True
+False

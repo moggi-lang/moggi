@@ -5,11 +5,13 @@ namespace Moggi\Semantics\Types;
 use function Moggi\Errors\appendDidYouMean;
 
 use Moggi\Semantics\Kinds;
+use Moggi\Semantics\TypeExpr\ForallBinder;
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TChar;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TDouble;
+use Moggi\Semantics\TypeExpr\TForall;
 use Moggi\Semantics\TypeExpr\TStr;
 use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
@@ -21,6 +23,8 @@ use function Moggi\Semantics\Exhaustiveness\caseExhaustivenessProven;
 use function Moggi\Semantics\Exhaustiveness\checkCaseExhaustiveness;
 use function Moggi\Semantics\IntrinsicRegistry\resolveIntrinsicName;
 use function Moggi\Semantics\Kernel\bindRole;
+use function Moggi\Semantics\Kernel\failRole;
+use function Moggi\Semantics\Kernel\stringLiteralRole;
 use function Moggi\Semantics\TypeExpr\scheme;
 use function Moggi\Syntax\Ast\desugarDo;
 use function Moggi\Syntax\isConstructorName;
@@ -46,10 +50,11 @@ function isIoTypeCon(TypeCheckState $state, Type $type): bool
 
 function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env, ?Type $expected = null): Type
 {
+
     $type = match ($expr::class) {
         Ast\IntegerLit::class => inferIntegerLit($state, $expr),
         Ast\DoubleLit::class => new TDouble(),
-        Ast\StringLit::class => new TStr(),
+        Ast\StringLit::class => inferStringLit($state, $expr, $expected),
         Ast\CharLit::class => new TChar(),
         Ast\Variable::class => inferVariable($state, $expr, $env),
         Ast\ConstructorRef::class => (static function () use ($state, $expr, $env): Type {
@@ -72,8 +77,8 @@ function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env, ?Type 
         Ast\OperatorRef::class => inferOperatorRef($state, $expr, $env),
         Ast\Apply::class => inferApplyAndElaborate($state, $expr, $env),
         Ast\Infix::class => inferInfix($state, $expr, $env),
-        Ast\Tuple::class => inferTuple($state, $expr, $env),
-        Ast\ListLit::class => inferList($state, $expr, $env),
+        Ast\Tuple::class => inferTuple($state, $expr, $env, $expected),
+        Ast\ListLit::class => inferList($state, $expr, $env, $expected),
         Ast\Lambda::class => inferLambda($state, $expr, $env, $expected),
         Ast\Let::class => inferLet($state, $expr, $env, $expected),
         Ast\Where::class => inferWhere($state, $expr, $env, $expected),
@@ -163,7 +168,7 @@ function inferDoExpr(TypeCheckState $state, Ast\DoExpr $expr, array $env, ?Type 
         );
     }
 
-    $desugared = desugarDo($expr->stmts, $bind);
+    $desugared = desugarDo($expr->stmts, $bind, classMethodWithRole($state, failRole()));
     if ($expr->sourceFile !== null) {
         Ast\markSourceFile($desugared, $expr->sourceFile);
     }
@@ -286,7 +291,38 @@ function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): T
         setPendingObligations($state, $expr, $instantiated['constraints'], $instantiated['dicts']);
     }
 
-    return $instantiated['type'];
+    return peelValueDictArrows($state, $expr, $instantiated);
+}
+
+/**
+ * Use a value whose type opens with dictionary arrows (`forall d. Data d => d`).
+ *
+ * Such a value is a function of its dictionaries until they are supplied, and
+ * using it *as a value* supplies them from the givens in scope -- the arrows name
+ * which. A value that is still a function after peeling keeps its arrows: those
+ * belong to whoever applies it, and application peels them at the call.
+ *
+ * @param array{type: Type, constraints: list<Ast\PendingConstraint>, dicts: list<Ast\PendingConstraint>} $instantiated
+ */
+function peelValueDictArrows(TypeCheckState $state, Ast\AstNode $expr, array $instantiated): Type
+{
+    $type = $instantiated['type'];
+    if ($instantiated['constraints'] !== []
+        || ! $type instanceof TArrow
+        || ! $type->from instanceof TCon
+        || ! \str_starts_with($type->from->name, '__Dict_')
+    ) {
+        return $type;
+    }
+
+    [$peeled, $givens] = peelLeadingDictArrows($state, $type);
+    if ($peeled instanceof TArrow || $peeled instanceof TForall || $givens === []) {
+        return $type;
+    }
+
+    setPendingObligations($state, $expr, $givens, expandConstraintsWithSuperclasses($state, $givens));
+
+    return $peeled;
 }
 
 function inferOperatorRef(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
@@ -355,7 +391,7 @@ function inferOperatorRef(TypeCheckState $state, Ast\AstNode &$expr, array $env)
         setPendingObligations($state, $expr, $instantiated['constraints'], $instantiated['dicts']);
     }
 
-    return $instantiated['type'];
+    return peelValueDictArrows($state, $expr, $instantiated);
 }
 
 /** @param array<string, array<string, mixed>> $env @return list<string> */
@@ -470,12 +506,48 @@ function restoreDictArgGiven(TypeCheckState $state, array $saved): void
  */
 function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
 {
+
     $argEnv = $env;
     if ($state->instanceSelfMethod !== null && $state->instanceSelfScheme !== null) {
         $argEnv[$state->instanceSelfMethod] = $state->instanceSelfScheme;
     }
 
     $fnType = prune($state, inferMethodByArgument($state, $expr, $env));
+
+    // A value whose type begins with a dictionary arrow takes that dictionary from
+    // its caller: a rank-2 parameter (`forall b. C b => b -> b`), or a constrained
+    // function passed in at higher rank. That dictionary is not the argument
+    // written here, so peel the arrows and park their obligations on the callee --
+    // evidence elaboration prepends the dictionaries at the root of this call.
+    if ($fnType instanceof TArrow
+        && $fnType->from instanceof TCon
+        && \str_starts_with($fnType->from->name, '__Dict_')
+        && ! $expr->argument instanceof Ast\EvidenceRef
+    ) {
+        $parked = [];
+        while ($fnType instanceof TArrow
+            && $fnType->from instanceof TCon
+            && \str_starts_with($fnType->from->name, '__Dict_')
+        ) {
+            $parked[] = new Ast\PendingConstraint(
+                \substr($fnType->from->name, \strlen('__Dict_')),
+                $fnType->from->args,
+                '',
+            );
+            $fnType = prune($state, $fnType->to);
+        }
+
+        // A callee whose own scheme already carries these constraints parked them
+        // when it was instantiated; the arrows are the same obligations in type form.
+        if (pendingConstraintsAndDicts($state, $expr->function)[0] === []) {
+            setPendingObligations(
+                $state,
+                $expr->function,
+                $parked,
+                expandConstraintsWithSuperclasses($state, $parked),
+            );
+        }
+    }
 
     if ($fnType instanceof TArrow && $fnType->from instanceof TCon && isDictArgConstraint($fnType->from)) {
         $constraint = $fnType->from;
@@ -493,11 +565,67 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
         return $fnType->to;
     }
 
-    $argType = prune($state, takeKnownOperandType($state, $expr->argument) ?? inferExpr($state, $expr->argument, $argEnv));
+    // A lambda checked against a type that asks for dictionaries takes them as its
+    // leading parameters: `(forall b. C b => b -> b)` is a function of `b` whose
+    // dictionary the consumer supplies, so the value must accept it at run time.
+    if ($expr->argument instanceof Ast\Lambda
+        && $fnType instanceof TArrow
+        && typeCarriesDictArrows($fnType->from)
+    ) {
+        checkConstrainedLambda($state, $expr->argument, $argEnv, $fnType->from);
+        $argType = prune($state, $fnType->from);
+    } else {
+        // A literal argument is typed at the parameter's type: that is what lets a
+        // string literal stand for a parameter type whose `fromString` builds it.
+        $argExpected = $expr->argument instanceof Ast\StringLit && $fnType instanceof TArrow
+            ? $fnType->from
+            : null;
+        // A variable carries what it refers to as well as its type: inference
+        // records its origin and any dictionary it is a selection from. Its
+        // declared type is no substitute for that, so a variable is always
+        // inferred rather than answered from a type already known for the node.
+        $knownArgType = $expr->argument instanceof Ast\Variable
+            ? null
+            : takeKnownOperandType($state, $expr->argument);
+        $argType = prune($state, $knownArgType ?? inferExpr($state, $expr->argument, $argEnv, $argExpected));
+    }
+
 
     if ($argType instanceof TCon && \str_starts_with($argType->name, '__Dict_')) {
         return $fnType;
     }
+
+    // The parameter is a function of its dictionaries, and this argument is not
+    // one: a plain function (`const ()`, `(+ 1)`) given where `forall d. Data d
+    // => d -> r` is expected. The consumer applies the dictionaries, so the
+    // argument is closed over them here -- `\d v -> arg v` -- which is the
+    // dictionary lambda a language without erased dictionaries has to write out.
+    $domainDicts = typeCarriesDictArrows($fnType instanceof TArrow ? $fnType->from : null);
+    if ($domainDicts
+        && ! typeCarriesDictArrows($argType)
+        && $argType instanceof TArrow
+        && ! $expr->argument instanceof Ast\Lambda
+    ) {
+        $original = $expr->argument;
+        $value = '__dictFnArg';
+        $wrapper = new Ast\Lambda(
+            [new Ast\LambdaParam(new Ast\PatVar($value), null)],
+            new Ast\Apply($original, new Ast\Variable($value)),
+            $original->line ?? 0,
+            $original->col ?? 0,
+            $original->endCol ?? 0,
+        );
+        $expr->argument = $wrapper;
+        checkConstrainedLambda($state, $wrapper, $argEnv, $fnType->from);
+        $argType = prune($state, $fnType->from);
+    }
+
+    // A value whose type carries dictionary arrows is passed unsaturated: the
+    // consumer applies it and supplies the dictionaries from its own givens. The
+    // arrows the callee's type asks for are the same ones, so nothing here is
+    // this call's to resolve -- resolving would need a dictionary for a type the
+    // consumer has yet to choose. A variable's own scheme constraints are exactly
+    // those dictionaries, so they stay parked with it.
 
     if ($fnType instanceof TVar) {
         $result = freshType($state);
@@ -817,33 +945,80 @@ function inferRewrittenInfixFromOperands(
     }
 }
 
-function inferTuple(TypeCheckState $state, Ast\Tuple $expr, array $env): Type
+function inferTuple(TypeCheckState $state, Ast\Tuple $expr, array $env, ?Type $expected = null): Type
 {
     if (\count($expr->elements) === 0) {
         return new TUnit();
     }
 
+    $elementExpectations = tupleElementExpectations($state, $expected, \count($expr->elements));
     $types = [];
-    foreach ($expr->elements as &$element) {
-        $types[] = inferExpr($state, $element, $env);
+    foreach ($expr->elements as $i => &$element) {
+        $types[] = inferExpr($state, $element, $env, $elementExpectations[$i] ?? null);
     }
     unset($element);
 
     return new TCon('Tuple' . \count($types), $types);
 }
 
-function inferList(TypeCheckState $state, Ast\ListLit $expr, array $env): Type
+/**
+ * The type each element of a tuple is checked against, when the context names a
+ * tuple of the same arity: `("a", "b") :: (Label, Label)` hands each literal
+ * its element type, which is what lets a literal stand for a non-`String`
+ * element. Any other expectation -- none, a variable, a different constructor --
+ * leaves the elements to be inferred on their own.
+ *
+ * @return ?list<Type>
+ */
+function tupleElementExpectations(TypeCheckState $state, ?Type $expected, int $arity): ?array
+{
+    if ($expected === null) {
+        return null;
+    }
+
+    $expected = prune($state, $expected);
+    if (! $expected instanceof TCon
+        || $expected->name !== 'Tuple' . $arity
+        || \count($expected->args) !== $arity
+    ) {
+        return null;
+    }
+
+    return \array_values($expected->args);
+}
+
+function inferList(TypeCheckState $state, Ast\ListLit $expr, array $env, ?Type $expected = null): Type
 {
     if (\count($expr->elements) === 0) {
         return new TCon('List', [freshType($state)]);
     }
 
-    $elemType = inferExpr($state, $expr->elements[0], $env);
+    $elementExpected = listElementExpectation($state, $expected);
+    $elemType = inferExpr($state, $expr->elements[0], $env, $elementExpected);
     for ($i = 1, $n = \count($expr->elements); $i < $n; ++$i) {
-        unify($state, inferExpr($state, $expr->elements[$i], $env), $elemType, $expr->elements[$i]);
+        unify($state, inferExpr($state, $expr->elements[$i], $env, $elementExpected), $elemType, $expr->elements[$i]);
     }
 
     return new TCon('List', [$elemType]);
+}
+
+/**
+ * The element type a list's elements are checked against, when the context names
+ * a list: `["a", "b"] :: [Tag]` hands every element `Tag`, so each literal is
+ * converted through that type's own `fromString`.
+ */
+function listElementExpectation(TypeCheckState $state, ?Type $expected): ?Type
+{
+    if ($expected === null) {
+        return null;
+    }
+
+    $expected = prune($state, $expected);
+    if (! $expected instanceof TCon || $expected->name !== 'List' || \count($expected->args) !== 1) {
+        return null;
+    }
+
+    return $expected->args[0];
 }
 
 function inferLambda(TypeCheckState $state, Ast\Lambda $expr, array $env, ?Type $expected = null): Type
@@ -914,6 +1089,126 @@ function inferLambda(TypeCheckState $state, Ast\Lambda $expr, array $env, ?Type 
     }
 
     return $fnType;
+}
+
+/**
+ * Check a lambda against a type that takes dictionaries (`forall b. C b => b -> b`).
+ *
+ * The dictionary is a value the lambda receives, so it becomes the lambda's
+ * leading parameter and the body is checked with the constraint as a given; the
+ * parameter name is the evidence those method calls dispatch on. Checking under
+ * the expected quantifier's skolems is what `unifyAgainstForall` does for a
+ * value, and the lambda needs the same scope because its body may use the
+ * dictionary at the binder's rigid type.
+ */
+function checkConstrainedLambda(TypeCheckState $state, Ast\Lambda $expr, array $env, Type $expected): void
+{
+    $savedScope = $state->skolemScope;
+    $savedRigid = $state->rigidVars;
+    $savedAmbient = $state->ambientConstraints;
+    $savedByClass = $state->ambientConstraintsByClass;
+    $mapping = [];
+    $binders = [];
+    $body = prune($state, $expected);
+
+    try {
+        while ($body instanceof TForall) {
+            foreach ($body->binders as $binder) {
+                $skolem = freshSkolem($state, $binder->name);
+                $mapping[$binder->name] = $skolem;
+                $state->rigidVars[$skolem->name] = true;
+                $state->skolemScope[$binder->name] = $skolem->name;
+                $binders[] = new ForallBinder($skolem->name, $binder->kind);
+            }
+            $body = $body->body;
+        }
+        $body = prune($state, substitute($body, $mapping));
+
+        // The arrows state the constraints the argument is written with; the
+        // dictionaries it receives are those constraints closed under
+        // superclasses, one parameter each -- the same list a signature's
+        // context becomes at a declaration. Building the parameters from that
+        // list and keeping their arrows in the type is what makes the body
+        // checked against the type's result: a peeled type would leave one more
+        // parameter than arrows, and `inferLambda` would take the body's type
+        // from a fresh variable instead.
+        $written = [];
+        $cursor = $body;
+        while ($cursor instanceof TArrow
+            && $cursor->from instanceof TCon
+            && \str_starts_with($cursor->from->name, '__Dict_')
+        ) {
+            $written[] = new Ast\PendingConstraint(
+                \substr($cursor->from->name, \strlen('__Dict_')),
+                $cursor->from->args,
+                '',
+            );
+            $cursor = prune($state, $cursor->to);
+        }
+
+        if ($written === []) {
+            return;
+        }
+
+        // The dictionaries the lambda receives are the written constraints
+        // closed under superclasses, one parameter each: that is the list the
+        // consumer of the argument passes, exactly as a signature's context is
+        // passed at a declaration.
+        $dictParams = [];
+        $dictTypes = [];
+        foreach (expandConstraintsWithSuperclasses($state, $written) as $given) {
+            if (constraintIsErased($given)) {
+                continue;
+            }
+
+            $state->ambientConstraints[] = $given;
+            $state->ambientConstraintsByClass[$given->class][] = $given;
+            $dictParams[] = new Ast\LambdaParam(new Ast\PatVar($given->evidence), null);
+            $dictTypes[] = new TCon('__Dict_' . $given->class, $given->args);
+        }
+
+        $withDicts = $cursor;
+        foreach (\array_reverse($dictTypes) as $dictType) {
+            $withDicts = new TArrow($dictType, $withDicts);
+        }
+
+        // A class default body is checked once per instance, and the lambda is
+        // the same node each time: its dictionary parameters must be added once,
+        // not once per check.
+        $added = \count($dictParams) > 0 && \count($expr->params) >= \count($dictParams);
+        if ($added) {
+            foreach ($dictParams as $i => $param) {
+                $existing = $expr->params[$i];
+                $pattern = $existing instanceof Ast\LambdaParam ? $existing->pattern : $existing;
+                if (! $pattern instanceof Ast\PatVar
+                    || $pattern->name !== $param->pattern->name
+                ) {
+                    $added = false;
+
+                    break;
+                }
+            }
+        }
+
+        if (! $added) {
+            $expr->params = [...$dictParams, ...$expr->params];
+        }
+
+        inferLambda($state, $expr, $env, $withDicts);
+
+        if ($dictParams !== []) {
+            // Obligations the body parked are discharged here, while the
+            // lambda's dictionaries are still givens: the pass over the whole
+            // declaration runs after they are restored, and by then the
+            // evidence they need is a parameter this lambda received.
+            $expr->body = resolvePendingEvidenceInExpr($state, $expr->body);
+        }
+    } finally {
+        $state->skolemScope = $savedScope;
+        $state->rigidVars = $savedRigid;
+        $state->ambientConstraints = $savedAmbient;
+        $state->ambientConstraintsByClass = $savedByClass;
+    }
 }
 
 function inferLet(TypeCheckState $state, Ast\Let $expr, array $env, ?Type $expected = null): Type
@@ -1036,7 +1331,6 @@ function describeUnresolvedConstraints(TypeCheckState $state, array $constraints
         if ($class === null) {
             continue;
         }
-
         $args = \array_map(
             static fn (Type $arg): Type => prune($state, $arg),
             $constraint->args,
@@ -1064,6 +1358,8 @@ function describeUnresolvedConstraints(TypeCheckState $state, array $constraints
  */
 function assertNoPendingConstraintsInExpr(TypeCheckState $state, Ast\AstNode $expr, ?Ast\AstNode $at = null): void
 {
+    solveDeferredCoercionsInExpr($state, $expr);
+
     walkAstValues($expr, static function (Ast\AstNode $node) use ($state, $at): void {
         $pending = pendingConstraintsOf($state, $node);
         if ($pending === []) {
