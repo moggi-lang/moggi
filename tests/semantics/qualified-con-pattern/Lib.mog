@@ -1,0 +1,5 @@
+module Lib (Shape(..), Point(..)) where
+
+data Shape = Circle Int | Square Int
+
+data Point = Point { px :: Int, py :: Int }
