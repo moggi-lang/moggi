@@ -120,8 +120,11 @@ final class HostLibraryCase
     /**
      * Write a stub resolver a `PATH` lookup finds on either platform: this PHP runs the script on
      * Windows through a `.bat` launcher (`findExecutable` resolves the extension, `runProcess` starts
-     * the batch file through `cmd`), and a `#!/usr/bin/env php` launcher elsewhere. A bash stub is
-     * invisible to a Windows lookup, which reaches the real resolver instead.
+     * the batch file through `cmd`), and a `sh` launcher naming this PHP by absolute path elsewhere.
+     * A bash stub is invisible to a Windows lookup, which reaches the real resolver instead.
+     *
+     * The Unix launcher names `PHP_BINARY` rather than resolving `php` through `PATH`: the suite is
+     * started by whatever PHP binary the caller chose, which need not be installed under that name.
      */
     public function stubResolver(string $directory, string $name, string $body): void
     {
@@ -133,7 +136,11 @@ final class HostLibraryCase
 
             return;
         }
-        \file_put_contents($directory . '/' . $name, "#!/usr/bin/env php\n" . \file_get_contents($script));
+        $exec = static fn (string $path): string => "'" . \str_replace("'", "'\\''", $path) . "'";
+        \file_put_contents(
+            $directory . '/' . $name,
+            "#!/bin/sh\nexec " . $exec(\PHP_BINARY) . ' ' . $exec($script) . " \"\$@\"\n",
+        );
         \chmod($directory . '/' . $name, 0755);
     }
 

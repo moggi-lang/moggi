@@ -387,18 +387,28 @@ assertTrue(isset($libIndex->byModule['Prelude']), 'Prelude module page is indexe
 assertTrue(\count($libIndex->byModule['Prelude']) > 10, 'Prelude lists re-exported symbols');
 assertTrue(isset($libIndex->byModule['Data.String']), 'facade modules stay indexed');
 
-$bsBackends = $libIndex->facadeBackends['Data.ByteString'] ?? [];
+\Moggi\Cache\setCacheEnabled(false);
+$bsProject = Docs\loadDocProject($root . '/libraries/bytestring/src', Docs\docsContext('php', []));
+\Moggi\Cache\setCacheEnabled(true);
+$bsIndex = Docs\buildIndex(
+    $bsProject['modules'],
+    $bsProject['prepared']->checked,
+    $bsProject['prepared'],
+    Docs\docRootFor($root . '/libraries/bytestring/src'),
+    Docs\docsContext('php', []),
+);
+$bsBackends = $bsIndex->facadeBackends['Data.ByteString'] ?? [];
 assertTrue(isset($bsBackends['php'], $bsBackends['jvm'], $bsBackends['dotnet']), 'Data.ByteString backend map');
 $bsHtml = Docs\renderModulePage(
     'Data.ByteString',
-    $libIndex->byModule['Data.ByteString'],
+    $bsIndex->byModule['Data.ByteString'],
     [],
-    $libIndex,
+    $bsIndex,
 );
 assertTrue(\str_contains($bsHtml, 'Backends:'), 'facade page shows backends');
 assertTrue(\str_contains($bsHtml, 'PHP · JVM · .NET'), 'facade shows backend labels without links');
 assertTrue(! \str_contains($bsHtml, 'Data-ByteString-PHP.html'), 'facade does not link backend impl pages');
-assertTrue(! isset($libIndex->byModule['Data.ByteString.PHP']), 'backend impl modules are not indexed');
+assertTrue(! isset($bsIndex->byModule['Data.ByteString.PHP']), 'backend impl modules are not indexed');
 assertTrue(! isset($libIndex->byModule['Data.String.PHP']), 'backend impl modules are not indexed');
 assertTrue(! isset($libIndex->byModule['Platform.JVM']), 'backend impl modules are not indexed');
 

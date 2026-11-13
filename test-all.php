@@ -17,6 +17,15 @@
  *                 run with `moggi run` once per backend
  *   6. filepath   the `Suite` test-suite in `libraries/filepath/tests`,
  *                 run with `moggi run` once per backend
+ *   7. bytestring the `Suite` test-suite in `libraries/bytestring/tests`,
+ *                 run with `moggi run` once per backend
+ *   8. string     the `Suite` test-suite in `libraries/string/tests`,
+ *                 run with `moggi run` once per backend
+ *   9. blaze-html the `Suite` test-suite in `libraries/blaze-html/tests`,
+ *                 run with `moggi run` once per backend
+ *  10. case-insensitive its `Suite` test-suite in
+ *                 `libraries/case-insensitive/tests`
+ *  11. http-types its `Suite` test-suite in `libraries/http-types/tests`
  *
  * Anything besides `--backend` is forwarded to the two `test.php` stages as
  * is (`--jobs`, `--stop-on-failure`, selectors, …); the json stage only takes
@@ -115,7 +124,8 @@ function allTestUsage(): string
 usage: test-all [--backend php|jvm|dotnet|all] [test.php options...]
 
 Run everything, one stage after the other: the compiler suite without the
-base group, the base group on its own, and the json, containers and time
+base group, the base group on its own, and the json, containers, time,
+filepath, bytestring, string, blaze-html, case-insensitive and http-types
 packages' Suites once per backend. Options besides --backend are forwarded to
 the test.php stages.
 
@@ -196,7 +206,9 @@ foreach ($backends as $backend) {
         '--lib', 'libraries/json/src',
         '--lib', 'libraries/json/tests',
         '--lib', 'libraries/containers/src',
-        '--lib', 'libraries/time/src'];
+        '--lib', 'libraries/time/src',
+        '--lib', 'libraries/string/src',
+        '--lib', 'libraries/bytestring/src'];
     if ($toolRoot !== null) {
         $json[] = '--lib';
         $json[] = $toolRoot;
@@ -248,10 +260,82 @@ foreach ($backends as $backend) {
     }
 }
 
+// Stage 7: the bytestring package's Suite, once per backend.
+foreach ($backends as $backend) {
+    $bytestring = [$php, MOGGI_PROJECT_ROOT . '/moggi.php', 'run',
+        'libraries/bytestring/tests/Suite.mog',
+        '--lib', 'libraries/bytestring/src',
+        '--lib', 'libraries/bytestring/tests',
+        '--backend',
+        $backend];
+    if (runStage("bytestring ({$backend})", $bytestring) !== 0) {
+        $failed[] = "bytestring ({$backend})";
+    }
+}
+
+// Stage 8: the string package's Suite, once per backend.
+foreach ($backends as $backend) {
+    $string = [$php, MOGGI_PROJECT_ROOT . '/moggi.php', 'run',
+        'libraries/string/tests/Suite.mog',
+        '--lib', 'libraries/string/src',
+        '--lib', 'libraries/string/tests',
+        '--lib', 'libraries/bytestring/src',
+        '--backend',
+        $backend];
+    if (runStage("string ({$backend})", $string) !== 0) {
+        $failed[] = "string ({$backend})";
+    }
+}
+
+// Stage 9: the blaze-html package's Suite, once per backend.
+foreach ($backends as $backend) {
+    $blaze = [$php, MOGGI_PROJECT_ROOT . '/moggi.php', 'run',
+        'libraries/blaze-html/tests/Suite.mog',
+        '--lib', 'libraries/blaze-html/src',
+        '--lib', 'libraries/blaze-html/tests',
+        '--lib', 'libraries/string/src',
+        '--lib', 'libraries/bytestring/src',
+        '--backend',
+        $backend];
+    if (runStage("blaze-html ({$backend})", $blaze) !== 0) {
+        $failed[] = "blaze-html ({$backend})";
+    }
+}
+
+// Stage 10: the case-insensitive package's Suite, once per backend.
+foreach ($backends as $backend) {
+    $caseInsensitive = [$php, MOGGI_PROJECT_ROOT . '/moggi.php', 'run',
+        'libraries/case-insensitive/tests/Suite.mog',
+        '--lib', 'libraries/case-insensitive/src',
+        '--lib', 'libraries/case-insensitive/tests',
+        '--lib', 'libraries/bytestring/src',
+        '--backend',
+        $backend];
+    if (runStage("case-insensitive ({$backend})", $caseInsensitive) !== 0) {
+        $failed[] = "case-insensitive ({$backend})";
+    }
+}
+
+// Stage 11: the http-types package's Suite, once per backend.
+foreach ($backends as $backend) {
+    $httpTypes = [$php, MOGGI_PROJECT_ROOT . '/moggi.php', 'run',
+        'libraries/http-types/tests/Suite.mog',
+        '--lib', 'libraries/http-types/src',
+        '--lib', 'libraries/http-types/tests',
+        '--lib', 'libraries/case-insensitive/src',
+        '--lib', 'libraries/string/src',
+        '--lib', 'libraries/bytestring/src',
+        '--backend',
+        $backend];
+    if (runStage("http-types ({$backend})", $httpTypes) !== 0) {
+        $failed[] = "http-types ({$backend})";
+    }
+}
+
 if ($failed !== []) {
     echo "\nALL TESTS: failed (" . \implode(', ', $failed) . ")\n";
     exit(1);
 }
 
-echo "\nALL TESTS: passed (compiler, base, json, containers, time, filepath on " . \implode(', ', $backends) . ")\n";
+echo "\nALL TESTS: passed (compiler, base, json, containers, time, filepath, bytestring, string, blaze-html, case-insensitive, http-types on " . \implode(', ', $backends) . ")\n";
 exit(0);

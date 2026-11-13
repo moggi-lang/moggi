@@ -25,25 +25,5 @@ if ($testArgs['help']) {
 }
 
 \Moggi\Modules\setStdlibLibPath(MOGGI_PROJECT_ROOT . '/libraries/base/src');
-$arrayRoot = MOGGI_PROJECT_ROOT . '/libraries/array/src';
-if (\is_dir($arrayRoot)) {
-    \Moggi\Modules\addLibraryRoot($arrayRoot);
-}
-$containersRoot = MOGGI_PROJECT_ROOT . '/libraries/containers/src';
-if (\is_dir($containersRoot)) {
-    \Moggi\Modules\addLibraryRoot($containersRoot);
-}
-$timeRoot = MOGGI_PROJECT_ROOT . '/libraries/time/src';
-if (\is_dir($timeRoot)) {
-    \Moggi\Modules\addLibraryRoot($timeRoot);
-}
-$filepathRoot = MOGGI_PROJECT_ROOT . '/libraries/filepath/src';
-if (\is_dir($filepathRoot)) {
-    \Moggi\Modules\addLibraryRoot($filepathRoot);
-}
-$directoryRoot = MOGGI_PROJECT_ROOT . '/libraries/directory/src';
-if (\is_dir($directoryRoot)) {
-    \Moggi\Modules\addLibraryRoot($directoryRoot);
-}
 
 exit(runSuite());
