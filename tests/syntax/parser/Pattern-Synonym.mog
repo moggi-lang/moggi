@@ -1,0 +1,3 @@
+pattern Nil = []
+pattern Cons x xs = x : xs
+pattern NilSig :: List Int

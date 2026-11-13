@@ -1,0 +1,28 @@
+program
+  function sign :: Int -> Int
+    pat_var n
+    variable n
+  function classify :: Int -> Int
+    pat_var x
+    case
+      variable x
+      alt
+        pat_view
+          variable sign
+          pat_lit 0
+        integer 0
+      alt
+        pat_wild _
+        integer 1
+  function describe :: Int -> String
+    pat_var _p0
+    case
+      variable _p0
+      alt
+        pat_view
+          variable sign
+          pat_lit 0
+        string "zero"
+      alt
+        pat_wild _
+        string "other"

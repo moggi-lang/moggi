@@ -1,0 +1,26 @@
+program
+  pattern Nil =
+    pat_nil
+  pattern Cons x xs =
+    pat_cons
+      pat_var x
+      pat_var xs
+  pattern YearMonthDay y m d =
+    pat_view
+      variable toGregorian
+      pat_tuple
+        pat_var y
+        pat_var m
+        pat_var d
+    where
+    lambda
+      pat_var y
+      pat_var m
+      pat_var d
+      apply
+        apply
+          apply
+            variable fromGregorian
+            variable y
+          variable m
+        variable d

@@ -81,6 +81,18 @@ final class ParserState
      * @var list<int>|null
      */
     public ?array $bracketDepthBefore = null;
+
+    /**
+     * Pattern synonyms by name, with their formal parameters and matcher.
+     *
+     * A use expands to the matcher as it is read, so the table must already
+     * hold every synonym of the module: {@see parse()} parses a second time,
+     * seeded with the table the first pass collected, when a module declares
+     * any.
+     *
+     * @var array<string, array{params: list<string>, matcher: \Moggi\Syntax\Ast\AstNode}>
+     */
+    public array $patternSynonyms = [];
 }
 
 final class ParseError extends \RuntimeException

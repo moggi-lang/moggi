@@ -141,6 +141,7 @@ function describeTokenKind(TokenKind $kind): string
         TokenKind::KwData => "keyword 'data'",
         TokenKind::KwNewtype => "keyword 'newtype'",
         TokenKind::KwType => "keyword 'type'",
+        TokenKind::KwPattern => "keyword 'pattern'",
         TokenKind::KwModule => "keyword 'module'",
         TokenKind::KwPub => "keyword 'pub'",
         TokenKind::KwForeign => "keyword 'foreign'",
@@ -288,6 +289,7 @@ function formatPatternPreview(AstNode $pattern): string
         Ast\PatTuple::class => '(' . \implode(', ', \array_map(formatPatternPreview(...), $pattern->elements)),
         Ast\PatNil::class => '[]',
         Ast\PatCons::class => formatPatternPreview($pattern->head) . ' : ' . formatPatternPreview($pattern->tail),
+        Ast\PatView::class => '(… -> ' . formatPatternPreview($pattern->pattern) . ')',
         Ast\PatRecord::class => $pattern->name . ' { '
             . \implode(', ', \array_map(
                 static fn (Ast\PatField $field): string => $field->name . ' = ' . formatPatternPreview($field->pattern),

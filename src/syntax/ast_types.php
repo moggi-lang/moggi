@@ -372,6 +372,8 @@ final class ImportItem extends AstNode
         int $col = 0,
         int $endCol = 0,
         public array|string|null $methods = null,
+        /** Written `pattern P`: the item names a pattern synonym, not a value. */
+        public bool $pattern = false,
     ) {
         parent::__construct($line, $col, $endCol);
     }
@@ -646,6 +648,34 @@ final class TypeSynonymDecl extends AstNode
         public array $familyEquations = [],
     ) {
         parent::__construct($line, $col, $endCol);
+    }
+}
+
+/**
+ * `pattern Nil = []`, `pattern Cons x xs = x : xs`, or a signature.
+ *
+ * The declaration is a matcher pattern over its parameters; it has no runtime
+ * representation of its own.
+ */
+final class PatternSynonymDecl extends AstNode
+{
+    /** @param list<string> $params */
+    public function __construct(
+        public string $name,
+        public array $params,
+        public ?AstNode $matcher,
+        public ?TypeNode $signature = null,
+        int $line = 0,
+        int $col = 0,
+        int $endCol = 0,
+        public ?AstNode $builder = null,
+    ) {
+        parent::__construct($line, $col, $endCol);
+    }
+
+    public function nameRefs(): array
+    {
+        return [['name' => $this->name, 'qualifier' => null]];
     }
 }
 
@@ -1774,6 +1804,26 @@ final class PatCons extends AstNode
     public function __construct(
         public AstNode $head,
         public AstNode $tail,
+        int $line = 0,
+        int $col = 0,
+        int $endCol = 0,
+    ) {
+        parent::__construct($line, $col, $endCol);
+    }
+}
+
+/**
+ * `(expr -> pattern)`: apply `expr` to the scrutinee and match the result.
+ *
+ * The expression is written in the scope around the pattern, so it may read
+ * the function's parameters; the pattern binds the names of the matched
+ * result.
+ */
+final class PatView extends AstNode
+{
+    public function __construct(
+        public AstNode $expression,
+        public AstNode $pattern,
         int $line = 0,
         int $col = 0,
         int $endCol = 0,

@@ -1,0 +1,7 @@
+pattern Nil = []
+
+pattern Cons x xs = x : xs
+
+pattern YearMonthDay y m d <- (toGregorian -> (y, m, d))
+  where
+    YearMonthDay y m d = fromGregorian y m d

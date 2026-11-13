@@ -64,6 +64,7 @@ enum TokenKind: string
     case KwData = 'kw_data';
     case KwNewtype = 'kw_newtype';
     case KwType = 'kw_type';
+    case KwPattern = 'kw_pattern';
     case KwModule = 'kw_module';
     case KwPub = 'kw_pub';
     case KwAbstract = 'kw_abstract';
@@ -173,6 +174,7 @@ function keyword(string $lexeme): array
         'data' => ['kind' => TokenKind::KwData, 'lexeme' => $lexeme],
         'newtype' => ['kind' => TokenKind::KwNewtype, 'lexeme' => $lexeme],
         'type' => ['kind' => TokenKind::KwType, 'lexeme' => $lexeme],
+        'pattern' => ['kind' => TokenKind::KwPattern, 'lexeme' => $lexeme],
         'module' => ['kind' => TokenKind::KwModule, 'lexeme' => $lexeme],
         'pub' => ['kind' => TokenKind::KwPub, 'lexeme' => $lexeme],
         'abstract' => ['kind' => TokenKind::KwAbstract, 'lexeme' => $lexeme],
