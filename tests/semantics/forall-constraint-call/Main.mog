@@ -1,0 +1,31 @@
+-- A signature may put its context under an explicit `forall`, as in
+-- `forall a. Tag a => a -> String`: the quantifier scopes over the constraint
+-- as well as the type. A use site passes the value and the compiler supplies
+-- the dictionary itself; reading the dictionary as an ordinary first parameter
+-- made `describe (1 :: Int)` try to pass an `Int` where a `__Dict_Tag` was
+-- expected.
+module Main where
+
+import Moggi.Internal.Base
+
+class Tag a where
+  tag :: a -> String
+
+instance Tag Int where
+  tag _ = "Int"
+
+instance Tag Bool where
+  tag _ = "Bool"
+
+describe :: forall a. Tag a => a -> String
+describe x = tag x
+
+-- Two constraints, both under the same `forall`.
+pair :: forall a b. (Tag a, Tag b) => a -> b -> String
+pair x _ = tag x
+
+main :: IO ()
+main = do
+  putStrLn (describe (1 :: Int))
+  putStrLn (describe True)
+  putStrLn (pair (2 :: Int) False)

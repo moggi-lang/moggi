@@ -1,0 +1,14 @@
+-- A constructor context may be written in the ordinary alternative form.
+-- The dictionary is evidence the value carries, exactly as it is under
+-- `where`, so `show` resolves inside the match.
+module Main where
+
+import Moggi.Internal.Base
+
+data Box = forall a. Show a => Box a
+
+render :: Box -> String
+render (Box x) = show x
+
+main :: IO ()
+main = print (render (Box 42))

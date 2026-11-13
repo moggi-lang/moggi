@@ -248,10 +248,11 @@ from `Data.Kind`.
   monotype, so `[forall a. a -> a]` is refused; `f (forall a. a -> a)` needs a
   signature that says so.
 
-* **Existential quantification is written the GADT way.** `data Box = forall a.
-  Box a` is refused, but the `where` form gives the same thing and keeps the
-  variable in scope inside the match: `MkBox :: a -> Box`
-  ([Data types § GADTs](data-types.md#gadts)).
+* **Existential quantification is written in the constructor.**
+  `data Box = forall a. Box a` and the `where` form (`MkBox :: a -> Box`) both
+  give a constructor whose variable is existential: rigid inside the match, and
+  unable to escape it. A context may follow the quantifier, and `newtype`
+  accepts the form ([Data types § GADTs](data-types.md#gadts)).
 
 * **Quantified constraints belong to a superclass.** `class (forall a. Functor
   (p a)) => Bifunctor p` is supported; the same constraint written in an

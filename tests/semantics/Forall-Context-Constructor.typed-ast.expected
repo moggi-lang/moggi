@@ -1,0 +1,24 @@
+program
+  data Box
+    constructor Box :: forall a. Show a => a -> Box
+      field  :: a
+  function render :: Box -> String
+    pat_con Box
+      pat_var __ev_Show
+      pat_var x
+    apply
+      evidence_method Show.show evidence=__ev_Show nullary=0
+      variable x
+  function main :: IO ()
+    io_action
+      apply
+        apply
+          variable print
+          evidence_ref Show String
+        apply
+          variable render
+          apply
+            apply
+              constructor_ref Box
+              evidence_ref Show Int
+            integer 42

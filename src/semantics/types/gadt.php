@@ -106,26 +106,6 @@ function refineGadt(TypeCheckState $state, string $name, Type $type): void
     $state->gadtEqualities[$name] = $type;
 }
 
-/**
- * Refuse to equate an existential with anything but itself.
- *
- * `MkBox :: a -> Box` hides its `a`: the match knows it only as a rigid
- * variable, and equating it with another rigid variable -- typically the
- * declaration's own result variable -- is exactly the escape the scope rule
- * forbids. Saying so is more use than "could not unify `a` with `a`".
- */
-function assertNotExistentialEscape(TypeCheckState $state, TVar $existential, Type $other, ?Ast\AstNode $at): void
-{
-    if (! isset($state->gadtExistentials[$existential->name])) {
-        return;
-    }
-    if ($other instanceof TVar && $other->name === $existential->name) {
-        return;
-    }
-
-    throw typeFail($state, existentialEscapeMessage($existential), $at);
-}
-
 /** The one wording for "a type the match invented is being used outside it". */
 function existentialEscapeMessage(TVar $existential): string
 {
@@ -158,7 +138,9 @@ function unifyGadtResult(TypeCheckState $state, Type $expected, Type $result, ?A
 
             return;
         }
-        assertNotExistentialEscape($state, $expected, $result, $at);
+        // Refining an existential here is sound: the new type holds only
+        // inside the alternative, and the branch's own type is checked for
+        // escapes by assertNoGadtEscape().
         refineGadt($state, $expected->name, $result);
 
         return;
@@ -170,7 +152,6 @@ function unifyGadtResult(TypeCheckState $state, Type $expected, Type $result, ?A
 
             return;
         }
-        assertNotExistentialEscape($state, $result, $expected, $at);
         refineGadt($state, $result->name, $expected);
 
         return;
@@ -308,7 +289,7 @@ function bindGadtContextFields(
         $binder = new Ast\PatVar($name, $pattern->line, $pattern->col, $pattern->endCol);
         $binder->binderId = ++$state->nextBinderId;
         $state->registerBinder($name, $binder->binderId);
-        $type = new TCon('__Dict_' . $constraint->class);
+        $type = new TCon('__Dict_' . $constraint->class, $constraint->args);
         $binder->inferredInternalType = $type;
         $env[binderKey($binder->binderId)] = scheme($type, []);
         $subpatterns[] = $binder;

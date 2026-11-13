@@ -1,4 +1,0 @@
-tests/semantics/Bad-Forall-Existential-Constructor.mog:7:12: parse error: a data constructor cannot quantify its own type variables: existential constructors are not supported; write the variable in the data declaration instead
-
-   7 | data Box = forall a. Box a
-     |            ^^^^^^

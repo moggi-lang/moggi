@@ -1,0 +1,13 @@
+-- A newtype may quantify its field's variable in the ordinary alternative
+-- form; the constructor's signature is the one the `where` form gives.
+module Main where
+
+import Moggi.Internal.Base
+
+newtype Box = forall a. Box a
+
+label :: Box -> String
+label (Box _) = "box"
+
+main :: IO ()
+main = print (label (Box 0))
