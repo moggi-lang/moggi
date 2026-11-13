@@ -147,6 +147,22 @@ function collectParameterRoles(TypeCheckState $state, Type $type, DataRole $role
     }
 }
 
+/**
+ * The role of an argument of a type constructor the language itself provides.
+ *
+ * `[]` and the tuple constructors have no declaration to read roles from, yet
+ * their parameters *are* their representation: a list or tuple of newtypes has
+ * the same representation as the list or tuple of the types they wrap.
+ */
+function intrinsicParameterRole(string $name): ?DataRole
+{
+    if ($name === 'List' || \preg_match('/^Tuple\d+$/', $name) === 1) {
+        return DataRole::Representational;
+    }
+
+    return null;
+}
+
 /** The role a type constructor's argument at `$i` plays in its representation. */
 function constructorPositionRole(TypeCheckState $state, string $name, int $i): DataRole
 {
@@ -165,6 +181,11 @@ function constructorPositionRole(TypeCheckState $state, string $name, int $i): D
 
     if (isset($state->typeSynonyms[$name]) && ! empty($state->typeSynonyms[$name]['family'])) {
         return DataRole::Nominal;
+    }
+
+    $intrinsicRole = intrinsicParameterRole($name);
+    if ($intrinsicRole !== null) {
+        return $state->constructorPositionRoles[$cacheKey] = $intrinsicRole;
     }
 
     $info = $state->data[$name] ?? null;
@@ -497,6 +518,138 @@ function coercibleAmbientHolds(TypeCheckState $state, Type $left, Type $right): 
     }
 
     return false;
+}
+
+/**
+ * Solve a parked `Coercible` by taking the flexible variables it still contains
+ * from the other side.
+ *
+ * A `Coercible` obligation parked during inference may mention a metavariable
+ * that nothing else fixes (`coerce Nothing :: Maybe TTL` leaves `Nothing`'s
+ * element open until the signature says `TTL`). Once the declaration's types are
+ * settled, that variable is the one the obligation itself decides, so it is
+ * instantiated from the other side — what GHC's solver does with
+ * `Coercible alpha ty`. Only positions the two sides share are reached: a
+ * variable *constructor* applied to arguments (`f Int`) is not a type
+ * application whose parts can be matched, exactly as GHC's decomposition rule
+ * requires matching type constructors.
+ */
+function solveDeferredCoercion(TypeCheckState $state, Ast\PendingConstraint $constraint): bool
+{
+    if (\count($constraint->args) !== 2) {
+        return false;
+    }
+
+    if (coercionObligation($state, $constraint) === CoercionObligation::Satisfied) {
+        return true;
+    }
+
+    if (! unifyCoercibleComponents($state, $constraint->args[0], $constraint->args[1])) {
+        return false;
+    }
+
+    return coercionObligation($state, $constraint) === CoercionObligation::Satisfied;
+}
+
+/**
+ * Instantiate the flexible variables two representational-equal types differ in.
+ *
+ * Positions are compared the way {@see representationalEqualityIn()} compares
+ * them — arrows, then type constructors by role — but a position that is a free
+ * variable is *taken* from the other side instead of being required equal. A
+ * nominal position still has to match exactly: nothing there is a choice.
+ */
+function unifyCoercibleComponents(TypeCheckState $state, Type $left, Type $right): bool
+{
+    $left = prune($state, $left);
+    $right = prune($state, $right);
+
+    if (freshenStableTypeKey($left) === freshenStableTypeKey($right)) {
+        return true;
+    }
+
+    foreach ([[$left, $right], [$right, $left]] as [$variable, $other]) {
+        if (! $variable instanceof TVar || isset($state->rigidVars[$variable->name])) {
+            continue;
+        }
+
+        try {
+            unify($state, $variable, $other);
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return true;
+    }
+
+    if ($left instanceof TArrow && $right instanceof TArrow) {
+        return unifyCoercibleComponents($state, $left->from, $right->from)
+            && unifyCoercibleComponents($state, $left->to, $right->to);
+    }
+
+    if (! $left instanceof TCon || ! $right instanceof TCon
+        || $left->name !== $right->name
+        || \count($left->args) !== \count($right->args)
+    ) {
+        return false;
+    }
+
+    foreach ($left->args as $i => $leftArg) {
+        $rightArg = $right->args[$i];
+        $role = constructorPositionRole($state, $left->name, $i);
+
+        if ($role === DataRole::Phantom) {
+            continue;
+        }
+
+        if ($role === DataRole::Nominal) {
+            if (freshenStableTypeKey(prune($state, $leftArg)) !== freshenStableTypeKey(prune($state, $rightArg))) {
+                return false;
+            }
+
+            continue;
+        }
+
+        if (! unifyCoercibleComponents($state, $leftArg, $rightArg)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Discharge the `Coercible` obligations left parked on a settled expression.
+ *
+ * Inference parks an obligation while its types are open; the passes that
+ * elaborate evidence then either supply it or leave it for this check. A node
+ * whose outstanding obligations are all erased (`Coercible` carries no
+ * dictionary) is settled here by {@see solveDeferredCoercion()}, so an
+ * obligation whose variable the enclosing declaration fixes afterwards is not
+ * reported as a representation mismatch.
+ */
+function solveDeferredCoercionsInExpr(TypeCheckState $state, Ast\AstNode $expr): void
+{
+    walkAstValues($expr, static function (Ast\AstNode $node) use ($state): void {
+        $pending = pendingConstraintsOf($state, $node);
+        if ($pending === []) {
+            return;
+        }
+
+        foreach ($pending as $constraint) {
+            if (! constraintIsErased($constraint)) {
+                return;
+            }
+        }
+
+        foreach ($pending as $constraint) {
+            if (! solveDeferredCoercion($state, $constraint)) {
+                return;
+            }
+        }
+
+        clearPendingConstraints($state, $node);
+    });
 }
 
 /** How a `Coercible` obligation stands at the moment it is asked about. */

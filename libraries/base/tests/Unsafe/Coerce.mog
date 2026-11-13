@@ -1,0 +1,28 @@
+module Main where
+
+import Data.Word (Word)
+import Unsafe.Coerce (UnsafeEquality(..), unsafeCoerce, unsafeEqualityProof)
+
+-- The cast asks nothing of the types, so the only thing to check is that a
+-- value keeps its representation: an `Int` read as a `Word`, a list read as a
+-- list of another element type, a character read as a character, and a
+-- function read as a function. An equality proof refines a type to itself.
+
+addOne :: Int -> Int
+addOne n = n + 1
+
+sameFunction :: Int -> Int
+sameFunction = unsafeCoerce addOne
+
+sameInt :: Int -> Int
+sameInt x = case unsafeEqualityProof of
+  UnsafeRefl -> x
+
+main :: IO ()
+main = do
+  putStrLn (show (unsafeCoerce (42 :: Int) :: Word))
+  putStrLn (show (unsafeCoerce [1, 2, 3] :: [Word]))
+  putStrLn (show (unsafeCoerce 'x' :: Char))
+  putStrLn (show (unsafeCoerce () :: ()))
+  putStrLn (show (sameFunction 41))
+  putStrLn (show (sameInt 9))

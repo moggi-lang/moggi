@@ -44,6 +44,14 @@ function rewriteIntrinsicApplies(TypeCheckState $state, Ast\AstNode $expr): Ast\
 
             $parts = flattenApplyForIntrinsicWrapper($expr);
             $callee = $parts['function'];
+
+            // `(coerce# x) y`: the callee is already the primop's value, so `y`
+            // applies to that value. Counting it as the wrapper's argument would
+            // build a fresh call that drops `x`.
+            if ($callee instanceof Ast\IntrinsicCall) {
+                return $expr;
+            }
+
             $wrapper = ($callee instanceof Ast\Variable || $callee instanceof Ast\QualifiedRef)
                 ? $callee->intrinsicWrapper
                 : null;
