@@ -22,3 +22,10 @@ Just 0
 LT
 unit
 Nothing
+"abc"
+""
+"a\"b"
+'a'
+'\''
+["a","b"]
+[("\"ab\""," rest")]
