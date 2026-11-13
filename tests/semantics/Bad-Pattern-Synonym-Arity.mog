@@ -1,0 +1,6 @@
+-- A synonym is applied to exactly its parameters.
+pattern Cons x xs = x : xs
+
+f :: List Int -> Int
+f xs = case xs of
+  Cons y -> y

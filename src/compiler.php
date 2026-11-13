@@ -96,6 +96,7 @@ require __DIR__ . '/foreign/path.php';
 require __DIR__ . '/semantics/foreign.php';
 require __DIR__ . '/semantics/effects.php';
 require __DIR__ . '/ir/lower.php';
+require __DIR__ . '/ir/lower_view.php';
 require __DIR__ . '/ir/dump.php';
 require __DIR__ . '/ir/visit.php';
 require __DIR__ . '/ir/callables.php';

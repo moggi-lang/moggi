@@ -1,0 +1,13 @@
+-- A view pattern applies its expression to the scrutinee and matches the
+-- result; the expression reads the enclosing scope and binds nothing.
+double :: Int -> Int
+double n = n + n
+
+zero :: Int -> Bool
+zero (double -> 0) = True
+zero _ = False
+
+classified :: Int -> Int
+classified x = case x of
+  (double -> 0) -> 1
+  _ -> 0

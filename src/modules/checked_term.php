@@ -757,6 +757,7 @@ enum PatternShape: string
     case Con = 'con';
     case Tuple = 'tuple';
     case Record = 'record';
+    case View = 'view';
 }
 
 /**
@@ -834,7 +835,8 @@ function isPatternNode(Ast\AstNode $node): bool
         || $node instanceof Ast\PatCons
         || $node instanceof Ast\PatCon
         || $node instanceof Ast\PatTuple
-        || $node instanceof Ast\PatRecord;
+        || $node instanceof Ast\PatRecord
+        || $node instanceof Ast\PatView;
 }
 
 /**
@@ -856,6 +858,7 @@ function patternShape(Ast\AstNode $node): PatternShape
         Ast\PatCon::class => PatternShape::Con,
         Ast\PatTuple::class => PatternShape::Tuple,
         Ast\PatRecord::class => PatternShape::Record,
+        Ast\PatView::class => PatternShape::View,
         default => throw new \LogicException('`' . $node::class . '` is not a pattern node'),
     };
 }

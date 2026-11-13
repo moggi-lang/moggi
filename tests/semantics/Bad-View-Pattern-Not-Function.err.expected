@@ -1,0 +1,4 @@
+tests/semantics/Bad-View-Pattern-Not-Function.mog:2:1: type error: unresolved type class constraint: `Num (Int -> a)`
+
+  2 | f :: Int -> Int
+    | ^

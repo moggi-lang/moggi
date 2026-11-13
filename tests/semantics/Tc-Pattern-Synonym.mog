@@ -1,0 +1,13 @@
+-- Pattern synonyms expand to their matcher when a pattern is parsed, so a use
+-- may appear before the declaration and the checker only sees `[]` and `:`.
+first :: List Int -> Int
+first Nil = 0
+first (Cons y _) = y
+
+isEmpty :: List Int -> Bool
+isEmpty xs = case xs of
+  Nil -> True
+  Cons _ _ -> False
+
+pattern Nil = []
+pattern Cons x xs = x : xs

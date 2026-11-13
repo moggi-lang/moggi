@@ -289,7 +289,7 @@ function lowerIoSequence(array $stmts, LowerCtx $ctx): bool
                 if ($result === null) {
                     return false;
                 }
-                bindPattern(lowerPattern($stmt->pattern, $ctx), $result, $ctx);
+                bindPatternWithViews($stmt->pattern, $result, $ctx);
 
                 return true;
             })(),

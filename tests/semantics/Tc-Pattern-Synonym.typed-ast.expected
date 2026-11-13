@@ -1,0 +1,25 @@
+program
+  function first :: [Int] -> Int
+    pat_var _p0
+    case
+      variable _p0
+      alt
+        pat_nil
+        integer 0
+      alt
+        pat_cons
+          pat_var y
+          pat_wild _
+        variable y
+  function isEmpty :: [Int] -> Bool
+    pat_var xs
+    case
+      variable xs
+      alt
+        pat_nil
+        constructor_ref True
+      alt
+        pat_cons
+          pat_wild _
+          pat_wild _
+        constructor_ref False

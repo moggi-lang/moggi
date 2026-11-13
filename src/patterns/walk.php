@@ -24,6 +24,7 @@ function patternBoundNames(Ast\AstNode $pattern): array
 
             return $bound;
         })(),
+        Ast\PatView::class => patternBoundNames($pattern->pattern),
         default => throw new \RuntimeException('unsupported pattern in patternBoundNames: ' . $pattern::class),
     };
 }
@@ -54,6 +55,7 @@ function patternVariableNamesOrdered(Ast\AstNode $pattern): array
             ...patternVariableNamesOrdered($pattern->head),
             ...patternVariableNamesOrdered($pattern->tail),
         ],
+        Ast\PatView::class => patternVariableNamesOrdered($pattern->pattern),
         default => throw new \RuntimeException('unsupported pattern in patternVariableNamesOrdered: ' . $pattern::class),
     };
 }
@@ -120,6 +122,7 @@ function patternVariableBindersOrdered(Ast\AstNode $pattern): array
             ...patternVariableBindersOrdered($pattern->head),
             ...patternVariableBindersOrdered($pattern->tail),
         ],
+        Ast\PatView::class => patternVariableBindersOrdered($pattern->pattern),
         default => throw new \RuntimeException('unsupported pattern in patternVariableBindersOrdered: ' . $pattern::class),
     };
 }
