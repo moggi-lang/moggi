@@ -55,9 +55,19 @@ runTupleUnit = do
   putStrLn (unitLabel asUnit)
   putStrLn (tuple0Label asTuple0)
 
+-- ---- Exec-Tuple-Map ----
+
+-- Separate from Solo: Tuple3 map/Show exercises product encoding on all backends.
+
+runTupleMap :: IO ()
+runTupleMap = do
+  let t3 = (1, 2, 3)
+  putStrLn (show (map (\x -> x + 1) t3))
+
 -- ---- combined entry point ----
 main :: IO ()
 main = do
   runTupleArity64
   runTupleSolo
   runTupleUnit
+  runTupleMap

@@ -1,5 +1,9 @@
+import Control.Applicative
 import Data.Bool
+import Data.Foldable
 import Data.Int
+import Data.Monoid
+import Data.Semigroup
 import Text.Show
 import System.IO
 
@@ -19,8 +23,42 @@ viaCase :: Age -> Int
 viaCase a = case a of
   Age n -> n + 1
 
+-- ---- Exec-Newtype-Ctor-Lambda ----
+
+-- A newtype whose single field is a function: building it from a lambda and
+-- taking it apart again must leave the lambda's own arity alone, whether the
+-- value is matched or read through the field's accessor.
+
+newtype Equiv a = Equiv { getEquiv :: a -> a -> Bool }
+
+bySum :: Int -> Equiv Int
+bySum n = Equiv (\a b -> a + b == n)
+
+runNewtypeCtorLambda :: IO ()
+runNewtypeCtorLambda = do
+  case bySum 3 of
+    Equiv f -> putStrLn (show (f 1 2))
+  putStrLn (show (getEquiv (bySum 3) 1 2))
+
+-- ---- Exec-Newtype-Ctor-Value ----
+
+-- A newtype constructor is the identity on its field: used as a value, passed
+-- to a fold, or partially applied, it never allocates the tag array a `data`
+-- constructor builds.
+
+runNewtypeCtorValue :: IO ()
+runNewtypeCtorValue = do
+  putStrLn (show (getSum (foldMap Sum [1, 2, 3])))
+  putStrLn (show (getProduct (foldMap Product [2, 3, 4])))
+  putStrLn (show (getMin (foldMap Min [5, 2, 9])))
+  putStrLn (show (getAll (foldMap All [True, False, True])))
+  putStrLn (show (getSum (id Sum 4)))
+  putStrLn (show (getSum ((\f -> f 7) Sum)))
+
 main :: IO ()
 main = do
   putStrLn (show (viaCase (incAge (Age 40)) == 42))
   putStrLn (show (unbox (MkWrap 7) == 7))
   putStrLn (show ((Named 9).unNamed == 9))
+  runNewtypeCtorLambda
+  runNewtypeCtorValue

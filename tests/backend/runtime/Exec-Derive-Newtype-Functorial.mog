@@ -13,7 +13,7 @@ import System.IO
 -- carried by that dictionary too, and one of its superclasses can be a
 -- superclass of the class being derived (`traverse` needs `Applicative f`,
 -- whose `Functor` is also `Traversable`'s), so the delegated call has to be
--- handed every expanded method dictionary — not only the ones whose class the
+-- handed every expanded method dictionary -- not only the ones whose class the
 -- derived class does not already inherit.
 
 newtype Wrap a = Wrap (Maybe a)
