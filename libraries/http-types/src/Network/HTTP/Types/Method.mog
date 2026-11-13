@@ -1,0 +1,131 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Types and constants for HTTP methods.
+--
+-- The HTTP standard defines a set of standard methods, when to use them,
+-- and how to handle them. The standard set has been provided as a separate
+-- data type 'StdMethod', but since you can also use custom methods, the
+-- basic type 'Method' is just a synonym for 'B.ByteString'.
+--
+-- Porting notes: the 'Data.Ix.Ix', 'GHC.Generics.Generic' and 'Data.Data.Data'
+-- derivations are absent because base has no @Ix@ derivation, no @Generics@
+-- generic representation and no 'Data.Data'.
+module Network.HTTP.Types.Method
+  ( -- * HTTP methods
+    Method
+
+    -- ** Constants
+  , methodGet
+  , methodPost
+  , methodHead
+  , methodPut
+  , methodDelete
+  , methodTrace
+  , methodConnect
+  , methodOptions
+  , methodPatch
+
+    -- ** Standard Methods
+
+  , StdMethod(..)
+  , parseMethod
+  , renderMethod
+  , renderStdMethod
+  ) where
+
+import Data.Bool (Bool(..), (&&))
+import Data.Bounded (Bounded(..))
+import Data.ByteString (ByteString)
+import Data.Either (Either(..))
+import Data.Enum (Enum(..))
+import Data.Eq (Eq)
+import Data.List ((++), lookup, map)
+import Data.Maybe (maybe)
+import Data.Ord (Ord, Ordering(..))
+import Moggi.Err (error)
+import Text.Read (Read(..), lex, readParen)
+import Text.Show (Show(..), showChar, showParen, showString)
+
+-- | HTTP method (flat 'B.ByteString' type).
+type Method = ByteString
+
+-- | GET Method
+methodGet :: Method
+methodGet = renderStdMethod GET
+
+-- | POST Method
+methodPost :: Method
+methodPost = renderStdMethod POST
+
+-- | HEAD Method
+methodHead :: Method
+methodHead = renderStdMethod HEAD
+
+-- | PUT Method
+methodPut :: Method
+methodPut = renderStdMethod PUT
+
+-- | DELETE Method
+methodDelete :: Method
+methodDelete = renderStdMethod DELETE
+
+-- | TRACE Method
+methodTrace :: Method
+methodTrace = renderStdMethod TRACE
+
+-- | CONNECT Method
+methodConnect :: Method
+methodConnect = renderStdMethod CONNECT
+
+-- | OPTIONS Method
+methodOptions :: Method
+methodOptions = renderStdMethod OPTIONS
+
+-- | PATCH Method
+methodPatch :: Method
+methodPatch = renderStdMethod PATCH
+
+-- | HTTP standard method (as defined by RFC 2616, and PATCH which is defined
+--   by RFC 5789).
+data StdMethod
+  = GET
+  | POST
+  | HEAD
+  | PUT
+  | DELETE
+  | TRACE
+  | CONNECT
+  | OPTIONS
+  | PATCH
+  deriving (Read, Show, Eq, Ord, Enum, Bounded)
+
+-- These are ordered by suspected frequency. More popular methods should go first.
+-- The reason is that methodList is used with lookup.
+-- lookup is probably faster for these few cases than setting up an elaborate data structure.
+
+methodList :: [(Method, StdMethod)]
+methodList = map (\m -> (renderStdMethod m, m)) (enumFromTo minBound maxBound)
+
+-- | Convert a method 'B.ByteString' to a 'StdMethod' if possible.
+parseMethod :: Method -> Either ByteString StdMethod
+parseMethod bs = maybe (Left bs) Right (lookup bs methodList)
+
+-- | Convert an algebraic method to a 'B.ByteString'.
+--
+-- prop> renderMethod (parseMethod bs) == bs
+renderMethod :: Either ByteString StdMethod -> Method
+renderMethod method = case method of
+  Left bs -> bs
+  Right m -> renderStdMethod m
+
+-- | Convert a 'StdMethod' to a 'B.ByteString'.
+renderStdMethod :: StdMethod -> Method
+renderStdMethod method = case method of
+  GET -> "GET"
+  POST -> "POST"
+  HEAD -> "HEAD"
+  PUT -> "PUT"
+  DELETE -> "DELETE"
+  TRACE -> "TRACE"
+  CONNECT -> "CONNECT"
+  OPTIONS -> "OPTIONS"
+  PATCH -> "PATCH"

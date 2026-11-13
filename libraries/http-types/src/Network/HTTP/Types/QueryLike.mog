@@ -1,0 +1,63 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Some type classes to make more general functions when handling query strings.
+--
+-- Porting notes: Moggi has no lazy 'ByteString', so the @L.ByteString@
+-- instances are absent. Text is 'String' here, so the 'Data.Text.Text'
+-- instance and the @[Char]@ instance are the one 'String' instance.
+module Network.HTTP.Types.QueryLike
+  ( QueryLike(..)
+  , QueryKeyLike(..)
+  , QueryValueLike(..)
+  ) where
+
+import Data.ByteString (ByteString)
+import Data.Function (id, (.))
+import Data.List qualified as L
+import Data.Maybe (Maybe(..), catMaybes)
+import Data.String (String)
+import Data.String.Encoding (encodeUtf8)
+import Data.Tuple (fst, snd)
+import Network.HTTP.Types.URI (Query)
+
+-- | Types which can, and commonly are, converted to 'Query' are in this class.
+--
+-- You can use lists of simple key value pairs, with 'B.ByteString', 'String'
+-- as the key/value types. You can also have the value type lifted into a Maybe
+-- to support keys without values; and finally it is possible to put each pair
+-- into a Maybe for key-value pairs that aren't always present.
+class QueryLike a where
+  -- | Convert to 'Query'.
+  toQuery :: a -> Query
+
+-- | Types which, in a Query-like key-value list, are used in the Key position.
+class QueryKeyLike a where
+  toQueryKey :: a -> ByteString
+
+-- | Types which, in a Query-like key-value list, are used in the Value position.
+class QueryValueLike a where
+  toQueryValue :: a -> Maybe ByteString
+
+instance (QueryKeyLike k, QueryValueLike v) => QueryLike [(k, v)] where
+  toQuery xs = L.map toPair xs
+    where
+      toPair item = (toQueryKey (fst item), toQueryValue (snd item))
+
+instance (QueryKeyLike k, QueryValueLike v) => QueryLike [Maybe (k, v)] where
+  toQuery xs = toQuery (catMaybes xs)
+
+instance QueryKeyLike ByteString where
+  toQueryKey = id
+
+instance QueryKeyLike String where
+  toQueryKey = encodeUtf8
+
+instance QueryValueLike ByteString where
+  toQueryValue = Just
+
+instance QueryValueLike String where
+  toQueryValue = Just . encodeUtf8
+
+instance QueryValueLike a => QueryValueLike (Maybe a) where
+  toQueryValue m = case m of
+    Nothing -> Nothing
+    Just v -> toQueryValue v

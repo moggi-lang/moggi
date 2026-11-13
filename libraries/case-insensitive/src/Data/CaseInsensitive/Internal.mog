@@ -1,0 +1,152 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- Module      :  Data.CaseInsensitive.Internal
+-- Copyright   :  (c) 2011-2013 Bas van Dijk
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Bas van Dijk <v.dijk.bas@gmail.com>
+--
+-- Internal module which exports the 'CI' type, constructor,
+-- associated instances and the 'FoldCase' class and instances.
+--
+-- Porting notes: Moggi has one text type -- 'String' -- so the upstream
+-- 'Data.Text.Text' instances are the 'String' ones, and the lazy
+-- @Data.ByteString.Lazy@, @Data.ByteString.Short@ and @Data.Text.Lazy@
+-- instances are absent together with those types. There is no 'Data.Data',
+-- ''Data.Typeable.Typeable' or @Lift@ in base, and no @hashable@ or
+-- @deepseq@ package, so the corresponding instances are not provided. Case
+-- folding is the simple per-character mapping ('Data.Char.toLower'): the full
+-- Unicode case folding the @text@ package provides is not available here.
+module Data.CaseInsensitive.Internal
+  ( CI
+  , mk
+  , unsafeMk
+  , original
+  , foldedCase
+  , map
+  , traverse
+  , FoldCase(foldCase)
+  ) where
+
+import Control.Applicative (Applicative)
+import Data.Bool (Bool(..), (&&), (||))
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as B
+import Data.Char (Char, toLower)
+import Data.Eq (Eq((==)))
+import Data.Function ((.))
+import Data.Functor qualified as F
+import Data.List qualified as L
+import Data.Monoid
+import Data.Num ((+))
+import Data.Ord (Ord(compare), (<=))
+import Data.Semigroup
+import Data.String (IsString(..), String)
+import Data.String qualified as S
+import Data.Tuple (fst, snd)
+import Data.Word (Word8)
+import Text.Read (Read(..))
+import Text.Show (Show(..))
+
+--------------------------------------------------------------------------------
+-- Case Insensitive Strings
+--------------------------------------------------------------------------------
+
+{-| A @CI s@ provides /C/ase /I/nsensitive comparison for the string-like type
+@s@ (for example: 'String', 'B.ByteString', etc.).
+
+Note that @CI s@ has an instance for 'IsString' which together with the
+overloaded string literals allows you to write case insensitive
+string literals as in:
+
+@
+\> (\"Content-Type\" :: 'CI' 'String') == (\"CONTENT-TYPE\" :: 'CI' 'String')
+True
+@
+
+-}
+data CI s = CI { original :: s, foldedCase :: s }
+
+-- | Make the given string-like value case insensitive.
+mk :: FoldCase s => s -> CI s
+mk s = CI s (foldCase s)
+
+-- | Constructs a 'CI' from an already case folded string-like
+-- value. The given string is used both as the 'original' as well as
+-- the 'foldedCase'.
+--
+-- This function is unsafe since the compiler can't guarantee that the
+-- provided string is case folded.
+unsafeMk :: FoldCase s => s -> CI s
+unsafeMk s = CI s s
+
+-- | Transform the original string-like value but keep it case insensitive.
+map :: FoldCase s2 => (s1 -> s2) -> (CI s1 -> CI s2)
+map f ci = mk (f (original ci))
+
+-- | Transform the original string-like value but keep it case insensitive.
+traverse :: (FoldCase s2, Applicative f) => (s1 -> f s2) -> CI s1 -> f (CI s2)
+traverse f ci = F.map mk (f (original ci))
+
+instance (IsString s, FoldCase s) => IsString (CI s) where
+  fromString = mk . fromString
+
+instance Semigroup s => Semigroup (CI s) where
+  (<>) a b = CI (original a <> original b) (foldedCase a <> foldedCase b)
+
+instance Monoid s => Monoid (CI s) where
+  mempty = CI mempty mempty
+
+instance Eq s => Eq (CI s) where
+  (==) a b = foldedCase a == foldedCase b
+
+instance Ord s => Ord (CI s) where
+  compare a b = compare (foldedCase a) (foldedCase b)
+
+instance (Read s, FoldCase s) => Read (CI s) where
+  readsPrec prec input = L.map convert (readsPrec prec input)
+    where
+      convert :: (s, String) -> (CI s, String)
+      convert pair = (mk (fst pair), snd pair)
+
+instance Show s => Show (CI s) where
+  showsPrec prec ci = showsPrec prec (original ci)
+  show ci = show (original ci)
+
+--------------------------------------------------------------------------------
+-- Folding (lowering) cases
+--------------------------------------------------------------------------------
+
+-- | Class of string-like types that support folding cases.
+--
+-- /Note/: In some languages, case conversion is a locale- and context-dependent
+-- operation. The @foldCase@ method is /not/ intended to be locale sensitive.
+class FoldCase s where
+  foldCase :: s -> s
+
+  foldCaseList :: [s] -> [s]
+  foldCaseList = L.map foldCase
+
+instance FoldCase a => FoldCase [a] where
+  foldCase = foldCaseList
+
+-- | Note that @foldCase@ on @'B.ByteString's@ is only guaranteed to be correct for ISO-8859-1 encoded strings!
+instance FoldCase ByteString where
+  foldCase = B.map toLower8
+
+instance FoldCase Char where
+  foldCase = toLower
+
+-- | 'String' is the one text type, so it has the folding instance the @text@
+-- package gives 'Data.Text.Text' upstream.
+instance FoldCase String where
+  foldCase s = S.pack (L.map toLower (S.unpack s))
+
+instance FoldCase (CI s) where
+  foldCase ci = case ci of
+    CI _ l -> CI l l
+
+toLower8 :: Word8 -> Word8
+toLower8 w =
+  if (65 <= w && w <= 90) || (192 <= w && w <= 214) || (216 <= w && w <= 222)
+    then w + 32
+    else w

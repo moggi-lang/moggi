@@ -1,0 +1,541 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Type and constants for handling HTTP header fields.
+--
+-- At the bottom are also some functions to handle certain header field values.
+--
+-- Porting notes: base has no lazy 'ByteString', so the byte ranges and the
+-- other builders are joined into a strict 'ByteString' with
+-- 'Data.ByteString.Builder.Internal.toByteString' instead of
+-- @toLazyByteString@ followed by @toStrict@. 'mappend' is spelled @<>@, since
+-- the 'Monoid' class here offers 'mempty' and 'mconcat' only. The
+-- 'Data.Data.Data' and 'GHC.Generics.Generic' derivations are absent with
+-- those libraries.
+module Network.HTTP.Types.Header
+  ( -- * HTTP Headers
+    Header
+  , HeaderName
+  , RequestHeaders
+  , ResponseHeaders
+
+    -- ** Common headers
+
+    -- to prevent accidental spelling errors.
+  , hAccept
+  , hAcceptCharset
+  , hAcceptEncoding
+  , hAcceptLanguage
+  , hAcceptPatch
+  , hAcceptQuery
+  , hAcceptRanges
+  , hAccessControlAllowCredentials
+  , hAccessControlAllowHeaders
+  , hAccessControlAllowMethods
+  , hAccessControlAllowOrigin
+  , hAccessControlExposeHeaders
+  , hAccessControlMaxAge
+  , hAccessControlRequestMethod
+  , hAge
+  , hAllow
+  , hAltSvc
+  , hAuthorization
+  , hCacheControl
+  , hConnection
+  , hContentDigest
+  , hContentDisposition
+  , hContentEncoding
+  , hContentLanguage
+  , hContentLength
+  , hContentLocation
+  , hContentMD5
+  , hContentRange
+  , hContentSecurityPolicy
+  , hContentSecurityPolicyReportOnly
+  , hContentType
+  , hCookie
+  , hDate
+  , hETag
+  , hExpect
+  , hExpires
+  , hForwarded
+  , hFrom
+  , hHost
+  , hIfMatch
+  , hIfModifiedSince
+  , hIfNoneMatch
+  , hIfRange
+  , hIfUnmodifiedSince
+  , hLastModified
+  , hLink
+  , hLocation
+  , hMaxForwards
+  , hMIMEVersion
+  , hOrigin
+  , hPragma
+  , hPrefer
+  , hPreferenceApplied
+  , hProxyAuthenticate
+  , hProxyAuthorization
+  , hRange
+  , hReferer
+  , hRetryAfter
+  , hServer
+  , hSetCookie
+  , hStrictTransportSecurity
+  , hTE
+  , hTrailer
+  , hTransferEncoding
+  , hUpgrade
+  , hUserAgent
+  , hVary
+  , hVia
+  , hWWWAuthenticate
+  , hWarning
+
+    -- ** Byte ranges
+
+    --
+    -- https://www.rfc-editor.org/rfc/rfc9110.html#name-byte-ranges
+  , ByteRange(..)
+  , renderByteRangeBuilder
+  , renderByteRange
+  , ByteRanges
+  , renderByteRangesBuilder
+  , renderByteRanges
+  , parseByteRanges
+  ) where
+
+import Data.Bool
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as B
+import Data.ByteString.Builder (Builder)
+import Data.ByteString.Builder qualified as BB
+import Data.ByteString.Builder.Internal (toByteString)
+import Data.ByteString.Char8 qualified as B8
+import Data.CaseInsensitive (CI)
+import Data.Eq (Eq)
+import Data.Function ((.))
+import Data.Integer (Integer)
+import Data.List ((:), intersperse, map)
+import Data.Maybe
+import Data.Monoid
+import Data.Num
+import Data.Ord
+import Data.Semigroup
+import Data.Tuple (fst, snd)
+import Data.Word (Word8)
+import Text.Show
+
+-- | A full HTTP header field with the name and value separated.
+--
+-- E.g. @"Content-Length: 28"@ parsed into a 'Header' would turn into @("Content-Length", "28")@
+type Header = (HeaderName, ByteString)
+
+-- | A case-insensitive name of a header field.
+--
+-- This is the part of the header field before the colon: @HeaderName: some value@
+type HeaderName = CI ByteString
+
+-- | A list of 'Header's.
+--
+-- Same type as 'ResponseHeaders', but useful to differentiate in type signatures.
+type RequestHeaders = [Header]
+
+-- | A list of 'Header's.
+--
+-- Same type as 'RequestHeaders', but useful to differentiate in type signatures.
+type ResponseHeaders = [Header]
+
+-- | [Accept](https://www.rfc-editor.org/rfc/rfc9110.html#name-accept)
+hAccept :: HeaderName
+hAccept = "Accept"
+
+-- | [Accept-Charset](https://www.rfc-editor.org/rfc/rfc9110.html#name-accept-charset)
+hAcceptCharset :: HeaderName
+hAcceptCharset = "Accept-Charset"
+
+-- | [Accept-Encoding](https://www.rfc-editor.org/rfc/rfc9110.html#name-accept-encoding)
+hAcceptEncoding :: HeaderName
+hAcceptEncoding = "Accept-Encoding"
+
+-- | [Access-Control-Allow-Credentials](https://www.w3.org/TR/2014/REC-cors-20140116/#access-control-allow-origin-response-header)
+hAccessControlAllowCredentials :: HeaderName
+hAccessControlAllowCredentials = "Access-Control-Allow-Credentials"
+
+-- | [Access-Control-Allow-Headers](https://www.w3.org/TR/2014/REC-cors-20140116/#access-control-allow-headers-response-header)
+hAccessControlAllowHeaders :: HeaderName
+hAccessControlAllowHeaders = "Access-Control-Allow-Headers"
+
+-- | [Access-Control-Allow-Methods](https://www.w3.org/TR/2014/REC-cors-20140116/#access-control-allow-methods-response-header)
+hAccessControlAllowMethods :: HeaderName
+hAccessControlAllowMethods = "Access-Control-Allow-Methods"
+
+-- | [Access-Control-Allow-Origin](https://www.w3.org/TR/2014/REC-cors-20140116/#access-control-allow-origin-response-header)
+hAccessControlAllowOrigin :: HeaderName
+hAccessControlAllowOrigin = "Access-Control-Allow-Origin"
+
+-- | [Access-Control-Expose-Headers](https://www.w3.org/TR/2014/REC-cors-20140116/#access-control-expose-headers-response-header)
+hAccessControlExposeHeaders :: HeaderName
+hAccessControlExposeHeaders = "Access-Control-Expose-Headers"
+
+-- | [Access-Control-Max-Age](https://www.w3.org/TR/2014/REC-cors-20140116/#access-control-max-age-response-header)
+hAccessControlMaxAge :: HeaderName
+hAccessControlMaxAge = "Access-Control-Max-Age"
+
+-- | [Access-Control-Request-Method](https://www.w3.org/TR/2014/REC-cors-20140116/#access-control-request-method-request-header)
+hAccessControlRequestMethod :: HeaderName
+hAccessControlRequestMethod = "Access-Control-Request-Method"
+
+-- | [Accept-Language](https://www.rfc-editor.org/rfc/rfc9110.html#name-accept-language)
+hAcceptLanguage :: HeaderName
+hAcceptLanguage = "Accept-Language"
+
+-- | [Accept-Query](https://www.rfc-editor.org/rfc/rfc10008.html#section-3)
+hAcceptQuery :: HeaderName
+hAcceptQuery = "Accept-Query"
+
+-- | [Accept-Ranges](https://www.rfc-editor.org/rfc/rfc9110.html#name-accept-ranges)
+hAcceptRanges :: HeaderName
+hAcceptRanges = "Accept-Ranges"
+
+-- | [Age](https://www.rfc-editor.org/rfc/rfc9111.html#name-age)
+hAge :: HeaderName
+hAge = "Age"
+
+-- | [Allow](https://www.rfc-editor.org/rfc/rfc9110.html#name-allow)
+hAllow :: HeaderName
+hAllow = "Allow"
+
+-- | [Authorization](https://www.rfc-editor.org/rfc/rfc9110.html#name-authorization)
+hAuthorization :: HeaderName
+hAuthorization = "Authorization"
+
+-- | [Cache-Control](https://www.rfc-editor.org/rfc/rfc9111.html#name-cache-control)
+hCacheControl :: HeaderName
+hCacheControl = "Cache-Control"
+
+-- | [Connection](https://www.rfc-editor.org/rfc/rfc9110.html#name-connection)
+hConnection :: HeaderName
+hConnection = "Connection"
+
+-- | [Content-Encoding](https://www.rfc-editor.org/rfc/rfc9110.html#name-content-encoding)
+hContentEncoding :: HeaderName
+hContentEncoding = "Content-Encoding"
+
+-- | [Content-Language](https://www.rfc-editor.org/rfc/rfc9110.html#name-content-language)
+hContentLanguage :: HeaderName
+hContentLanguage = "Content-Language"
+
+-- | [Content-Length](https://www.rfc-editor.org/rfc/rfc9110.html#name-content-length)
+hContentLength :: HeaderName
+hContentLength = "Content-Length"
+
+-- | [Content-Location](https://www.rfc-editor.org/rfc/rfc9110.html#name-content-location)
+hContentLocation :: HeaderName
+hContentLocation = "Content-Location"
+
+-- | [Content-MD5](https://www.rfc-editor.org/rfc/rfc2616.html#section-14.15)
+--
+-- /This header has been obsoleted in RFC 9110./
+hContentMD5 :: HeaderName
+hContentMD5 = "Content-MD5"
+
+-- | [Content-Range](https://www.rfc-editor.org/rfc/rfc9110.html#name-content-range)
+hContentRange :: HeaderName
+hContentRange = "Content-Range"
+
+-- | [Content-Type](https://www.rfc-editor.org/rfc/rfc9110.html#name-content-type)
+hContentType :: HeaderName
+hContentType = "Content-Type"
+
+-- | [Date](https://www.rfc-editor.org/rfc/rfc9110.html#name-date)
+hDate :: HeaderName
+hDate = "Date"
+
+-- | [ETag](https://www.rfc-editor.org/rfc/rfc9110.html#name-etag)
+hETag :: HeaderName
+hETag = "ETag"
+
+-- | [Expect](https://www.rfc-editor.org/rfc/rfc9110.html#name-expect)
+hExpect :: HeaderName
+hExpect = "Expect"
+
+-- | [Expires](https://www.rfc-editor.org/rfc/rfc9111.html#name-expires)
+hExpires :: HeaderName
+hExpires = "Expires"
+
+-- | [From](https://www.rfc-editor.org/rfc/rfc9110.html#name-from)
+hFrom :: HeaderName
+hFrom = "From"
+
+-- | [Host](https://www.rfc-editor.org/rfc/rfc9110.html#name-host-and-authority)
+hHost :: HeaderName
+hHost = "Host"
+
+-- | [If-Match](https://www.rfc-editor.org/rfc/rfc9110.html#name-if-match)
+hIfMatch :: HeaderName
+hIfMatch = "If-Match"
+
+-- | [If-Modified-Since](https://www.rfc-editor.org/rfc/rfc9110.html#name-if-modified-since)
+hIfModifiedSince :: HeaderName
+hIfModifiedSince = "If-Modified-Since"
+
+-- | [If-None-Match](https://www.rfc-editor.org/rfc/rfc9110.html#name-if-none-match)
+hIfNoneMatch :: HeaderName
+hIfNoneMatch = "If-None-Match"
+
+-- | [If-Range](https://www.rfc-editor.org/rfc/rfc9110.html#name-if-range)
+hIfRange :: HeaderName
+hIfRange = "If-Range"
+
+-- | [If-Unmodified-Since](https://www.rfc-editor.org/rfc/rfc9110.html#name-if-unmodified-since)
+hIfUnmodifiedSince :: HeaderName
+hIfUnmodifiedSince = "If-Unmodified-Since"
+
+-- | [Last-Modified](https://www.rfc-editor.org/rfc/rfc9110.html#name-last-modified)
+hLastModified :: HeaderName
+hLastModified = "Last-Modified"
+
+-- | [Location](https://www.rfc-editor.org/rfc/rfc9110.html#name-location)
+hLocation :: HeaderName
+hLocation = "Location"
+
+-- | [Max-Forwards](https://www.rfc-editor.org/rfc/rfc9110.html#name-max-forwards)
+hMaxForwards :: HeaderName
+hMaxForwards = "Max-Forwards"
+
+-- | [Pragma](https://www.rfc-editor.org/rfc/rfc9111.html#name-pragma)
+--
+-- /This header has been deprecated in RFC 9111 in favor of "Cache-Control"./
+hPragma :: HeaderName
+hPragma = "Pragma"
+
+-- | [Proxy-Authenticate](https://www.rfc-editor.org/rfc/rfc9110.html#name-proxy-authenticate)
+hProxyAuthenticate :: HeaderName
+hProxyAuthenticate = "Proxy-Authenticate"
+
+-- | [Proxy-Authorization](https://www.rfc-editor.org/rfc/rfc9110.html#name-proxy-authorization)
+hProxyAuthorization :: HeaderName
+hProxyAuthorization = "Proxy-Authorization"
+
+-- | [Range](https://www.rfc-editor.org/rfc/rfc9110.html#name-range)
+hRange :: HeaderName
+hRange = "Range"
+
+-- | [Referer](https://www.rfc-editor.org/rfc/rfc9110.html#name-referer)
+hReferer :: HeaderName
+hReferer = "Referer"
+
+-- | [Retry-After](https://www.rfc-editor.org/rfc/rfc9110.html#name-retry-after)
+hRetryAfter :: HeaderName
+hRetryAfter = "Retry-After"
+
+-- | [Server](https://www.rfc-editor.org/rfc/rfc9110.html#name-server)
+hServer :: HeaderName
+hServer = "Server"
+
+-- | [TE](https://www.rfc-editor.org/rfc/rfc9110.html#name-te)
+hTE :: HeaderName
+hTE = "TE"
+
+-- | [Trailer](https://www.rfc-editor.org/rfc/rfc9110.html#name-trailer)
+hTrailer :: HeaderName
+hTrailer = "Trailer"
+
+-- | [Transfer-Encoding](https://www.rfc-editor.org/rfc/rfc9112#name-transfer-encoding)
+hTransferEncoding :: HeaderName
+hTransferEncoding = "Transfer-Encoding"
+
+-- | [Upgrade](https://www.rfc-editor.org/rfc/rfc9110.html#name-upgrade)
+hUpgrade :: HeaderName
+hUpgrade = "Upgrade"
+
+-- | [User-Agent](https://www.rfc-editor.org/rfc/rfc9110.html#name-user-agent)
+hUserAgent :: HeaderName
+hUserAgent = "User-Agent"
+
+-- | [Vary](https://www.rfc-editor.org/rfc/rfc9110.html#name-vary)
+hVary :: HeaderName
+hVary = "Vary"
+
+-- | [Via](https://www.rfc-editor.org/rfc/rfc9110.html#name-via)
+hVia :: HeaderName
+hVia = "Via"
+
+-- | [WWW-Authenticate](https://www.rfc-editor.org/rfc/rfc9110.html#name-www-authenticate)
+hWWWAuthenticate :: HeaderName
+hWWWAuthenticate = "WWW-Authenticate"
+
+-- | [Warning](https://www.rfc-editor.org/rfc/rfc9111.html#name-warning)
+--
+-- /This header has been obsoleted in RFC 9111./
+hWarning :: HeaderName
+hWarning = "Warning"
+
+-- | [Accept-Patch](https://www.rfc-editor.org/rfc/rfc5789.html#section-3.1)
+hAcceptPatch :: HeaderName
+hAcceptPatch = "Accept-Patch"
+
+-- | [Alt-Svc](https://www.rfc-editor.org/rfc/rfc7838.html#section-3)
+hAltSvc :: HeaderName
+hAltSvc = "Alt-Svc"
+
+-- | [Content-Disposition](https://www.rfc-editor.org/rfc/rfc6266.html)
+hContentDisposition :: HeaderName
+hContentDisposition = "Content-Disposition"
+
+-- | [Content-Digest](https://www.rfc-editor.org/rfc/rfc9530.html#section-2)
+hContentDigest :: HeaderName
+hContentDigest = "Content-Digest"
+
+-- | [Content-Security-Policy](https://www.w3.org/TR/CSP3/#csp-header)
+hContentSecurityPolicy :: HeaderName
+hContentSecurityPolicy = "Content-Security-Policy"
+
+-- | [Content-Security-Policy-Report-Only](https://www.w3.org/TR/CSP3/#cspro-header)
+hContentSecurityPolicyReportOnly :: HeaderName
+hContentSecurityPolicyReportOnly = "Content-Security-Policy-Report-Only"
+
+-- | [Cookie](https://www.rfc-editor.org/rfc/rfc6265.html#section-4.2)
+hCookie :: HeaderName
+hCookie = "Cookie"
+
+-- | [Forwarded](https://www.rfc-editor.org/rfc/rfc7239.html)
+hForwarded :: HeaderName
+hForwarded = "Forwarded"
+
+-- | [Link](https://www.rfc-editor.org/rfc/rfc8288.html#section-3)
+hLink :: HeaderName
+hLink = "Link"
+
+-- | [MIME-Version](https://www.rfc-editor.org/rfc/rfc2616.html#section-19.4.1)
+hMIMEVersion :: HeaderName
+hMIMEVersion = "MIME-Version"
+
+-- | [Origin](https://www.rfc-editor.org/rfc/rfc6454.html#section-7)
+hOrigin :: HeaderName
+hOrigin = "Origin"
+
+-- | [Prefer](https://www.rfc-editor.org/rfc/rfc7240.html#section-2)
+hPrefer :: HeaderName
+hPrefer = "Prefer"
+
+-- | [Preference-Applied](https://www.rfc-editor.org/rfc/rfc7240.html#section-3)
+hPreferenceApplied :: HeaderName
+hPreferenceApplied = "Preference-Applied"
+
+-- | [Set-Cookie](https://www.rfc-editor.org/rfc/rfc6265.html#section-4.1)
+hSetCookie :: HeaderName
+hSetCookie = "Set-Cookie"
+
+-- | [Strict-Transport-Security](https://www.rfc-editor.org/rfc/rfc6797.html#section-6.1)
+hStrictTransportSecurity :: HeaderName
+hStrictTransportSecurity = "Strict-Transport-Security"
+
+-- | An individual byte range. Used in @Range@ request headers.
+-- This type and its accompanying functions are /NOT/ compatible with the
+-- @Content-Range@ response header.
+--
+-- Negative indices are not allowed!
+data ByteRange
+  = ByteRangeFrom Integer
+  | ByteRangeFromTo Integer Integer
+  | ByteRangeSuffix Integer
+  deriving (Show, Eq, Ord)
+
+-- | Turns a byte range into a byte string 'Builder'.
+renderByteRangeBuilder :: ByteRange -> Builder
+renderByteRangeBuilder range = case range of
+  ByteRangeFrom from -> BB.integerDec from <> BB.word8 _hyphen
+  ByteRangeFromTo from to -> BB.integerDec from <> BB.word8 _hyphen <> BB.integerDec to
+  ByteRangeSuffix suffix -> BB.word8 _hyphen <> BB.integerDec suffix
+
+-- | Renders a byte range into a 'B.ByteString'.
+--
+-- >>> renderByteRange (ByteRangeFrom 2048)
+-- "2048-"
+renderByteRange :: ByteRange -> ByteString
+renderByteRange br = toByteString (renderByteRangeBuilder br)
+
+-- | A list of byte ranges.
+type ByteRanges = [ByteRange]
+
+-- | Turns a list of byte ranges into a byte string 'Builder'.
+renderByteRangesBuilder :: ByteRanges -> Builder
+renderByteRangesBuilder ranges =
+  BB.byteString "bytes="
+    <> mconcat (intersperse (BB.word8 _comma) (map renderByteRangeBuilder ranges))
+
+-- | Renders a list of byte ranges into a 'B.ByteString'.
+--
+-- >>> renderByteRanges [ByteRangeFrom 2048, ByteRangeSuffix 20]
+-- "bytes=2048-,-20"
+renderByteRanges :: ByteRanges -> ByteString
+renderByteRanges brs = toByteString (renderByteRangesBuilder brs)
+
+-- | Parse the value of a Range header into a 'ByteRanges'.
+--
+-- >>> parseByteRanges "error"
+-- Nothing
+-- >>> parseByteRanges "bytes=0-499"
+-- Just [ByteRangeFromTo 0 499]
+-- >>> parseByteRanges "bytes=-500"
+-- Just [ByteRangeSuffix 500]
+-- >>> parseByteRanges "bytes=9500-"
+-- Just [ByteRangeFrom 9500]
+-- >>> parseByteRanges "bytes=0-0,-1"
+-- Just [ByteRangeFromTo 0 0,ByteRangeSuffix 1]
+parseByteRanges :: ByteString -> Maybe ByteRanges
+parseByteRanges bs1 =
+  let prefix = "bytes=" :: ByteString
+      split = B.splitAt (B.length prefix) bs1
+  in if fst split == prefix
+       then case parseRange (snd split) of
+         Nothing -> Nothing
+         Just r -> parseRanges (fst r) (snd r)
+       else Nothing
+
+parseRange :: ByteString -> Maybe (ByteRange, ByteString)
+parseRange bs2 = case B8.readInteger bs2 of
+  Nothing -> Nothing
+  Just i ->
+    if fst i < 0
+      then Just (ByteRangeSuffix (negate (fst i)), snd i)
+      else case startsWithHyphen bs2 of
+        -- A suffix of zero is not satisfiable: "-0" reaches the parser as a
+        -- non-negative zero whose input still carries the sign.
+        True -> Nothing
+        False -> case popByte _hyphen (snd i) of
+          Nothing -> Just (ByteRangeFrom (fst i), snd i)
+          Just bs4 -> case B8.readInteger bs4 of
+            Just j ->
+              if fst j >= fst i
+                then Just (ByteRangeFromTo (fst i) (fst j), snd j)
+                else Just (ByteRangeFrom (fst i), bs4)
+            Nothing -> Just (ByteRangeFrom (fst i), bs4)
+
+startsWithHyphen :: ByteString -> Bool
+startsWithHyphen bs = case B.uncons bs of
+  Nothing -> False
+  Just b -> fst b == _hyphen
+
+parseRanges :: ByteRange -> ByteString -> Maybe ByteRanges
+parseRanges r bs3 = case B.null bs3 of
+  True -> Just [r]
+  False -> case popByte _comma bs3 of
+    Nothing -> Nothing
+    Just bs4 -> case parseRange bs4 of
+      Nothing -> Nothing
+      Just next -> case parseRanges (fst next) (snd next) of
+        Nothing -> Nothing
+        Just rest -> Just (r : rest)
+
+popByte :: Word8 -> ByteString -> Maybe ByteString
+popByte w8 bs = case B.uncons bs of
+  Nothing -> Nothing
+  Just b -> if fst b == w8 then Just (snd b) else Nothing
+
+_comma :: Word8
+_comma = 44
+
+_hyphen :: Word8
+_hyphen = 45
