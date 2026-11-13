@@ -215,7 +215,7 @@ getChar :: IO Char
 getChar = hGetChar stdin
 
 print :: Show a => a -> IO ()
-print x = putStr (show x)
+print x = putStrLn (show x)
 
 putStr s = hPutStr stdout s
 
