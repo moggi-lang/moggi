@@ -5,11 +5,13 @@ namespace Moggi\Semantics\Types;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TDouble;
 use Moggi\Semantics\TypeExpr\TInt;
+use Moggi\Semantics\TypeExpr\TStr;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Kernel\literalRole;
+use function Moggi\Semantics\Kernel\stringLiteralRole;
 use function Moggi\Semantics\Kinds\canonicalTypeConName;
 
 /**
@@ -29,6 +31,56 @@ function inferIntegerLit(TypeCheckState $state, Ast\IntegerLit $expr): Type
     $literalClass = classWithRole($state, literalRole());
     if ($literalClass === null) {
         return new TInt();
+    }
+
+    $type = freshType($state);
+    setPendingObligations($state, $expr, [new Ast\PendingConstraint($literalClass, [$type])]);
+
+    return $type;
+}
+
+/**
+ * A string literal is the kernel `String` unless the context asks it for a type
+ * the `fromString` class can build.
+ *
+ * Only then does the literal get a fresh variable and the class's dictionary:
+ * a position with no expectation, or one still a variable or `String`, takes the
+ * literal as it is and allocates nothing. A position that names another type
+ * without an instance for it also keeps the literal a `String`, so unifying the
+ * two reports the mismatch itself rather than an unresolvable constraint.
+ *
+ * Without the class in scope there is no method to denote the value with, so the
+ * literal is the `String` it already is; a module that never imports the class
+ * keeps working unchanged.
+ */
+function inferStringLit(TypeCheckState $state, Ast\StringLit $expr, ?Type $expected = null): Type
+{
+    $literalClass = classWithRole($state, stringLiteralRole());
+    if ($literalClass === null) {
+        return new TStr();
+    }
+
+    $expected = $expected === null ? null : prune($state, $expected);
+    if ($expected === null
+        || $expected instanceof TVar
+        || $expected instanceof TStr
+        || ($expected instanceof TCon
+            && $expected->args === []
+            && $expected->name === canonicalTypeConName('String#'))) {
+        return new TStr();
+    }
+
+    try {
+        $convertible = tryResolveEvidenceExprs(
+            $state,
+            expandConstraintsWithSuperclasses($state, [new Ast\PendingConstraint($literalClass, [$expected])]),
+        );
+    } catch (TypeError) {
+        $convertible = null;
+    }
+
+    if ($convertible === null) {
+        return new TStr();
     }
 
     $type = freshType($state);
@@ -100,7 +152,6 @@ function defaultAmbiguousNumericVars(
     }
 
     $known = \array_flip(knownTypeConstructorNames($state));
-    /** @var array<string, list<Ast\PendingConstraint>> $mentioned */
     $mentioned = [];
     foreach ($pending as $constraint) {
         if (! isset($state->classes[$constraint->class])) {
@@ -148,6 +199,83 @@ function defaultAmbiguousNumericVars(
 }
 
 /**
+ * Give every string literal whose type nothing can determine the kernel
+ * `String`.
+ *
+ * A literal in `let s = "text"` is the only thing that constrains its type and
+ * no part of the declaration's own type mentions it, so the obligation has to
+ * be resolved rather than generalized. There is exactly one candidate, because
+ * the kernel has one string type; a declaration that does name something else is
+ * not ambiguous and keeps the dictionary it was given.
+ *
+ * @param array<string, true> $bound variables the enclosing declaration
+ *        quantifies over
+ * @param ?Ast\FunctionDecl $owner the declaration this body belongs to, so the
+ *        decision can be published with the declaration it settled
+ */
+function defaultAmbiguousStringVars(
+    TypeCheckState $state,
+    Ast\AstNode $body,
+    array $bound,
+    ?Ast\FunctionDecl $owner = null,
+): void {
+    $literalClass = classWithRole($state, stringLiteralRole());
+    if ($literalClass === null) {
+        return;
+    }
+
+    $pending = pendingConstraintsDeep($body, $state);
+    if ($pending === []) {
+        return;
+    }
+
+    $known = \array_flip(knownTypeConstructorNames($state));
+    $mentioned = [];
+    foreach ($pending as $constraint) {
+        if (! isset($state->classes[$constraint->class])) {
+            continue;
+        }
+
+        $vars = [];
+        foreach ($constraint->args as $arg) {
+            foreach (signatureVarsInType(prune($state, $arg), $known) as $name => $_) {
+                $vars[$name] = true;
+            }
+        }
+        foreach ($vars as $name => $_) {
+            $mentioned[$name][] = $constraint;
+        }
+    }
+
+    foreach ($mentioned as $name => $constraints) {
+        if (isset($bound[$name])) {
+            continue;
+        }
+
+        $defaultable = defaultableConstraintsOnVar($state, $constraints, $name, [$literalClass]);
+        if ($defaultable === null) {
+            continue;
+        }
+
+        $candidate = new TStr();
+        if (! constraintsHoldAtType($state, $defaultable, $name, $candidate)) {
+            continue;
+        }
+
+        $state->defaultingLog[] = [
+            'decl' => $owner === null ? null : \spl_object_id($owner),
+            'wanted' => \implode(' & ', \array_map(
+                static fn (Ast\PendingConstraint $c): string => $c->class . '(' . $name . ')',
+                $defaultable,
+            )),
+            'decision' => typeToString($candidate),
+            'provenance' => 'string defaulting: the kernel has one string type',
+        ];
+        unify($state, new TVar($name), $candidate);
+    }
+}
+
+/**
  * The requirements a default for `$varName` has to satisfy, or null when the
  * variable cannot be defaulted.
  *
@@ -162,10 +290,10 @@ function defaultAmbiguousNumericVars(
  * @param list<Ast\PendingConstraint> $constraints every constraint mentioning the variable
  * @return ?list<Ast\PendingConstraint>
  */
-function defaultableConstraintsOnVar(TypeCheckState $state, array $constraints, string $varName): ?array
+function defaultableConstraintsOnVar(TypeCheckState $state, array $constraints, string $varName, ?array $requiredClasses = null): ?array
 {
     $known = \array_flip(knownTypeConstructorNames($state));
-    $numericClasses = numericDefaultClasses();
+    $literalClasses = $requiredClasses ?? numericDefaultClasses();
     $required = [];
     $numeric = false;
 
@@ -189,7 +317,7 @@ function defaultableConstraintsOnVar(TypeCheckState $state, array $constraints, 
                 continue;
             }
 
-            $numeric = $numeric || \in_array($leaf->class, $numericClasses, true);
+            $numeric = $numeric || \in_array($leaf->class, $literalClasses, true);
             $required[] = $leaf;
         }
     }
@@ -291,6 +419,10 @@ function elaborateNumericLiterals(TypeCheckState $state, Ast\AstNode $expr): Ast
 {
     if ($expr instanceof Ast\IntegerLit) {
         return elaborateNumericLiteral($state, $expr);
+    }
+
+    if ($expr instanceof Ast\StringLit) {
+        return elaborateStringLiteral($state, $expr);
     }
 
     if ($expr instanceof Ast\Apply) {
@@ -472,6 +604,62 @@ function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): A
     );
     setPendingObligations($state, $expr, []);
     $converted = new Ast\Apply($method, $integerValue, $expr->line, $expr->col, $expr->endCol);
+    copyInferredType($converted, $expr);
+
+    return $converted;
+}
+
+/**
+ * Replace a string literal whose type is not the kernel `String` with the value
+ * that type denotes: the literal itself stays the argument, and the type's own
+ * `fromString` from its dictionary wraps it. A literal left with its constraint
+ * pending is one nothing determined, and the unresolved-constraint report names
+ * it.
+ */
+function elaborateStringLiteral(TypeCheckState $state, Ast\StringLit $expr): Ast\AstNode
+{
+    if (pendingConstraintsOf($state, $expr) === []) {
+        return $expr;
+    }
+
+    $constraints = refreshConstraintArgs($state, pendingConstraintsOf($state, $expr));
+    $type = canonicalPrimitiveType(prune($state, $constraints[0]->args[0] ?? freshType($state)));
+
+    if ($type instanceof TStr) {
+        setPendingObligations($state, $expr, []);
+
+        return $expr;
+    }
+
+    if ($type instanceof TVar) {
+        // Nothing asked this literal for another type, and the kernel has only
+        // one string type, so that is what it stands for.
+        setPendingObligations($state, $expr, []);
+        unify($state, $type, new TStr(), $expr);
+
+        return $expr;
+    }
+
+    $literalMethod = classMethodWithRole($state, stringLiteralRole());
+    if ($literalMethod === null) {
+        return $expr;
+    }
+
+    $evidence = tryResolveEvidenceExprs(
+        $state,
+        expandConstraintsWithSuperclasses($state, $constraints),
+    );
+    if ($evidence === null) {
+        return $expr;
+    }
+
+    $method = prependEvidenceToCall(
+        $state,
+        new Ast\Variable($literalMethod, $expr->line, $expr->col, $expr->endCol),
+        $evidence,
+    );
+    setPendingObligations($state, $expr, []);
+    $converted = new Ast\Apply($method, $expr, $expr->line, $expr->col, $expr->endCol);
     copyInferredType($converted, $expr);
 
     return $converted;
