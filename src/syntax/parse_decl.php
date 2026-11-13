@@ -75,6 +75,10 @@ function parseTopLevelDecl(ParserState $state): ?Ast\AstNode
         return parseTypeSynonymDecl($state);
     }
 
+    if (isAt($state, TokenKind::KwPattern)) {
+        return parsePatternSynonymDecl($state);
+    }
+
     if (isAt($state, TokenKind::LParen)
         && isAt($state, TokenKind::Op, 1)
         && isAt($state, TokenKind::RParen, 2)
@@ -122,6 +126,158 @@ function parseTopLevel(ParserState $state): Ast\AstNode
     }
 
     return $decl;
+}
+
+/**
+ * `pattern Name p1 p2 = matcher`, `pattern Name p1 p2 <- matcher` with an
+ * optional `where` builder, or `pattern Name :: type`.
+ *
+ * A matcher that needs a view (`(f -> p)`) is written with `<-`, as in GHC.
+ */
+function parsePatternSynonymDecl(ParserState $state): Ast\PatternSynonymDecl
+{
+    $keyword = expect($state, TokenKind::KwPattern);
+    $name = expect($state, TokenKind::ConId);
+    $endCol = $keyword->col + \strlen('pattern');
+
+    if (isAt($state, TokenKind::Op, 0, '::')) {
+        advance($state);
+
+        $decl = new Ast\PatternSynonymDecl(
+            $name->lexeme,
+            [],
+            null,
+            parseType($state),
+            $keyword->line,
+            $keyword->col,
+            $endCol,
+        );
+        registerPatternSynonym($state, $decl);
+
+        return $decl;
+    }
+
+    $params = [];
+    while (isAt($state, TokenKind::VarId)) {
+        $params[] = advance($state)->lexeme;
+    }
+
+    if (isAt($state, TokenKind::Op, 0, '<-')) {
+        advance($state);
+    } else {
+        expectOp($state, '=');
+    }
+
+    $decl = new Ast\PatternSynonymDecl(
+        $name->lexeme,
+        $params,
+        parsePattern($state),
+        null,
+        $keyword->line,
+        $keyword->col,
+        $endCol,
+        parsePatternSynonymBuilder($state, $name->lexeme, $params, $keyword->line, $keyword->col),
+    );
+    registerPatternSynonym($state, $decl);
+
+    return $decl;
+}
+
+/**
+ * Parse the optional `where` builder of a pattern synonym:
+ *
+ *     pattern YearMonthDay y m d <- (toGregorian -> (y, m, d))
+ *       where
+ *         YearMonthDay y m d = fromGregorian y m d
+ *
+ * The builder is one equation whose left side names exactly the synonym's
+ * parameters as variables. It is stored as a lambda, so an expression-position
+ * use becomes that lambda applied to the arguments.
+ *
+ * @param list<string> $params
+ */
+function parsePatternSynonymBuilder(ParserState $state, string $name, array $params, int $line, int $col): ?Ast\AstNode
+{
+    if (! isAt($state, TokenKind::KwWhere)) {
+        return null;
+    }
+
+    $where = advance($state);
+    if (! isAt($state, TokenKind::ConId) || peek($state)->lexeme !== $name) {
+        throw parseError(
+            $state,
+            "the builder for pattern synonym `{$name}` must start with `{$name}`",
+            $where,
+            'parse/pattern-synonym',
+        );
+    }
+    advance($state);
+
+    $formals = [];
+    while (startsPattern($state) && ! isAt($state, TokenKind::Op, 0, '=')) {
+        $atom = parsePatternAtom($state);
+        if (! $atom instanceof Ast\PatVar) {
+            throw parseError(
+                $state,
+                "the builder for pattern synonym `{$name}` takes variables, not patterns",
+                null,
+                'parse/pattern-synonym',
+            );
+        }
+        if (isset($formals[$atom->name])) {
+            throw parseError(
+                $state,
+                "the builder for pattern synonym `{$name}` binds `{$atom->name}` twice",
+                null,
+                'parse/pattern-synonym',
+            );
+        }
+        $formals[$atom->name] = true;
+    }
+
+    $names = \array_keys($formals);
+    if (\count($names) !== \count($params)) {
+        throw parseError(
+            $state,
+            "the builder for pattern synonym `{$name}` takes " . \count($params)
+            . ' argument(s), got ' . \count($names),
+            $where,
+            'parse/pattern-synonym',
+        );
+    }
+    foreach ($names as $formal) {
+        if (! \in_array($formal, $params, true)) {
+            throw parseError(
+                $state,
+                "the builder for pattern synonym `{$name}` names `{$formal}`, which is not a parameter",
+                $where,
+                'parse/pattern-synonym',
+            );
+        }
+    }
+
+    expectOp($state, '=');
+    $body = parseExprWithWhere($state);
+
+    if (isAt($state, TokenKind::ConId) && peek($state)->lexeme === $name) {
+        throw parseError(
+            $state,
+            "the builder for pattern synonym `{$name}` takes one equation",
+            null,
+            'parse/pattern-synonym',
+        );
+    }
+
+    if ($names === []) {
+        return $body;
+    }
+
+    $lambdaParams = \array_map(
+        static fn (string $formal): Ast\LambdaParam => new Ast\LambdaParam(new Ast\PatVar($formal)),
+        $names,
+    );
+
+    return new Ast\Lambda($lambdaParams, $body, $line, $col, $col);
 }
 
 /**
@@ -645,10 +801,10 @@ function parseDataDecl(ParserState $state): Ast\DataDecl
         $constructors = parseGadtConstructorBlock($state, $dataToken);
     } elseif (isAt($state, TokenKind::Op, 0, '=')) {
         advance($state);
-        $constructors = [parseDocumentedConstructor($state)];
+        $constructors = [parseConstructorAlternative($state, $name, $params, $dataToken->col)];
         while (isAt($state, TokenKind::Pipe)) {
             advance($state);
-            $constructors[] = parseDocumentedConstructor($state);
+            $constructors[] = parseConstructorAlternative($state, $name, $params, $dataToken->col);
         }
     }
 
@@ -663,6 +819,114 @@ function parseDataDecl(ParserState $state): Ast\DataDecl
         $nameToken->col + \max(0, \strlen($name) - 1),
         derivingClasses: $derivingClasses,
     );
+}
+
+/**
+ * Whether a constructor context (`Show a, Eq b =>`) follows the `forall` of an
+ * alternative-form constructor.
+ *
+ * A context is the only thing in a constructor's field list that can contain
+ * `=>`, so finding one at bracket depth zero before the next alternative, the
+ * `deriving` clause, or the end of the declaration means a context is there.
+ * The declaration's column bounds the scan: the alternative is indented past
+ * the `data`/`newtype` keyword, so a token at or left of it is the next
+ * declaration.
+ */
+function constructorContextFollows(ParserState $state, int $declCol): bool
+{
+    $depth = 0;
+    $count = \count($state->tokens);
+    for ($i = $state->pos; $i < $count; ++$i) {
+        $token = $state->tokens[$i];
+        switch ($token->kind) {
+            case TokenKind::LParen:
+            case TokenKind::LBracket:
+                ++$depth;
+
+                continue 2;
+            case TokenKind::RParen:
+            case TokenKind::RBracket:
+                --$depth;
+
+                continue 2;
+            case TokenKind::Pipe:
+            case TokenKind::KwDeriving:
+            case TokenKind::Eof:
+                return false;
+            default:
+                break;
+        }
+        if ($depth !== 0) {
+            continue;
+        }
+        if ($token->col <= $declCol) {
+            return false;
+        }
+        if ($token->kind === TokenKind::Op && $token->lexeme === '=>') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * One constructor of an ordinary `data` declaration, including the form
+ * `| forall b. Append (MarkupM b) (MarkupM a)`, whose quantified variables the
+ * data head does not mention and which are therefore existential.
+ *
+ * The constructor becomes the signature the GADT syntax already states, so the
+ * checker has one path for both spellings: `C :: forall a b. T b -> U a`,
+ * with a context (`| forall a. Show a => C a`) becoming the same stored
+ * dictionary fields it becomes under `where`.
+ *
+ * @param list<Ast\DataParam> $params
+ */
+function parseConstructorAlternative(ParserState $state, string $dataName, array $params, int $declCol): Ast\ConstructorDecl
+{
+    $forall = isForallStart($state) ? parseForallHead($state) : null;
+
+    $constraints = [];
+    if ($forall !== null && constructorContextFollows($state, $declCol)) {
+        $constraints[] = parseTypeInfix($state);
+        while (isAt($state, TokenKind::Comma)) {
+            advance($state);
+            $constraints[] = parseTypeInfix($state);
+        }
+        expectOp($state, '=>');
+    }
+
+    $ctor = parseDocumentedConstructor($state);
+    if ($forall === null) {
+        return $ctor;
+    }
+
+    $result = new Ast\TypeCon($dataName, $ctor->line, $ctor->col, $ctor->endCol);
+    foreach ($params as $param) {
+        $result = new Ast\TypeApp($result, [new Ast\TypeVar($param->name)]);
+    }
+
+    $body = $result;
+    foreach (\array_reverse($ctor->fields) as $field) {
+        $body = new Ast\TypeArrow($field->type, $body);
+    }
+    if ($constraints !== []) {
+        $body = new Ast\TypeConstrained($constraints, $body);
+    }
+
+    $binders = $forall['binders'];
+    $kinds = $forall['kinds'];
+    foreach ($params as $param) {
+        $binders[] = $param->name;
+        $kinds[] = $param->kind instanceof Ast\KindInfer ? null : $param->kind;
+    }
+
+    $ctor->signature = forallSignature(
+        ['binders' => $binders, 'kinds' => $kinds, 'token' => $forall['token']],
+        $body,
+    );
+
+    return $ctor;
 }
 
 /**
@@ -788,12 +1052,16 @@ function parseNewtypeDecl(ParserState $state): Ast\DataDecl
     } else {
         expectOp($state, '=');
 
-        $constructors = [parseDocumentedConstructor($state)];
+        $constructors = [parseConstructorAlternative($state, $name, $params, $newtypeToken->col)];
         if (isAt($state, TokenKind::Pipe)) {
             throw parseError($state, 'a newtype must have exactly one constructor');
         }
 
-        if (\count($constructors[0]->fields) !== 1) {
+        $ctor = $constructors[0];
+        $fieldCount = $ctor->isGadt()
+            ? \count($ctor->fieldTypeAsts())
+            : \count($ctor->fields);
+        if ($fieldCount !== 1) {
             throw parseError($state, 'a newtype constructor must have exactly one field');
         }
     }
@@ -1351,14 +1619,19 @@ function parseClassDecl(ParserState $state): Ast\ClassDecl
     $headCon = $headType instanceof Ast\TypeApp ? $headType->con : $headType;
     $headLoc = $headCon->line ? $headCon : $classToken;
 
-    expect($state, TokenKind::KwWhere);
+    // A class may have no body at all — `class Coercible (a :: k) (b :: k)` —
+    // which is how base declares the primitive classes.
+    $hasBody = isAt($state, TokenKind::KwWhere);
+    if ($hasBody) {
+        advance($state);
+    }
 
     $bodyCol = $classToken->col;
     $methods = [];
     $associatedTypes = [];
     $defaults = [];
     $minimalGroups = [];
-    while (! isAt($state, TokenKind::Eof) && ! isFollowingClassBodyBoundary($state)) {
+    while ($hasBody && ! isAt($state, TokenKind::Eof) && ! isFollowingClassBodyBoundary($state)) {
         if (peek($state)->col <= $bodyCol) {
             break;
         }
@@ -1812,12 +2085,13 @@ function parseInstanceDecl(ParserState $state): Ast\AstNode
  */
 function instanceClassAndHeadFromType(Ast\TypeNode $type, ParserState $state): array
 {
-    $args = [];
+    $groups = [];
     $cur = $type;
     while ($cur instanceof Ast\TypeApp) {
-        $args = [...\array_reverse($cur->args), ...$args];
+        \array_unshift($groups, $cur->args);
         $cur = $cur->con;
     }
+    $args = $groups === [] ? [] : \array_merge(...$groups);
 
     if (! $cur instanceof Ast\TypeCon) {
         throw unexpected($state, 'class name');
@@ -1867,6 +2141,7 @@ function isFollowingDeclBoundary(ParserState $state): bool
         TokenKind::KwData,
         TokenKind::KwNewtype,
         TokenKind::KwType,
+        TokenKind::KwPattern,
         TokenKind::KwClass,
         TokenKind::KwInstance,
         TokenKind::KwForeign,
@@ -2119,6 +2394,7 @@ function isFollowingTopLevelDecl(ParserState $state): bool
         TokenKind::KwData,
         TokenKind::KwNewtype,
         TokenKind::KwType,
+        TokenKind::KwPattern,
         TokenKind::KwClass,
         TokenKind::KwInstance,
         TokenKind::KwForeign,

@@ -1,0 +1,8 @@
+program
+  pattern Nil =
+    pat_nil
+  pattern Cons x xs =
+    pat_cons
+      pat_var x
+      pat_var xs
+  pattern NilSig :: [Int]

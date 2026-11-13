@@ -101,7 +101,58 @@ function parse(
     array $importedFixity = [],
     ?array $localFixity = null,
     array $imports = [],
+    array $importedPatternSynonyms = [],
 ): Ast\Program {
+    [$program, $patternSynonyms] = parseOnce(
+        $tokens,
+        $source,
+        $filename,
+        $importedFixity,
+        $localFixity,
+        $imports,
+        $importedPatternSynonyms,
+    );
+    if ($patternSynonyms === []) {
+        return $program;
+    }
+
+    [$reparsed] = parseOnce(
+        $tokens,
+        $source,
+        $filename,
+        $importedFixity,
+        $localFixity,
+        $imports,
+        $patternSynonyms,
+    );
+
+    return $reparsed;
+}
+
+/**
+ * One parse pass.
+ *
+ * Pattern synonyms are registered as their declarations are read, so a pass
+ * only expands the uses that follow a declaration. Parsing again with the
+ * collected table expands the uses that came first: the second pass reports
+ * the same syntax errors as the first, and only its program is kept.
+ *
+ * @param list<Token> $tokens
+ * @param array<string, array{assoc: string, prec: int}> $importedFixity
+ * @param array<string, array{assoc: string, prec: int}>|null $localFixity
+ * @param list<Ast\ImportDecl> $imports
+ * @param array<string, array{params: list<string>, matcher: Ast\AstNode}> $patternSynonyms
+ * @return array{0: Ast\Program, 1: array<string, array{params: list<string>, matcher: Ast\AstNode}>}
+ */
+function parseOnce(
+    array $tokens,
+    string $source = '',
+    string $filename = '',
+    array $importedFixity = [],
+    ?array $localFixity = null,
+    array $imports = [],
+    array $patternSynonyms = [],
+): array {
     $localFixity ??= collectFixity($tokens, $source, $filename);
     $state = new ParserState(
         $tokens,
@@ -110,6 +161,7 @@ function parse(
         $source,
         $filename,
     );
+    $state->patternSynonyms = $patternSynonyms;
     $pragmas = parseHeaderPragmas($state);
     $language = $pragmas['language'];
 
@@ -207,7 +259,7 @@ function parse(
         $fixityDocs,
     );
 
-    return $program;
+    return [$program, $state->patternSynonyms];
 }
 
 /**

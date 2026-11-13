@@ -65,6 +65,7 @@ function parseType(ParserState $state, bool $anyOperator = false): Ast\TypeNode
     }
 
     $first = parseTypeInfix($state, $anyOperator);
+    skipDocInsideType($state);
 
     if (isAt($state, TokenKind::Comma)) {
         $before = $state->pos;
@@ -108,6 +109,7 @@ function parseTypeNoConstraint(ParserState $state, bool $anyOperator = false): A
     }
 
     $first = parseTypeInfix($state, $anyOperator);
+    skipDocInsideType($state);
 
     if (isAt($state, TokenKind::Op, 0, '->')) {
         advance($state);
@@ -116,6 +118,37 @@ function parseTypeNoConstraint(ParserState $state, bool $anyOperator = false): A
     }
 
     return $first;
+}
+
+/**
+ * Skip a `-- ^` doc comment written inside a multi-line type.
+ *
+ * Haskell writes argument documentation where the argument ends, which in a
+ * signature is in front of the next arrow:
+ *
+ * > fromDyn :: Typeable a
+ * >         => Dynamic      -- ^ the dynamically-typed object
+ * >         -> a            -- ^ a default value
+ *
+ * The comment belongs to the declaration, but it cannot interrupt the type: it
+ * is skipped here when the type continues with `->` or `=>`. A `-- ^` that ends
+ * the type (a record field, or the last argument of a signature) is left for
+ * the declaration parser to attach.
+ */
+function skipDocInsideType(ParserState $state): void
+{
+    while (isAt($state, TokenKind::DocTrailing) || isAt($state, TokenKind::DocBlock)) {
+        $saved = $state->pos;
+        advance($state);
+
+        if (isAt($state, TokenKind::Op) && (peek($state)->lexeme === '->' || peek($state)->lexeme === '=>')) {
+            return;
+        }
+
+        $state->pos = $saved;
+
+        return;
+    }
 }
 
 /**

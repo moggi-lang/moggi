@@ -136,6 +136,24 @@ function parseModuleExportItem(ParserState $state, ?string $section = null): arr
         return $item;
     }
 
+    if (isAt($state, TokenKind::KwPattern)) {
+        advance($state);
+        $item = parseModuleExportItem($state, $section);
+        $item['tag'] = 'pattern';
+        $item['namespace'] = 'pattern';
+
+        return $item;
+    }
+
+    if (isAt($state, TokenKind::KwData)) {
+        advance($state);
+        $item = parseModuleExportItem($state, $section);
+        $item['tag'] = 'data';
+        $item['namespace'] = 'data';
+
+        return $item;
+    }
+
     if (isAt($state, TokenKind::KwModule)) {
         advance($state);
         $path = parseModulePath($state);
@@ -387,6 +405,12 @@ function parseImportItems(ParserState $state): array
 
 function parseImportItem(ParserState $state): Ast\ImportItem
 {
+    $pattern = false;
+    if (isAt($state, TokenKind::KwPattern)) {
+        advance($state);
+        $pattern = true;
+    }
+
     $name = parseImportChildName($state);
     $asName = null;
     $methods = null;
@@ -414,7 +438,7 @@ function parseImportItem(ParserState $state): Ast\ImportItem
         $asName = expectImportName($state);
     }
 
-    return new Ast\ImportItem($name, $asName, methods: $methods);
+    return new Ast\ImportItem($name, $asName, methods: $methods, pattern: $pattern);
 }
 
 function parseImportChildName(ParserState $state): string

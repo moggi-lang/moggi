@@ -1,0 +1,13 @@
+-- `(expr -> pattern)` applies the expression to the scrutinee and matches the
+-- result.
+sign :: Int -> Int
+sign n = n
+
+classify :: Int -> Int
+classify x = case x of
+  (sign -> 0) -> 0
+  _ -> 1
+
+describe :: Int -> String
+describe (sign -> 0) = "zero"
+describe _ = "other"
