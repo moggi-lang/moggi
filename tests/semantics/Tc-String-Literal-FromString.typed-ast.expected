@@ -1,0 +1,61 @@
+program
+  newtype Label
+    constructor Label
+      field  :: String
+  function __ev_IsString_Label_fromString :: String -> Label
+    pat_var s
+    apply
+      constructor_ref Label
+      variable s
+  newtype Tag
+    constructor Tag
+      field  :: String
+  function __ev_IsString_Tag_fromString :: String -> Tag
+    pat_var s
+    apply
+      constructor_ref Tag
+      variable s
+  function label :: Label
+    apply
+      evidence_method IsString.fromString evidence= nullary=0
+        instance Label
+      string "hi"
+  function useTag :: Tag -> String
+    pat_var t
+    case
+      variable t
+      alt
+        pat_con Tag
+          pat_var s
+        variable s
+  function b :: String
+    apply
+      variable useTag
+      apply
+        evidence_method IsString.fromString evidence= nullary=0
+          instance Tag
+        string "x"
+  function plain :: String
+    string "hi"
+  function tags :: [Tag]
+    list
+      apply
+        evidence_method IsString.fromString evidence= nullary=0
+          instance Tag
+        string "a"
+      apply
+        evidence_method IsString.fromString evidence= nullary=0
+          instance Tag
+        string "b"
+  function pair :: Tuple2 Label Label
+    tuple
+      apply
+        evidence_method IsString.fromString evidence= nullary=0
+          instance Label
+        string "c"
+      apply
+        evidence_method IsString.fromString evidence= nullary=0
+          instance Label
+        string "d"
+  function inferred :: String
+    string "hi"

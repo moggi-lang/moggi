@@ -1,0 +1,45 @@
+-- A string literal stands for another type only when the context asks for one
+-- that the `fromString` class can build, and then it is the value that type's
+-- method returns for the string it spells.
+--
+-- The contexts here are a signature (`label`), a parameter's type (`b`), a
+-- list's element type (`tags`) and a tuple's element types (`pair`), so each of
+-- those literals is converted through the type's own `fromString`; `plain` names
+-- `String` and `inferred` has nothing asking for another type, so they stay the
+-- kernel string literal and need no dictionary.
+
+module Main
+
+import Data.String (String, IsString(..))
+
+newtype Label = Label String
+
+instance IsString Label where
+  fromString s = Label s
+
+newtype Tag = Tag String
+
+instance IsString Tag where
+  fromString s = Tag s
+
+label :: Label
+label = "hi"
+
+useTag :: Tag -> String
+useTag t = case t of
+  Tag s -> s
+
+b :: String
+b = useTag "x"
+
+plain :: String
+plain = "hi"
+
+-- A list's element type and a tuple's element types are context as well.
+tags :: [Tag]
+tags = ["a", "b"]
+
+pair :: (Label, Label)
+pair = ("c", "d")
+
+inferred = "hi"
