@@ -33,9 +33,20 @@ function moduleFilenameWarning(string $path, string $moduleName): ?string
  */
 function mogPathToOutputRelative(string $mogPath, string $rootPrefix, string $extension): string
 {
+    static $memo = [];
+
+    $key = $mogPath . "\0" . $rootPrefix . "\0" . $extension;
+    if (isset($memo[$key])) {
+        return $memo[$key];
+    }
+
     $relative = outputRelativePath($mogPath, $rootPrefix);
 
-    return \preg_replace('/\.mog$/', $extension, $relative) ?? $relative;
+    if (\count($memo) >= 8192) {
+        $memo = [];
+    }
+
+    return $memo[$key] = \preg_replace('/\.mog$/', $extension, $relative) ?? $relative;
 }
 
 /**
