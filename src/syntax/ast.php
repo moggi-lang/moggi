@@ -39,6 +39,79 @@ function lambdaParamFor(AstNode $pattern): LambdaParam
     );
 }
 
+/**
+ * A lambda as a function of variables.
+ *
+ * Haskell defines `\p1 … pn -> e` by desugaring it to
+ * `\x1 … xn -> case x1 of p1 -> … case xn of pn -> e`, and the IR binds a
+ * lambda's parameters as slots, so the source form is turned into that one
+ * here, in the sugar stage: every later pass sees only variable parameters.
+ * A variable or wildcard parameter is already in that form and keeps its own
+ * name, so an ordinary lambda comes back unchanged.
+ *
+ * A pattern the checker cannot prove total is a match failure at run time, as
+ * it is for a function clause, so the generated `case` opts out of the
+ * exhaustiveness requirement a written `case` carries. A binding form that has
+ * an answer for a pattern it does not match -- a `do` statement's `fail`, a list
+ * comprehension's dropped element -- passes it as `$onFail`, which becomes the
+ * case's last alternative.
+ *
+ * @param array<int, \Moggi\Syntax\Ast\LambdaParam|\Moggi\Syntax\Ast\AstNode> $params
+ */
+function desugarLambdaPatterns(array $params, AstNode $body, ?AstNode $onFail = null): Lambda
+{
+    static $fresh = 0;
+
+    /** @var list<array{0: LambdaParam, 1: ?AstNode}> $binders */
+    $binders = [];
+    foreach ($params as $param) {
+        $pattern = $param instanceof LambdaParam ? $param->pattern : $param;
+        $type = $param instanceof LambdaParam ? $param->type : null;
+        if ($pattern instanceof PatVar || $pattern instanceof PatWild) {
+            $binders[] = [$param instanceof LambdaParam ? $param : lambdaParamFor($pattern), null];
+
+            continue;
+        }
+
+        $name = '__lam' . $fresh++;
+        $binders[] = [
+            new LambdaParam(new PatVar($name), $type, $pattern->line, $pattern->col, $pattern->endCol),
+            $pattern,
+        ];
+    }
+
+    $result = $body;
+    for ($i = \count($binders) - 1; $i >= 0; --$i) {
+        [$param, $pattern] = $binders[$i];
+        if ($pattern === null) {
+            continue;
+        }
+        $alts = [new Alt($pattern, $result)];
+        if ($onFail !== null) {
+            $alts[] = new Alt(new PatWild($pattern->line, $pattern->col, $pattern->endCol), $onFail);
+        }
+        $case = new CaseExpr(
+            new Variable($param->pattern->name),
+            $alts,
+            $pattern->line,
+            $pattern->col,
+            $pattern->endCol,
+        );
+        $case->exhaustiveCheck = false;
+        $result = $case;
+    }
+
+    $first = $binders[0][0] ?? null;
+
+    return new Lambda(
+        \array_column($binders, 0),
+        $result,
+        $first->line ?? 0,
+        $first->col ?? 0,
+        $first->endCol ?? 0,
+    );
+}
+
 function desugarEnumFromTo(AstNode $from, AstNode $to): AstNode
 {
     return new Apply(new Apply(new Variable('enumFromTo'), $from), $to);
@@ -70,7 +143,10 @@ function desugarListComp(AstNode $expr, array $qualifiers): AstNode
         return new Apply(
             new Apply(
                 new Variable('concatMap'),
-                new Lambda([lambdaParamFor($qual->pattern)], $inner),
+                // A list comprehension with a refutable generator keeps the
+                // elements its pattern matches and drops the rest, which is
+                // what `concatMap` does with the empty list.
+                desugarLambdaPatterns([$qual->pattern], $inner, new ListLit([])),
             ),
             $qual->expr,
         );
@@ -92,8 +168,10 @@ function desugarListComp(AstNode $expr, array $qualifiers): AstNode
  * @param list<AstNode> $stmts `do` statements, as parsed
  * @param string $bind the method the block sequences with, read off the declaration that implies the
  *   bind role ({@see \Moggi\Semantics\Kernel}) — the desugaring names no operator itself
+ * @param ?string $fail the method a pattern that does not match runs, read off the class that
+ *   declares the fail role; a bind whose pattern is a variable never needs it
  */
-function desugarDo(array $stmts, string $bind): AstNode
+function desugarDo(array $stmts, string $bind, ?string $fail = null): AstNode
 {
     if ($stmts === []) {
         throw new \InvalidArgumentException('empty do block');
@@ -103,17 +181,24 @@ function desugarDo(array $stmts, string $bind): AstNode
     $rest = \array_slice($stmts, 1);
 
     return match ($first::class) {
-        DoBind::class => (function () use ($first, $rest, $bind): AstNode {
-            $inner = desugarDo($rest, $bind);
+        DoBind::class => (function () use ($first, $rest, $bind, $fail): AstNode {
+            $inner = desugarDo($rest, $bind, $fail);
             $pattern = $first->pattern;
             if ($pattern instanceof PatWild) {
                 $pattern = new PatVar('__doWild');
             }
 
-            return new Infix($bind, $first->expr, new Lambda([lambdaParamFor($pattern)], $inner));
+            $onFail = $pattern instanceof PatVar || $fail === null
+                ? null
+                : new Apply(
+                    new Variable($fail),
+                    new StringLit('Pattern match failure in `do` expression', $pattern->line ?? 0, $pattern->col ?? 0, $pattern->endCol ?? 0),
+                );
+
+            return new Infix($bind, $first->expr, desugarLambdaPatterns([$pattern], $inner, $onFail));
         })(),
-        DoLet::class => (function () use ($first, $rest, $bind): AstNode {
-            $inner = desugarDo($rest, $bind);
+        DoLet::class => (function () use ($first, $rest, $bind, $fail): AstNode {
+            $inner = desugarDo($rest, $bind, $fail);
 
             return new Let(
                 \array_map(
@@ -132,7 +217,7 @@ function desugarDo(array $stmts, string $bind): AstNode
         })(),
         DoExprStmt::class => $rest === []
             ? $first->expr
-            : new Infix($bind, $first->expr, new Lambda([new LambdaParam(new PatVar('__doUnit'))], desugarDo($rest, $bind))),
+            : new Infix($bind, $first->expr, new Lambda([new LambdaParam(new PatVar('__doUnit'))], desugarDo($rest, $bind, $fail))),
         default => throw new \InvalidArgumentException('invalid do statement'),
     };
 }
@@ -257,6 +342,15 @@ function dump(AstNode $node, int $indent = 0): string
                 static fn (AstNode $param): string => dumpPattern($param, $indent + 1),
                 $node->params,
             )) . dump($node->body, $indent + 1)),
+        PatternSynonymDecl::class => $pad . 'pattern ' . $node->name
+            . ($node->params !== [] ? ' ' . \implode(' ', $node->params) : '')
+            . ($node->signature !== null ? ' :: ' . dumpTypeInline($node->signature) : '')
+            . ($node->matcher === null
+                ? "\n"
+                : " =\n" . dumpPattern($node->matcher, $indent + 1))
+            . ($node->builder === null
+                ? ''
+                : $pad . "  where\n" . dump($node->builder, $indent + 1)),
         IntegerLit::class => $pad . 'integer ' . $node->value . "\n",
         DoubleLit::class => $pad . 'float ' . $node->value . "\n",
         TypeAsc::class => $pad . 'type_asc ' . dumpTypeInline($node->type) . "\n"
@@ -491,6 +585,9 @@ function dumpPattern(AstNode $node, int $indent): string
         PatCons::class => $pad . "pat_cons\n"
             . dumpPattern($node->head, $indent + 1)
             . dumpPattern($node->tail, $indent + 1),
+        PatView::class => $pad . "pat_view\n"
+            . dump($node->expression, $indent + 1)
+            . dumpPattern($node->pattern, $indent + 1),
         PatCon::class => dumpPatCon($node, $indent),
         PatTuple::class => $pad . "pat_tuple\n" . \implode('', \array_map(
             static fn (AstNode $element): string => dumpPattern($element, $indent + 1),
@@ -613,6 +710,7 @@ function dumpTypeInline(TypeNode $node): string
                 $node->args,
             ));
         })(),
+        TypeKindAnnot::class => '(' . $node->name . ' :: ' . dumpKindInline($node->kind) . ')',
         TypeArrow::class => dumpTypeDomain($node->from) . ' -> ' . dumpTypeInline($node->to),
         TypeConstrained::class => \implode(', ', \array_map(
             static fn (TypeNode $constraint): string => dumpTypeInline($constraint),

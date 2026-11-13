@@ -7,6 +7,7 @@ use Moggi\Syntax\Lexer\TokenKind;
 
 use function Moggi\Semantics\Kernel\boolFalseCtor;
 use function Moggi\Semantics\Kernel\boolTrueCtor;
+use function Moggi\Syntax\Ast\desugarLambdaPatterns;
 
 /**
  * An integer literal, keeping the digits when they do not fit the host `int`:
@@ -292,7 +293,7 @@ function parseLambda(ParserState $state): Ast\AstNode
     expectOp($state, '->');
     $body = parseExprWithWhere($state);
 
-    return spannedRange(new Ast\Lambda($params, $body), $start, $body);
+    return spannedRange(desugarLambdaPatterns($params, $body), $start, $body);
 }
 
 function parseLambdaParam(ParserState $state): Ast\LambdaParam
@@ -475,11 +476,37 @@ function startsDoStmt(ParserState $state): bool
         return true;
     }
 
-    if (startsPattern($state) && isAt($state, TokenKind::Op, 1, '<-')) {
+    if (bindsWithArrow($state)) {
         return true;
     }
 
     return isExprStart($state);
+}
+
+/**
+ * Whether the statement at the cursor is a `do` bind, `pat <- expr`.
+ *
+ * The pattern may be compound (`Just x <- …`, `(a, b) <- …`), so the arrow is
+ * looked for after the whole pattern rather than one token ahead: parsing the
+ * pattern and rewinding is the only way to know how far it reaches.
+ */
+function bindsWithArrow(ParserState $state): bool
+{
+    if (! startsPattern($state)) {
+        return false;
+    }
+
+    $saved = $state->pos;
+
+    try {
+        parsePattern($state);
+
+        return isAt($state, TokenKind::Op, 0, '<-');
+    } catch (ParseError) {
+        return false;
+    } finally {
+        $state->pos = $saved;
+    }
 }
 
 /**
@@ -494,7 +521,7 @@ function parseDoStmt(ParserState $state): Ast\AstNode
         return new Ast\DoLet($bindings);
     }
 
-    if (startsPattern($state) && isAt($state, TokenKind::Op, 1, '<-')) {
+    if (bindsWithArrow($state)) {
         $pattern = parsePattern($state);
         advance($state);
         $expr = withDoExprStartLine($state, static fn (): Ast\AstNode => parseExprWithWhere($state));
@@ -723,10 +750,9 @@ function parseInfix(ParserState $state, int $minPrec): Ast\AstNode
             continue;
         }
 
-        if (isAt($state, TokenKind::Backtick)
-            && isAt($state, TokenKind::VarId, 1)
-            && isAt($state, TokenKind::Backtick, 2)) {
-            $op = peekAt($state, 1)->lexeme;
+        $backticked = backtickOperatorAt($state);
+        if ($backticked !== null) {
+            $op = $backticked['name'];
             ['precedence' => $prec, 'assoc' => $assoc] = fixityFor($state, $op);
 
             if ($prec < $minPrec) {
@@ -734,9 +760,9 @@ function parseInfix(ParserState $state, int $minPrec): Ast\AstNode
             }
 
             $start = peek($state);
-            advance($state);
-            advance($state);
-            $opToken = advance($state);
+            while ($state->pos < $backticked['end']) {
+                advance($state);
+            }
 
             if ($state->stopBeforeCaseAlt && caseAltBoundary($state, $start->line)) {
                 throw incompleteCaseAltError($state, 'incomplete expression in case alternative');
@@ -744,7 +770,23 @@ function parseInfix(ParserState $state, int $minPrec): Ast\AstNode
 
             $nextMin = $assoc === 'infixr' ? $prec : $prec + 1;
             $right = parseInfix($state, $nextMin);
-            $left = spannedRange(new Ast\Infix($op, $left, $right), $left, $right);
+
+            // A qualified operator (`a `Mod.f` b`) is an application of the
+            // qualified name: the surface form is ``Mod.f``, the meaning is
+            // `Mod.f a b`, and the qualified reference already names it.
+            $left = $backticked['module'] === null
+                ? spannedRange(new Ast\Infix($op, $left, $right), $left, $right)
+                : spannedRange(
+                    new Ast\Apply(
+                        new Ast\Apply(
+                            new Ast\QualifiedRef($backticked['module'], $backticked['short']),
+                            $left,
+                        ),
+                        $right,
+                    ),
+                    $left,
+                    $right,
+                );
 
             continue;
         }
@@ -832,8 +874,21 @@ function parseProjection(ParserState $state): Ast\AstNode
             if ($fieldToken->kind === TokenKind::ConId) {
                 $name = advance($state)->lexeme;
                 $module = qualifiedModuleFromExpr($expr);
+
+                $candidate = $module !== null
+                    ? $module . '.' . $name
+                    : ($expr instanceof Ast\QualifiedRef ? $expr->module . '.' . $expr->name . '.' . $name : null);
+                $synonym = $candidate !== null ? ($state->patternSynonyms[$candidate] ?? null) : null;
+                if ($synonym !== null && ($synonym['builder'] ?? null) !== null) {
+                    return \unserialize(\serialize($synonym['builder']));
+                }
+
                 if ($module === null) {
-                    throw unexpected($state, 'record field');
+                    if (! $expr instanceof Ast\QualifiedRef) {
+                        throw unexpected($state, 'record field');
+                    }
+
+                    $module = $expr->module . '.' . $expr->name;
                 }
                 $expr = spannedRange(new Ast\QualifiedRef($module, $name), $expr, $expr);
 
@@ -1027,6 +1082,11 @@ function parseAtom(ParserState $state): Ast\AstNode
         $name = $token->lexeme;
         advance($state);
 
+        $synonym = $state->patternSynonyms[$name] ?? null;
+        if ($synonym !== null && ($synonym['builder'] ?? null) !== null) {
+            return spanned(\unserialize(\serialize($synonym['builder'])), $token);
+        }
+
         if (isAt($state, TokenKind::LBrace)) {
             return spanned(new Ast\RecordCon($name, parseRecordConFields($state)), $token);
         }
@@ -1065,6 +1125,54 @@ function matchingParenIndex(ParserState $state, int $open): ?int
     }
 
     return null;
+}
+
+/**
+ * The backticked operator at the cursor, qualified or not.
+ *
+ * `a `f` b` is one name between backticks, and `a `Mod.f` b` is a qualified
+ * one: the lexer gives `Mod.f` as `Mod`, `.`, `f`, so the name spans five
+ * tokens rather than three. Both spell the application of that name to the two
+ * operands; the qualification is part of how the name is found.
+ *
+ * @return array{end: int, name: string, module: ?string, short: string}|null
+ *         `end` is exclusive; `module` is null for an unqualified name
+ */
+function backtickOperatorAt(ParserState $state): ?array
+{
+    if (! isAt($state, TokenKind::Backtick)) {
+        return null;
+    }
+
+    $tokens = $state->tokens;
+    $at = $state->pos + 1;
+    $first = $tokens[$at] ?? null;
+    if ($first === null || ($first->kind !== TokenKind::VarId && $first->kind !== TokenKind::ConId)) {
+        return null;
+    }
+
+    $parts = [$first->lexeme];
+    $at++;
+    while (($tokens[$at] ?? null)?->kind === TokenKind::Op
+        && $tokens[$at]->lexeme === '.'
+        && (($tokens[$at + 1] ?? null)?->kind === TokenKind::VarId
+            || ($tokens[$at + 1] ?? null)?->kind === TokenKind::ConId)) {
+        $parts[] = $tokens[$at + 1]->lexeme;
+        $at += 2;
+    }
+
+    if (($tokens[$at] ?? null)?->kind !== TokenKind::Backtick) {
+        return null;
+    }
+
+    $short = \array_pop($parts);
+
+    return [
+        'end' => $at + 1,
+        'name' => $short,
+        'module' => $parts === [] ? null : \implode('.', $parts),
+        'short' => $short,
+    ];
 }
 
 /**
@@ -1289,7 +1397,7 @@ function parseListComp(Ast\AstNode $expr, ParserState $state): Ast\AstNode
     $qualifiers = [];
 
     while (! isAt($state, TokenKind::RBracket)) {
-        if (startsPattern($state) && isAt($state, TokenKind::Op, 1, '<-')) {
+        if (bindsWithArrow($state)) {
             $pattern = parsePattern($state);
             advance($state);
             $qualifiers[] = new Ast\QualGen($pattern, parseExprWithWhere($state));
