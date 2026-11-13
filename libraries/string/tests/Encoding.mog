@@ -1,0 +1,277 @@
+-- Data.String.Encoding through every direction of the byte-string/text
+-- boundary: what each decode yields (as code points, so a replacement character
+-- is visible), what each encode yields (as the byte values), and what a chunked
+-- or streamed decode reports. Together the cases cover the whole exported
+-- surface, including the builders and the incremental-UTF-8 entry points.
+
+module Encoding (encodingSuite) where
+
+import Data.Bool (Bool(True, False))
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as B
+import Data.ByteString.Builder qualified as BB
+import Data.ByteString.Builder.Internal qualified as BI
+import Data.ByteString.Builder.Prim qualified as BP
+import Data.Char (Char, chr, ord)
+import Data.Either (Either(..))
+import Data.Enum (fromEnum, toEnum)
+import Data.Eq ((==))
+import Data.Int (Int)
+import Data.Maybe (Maybe(..))
+import Data.String (String)
+import Data.String qualified as S
+import Data.String.Encoding
+import Data.String.Encoding.Error (OnDecodeError, UnicodeException (..), ignore, replace)
+import Data.Tuple (fst, snd)
+import Data.Word (Word8)
+import Support (assertTrue, expect)
+import System.IO (IO)
+import Text.Show (show)
+
+ords :: String -> [Int]
+ords s = charInts (S.unpack s)
+
+charInts :: [Char] -> [Int]
+charInts cs = case cs of
+  [] -> []
+  c : rest -> ord c : charInts rest
+
+ints :: [Word8] -> [Int]
+ints ws = case ws of
+  [] -> []
+  w : rest -> fromEnum w : ints rest
+
+byteInts :: ByteString -> [Int]
+byteInts bytes = ints (B.unpack bytes)
+
+wordsOf :: [Int] -> [Word8]
+wordsOf ns = case ns of
+  [] -> []
+  n : rest -> toEnum n : wordsOf rest
+
+bytesFrom :: [Int] -> ByteString
+bytesFrom ns = B.pack (wordsOf ns)
+
+eitherText :: Either UnicodeException String -> String
+eitherText result = case result of
+  Right text -> "Right " <> text
+  Left err -> "Left " <> show err
+
+maybeText :: Maybe String -> String
+maybeText result = case result of
+  Nothing -> "Nothing"
+  Just text -> text
+
+stateText :: Maybe Utf8State -> String
+stateText state = case state of
+  Nothing -> "|bad"
+  Just _ -> "|pending"
+
+-- UTF-8: bytes out, text back, and both failures.
+escapeAngle :: BP.BoundedPrim Word8
+escapeAngle = BP.boundedPrim 4 escapeByte
+
+escapeByte :: Word8 -> BB.Builder
+escapeByte w = case fromEnum w == 60 of
+  True -> BB.byteString (bytesFrom [38, 108, 116])
+  False -> BB.char8 (chr (fromEnum w))
+
+-- A carried-over code point broken by the next chunk reports a negative
+-- position: the bytes it cannot use started before this chunk did.
+validateIncomplete :: ByteString -> String
+validateIncomplete first = case validateUtf8Chunk first of
+  (_, Just state) -> case validateUtf8More state (bytesFrom [65]) of
+    (n, state') -> show n <> stateText state'
+  (_, Nothing) -> "no state"
+
+streamWith :: OnDecodeError -> ByteString -> String
+streamWith onErr bytes = case streamDecodeUtf8With onErr bytes of
+  Some text _ _ -> text
+
+replaceLenient :: String -> Maybe Word8 -> Maybe Char
+replaceLenient _ _ = Just (chr 65533)
+
+fstText :: (String, ByteString) -> String
+fstText pair = fst pair
+
+sndText :: (String, ByteString) -> String
+sndText pair = show (byteInts (snd pair))
+
+encodeUtf8ChunkBuilder :: ByteString -> StrictTextBuilder
+encodeUtf8ChunkBuilder bytes = case decodeUtf8Chunk bytes of
+  (builder, _, _) -> builder
+
+chunkText :: ByteString -> String
+chunkText bytes = case decodeUtf8Chunk bytes of
+  (builder, _, _) -> strictBuilderToText builder
+
+chunkRest :: ByteString -> String
+chunkRest bytes = case decodeUtf8Chunk bytes of
+  (_, rest, _) -> show (byteInts rest)
+
+chunkState :: ByteString -> String
+chunkState bytes = case decodeUtf8Chunk bytes of
+  (_, _, state) -> stateText state
+
+moreText :: ByteString -> ByteString -> String
+moreText first second = case decodeUtf8Chunk first of
+  (_, _, Just state) -> case decodeUtf8More state second of
+    (builder, _, _) -> strictBuilderToText builder
+  (_, _, Nothing) -> "no state"
+
+moreRest :: ByteString -> ByteString -> String
+moreRest first second = case decodeUtf8Chunk first of
+  (_, _, Just state) -> case decodeUtf8More state second of
+    (_, rest, _) -> show (byteInts rest)
+  (_, _, Nothing) -> "no state"
+
+validateFirst :: ByteString -> String
+validateFirst bytes = case validateUtf8Chunk bytes of
+  (n, state) -> show n <> stateText state
+
+validateNext :: ByteString -> ByteString -> String
+validateNext first second = case validateUtf8Chunk first of
+  (_, Just state) -> case validateUtf8More state second of
+    (n, _) -> show n
+  (_, Nothing) -> "no state"
+
+validateBad :: ByteString -> String
+validateBad bytes = case validateUtf8Chunk bytes of
+  (n, state) -> show n <> stateText state
+
+streamText :: ByteString -> String
+streamText bytes = case streamDecodeUtf8 bytes of
+  Some text _ _ -> text
+
+streamRest :: ByteString -> String
+streamRest bytes = case streamDecodeUtf8 bytes of
+  Some _ rest _ -> show (byteInts rest)
+
+streamNext :: ByteString -> ByteString -> String
+streamNext first second = case streamDecodeUtf8 first of
+  Some _ _ next -> case next second of
+    Some text _ _ -> text
+
+encodingSuite :: IO ()
+encodingSuite = do
+  expect "UTF-8 round trip"
+    (decodeUtf8 (encodeUtf8 "héllo")) "héllo"
+  expect "UTF-8 of U+00E9"
+    (show (byteInts (encodeUtf8 (S.singleton (chr 233))))) "[195,169]"
+  expect "UTF-8 of U+1F600"
+    (show (byteInts (encodeUtf8 (S.singleton (chr 128512))))) "[240,159,152,128]"
+  expect "decodeUtf8' on valid input"
+    (eitherText (decodeUtf8' (encodeUtf8 "ok"))) "Right ok"
+  expect "decodeUtf8' on invalid input"
+    (eitherText (decodeUtf8' (bytesFrom [255])))
+    "Left Cannot decode byte '\\xff': Data.String.Encoding: Invalid UTF-8 stream"
+  expect "decodeUtf8With replaces a bad byte"
+    (show (ords (decodeUtf8With replaceLenient (bytesFrom [104, 255, 105]))))
+    "[104,65533,105]"
+  expect "decodeUtf8Lenient replaces a bad byte"
+    (show (ords (decodeUtf8Lenient (bytesFrom [104, 255, 105]))))
+    "[104,65533,105]"
+  -- An error is shown with the value it names, and errors compare by content.
+  expect "DecodeError with a byte"
+    (show (DecodeError "bad input" (Just 255)))
+    "Cannot decode byte '\\xff': bad input"
+  expect "DecodeError without a byte"
+    (show (DecodeError "bad input" Nothing)) "Cannot decode input: bad input"
+  expect "DecodeError equality"
+    (show ((DecodeError "a" (Just 1)) == (DecodeError "a" (Just 1)))) "True"
+  expect "EncodeError with a character"
+    (show (EncodeError "bad output" (Just (chr 8))))
+    "Cannot encode character '\\x8': bad output"
+  expect "EncodeError without a character"
+    (show (EncodeError "bad output" Nothing)) "Cannot encode input: bad output"
+  expect "EncodeError equality"
+    (show ((EncodeError "a" Nothing) == (EncodeError "a" Nothing))) "True"
+  expect "Latin-1 decoding" (decodeLatin1 (bytesFrom [65, 233])) "Aé"
+  expect "Latin-1 code points"
+    (show (ords (decodeLatin1 (bytesFrom [65, 233])))) "[65,233]"
+  expect "ASCII decoding" (decodeASCII (bytesFrom [65, 66, 67])) "ABC"
+  expect "ASCII' on pure input"
+    (maybeText (decodeASCII' (bytesFrom [65, 66]))) "AB"
+  expect "ASCII' on a non-ASCII byte"
+    (maybeText (decodeASCII' (bytesFrom [128]))) "Nothing"
+  expect "ASCII prefix before a bad byte"
+    (fstText (decodeASCIIPrefix (bytesFrom [65, 128, 66]))) "A"
+  expect "ASCII prefix rest"
+    (sndText (decodeASCIIPrefix (bytesFrom [65, 128, 66]))) "[128,66]"
+  -- UTF-16 and UTF-32, in both byte orders, including a surrogate pair.
+  expect "UTF-16LE of U+00E9"
+    (show (byteInts (encodeUtf16LE (S.singleton (chr 233))))) "[233,0]"
+  expect "UTF-16BE of U+00E9"
+    (show (byteInts (encodeUtf16BE (S.singleton (chr 233))))) "[0,233]"
+  expect "UTF-16LE of U+1F600"
+    (show (byteInts (encodeUtf16LE (S.singleton (chr 128512)))))
+    "[61,216,0,222]"
+  expect "UTF-16LE decoding" (show (ords (decodeUtf16LE (bytesFrom [233, 0])))) "[233]"
+  expect "UTF-16BE decoding" (show (ords (decodeUtf16BE (bytesFrom [0, 233])))) "[233]"
+  expect "UTF-16LE surrogate pair"
+    (show (ords (decodeUtf16LE (bytesFrom [61, 216, 0, 222])))) "[128512]"
+  expect "UTF-16BE surrogate pair"
+    (show (ords (decodeUtf16BE (bytesFrom [216, 61, 222, 0])))) "[128512]"
+  expect "UTF-16LE with a replacement"
+    (show (ords (decodeUtf16LEWith (replace '?') (bytesFrom [0, 216])))) "[63]"
+  expect "UTF-32LE of U+00E9"
+    (show (byteInts (encodeUtf32LE (S.singleton (chr 233))))) "[233,0,0,0]"
+  expect "UTF-32BE of U+00E9"
+    (show (byteInts (encodeUtf32BE (S.singleton (chr 233))))) "[0,0,0,233]"
+  expect "UTF-32LE decoding"
+    (show (ords (decodeUtf32LE (bytesFrom [233, 0, 0, 0])))) "[233]"
+  expect "UTF-32BE decoding"
+    (show (ords (decodeUtf32BE (bytesFrom [0, 0, 0, 233])))) "[233]"
+  expect "UTF-32BE with a replacement"
+    (show (ords (decodeUtf32BEWith (replace '!') (bytesFrom [0, 17, 0, 0])))) "[33]"
+  -- Builders: plain, escaped, and the delayed strict text.
+  expect "UTF-8 builder"
+    (decodeUtf8 (BI.toByteString (encodeUtf8Builder "builder"))) "builder"
+  expect "UTF-8 builder bytes"
+    (show (byteInts (BI.toByteString (encodeUtf8Builder (S.singleton (chr 233))))))
+    "[195,169]"
+  expect "UTF-8 escaped builder"
+    (decodeUtf8 (BI.toByteString (encodeUtf8BuilderEscaped escapeAngle (S.pack [chr 60, chr 97]))))
+    "&lta"
+  expect "UTF-8 escaped builder leaves non-ASCII alone"
+    (decodeUtf8 (BI.toByteString (encodeUtf8BuilderEscaped escapeAngle (S.singleton (chr 233)))))
+    "é"
+  expect "strict text builder round trip"
+    (strictBuilderToText (textToStrictBuilder "strict")) "strict"
+  expect "chunk builder"
+    (strictBuilderToText (encodeUtf8ChunkBuilder (encodeUtf8 "chunk"))) "chunk"
+  -- Incremental UTF-8: a two-byte character split across two chunks.
+  expect "chunk text of a split character" (chunkText (bytesFrom [104, 195])) "h"
+  expect "chunk rest of a split character"
+    (chunkRest (bytesFrom [104, 195])) "[195]"
+  expect "chunk state of a split character"
+    (chunkState (bytesFrom [104, 195])) "|pending"
+  expect "more text after a split character"
+    (moreText (bytesFrom [195]) (bytesFrom [169])) "é"
+  expect "more rest after a split character"
+    (moreRest (bytesFrom [195]) (bytesFrom [169])) "[]"
+  expect "validate an incomplete chunk"
+    (validateIncomplete (bytesFrom [104, 195])) "-1|bad"
+  expect "decodeUtf8' on a truncated tail"
+    (eitherText (decodeUtf8' (bytesFrom [195])))
+    "Left Cannot decode byte '\\xc3': Data.String.Encoding: Invalid UTF-8 stream"
+  expect "stream with replace"
+    (streamWith (replace '?') (bytesFrom [104, 255, 105])) "h?i"
+  expect "stream with ignore"
+    (streamWith ignore (bytesFrom [104, 255, 105])) "hi"
+  -- Validation reports the bytes used and the state to continue from.
+  expect "validate a chunk ending mid-character"
+    (validateFirst (bytesFrom [65, 195])) "1|pending"
+  expect "validate continues across chunks"
+    (validateNext (bytesFrom [195]) (bytesFrom [169])) "1"
+  expect "validate a bad byte"
+    (validateBad (bytesFrom [65, 255])) "1|bad"
+  -- Stream decoding: the text so far, the bytes left over, then the rest.
+  expect "stream text of an incomplete chunk"
+    (streamText (bytesFrom [104, 195])) "h"
+  expect "stream rest of an incomplete chunk"
+    (streamRest (bytesFrom [104, 195])) "[195]"
+  expect "stream decode of whole text"
+    (show (streamDecodeUtf8 (bytesFrom [104]))) "Some \"h\" [] _"
+  expect "stream continues"
+    (streamNext (bytesFrom [104, 195]) (bytesFrom [169])) "é"

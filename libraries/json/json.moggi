@@ -21,6 +21,8 @@ source-dirs = tests
 [dependencies]
 base = >=0.2.0
 containers = >=0.1.0
+string = >=0.1.0
+bytestring = >=0.1.0
 
 [jvm]
 version = 21

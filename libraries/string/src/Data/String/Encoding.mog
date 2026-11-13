@@ -1,0 +1,727 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Functions for converting 'String' values to and from 'ByteString',
+--   using several standard encodings.
+module Data.String.Encoding
+  ( -- * Decoding ByteStrings to Text
+
+    -- ** Total functions
+    decodeLatin1
+  , decodeASCIIPrefix
+  , decodeUtf8Lenient
+  , decodeUtf8'
+  , decodeASCII'
+
+    -- *** Controllable error handling
+  , decodeUtf8With
+  , decodeUtf16LEWith
+  , decodeUtf16BEWith
+  , decodeUtf32LEWith
+  , decodeUtf32BEWith
+
+    -- *** Incremental UTF-8 decoding
+  , decodeUtf8Chunk
+  , decodeUtf8More
+  , Utf8State
+  , startUtf8State
+  , StrictBuilder
+  , StrictTextBuilder
+  , strictBuilderToText
+  , textToStrictBuilder
+
+    -- ** Partial functions
+  , decodeASCII
+  , decodeUtf8
+  , decodeUtf16LE
+  , decodeUtf16BE
+  , decodeUtf32LE
+  , decodeUtf32BE
+
+    -- ** Stream oriented decoding
+  , streamDecodeUtf8
+  , streamDecodeUtf8With
+  , Decoding (..)
+
+    -- * Encoding Text to ByteStrings
+  , encodeUtf8
+  , encodeUtf16LE
+  , encodeUtf16BE
+  , encodeUtf32LE
+  , encodeUtf32BE
+
+    -- * Encoding Text using ByteString Builders
+  , encodeUtf8Builder
+  , encodeUtf8BuilderEscaped
+
+    -- * ByteString validation
+  , validateUtf8Chunk
+  , validateUtf8More
+  ) where
+
+import Data.Bool
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as B
+import Data.ByteString.Builder qualified as BB
+import Data.ByteString.Builder.Prim (BoundedPrim, runB)
+import Data.Char (Char, chr, ord)
+import Data.Either (Either (..))
+import Data.Eq
+import Data.Int (Int)
+import Data.List ((:), reverse)
+import Data.Maybe (Maybe (..))
+import Data.Monoid (mconcat)
+import Data.Num
+import Data.Ord
+import Data.Real (Integral (div, mod))
+import Data.Semigroup ((<>))
+import Data.String (String)
+import Data.String qualified as S
+import Data.Tuple (fst, snd)
+import Data.String.Encoding.Error
+  ( OnDecodeError
+  , UnicodeException (DecodeError)
+  , lenientDecode
+  , strictDecode
+  )
+import Data.Word (Word8)
+import Moggi.Err (error)
+import Moggi.Internal.Prim (word8FromInt#, word8ToInt#)
+import Text.Show (show)
+
+invalidUtf8 :: String
+invalidUtf8 = "Data.String.Encoding: Invalid UTF-8 stream"
+
+invalidUtf16 :: String
+invalidUtf16 = "Data.String.Encoding: Invalid UTF-16 stream"
+
+invalidUtf32 :: String
+invalidUtf32 = "Data.String.Encoding: Invalid UTF-32 stream"
+
+-- --- bytes and ints ----------------------------------------------------------
+
+toInts :: [Word8] -> [Int]
+toInts bytes = case bytes of
+  [] -> []
+  b : rest -> word8ToInt# b : toInts rest
+
+fromInts :: [Int] -> [Word8]
+fromInts ns = case ns of
+  [] -> []
+  n : rest -> byte n : fromInts rest
+
+byte :: Int -> Word8
+byte n = word8FromInt# n
+
+bytesOf :: ByteString -> [Int]
+bytesOf bytes = toInts (B.unpack bytes)
+
+len :: [Int] -> Int
+len ns = case ns of
+  [] -> 0
+  _ : rest -> 1 + len rest
+
+charsLen :: [Char] -> Int
+charsLen cs = case cs of
+  [] -> 0
+  _ : rest -> 1 + charsLen rest
+
+atLeast :: [Int] -> Int -> Bool
+atLeast ns n = case ns of
+  [] -> n <= 0
+  _ : rest -> atLeast rest (n - 1)
+
+-- --- UTF-8 scalars -----------------------------------------------------------
+
+-- | How many bytes a lead byte announces, or 0 when it is not a lead byte at
+-- all. Continuation bytes (128-191), the overlong lead bytes (192, 193) and the
+-- lead bytes above U+10FFFF (245-255) are all rejected here.
+utf8Width :: Int -> Int
+utf8Width b =
+  if b < 128 then 1
+  else if b >= 194 && b <= 223 then 2
+  else if b >= 224 && b <= 239 then 3
+  else if b >= 240 && b <= 244 then 4
+  else 0
+
+isCont :: Int -> Bool
+isCont b = b >= 128 && b <= 191
+
+-- The second byte of a three-byte sequence may not spell an overlong form
+-- (E0 80..9F) and may not spell a surrogate (ED A0..BF).
+second3 :: Int -> Int -> Bool
+second3 b0 b1 =
+  if b0 == 224 then b1 >= 160 && b1 <= 191
+  else if b0 == 237 then b1 >= 128 && b1 <= 159
+  else isCont b1
+
+-- The second byte of a four-byte sequence may not spell an overlong form
+-- (F0 80..8F) and may not reach past U+10FFFF (F4 90..BF).
+second4 :: Int -> Int -> Bool
+second4 b0 b1 =
+  if b0 == 240 then b1 >= 144 && b1 <= 191
+  else if b0 == 244 then b1 >= 128 && b1 <= 143
+  else isCont b1
+
+scalar2 :: Int -> Int -> Int
+scalar2 b0 b1 = (b0 - 192) * 64 + (b1 - 128)
+
+scalar3 :: Int -> Int -> Int -> Int
+scalar3 b0 b1 b2 = (b0 - 224) * 4096 + (b1 - 128) * 64 + (b2 - 128)
+
+scalar4 :: Int -> Int -> Int -> Int -> Int
+scalar4 b0 b1 b2 b3 =
+  (b0 - 240) * 262144 + (b1 - 128) * 4096 + (b2 - 128) * 64 + (b3 - 128)
+
+-- | The scalar a lead byte and the bytes after it denote, together with what is
+-- left of the input, or nothing when the sequence is malformed or truncated.
+decodeScalar :: Int -> [Int] -> Maybe (Int, [Int])
+decodeScalar b0 rest = case utf8Width b0 of
+  1 -> Just (b0, rest)
+  2 -> case rest of
+    b1 : after -> case isCont b1 of
+      True -> Just (scalar2 b0 b1, after)
+      False -> Nothing
+    [] -> Nothing
+  3 -> case rest of
+    b1 : after -> case after of
+      b2 : leftover -> case isCont b1 && isCont b2 && second3 b0 b1 of
+        True -> Just (scalar3 b0 b1 b2, leftover)
+        False -> Nothing
+      [] -> Nothing
+    [] -> Nothing
+  4 -> case rest of
+    b1 : after -> case after of
+      b2 : more -> case more of
+        b3 : leftover -> case isCont b1 && isCont b2 && isCont b3 && second4 b0 b1 of
+          True -> Just (scalar4 b0 b1 b2 b3, leftover)
+          False -> Nothing
+        [] -> Nothing
+      [] -> Nothing
+    [] -> Nothing
+  _ -> Nothing
+
+-- --- decoding with a handler -------------------------------------------------
+
+-- | Decode a byte list with one step per unit, asking the handler about every
+-- unit that does not parse. A handler that declines aborts the decode; one that
+-- answers supplies the character in its place, and the decoder resumes after the
+-- bytes the step rejected.
+decodeWith
+  :: String
+  -> OnDecodeError
+  -> (Int -> [Int] -> Maybe (Int, [Int]))
+  -> (Int -> [Int] -> [Int])
+  -> [Int]
+  -> [Char]
+  -> [Char]
+decodeWith msg onErr step skip bytes acc = case bytes of
+  [] -> acc
+  b0 : rest -> case step b0 rest of
+    Just pair -> decodeWith msg onErr step skip (snd pair) (chr (fst pair) : acc)
+    Nothing -> case onErr msg (Just (byte b0)) of
+      Just c -> decodeWith msg onErr step skip (skip b0 rest) (c : acc)
+      Nothing -> decodeWith msg onErr step skip (skip b0 rest) acc
+
+-- | The bytes a malformed unit consumes before the decoder resumes.
+skipOne :: Int -> [Int] -> [Int]
+skipOne _ rest = rest
+
+skipTwo :: Int -> [Int] -> [Int]
+skipTwo _ rest = case rest of
+  _ : after -> after
+  [] -> []
+
+skipFour :: Int -> [Int] -> [Int]
+skipFour _ rest = case rest of
+  _ : a -> case a of
+    _ : b -> case b of
+      _ : c -> c
+      [] -> []
+    [] -> []
+  [] -> []
+
+-- --- UTF-8 -------------------------------------------------------------------
+
+decodeUtf8With :: OnDecodeError -> ByteString -> String
+decodeUtf8With onErr bytes =
+  S.pack (reverse (decodeWith invalidUtf8 (remapSurrogateChars onErr) decodeScalar skipOne (bytesOf bytes) []))
+
+-- | A handler that answers with a surrogate code point cannot put one in the
+-- text, so it stands for U+FFFD instead, as the reference decoder does.
+remapSurrogateChars :: OnDecodeError -> OnDecodeError
+remapSurrogateChars onErr msg byte = case onErr msg byte of
+  Nothing -> Nothing
+  Just c ->
+    if ord c >= 55296 && ord c <= 57343 then
+      Just (chr 65533)
+    else
+      Just c
+
+decodeUtf8 :: ByteString -> String
+decodeUtf8 bytes = decodeUtf8With strictDecode bytes
+
+decodeUtf8Lenient :: ByteString -> String
+decodeUtf8Lenient bytes = decodeUtf8With lenientDecode bytes
+
+decodeUtf8' :: ByteString -> Either UnicodeException String
+decodeUtf8' bytes = case scanChunk 0 (bytesOf bytes) of
+  ScanValid _ [] -> Right (utf8Text (bytesOf bytes))
+  ScanValid _ rest -> Left (DecodeError invalidUtf8 (firstByte rest))
+  ScanInvalid _ rest -> Left (DecodeError invalidUtf8 (firstByte rest))
+
+firstByte :: [Int] -> Maybe Word8
+firstByte ns = case ns of
+  [] -> Nothing
+  b : _ -> Just (byte b)
+
+-- --- ASCII and Latin-1 -------------------------------------------------------
+
+asciiPrefix :: [Int] -> [Char] -> ([Char], [Int])
+asciiPrefix bytes acc = case bytes of
+  [] -> (acc, [])
+  b : rest -> case b < 128 of
+    True -> asciiPrefix rest (chr b : acc)
+    False -> (acc, bytes)
+
+decodeASCII :: ByteString -> String
+decodeASCII bytes = case asciiPrefix (bytesOf bytes) [] of
+  (chars, []) -> S.pack (reverse chars)
+  (chars, rest) ->
+    error
+      ( "decodeASCII: detected non-ASCII codepoint "
+          <> show (firstOf rest)
+          <> " at position "
+          <> show (charsLen chars)
+      )
+
+firstOf :: [Int] -> Int
+firstOf ns = case ns of
+  [] -> 0
+  b : _ -> b
+
+decodeASCIIPrefix :: ByteString -> (String, ByteString)
+decodeASCIIPrefix bytes = case asciiPrefix (bytesOf bytes) [] of
+  (chars, rest) -> (S.pack (reverse chars), B.pack (fromInts rest))
+
+decodeASCII' :: ByteString -> Maybe String
+decodeASCII' bytes = case asciiPrefix (bytesOf bytes) [] of
+  (chars, []) -> Just (S.pack (reverse chars))
+  (_, _) -> Nothing
+
+latin1Chars :: [Int] -> [Char] -> [Char]
+latin1Chars bytes acc = case bytes of
+  [] -> acc
+  b : rest -> latin1Chars rest (chr b : acc)
+
+decodeLatin1 :: ByteString -> String
+decodeLatin1 bytes = S.pack (reverse (latin1Chars (bytesOf bytes) []))
+
+-- --- UTF-16 ------------------------------------------------------------------
+
+-- A unit is two bytes in the order the encoding names; a scalar above U+FFFF is
+-- a surrogate pair, and a lone or reversed pair is malformed.
+utf16Unit :: Bool -> Int -> Int -> Int
+utf16Unit little b0 b1 = if little then b0 + 256 * b1 else b0 * 256 + b1
+
+utf16StepLE :: Int -> [Int] -> Maybe (Int, [Int])
+utf16StepLE b0 rest = utf16Pair True b0 rest
+
+utf16StepBE :: Int -> [Int] -> Maybe (Int, [Int])
+utf16StepBE b0 rest = utf16Pair False b0 rest
+
+utf16Pair :: Bool -> Int -> [Int] -> Maybe (Int, [Int])
+utf16Pair little b0 rest = case rest of
+  b1 : after -> case utf16Unit little b0 b1 of
+    unit -> case unit < 55296 || (unit > 57343 && unit < 65536) of
+      True -> Just (unit, after)
+      False -> case unit >= 55296 && unit <= 56319 of
+        False -> Nothing
+        True -> case after of
+          b2 : more -> case more of
+            b3 : leftover -> case utf16Unit little b2 b3 of
+              low -> case low >= 56320 && low <= 57343 of
+                True -> Just (65536 + (unit - 55296) * 1024 + (low - 56320), leftover)
+                False -> Nothing
+            [] -> Nothing
+          [] -> Nothing
+  [] -> Nothing
+
+decodeUtf16LEWith :: OnDecodeError -> ByteString -> String
+decodeUtf16LEWith onErr bytes =
+  S.pack (reverse (decodeWith invalidUtf16 onErr utf16StepLE skipTwo (bytesOf bytes) []))
+
+decodeUtf16BEWith :: OnDecodeError -> ByteString -> String
+decodeUtf16BEWith onErr bytes =
+  S.pack (reverse (decodeWith invalidUtf16 onErr utf16StepBE skipTwo (bytesOf bytes) []))
+
+decodeUtf16LE :: ByteString -> String
+decodeUtf16LE bytes = decodeUtf16LEWith strictDecode bytes
+
+decodeUtf16BE :: ByteString -> String
+decodeUtf16BE bytes = decodeUtf16BEWith strictDecode bytes
+
+-- --- UTF-32 ------------------------------------------------------------------
+
+utf32StepLE :: Int -> [Int] -> Maybe (Int, [Int])
+utf32StepLE b0 rest = utf32Unit True b0 rest
+
+utf32StepBE :: Int -> [Int] -> Maybe (Int, [Int])
+utf32StepBE b0 rest = utf32Unit False b0 rest
+
+utf32Unit :: Bool -> Int -> [Int] -> Maybe (Int, [Int])
+utf32Unit little b0 rest = case rest of
+  b1 : after -> case after of
+    b2 : more -> case more of
+      b3 : leftover -> case utf32Code little b0 b1 b2 b3 of
+        code -> case utf32Valid code of
+          True -> Just (code, leftover)
+          False -> Nothing
+      [] -> Nothing
+    [] -> Nothing
+  [] -> Nothing
+
+utf32Code :: Bool -> Int -> Int -> Int -> Int -> Int
+utf32Code little b0 b1 b2 b3 =
+  if little then
+    b0 + 256 * b1 + 65536 * b2 + 16777216 * b3
+  else
+    b0 * 16777216 + b1 * 65536 + b2 * 256 + b3
+
+-- Above U+10FFFF, and the surrogate range, are not scalar values.
+utf32Valid :: Int -> Bool
+utf32Valid code =
+  code >= 0 && code <= 1114111 && (code < 55296 || code > 57343)
+
+decodeUtf32LEWith :: OnDecodeError -> ByteString -> String
+decodeUtf32LEWith onErr bytes =
+  S.pack (reverse (decodeWith invalidUtf32 onErr utf32StepLE skipFour (bytesOf bytes) []))
+
+decodeUtf32BEWith :: OnDecodeError -> ByteString -> String
+decodeUtf32BEWith onErr bytes =
+  S.pack (reverse (decodeWith invalidUtf32 onErr utf32StepBE skipFour (bytesOf bytes) []))
+
+decodeUtf32LE :: ByteString -> String
+decodeUtf32LE bytes = decodeUtf32LEWith strictDecode bytes
+
+decodeUtf32BE :: ByteString -> String
+decodeUtf32BE bytes = decodeUtf32BEWith strictDecode bytes
+
+-- --- encoding ----------------------------------------------------------------
+
+-- Bytes are pushed in reverse, so they come out in order once the accumulator
+-- is reversed.
+encodeScalar :: Int -> [Word8] -> [Word8]
+encodeScalar code acc =
+  if code < 128 then
+    byte code : acc
+  else if code < 2048 then
+    byte (128 + mod code 64) : byte (192 + div code 64) : acc
+  else if code < 65536 then
+    byte (128 + mod code 64)
+      : byte (128 + mod (div code 64) 64)
+      : byte (224 + div code 4096)
+      : acc
+  else
+    byte (128 + mod code 64)
+      : byte (128 + mod (div code 64) 64)
+      : byte (128 + mod (div code 4096) 64)
+      : byte (240 + div code 262144)
+      : acc
+
+encodeChars :: [Char] -> [Word8] -> [Word8]
+encodeChars chars acc = case chars of
+  [] -> acc
+  c : rest -> encodeChars rest (encodeScalar (ord c) acc)
+
+encodeUtf8 :: String -> ByteString
+encodeUtf8 text = B.pack (reverse (encodeChars (S.unpack text) []))
+
+-- | Encode text to a UTF-8 byte-string builder.
+encodeUtf8Builder :: String -> BB.Builder
+encodeUtf8Builder text = BB.byteString (encodeUtf8 text)
+
+-- | UTF-8 bytes with every ASCII character passed through the escape that
+-- belongs to it, which is how a format with metacharacters encodes text. A
+-- character outside ASCII is written as its UTF-8 bytes, unescaped.
+encodeUtf8BuilderEscaped :: BoundedPrim Word8 -> String -> BB.Builder
+encodeUtf8BuilderEscaped escapeAscii text =
+  mconcat (escapedPieces escapeAscii (S.unpack text))
+
+escapedPieces :: BoundedPrim Word8 -> [Char] -> [BB.Builder]
+escapedPieces escapeAscii chars = case chars of
+  [] -> []
+  c : rest -> case ord c < 128 of
+    True -> runB escapeAscii (byte (ord c)) : escapedPieces escapeAscii rest
+    False -> BB.charUtf8 c : escapedPieces escapeAscii rest
+
+pushUnitLE :: Int -> [Word8] -> [Word8]
+pushUnitLE code acc = byte (div code 256) : byte (mod code 256) : acc
+
+pushUnitBE :: Int -> [Word8] -> [Word8]
+pushUnitBE code acc = byte (mod code 256) : byte (div code 256) : acc
+
+pushUnit :: Bool -> Int -> [Word8] -> [Word8]
+pushUnit little code acc = if little then pushUnitLE code acc else pushUnitBE code acc
+
+utf16Chars :: Bool -> [Char] -> [Word8] -> [Word8]
+utf16Chars little chars acc = case chars of
+  [] -> acc
+  c : rest -> utf16Chars little rest (utf16Units little (ord c) acc)
+
+utf16Units :: Bool -> Int -> [Word8] -> [Word8]
+utf16Units little code acc =
+  if code < 65536 then
+    pushUnit little code acc
+  else
+    pushUnit little
+      (56320 + mod (code - 65536) 1024)
+      (pushUnit little (55296 + div (code - 65536) 1024) acc)
+
+encodeUtf16LE :: String -> ByteString
+encodeUtf16LE text = B.pack (reverse (utf16Chars True (S.unpack text) []))
+
+encodeUtf16BE :: String -> ByteString
+encodeUtf16BE text = B.pack (reverse (utf16Chars False (S.unpack text) []))
+
+push32 :: Bool -> Int -> [Word8] -> [Word8]
+push32 little code acc =
+  if little then
+    byte (div code 16777216)
+      : byte (div (mod code 16777216) 65536)
+      : byte (div (mod code 65536) 256)
+      : byte (mod code 256)
+      : acc
+  else
+    byte (mod code 256)
+      : byte (div (mod code 65536) 256)
+      : byte (div (mod code 16777216) 65536)
+      : byte (div code 16777216)
+      : acc
+
+utf32Chars :: Bool -> [Char] -> [Word8] -> [Word8]
+utf32Chars little chars acc = case chars of
+  [] -> acc
+  c : rest -> utf32Chars little rest (push32 little (ord c) acc)
+
+encodeUtf32LE :: String -> ByteString
+encodeUtf32LE text = B.pack (reverse (utf32Chars True (S.unpack text) []))
+
+encodeUtf32BE :: String -> ByteString
+encodeUtf32BE text = B.pack (reverse (utf32Chars False (S.unpack text) []))
+
+-- --- builders ----------------------------------------------------------------
+
+-- | A delayed strict text: chunks accumulate without being copied, and
+-- 'strictBuilderToText' is what asks for the result.
+newtype StrictTextBuilder = StrictTextBuilder String
+
+instance Semigroup StrictTextBuilder where
+  (<>) (StrictTextBuilder left) (StrictTextBuilder right) =
+    StrictTextBuilder (left <> right)
+
+-- | The name the delayed strict text answers to.
+type StrictBuilder = StrictTextBuilder
+
+strictBuilderToText :: StrictTextBuilder -> String
+strictBuilderToText builder = case builder of
+  StrictTextBuilder text -> text
+
+textToStrictBuilder :: String -> StrictTextBuilder
+textToStrictBuilder text = StrictTextBuilder text
+
+-- --- incremental UTF-8 decoding ----------------------------------------------
+
+-- | The bytes of an incomplete sequence carried from one chunk to the next, so
+-- a character split across two chunks is decoded once from the bytes both of
+-- them spell.
+data Utf8State = Utf8State [Int]
+
+startUtf8State :: Utf8State
+startUtf8State = Utf8State []
+
+pendingOf :: Utf8State -> [Int]
+pendingOf state = case state of
+  Utf8State pending -> pending
+
+data Utf8Scan = ScanValid Int [Int] | ScanInvalid Int [Int]
+
+-- | Scan a chunk from an offset, following whole code points until the bytes run
+-- out or a malformed or truncated sequence starts. The position is an index into
+-- the chunk, and the list is what is left from there.
+scanChunk :: Int -> [Int] -> Utf8Scan
+scanChunk i remaining = case remaining of
+  [] -> ScanValid i []
+  b0 : rest -> case utf8Width b0 of
+    0 -> ScanInvalid i remaining
+    width -> case decodeScalar b0 rest of
+      Just pair -> scanChunk (i + width) (snd pair)
+      Nothing -> case atLeast rest (width - 1) of
+        True -> ScanInvalid i remaining
+        False -> ScanValid i remaining
+
+dropInts :: Int -> [Int] -> [Int]
+dropInts n ns = if n <= 0 then ns else case ns of
+  [] -> []
+  _ : rest -> dropInts (n - 1) rest
+
+takeInts :: Int -> [Int] -> [Int]
+takeInts n ns = if n <= 0 then [] else case ns of
+  [] -> []
+  x : rest -> x : takeInts (n - 1) rest
+
+countInts :: [Int] -> Int
+countInts ns = case ns of
+  [] -> 0
+  _ : rest -> 1 + countInts rest
+
+-- | The text a sequence of bytes that is known to be valid UTF-8 denotes.
+utf8Text :: [Int] -> String
+utf8Text bytes = S.pack (utf8Chars bytes)
+
+utf8Chars :: [Int] -> [Char]
+utf8Chars bytes = case bytes of
+  [] -> []
+  b0 : rest -> case decodeScalar b0 rest of
+    Just pair -> chr (fst pair) : utf8Chars (snd pair)
+    Nothing -> []
+
+-- --- carrying a code point across chunks -------------------------------------
+
+data PendingStep = PendingDone Int | PendingIncomplete [Int] | PendingBroken
+
+-- | What the bytes a previous chunk carried over become once this chunk's first
+-- bytes are added: a complete code point ('PendingDone', naming how many bytes of
+-- the chunk it took), still incomplete, or broken by a byte that cannot continue
+-- it.
+completePending :: [Int] -> [Int] -> PendingStep
+completePending pending chunk = case pending of
+  [] -> PendingDone 0
+  b0 : after -> case utf8Width b0 of
+    0 -> PendingBroken
+    width -> case atLeast (after <> chunk) (width - 1) of
+      False -> PendingIncomplete (pending <> chunk)
+      True -> case decodeScalar b0 (after <> takeInts (width - 1) chunk) of
+        Just _ -> PendingDone (width - countInts pending)
+        Nothing -> PendingBroken
+
+-- | The end position, relative to this chunk, of the longest prefix that is
+-- valid UTF-8 once the bytes a previous chunk carried over are prefixed to it,
+-- and the state to continue from.
+--
+-- The position is negative when the carried-over code point is not completed by
+-- this chunk -- it is still incomplete, or the chunk breaks it -- which tells a
+-- caller that the bytes it cannot use started before this chunk did.
+validateUtf8More :: Utf8State -> ByteString -> (Int, Maybe Utf8State)
+validateUtf8More state chunk = case pendingOf state of
+  [] -> validated (scanChunk 0 (bytesOf chunk))
+  pending -> case completePending pending (bytesOf chunk) of
+    PendingDone consumed -> validated (scanChunk consumed (dropInts consumed (bytesOf chunk)))
+    PendingIncomplete combined -> (0 - countInts pending, Just (Utf8State combined))
+    PendingBroken -> (0 - countInts pending, Nothing)
+
+validated :: Utf8Scan -> (Int, Maybe Utf8State)
+validated scan = case scan of
+  ScanValid end rest -> (end, Just (Utf8State rest))
+  ScanInvalid end _ -> (end, Nothing)
+
+-- --- UTF-8 validation --------------------------------------------------------
+
+validateUtf8Chunk :: ByteString -> (Int, Maybe Utf8State)
+validateUtf8Chunk chunk = validateUtf8More startUtf8State chunk
+
+-- | Decode one chunk of an ongoing UTF-8 stream. The builder is the text this
+-- chunk completed -- including the code point the previous chunk carried over --
+-- the byte string is the suffix of *this* chunk that did not decode, and the
+-- state is what the next chunk continues from: 'Nothing' when the suffix starts
+-- at a malformed byte rather than at an incomplete one.
+decodeUtf8More :: Utf8State -> ByteString -> (StrictTextBuilder, ByteString, Maybe Utf8State)
+decodeUtf8More state chunk = case validateUtf8More state chunk of
+  (n, scanned) ->
+    ( if n <= 0 then
+        textToStrictBuilder ""
+      else
+        textToStrictBuilder (utf8Text (pendingOf state <> takeInts n (bytesOf chunk)))
+    , B.pack (fromInts (dropInts n (bytesOf chunk)))
+    , scanned
+    )
+
+-- | Decode a chunk with nothing carried over from a previous one.
+decodeUtf8Chunk :: ByteString -> (StrictTextBuilder, ByteString, Maybe Utf8State)
+decodeUtf8Chunk chunk = decodeUtf8More startUtf8State chunk
+
+-- --- stream oriented decoding ------------------------------------------------
+
+-- | One step of a UTF-8 stream: the text this input completed, the bytes that
+-- did not decode, and the decoder to carry on with.
+data Decoding = Some String ByteString (ByteString -> Decoding)
+
+instance Show Decoding where
+  show decoding = case decoding of
+    Some text rest _ -> "Some " <> show text <> " " <> show rest <> " _"
+
+streamDecodeUtf8 :: ByteString -> Decoding
+streamDecodeUtf8 chunk = streamDecodeUtf8With strictDecode chunk
+
+streamDecodeUtf8With :: OnDecodeError -> ByteString -> Decoding
+streamDecodeUtf8With onErr chunk = streamLoop onErr startUtf8State chunk
+
+streamLoop :: OnDecodeError -> Utf8State -> ByteString -> Decoding
+streamLoop onErr state chunk = case recoverUtf8 onErr chunk state 0 (textToStrictBuilder "") of
+  (builder, rest, next) ->
+    Some (strictBuilderToText builder) rest (streamLoop onErr next)
+
+-- | Decode as much of the chunk as possible, asking the handler about every byte
+-- that does not fit and resuming after it. A handler that declines leaves the
+-- byte out and the decode carries on; the strict entry point supplies one that
+-- raises the error instead, so a malformed byte stops the stream there.
+recoverUtf8
+  :: OnDecodeError
+  -> ByteString
+  -> Utf8State
+  -> Int
+  -> StrictTextBuilder
+  -> (StrictTextBuilder, ByteString, Utf8State)
+recoverUtf8 onErr chunk state offset builder =
+  case validateUtf8More state (B.pack (fromInts (dropInts offset (bytesOf chunk)))) of
+    (n, Just next) ->
+      ( if n <= 0 then
+          builder
+        else
+          builder <> textToStrictBuilder (utf8Text (pendingOf state <> takeInts n (dropInts offset (bytesOf chunk))))
+      , undecodedSuffix chunk next offset n
+      , next
+      )
+    (n, Nothing) -> case n < 0 of
+      True ->
+        -- The carried-over bytes are broken by this chunk, so they are reported
+        -- and the chunk is read again from a fresh state.
+        recoverUtf8 onErr chunk startUtf8State offset
+          (builder <> textToStrictBuilder (droppedBytes onErr (pendingOf state)))
+      False ->
+        recoverUtf8 onErr chunk startUtf8State (offset + n + 1)
+          ( builder
+              <> textToStrictBuilder (utf8Text (pendingOf state <> takeInts n (dropInts offset (bytesOf chunk))))
+              <> textToStrictBuilder (droppedBytes onErr [byteAt (offset + n) chunk])
+          )
+
+byteAt :: Int -> ByteString -> Int
+byteAt i chunk = case dropInts i (bytesOf chunk) of
+  b : _ -> b
+  [] -> 0
+
+undecodedSuffix :: ByteString -> Utf8State -> Int -> Int -> ByteString
+undecodedSuffix chunk next offset n =
+  if countInts (bytesOf chunk) >= countInts (pendingOf next) then
+    B.pack (fromInts (dropInts (offset + n) (bytesOf chunk)))
+  else
+    B.pack (fromInts (pendingOf next))
+
+-- | What the handler makes of each byte it is shown, one after another.
+droppedBytes :: OnDecodeError -> [Int] -> String
+droppedBytes onErr bytes = case bytes of
+  [] -> ""
+  b : rest -> replacementFor onErr b <> droppedBytes onErr rest
+
+replacementFor :: OnDecodeError -> Int -> String
+replacementFor onErr b = case onErr invalidUtf8 (Just (byte b)) of
+  Just c -> S.singleton c
+  Nothing -> ""

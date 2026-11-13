@@ -30,7 +30,6 @@ import Data.Bool
 import Moggi.Internal.Base
 import Control.Applicative
 import Control.Monad
-import Data.ByteString.Char8 qualified as C
 import Data.Double
 import Data.Either
 import Data.Eq
@@ -41,6 +40,7 @@ import Data.Maybe
 import Data.Num
 import Data.Ord
 import Data.String hiding (pack, unpack, length, take, drop, isPrefixOf, isSuffixOf)
+import Data.String.Encoding (decodeUtf8, encodeUtf8)
 import Data.ByteString (ByteString)
 import Data.JSON.Types
 import Moggi.Internal.Prim
@@ -167,12 +167,12 @@ nodeValueKind enc = vkToInt (nodeValueKindRaw enc)
 toJsonPlain :: Encoding -> String
 toJsonPlain enc = toJsonPlainRaw enc
 
-bsToStr b = C.toString b
+bsToStr b = decodeUtf8 b
 
 encodeEncoding :: Encoding -> ByteString
 encodeEncoding enc = case isNullEnc enc of
-  True -> C.fromString "null"
-  False -> C.fromString (toJsonOpts enc sharedUnescapedOpts)
+  True -> encodeUtf8 "null"
+  False -> encodeUtf8 (toJsonOpts enc sharedUnescapedOpts)
 
 -- One shared JsonSerializerOptions (relaxed escaping). Allocating per encode
 -- was measurable on Hand roundtrip; Options is immutable after construction.
