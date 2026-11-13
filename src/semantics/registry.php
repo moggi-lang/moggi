@@ -76,6 +76,8 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, ImportC
     $state->qualifiedModules = $interface->qualifiedModules;
     $state->qualifiedOrigins = $interface->qualifiedOrigins();
     $state->qualifiedEnv = $interface->qualifiedEnv();
+    $state->qualifiedData = $interface->qualifiedData();
+    $state->qualifiedTypeSynonyms = $interface->qualifiedTypeSynonyms();
     $state->intrinsicWrappers = $interface->intrinsicWrappers();
 
     $state->ambiguousImports = $interface->ambiguousNames();
@@ -88,6 +90,7 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, ImportC
     $state->projectInstancesByClass = $index['byClass'];
     $state->projectInstancesByClassHead = $index['byClassHead'];
     $state->associatedEquations = $index['associatedEquations'];
+    $state->ambiguousTypeNames = \array_fill_keys($world->ambiguousTypeNames(), true);
 
     $state->currentModule = $importContext->currentModule;
     $state->checkedInstances = [];
@@ -113,6 +116,7 @@ function registerTypeDeclarations(TypeCheckState $state, Ast\Program $program): 
         }
 
         if ($item instanceof Ast\TypeSynonymDecl) {
+            shadowImportedType($state, $item->name);
             registerTypeSynonym($state, $item);
         }
 
@@ -161,8 +165,11 @@ function shadowImportedType(TypeCheckState $state, string $name): void
         );
     }
 
-    $canonical = Kinds\canonicalTypeConName($name);
-    unset($state->data[$name], $state->kindEnv[$canonical], $state->kindEnvByArity[$canonical]);
+    // The kinds stay: they are cut by arity, so the imported `TypeRep` (one
+    // parameter) and the local `type TypeRep = …` (none) remain distinguishable,
+    // and a qualified `I.TypeRep a` still finds the former. `kindEnvByModule`
+    // keeps them per declaring module for the same reason.
+    unset($state->data[$name]);
 }
 
 /**
@@ -266,6 +273,11 @@ function projectInstancesFromProgram(
                 'constraints' => $item->constraints,
                 'intrinsicMethods' => instanceIntrinsicMethods($item),
                 'associatedEquations' => associatedEquationsMapFromDecl($item),
+                // Where the declaration is written, so a diagnostic that has to
+                // name one instance can cite it (ambiguous overlap, for one).
+                'line' => $item->line,
+                'col' => $item->col,
+                'sourceFile' => $item->sourceFile,
             ];
 
             continue;
@@ -287,12 +299,17 @@ function projectInstancesFromProgram(
     }
 
     foreach ($instances as $index => $record) {
-        if (isset($record['headModule'])) {
+        $name = instanceHeadSpelling($record['instanceHead'] ?? null);
+        if ($name === null) {
             continue;
         }
-        $name = instanceHeadSpelling($record['instanceHead'] ?? null);
-        if ($name !== null) {
-            $instances[$index]['headModule'] = $dataModules[$mod . '::' . $name] ?? $mod;
+        $local = $dataModules[$mod . '::' . $name] ?? null;
+        if (! isset($record['headModule'])) {
+            $instances[$index]['headModule'] = $local ?? $mod;
+        }
+        $declaring = $local ?? $dataModules[$name] ?? null;
+        if (\is_string($declaring) && $declaring !== '') {
+            $instances[$index]['headDeclaringModule'] = $declaring;
         }
     }
 

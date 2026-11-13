@@ -17,6 +17,7 @@ use function Moggi\Semantics\IoBoundary\functionReturnsIo;
 use function Moggi\Semantics\Kinds\dataKind;
 use function Moggi\Semantics\Kinds\registerTypeKind;
 use function Moggi\Semantics\Types\evidenceFunctionName;
+use function Moggi\Semantics\Types\isCoercionClass;
 use function Moggi\Syntax\Ast\moduleName;
 use function Moggi\Syntax\exportedChildrenSpec;
 use function Moggi\Syntax\surfaceConstructorAlias;
@@ -161,17 +162,438 @@ function mergeEvidenceMetas(array $metas): array
  * @param array<string, mixed> $unit
  * @return array<string, int>
  */
-function unitEvidenceArities(array $unit, string $moduleName, string $namespace): array
+/**
+ * Identity of a unit's parsed tree and the spelling its evidence names are built under.
+ *
+ * The key a caller passes to {@see unitEvidenceArities()} so that the superclass expansion of its
+ * instances is computed once even though every importing module asks for it. It is the same shape
+ * the importing loop already builds for `unitEvidenceMeta()`.
+ *
+ * @param array<string, mixed> $unit
+ */
+function unitEvidenceMemoKey(array $unit, string $moduleName, string $namespace): string
 {
+    return $moduleName . "\0" . $namespace . "\0" . \hash(
+        'xxh3',
+        (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''),
+    );
+}
+
+function unitEvidenceArities(
+    array $unit,
+    string $moduleName,
+    string $namespace,
+    string $cacheKey = '',
+    array $classes = [],
+): array {
     $checked = $unit['facts']['evidenceChecked']['arity'] ?? null;
     if (! \is_array($checked)) {
         $program = $unit['checkedProgram'] ?? null;
         $checked = $program instanceof Ast\Program
-            ? moduleEvidenceMeta($program, $moduleName, $namespace)['arity']
+            ? moduleEvidenceMeta(
+                $program,
+                $moduleName,
+                $namespace,
+                $cacheKey === '' ? '' : $cacheKey . "\0checkedProgram",
+            )['arity']
             : [];
     }
 
-    return $checked + unitEvidenceMeta($unit, $moduleName, $namespace)['arity'];
+    $parsed = unitEvidenceMeta($unit, $moduleName, $namespace, $cacheKey)['arity'];
+    if ($classes !== []) {
+        $parsed = withExpandedInstanceArities($unit, $parsed, $classes, $cacheKey);
+    }
+
+    return $checked + $parsed;
+}
+
+/**
+ * Replace the arity of every hand-written instance with its superclass-expanded dictionary count.
+ *
+ * The pre-check tree counts the constraints an instance spells, but a factory's slots are the
+ * instance context *closed under its classes' superclasses*: `instance Ord a => Ord (List a)`
+ * takes `Eq a` and `Ord a`, so it publishes two slots, and the checker elaborates calls that way.
+ * A module checked in this run publishes the checked count; this is the same number for a module
+ * only parsed, using the class declarations every unit in the compilation carries.
+ *
+ * A compilation asks for this once per importing module for *every* unit in the build, so the
+ * expansion is memoised: it is a function of the unit's source (its parsed tree) and of the class
+ * declarations it is expanded against, and nothing else, which is what `$memoKey` and the class
+ * fingerprint together identify. Two modules importing the same unit reuse one expansion instead
+ * of walking its instances again.
+ *
+ * @param array<string, mixed> $unit
+ * @param array<string, int> $arity
+ * @param array<string, array{params: list<string>, superclasses: list<Ast\TypeNode>}> $classes
+ * @param string $memoKey stable identity of the unit's parsed tree, or '' to skip the memo
+ * @return array<string, int>
+ */
+function withExpandedInstanceArities(array $unit, array $arity, array $classes, string $memoKey = ''): array
+{
+    static $memo = [];
+
+    $key = $memoKey === '' ? '' : $memoKey . "\0" . classesFingerprint($classes);
+    if ($key !== '' && isset($memo[$key])) {
+        return $memo[$key] + $arity;
+    }
+
+    $program = $unit['program'] ?? null;
+    if (! $program instanceof Ast\Program) {
+        return $arity;
+    }
+
+    $expanded = [];
+    foreach ($program->items as $item) {
+        if (! $item instanceof Ast\InstanceDecl) {
+            continue;
+        }
+
+        $expanded[evidenceFunctionName($item->class, $item->head)] = parsedInstanceEvidenceArity($item, $classes);
+    }
+
+    if ($key !== '') {
+        if (\count($memo) >= 4096) {
+            $memo = [];
+        }
+        $memo[$key] = $expanded;
+    }
+
+    return $expanded + $arity;
+}
+
+/**
+ * What a set of class declarations says about expansion, in one string.
+ *
+ * Only the class names, their parameter counts and their superclass heads reach
+ * {@see parsedInstanceEvidenceArity()}, so those are what has to distinguish two class tables.
+ *
+ * @param array<string, array{params: list<string>, superclasses: list<Ast\TypeNode>}> $classes
+ */
+function classesFingerprint(array $classes): string
+{
+    if ($classes === []) {
+        return '';
+    }
+
+    $parts = [];
+    foreach ($classes as $name => $info) {
+        $heads = [];
+        foreach ($info['superclasses'] ?? [] as $superclass) {
+            $heads[] = $superclass instanceof Ast\TypeApp && $superclass->con instanceof Ast\TypeCon
+                ? $superclass->con->name
+                : ($superclass instanceof Ast\TypeCon ? $superclass->name : '?');
+        }
+
+        $parts[] = $name . ':' . \count($info['params'] ?? []) . ':' . \implode('&', $heads);
+    }
+
+    return \hash('xxh3', \implode(',', $parts));
+}
+
+/**
+ * Every class a module declares, with its parameter names and superclass nodes.
+ *
+ * @return array<string, array{params: list<string>, superclasses: list<Ast\TypeNode>}>
+ */
+function programClasses(Ast\Program $program): array
+{
+    /** @var \WeakMap<Ast\Program, array<string, array{params: list<string>, superclasses: list<Ast\TypeNode>}>>|null $cache */
+    static $cache = null;
+    $cache ??= new \WeakMap();
+    if (isset($cache[$program])) {
+        return $cache[$program];
+    }
+
+    $classes = [];
+    foreach ($program->items as $item) {
+        if (! $item instanceof Ast\ClassDecl) {
+            continue;
+        }
+
+        $classes[$item->name] ??= [
+            'params' => \array_map(static fn (Ast\ClassParam $param): string => $param->name, $item->params),
+            'superclasses' => $item->superclasses,
+        ];
+    }
+
+    return $cache[$program] = $classes;
+}
+
+/**
+ * Class declarations of a whole compilation, keyed by class name.
+ *
+ * This is what the parsed publication path needs and the checker already has: the superclass
+ * relations that turn an instance's written context into its runtime dictionary slots. The
+ * parsed tree is enough; the class modules keep their declarations even when the closure is
+ * prepared shallow, without checked bodies.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @return array<string, array{params: list<string>, superclasses: list<Ast\TypeNode>}>
+ */
+function classSuperclassTable(array $units): array
+{
+    $table = [];
+    foreach ($units as $unit) {
+        if (! \is_array($unit)) {
+            continue;
+        }
+
+        foreach (['program', 'checkedProgram'] as $slot) {
+            $program = $unit[$slot] ?? null;
+            if (! $program instanceof Ast\Program) {
+                continue;
+            }
+
+            foreach (programClasses($program) as $name => $info) {
+                $table[$name] ??= $info;
+            }
+        }
+    }
+
+    return $table;
+}
+
+/**
+ * Canonical key of a surface type under a variable mapping, for recognising the same dictionary
+ * obligation twice while an instance context is expanded.
+ *
+ * @param array<string, string> $vars variable name => key of the type it stands for
+ */
+function parsedTypeKey(Ast\TypeNode $type, array $vars = []): string
+{
+    if ($type instanceof Ast\TypeVar || $type instanceof Ast\TypeKindAnnot) {
+        return $vars[$type->name] ?? 'v:' . $type->name;
+    }
+
+    if ($type instanceof Ast\TypeCon) {
+        return 'c:' . $type->name;
+    }
+
+    if ($type instanceof Ast\TypeQualified) {
+        return 'q:' . $type->module . '.' . $type->name;
+    }
+
+    if ($type instanceof Ast\TypeApp) {
+        return 'a(' . parsedTypeKey($type->con, $vars) . ';'
+            . \implode(',', \array_map(
+                static fn (Ast\TypeNode $arg): string => parsedTypeKey($arg, $vars),
+                $type->args,
+            )) . ')';
+    }
+
+    if ($type instanceof Ast\TypeArrow) {
+        return 'f(' . parsedTypeKey($type->from, $vars) . '->' . parsedTypeKey($type->to, $vars) . ')';
+    }
+
+    if ($type instanceof Ast\TypeUnit) {
+        return 'unit';
+    }
+
+    if ($type instanceof Ast\TypeStringLit) {
+        return 's:' . $type->value;
+    }
+
+    if ($type instanceof Ast\TypeNatLit) {
+        return 'n:' . ($type->negative ? '-' : '') . $type->digits;
+    }
+
+    if ($type instanceof Ast\TypePromoted) {
+        return 'p:' . $type->name;
+    }
+
+    if ($type instanceof Ast\TypeForall) {
+        return 'forall(' . \implode(',', $type->binders) . ';' . parsedTypeKey($type->body, $vars) . ')';
+    }
+
+    return 'x:' . $type::class;
+}
+
+/**
+ * One dictionary obligation as `class` and one key per class parameter.
+ *
+ * @param array<string, array{params: list<string>, superclasses: list<Ast\TypeNode>}> $classes
+ * @return array{class: string, keys: list<string>}
+ */
+function parsedConstraintObligation(Ast\TypeApp $constraint, array $classes): array
+{
+    $className = $constraint->con instanceof Ast\TypeCon ? $constraint->con->name : '';
+    $params = $classes[$className]['params'] ?? [];
+
+    $keys = [];
+    foreach ($params as $index => $_param) {
+        $arg = $constraint->args[$index] ?? null;
+        $keys[] = $arg instanceof Ast\TypeNode ? parsedTypeKey($arg) : '?';
+    }
+
+    return ['class' => $className, 'keys' => $keys];
+}
+
+/**
+ * @param array{class: string, keys: list<string>} $obligation
+ */
+function parsedConstraintKey(array $obligation): string
+{
+    return $obligation['class'] . '(' . \implode(',', $obligation['keys']) . ')';
+}
+
+/**
+ * Superclass obligation of one constraint, with the class's parameters substituted by the keys of
+ * the arguments the constraint was written at. Null when the superclass is not an application of
+ * a class (nothing the runtime passes as a dictionary).
+ *
+ * @param array<string, string> $paramKeys
+ * @param array<string, array{params: list<string>, superclasses: list<Ast\TypeNode>}> $classes
+ * @return array{class: string, keys: list<string>}|null
+ */
+function parsedSuperclassObligation(Ast\TypeNode $super, array $paramKeys, array $classes): ?array
+{
+    $node = $super;
+    $quantified = [];
+    while ($node instanceof Ast\TypeForall) {
+        foreach ($node->binders as $binder) {
+            $quantified[$binder] = 'v:' . $binder;
+        }
+        $node = $node->body;
+    }
+
+    if (! $node instanceof Ast\TypeApp || ! $node->con instanceof Ast\TypeCon) {
+        return null;
+    }
+
+    $mapping = [...$quantified, ...$paramKeys];
+    $className = $node->con->name;
+    $params = $classes[$className]['params'] ?? [];
+
+    $keys = [];
+    foreach ($params as $index => $_param) {
+        $arg = $node->args[$index] ?? null;
+        $keys[] = $arg instanceof Ast\TypeNode ? parsedTypeKey($arg, $mapping) : '?';
+    }
+
+    return ['class' => $className, 'keys' => $keys];
+}
+
+/**
+ * Whether every obligation in a context is present, closing through superclasses.
+ *
+ * This is the parsed twin of `constraintsSuperclassClosed()`, and it matters for the same reason
+ * expansion has a fast path there: a context that already names its superclass dictionaries is
+ * emitted as written, so expanding again would add a duplicate slot the checker never passes.
+ *
+ * @param array{class: string, keys: list<string>} $obligation
+ * @param array<string, array{params: list<string>, superclasses: list<Ast\TypeNode>}> $classes
+ * @param array<string, true> $present
+ * @param array<string, true> $visited
+ */
+function parsedSuperclassesPresent(array $obligation, array $classes, array $present, array &$visited): bool
+{
+    $key = parsedConstraintKey($obligation);
+    if (isset($visited[$key])) {
+        return true;
+    }
+    $visited[$key] = true;
+
+    $info = $classes[$obligation['class']] ?? null;
+    if ($info === null) {
+        return true;
+    }
+
+    $paramKeys = $info['params'] === []
+        ? []
+        : (\array_combine($info['params'], $obligation['keys']) ?: []);
+
+    foreach ($info['superclasses'] as $super) {
+        $superObligation = parsedSuperclassObligation($super, $paramKeys, $classes);
+        if ($superObligation === null) {
+            continue;
+        }
+
+        if (! isset($present[parsedConstraintKey($superObligation)])) {
+            return false;
+        }
+
+        if (! parsedSuperclassesPresent($superObligation, $classes, $present, $visited)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Dictionary slots an instance factory takes, expanded from its written context.
+ *
+ * Mirrors the checker's `expandConstraintsWithSuperclasses()` on surface syntax: one obligation
+ * per written constraint, each preceded by the superclass obligations it needs, deduplicated
+ * within that constraint but never across constraints (definition-time multiplicity is part of the
+ * ABI).
+ *
+ * @param array<string, array{params: list<string>, superclasses: list<Ast\TypeNode>}> $classes
+ */
+function parsedInstanceEvidenceArity(Ast\InstanceDecl $decl, array $classes): int
+{
+    $obligations = [];
+    foreach ($decl->constraints as $constraint) {
+        if (! $constraint instanceof Ast\TypeApp || ! $constraint->con instanceof Ast\TypeCon) {
+            continue;
+        }
+
+        $className = $constraint->con->name;
+        if ($className === '~' || $className === '~~' || isCoercionClass($className)) {
+            continue;
+        }
+
+        $obligations[] = parsedConstraintObligation($constraint, $classes);
+    }
+
+    $present = [];
+    foreach ($obligations as $obligation) {
+        $present[parsedConstraintKey($obligation)] = true;
+    }
+
+    $closed = true;
+    foreach ($obligations as $obligation) {
+        $visited = [];
+        if (! parsedSuperclassesPresent($obligation, $classes, $present, $visited)) {
+            $closed = false;
+
+            break;
+        }
+    }
+
+    if ($closed) {
+        return \count($obligations);
+    }
+
+    $arity = 0;
+    foreach ($obligations as $obligation) {
+        $seen = [];
+        $add = function (array $current) use ($classes, &$arity, &$seen, &$add): void {
+            $key = parsedConstraintKey($current);
+            if (isset($seen[$key])) {
+                return;
+            }
+
+            $info = $classes[$current['class']] ?? null;
+            if ($info !== null) {
+                $paramKeys = $info['params'] === []
+                    ? []
+                    : (\array_combine($info['params'], $current['keys']) ?: []);
+                foreach ($info['superclasses'] as $super) {
+                    $superObligation = parsedSuperclassObligation($super, $paramKeys, $classes);
+                    if ($superObligation !== null) {
+                        $add($superObligation);
+                    }
+                }
+            }
+
+            $seen[$key] = true;
+            ++$arity;
+        };
+        $add($obligation);
+    }
+
+    return $arity;
 }
 
 /**
@@ -565,7 +987,17 @@ function unitCallableEntries(array $unit, array $units, string $moduleName): arr
         $exports = collectExports($program, $localTypes, $units, $moduleName);
     }
 
-    return parsedCallableFacts($program, $exports, unitEvidenceArities($unit, $moduleName, $namespace))['entries'];
+    return parsedCallableFacts(
+        $program,
+        $exports,
+        unitEvidenceArities(
+            $unit,
+            $moduleName,
+            $namespace,
+            unitEvidenceMemoKey($unit, $moduleName, $namespace),
+            classSuperclassTable($units),
+        ),
+    )['entries'];
 }
 
 /**
@@ -642,6 +1074,7 @@ function buildImportContext(
     string $backendId,
     InstanceWorld $instanceWorld,
 ): ImportContext {
+    $classes = classSuperclassTable($units);
     $planPhpImports = $backendId === 'php';
     $outputExtension = backendById($backendId)->extension();
     /** @var array<string, ImportSymbol> $symbols the one table: every fact about every imported spelling */
@@ -651,6 +1084,8 @@ function buildImportContext(
     $moduleOutputPaths = [];
     $namespaceModules = [];
     $implicitNames = [];
+    $qualifiedData = [];
+    $qualifiedTypeSynonyms = [];
 
     foreach ($imports as $import) {
         $importLine = $import->line;
@@ -724,6 +1159,26 @@ function buildImportContext(
                 $importCol,
                 $importEndCol,
             );
+        }
+
+        foreach ($selected['data'] as $name => $info) {
+            if ((! isset($info['declaringModule']) || $info['declaringModule'] === '')
+                && isset($info['result'])
+                && \is_object($info['result'])
+                && isset($info['result']->module)
+            ) {
+                $info['declaringModule'] = $info['result']->module;
+            }
+            $qualifiedData[$localPrefix][$name] = $info;
+        }
+
+        foreach ($selected['typeSynonyms'] as $name => $type) {
+            $qualifiedTypeSynonyms[$localPrefix][$name] = $type;
+        }
+
+        foreach ($selected['patternSynonyms'] ?? [] as $name => $definition) {
+            $symbols[$name] = ($symbols[$name] ?? new ImportSymbol())
+                ->withPatternSynonym($definition, $import->qualifiedOnly);
         }
 
         foreach ($selected['env'] as $name => $scheme) {
@@ -822,7 +1277,13 @@ function buildImportContext(
 
         if ($targetName !== $currentModule) {
             $targetMeta = unitEvidenceMeta($target, $targetName, $namespace);
-            $targetArities = unitEvidenceArities($target, $targetName, $namespace);
+            $targetArities = unitEvidenceArities(
+                $target,
+                $targetName,
+                $namespace,
+                unitEvidenceMemoKey($target, $targetName, $namespace),
+                $classes,
+            );
             foreach ($targetMeta['origins'] as $evName => $origin) {
                 $symbols[$evName] = ($symbols[$evName] ?? new ImportSymbol())->withSymbol(
                     resolvedSymbol($origin['module'], $origin['phpName']),
@@ -880,7 +1341,7 @@ function buildImportContext(
             (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''),
         );
         $meta = unitEvidenceMeta($unit, $unitName, $unit['namespace'], $cacheKey);
-        $unitArities = unitEvidenceArities($unit, $unitName, $unit['namespace']);
+        $unitArities = unitEvidenceArities($unit, $unitName, $unit['namespace'], $cacheKey, $classes);
         foreach ($meta['origins'] as $evName => $origin) {
             if (isset($symbols[$evName])) {
                 continue;
@@ -916,6 +1377,8 @@ function buildImportContext(
             symbols: $symbols,
             qualifiedModules: $qualifiedModules,
             trueBindings: moduleTrueBindingOriginsAll($units),
+            qualifiedData: $qualifiedData,
+            qualifiedTypeSynonyms: $qualifiedTypeSynonyms,
         ),
         plan: EmitPlan::forTarget(
             $backendId,
@@ -946,6 +1409,12 @@ function recordOriginOutputPath(
 ): void {
     $originModule = $origin['module'];
     if ($originModule === $currentModule || ! isset($units[$originModule])) {
+        return;
+    }
+
+    // One path per origin module: the root prefix and extension are the same for every symbol the
+    // module publishes, and a widely imported module is reached once per imported name.
+    if (isset($moduleOutputPaths[$originModule])) {
         return;
     }
 

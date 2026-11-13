@@ -457,7 +457,7 @@ program
       field  :: a
       field  :: b
     deriving (Generic)
-  function __ev_Generic_h_92fce4fd6d64c552_from :: t304 :|| t305 -> Rep t304 :|| t305 t312
+  function __ev_Generic_h_b8548481df989cca_from :: t304 :|| t305 -> Rep t304 :|| t305 t312
     pat_var __x
     case
       variable __x
@@ -480,7 +480,7 @@ program
                 apply
                   constructor_ref K1
                   variable __f1
-  function __ev_Generic_h_92fce4fd6d64c552_to :: Rep t304 :|| t305 t367 -> t304 :|| t305
+  function __ev_Generic_h_b8548481df989cca_to :: Rep t304 :|| t305 t367 -> t304 :|| t305
     pat_var __r
     case
       variable __r

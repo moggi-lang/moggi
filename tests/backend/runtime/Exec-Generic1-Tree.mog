@@ -1,13 +1,18 @@
 module Main where
 
 import Data.Int
-import Data.Tree (Tree(..))
 import Moggi.Generics
 import Moggi.Internal.Base
 
--- The containers library's rose tree, walked through the `Generic1` derived beside its declaration:
+-- A rose tree declared here, walked through the `Generic1` derived beside its declaration:
 -- a `Par1` for the label and a `Rec1 List :.: Rec1 Tree` composition for the child forest, which
 -- is the shape a plain self-recursive constructor cannot express.
+
+data Tree a = Node
+  { rootLabel :: a
+  , subForest :: [Tree a]
+  }
+  deriving (Eq, Generic1)
 
 sample :: Tree Int
 sample = Node 1 [Node 2 [], Node 3 [Node 4 []]]

@@ -1,0 +1,52 @@
+-- Twelve instances of equal specificity at one use site.
+--
+-- Every head is `fN Unit`: a different variable constructor with the same fixed
+-- argument, so no head is more specific than any other and all twelve answer
+-- `C (Box Unit)`. The tie is decided by one streaming pass over every candidate
+-- the bucket matched, not by looking at a prefix of them, so this reports both
+-- declarations instead of taking whichever is written first.
+data Box a = Box a
+
+data Unit = Unit
+
+class C a where
+  c :: a -> String
+
+instance C (f1 Unit) where
+  c _ = "f1"
+
+instance C (f2 Unit) where
+  c _ = "f2"
+
+instance C (f3 Unit) where
+  c _ = "f3"
+
+instance C (f4 Unit) where
+  c _ = "f4"
+
+instance C (f5 Unit) where
+  c _ = "f5"
+
+instance C (f6 Unit) where
+  c _ = "f6"
+
+instance C (f7 Unit) where
+  c _ = "f7"
+
+instance C (f8 Unit) where
+  c _ = "f8"
+
+instance C (f9 Unit) where
+  c _ = "f9"
+
+instance C (f10 Unit) where
+  c _ = "f10"
+
+instance C (f11 Unit) where
+  c _ = "f11"
+
+instance C (f12 Unit) where
+  c _ = "f12"
+
+main :: String
+main = c (Box Unit)

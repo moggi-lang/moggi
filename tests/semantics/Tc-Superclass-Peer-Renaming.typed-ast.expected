@@ -9,7 +9,7 @@ program
   function __ev_Showish_Int_render :: Int -> String
     pat_var x
     string "int"
-  function __ev_Showish_h_969e58c6891f6b23_render :: __Dict_Showish -> Box Maybe t2 -> String
+  function __ev_Showish_h_e59fb72d7466dc62_render :: __Dict_Showish Maybe t2 -> Box Maybe t2 -> String
     pat_var __ev_Showish
     pat_var b
     case
@@ -20,7 +20,7 @@ program
         apply
           evidence_method Showish.render evidence=__ev_Showish nullary=0
           variable v
-  function pretty :: __Dict_Showish -> Box Maybe Int -> String
+  function pretty :: __Dict_Showish Maybe Int -> Box Maybe Int -> String
     pat_var __ev_Showish
     pat_wild _
     string "pretty"

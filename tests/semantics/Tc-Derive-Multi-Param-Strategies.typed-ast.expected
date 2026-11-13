@@ -52,14 +52,13 @@ program
             pat_con VP
           pat_con False
         string "wf"
-  function __ev_Both_VP_Bool_both :: __Dict_Both -> VP -> Bool -> String
+  function __ev_Both_VP_Bool_both :: __Dict_Both VW Bool -> VP -> Bool -> String
     pat_var __ev_Both
     pat_var __v0
     pat_var __v1
     apply
       apply
-        evidence_method Both.both evidence= nullary=0
-          instance VW Bool
+        evidence_method Both.both evidence=__ev_Both nullary=0
         apply
           constructor_ref VW
           variable __v0

@@ -118,6 +118,16 @@ function splitTypeAst(Ast\TypeNode $type): array
         return [$type->constraints, $type->body];
     }
 
+    if ($type instanceof Ast\TypeForall) {
+        [$constraints, $body] = splitTypeAst($type->body);
+        if ($constraints !== []) {
+            return [
+                $constraints,
+                new Ast\TypeForall($type->binders, $type->kinds, $body, $type->line, $type->col, $type->endCol),
+            ];
+        }
+    }
+
     return [[], $type];
 }
 
@@ -1593,6 +1603,8 @@ function resolveProjectInstanceContextEvidence(
     if ($cached !== null) {
         return \array_map(cloneEvidenceNode(...), \array_map(\unserialize(...), $cached));
     }
+
+    assertProjectInstanceUnambiguous($state, $className, $headType, $at);
 
     $match = findProjectInstanceRecord($state, $className, $headType);
     if ($match === null) {

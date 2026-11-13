@@ -454,7 +454,7 @@ function allocateDictParams(TypeCheckState $state, array $constraints): array
     $dictTypes = [];
     foreach (dictionaryConstraints($constraints) as $constraint) {
         $name = '__ev_dict' . $state->nextEvidenceParam++;
-        $dictType = new TCon('__Dict_' . $constraint->class);
+        $dictType = new TCon('__Dict_' . $constraint->class, $constraint->args);
         $dictTypes[] = $dictType;
         $param = new Ast\PatVar($name);
         $dictAst = internalTypeToAst($dictType, $state->subst);

@@ -380,7 +380,7 @@ function finishRecursiveMember(TypeCheckState $state, RecursiveMember $member, a
     $solved = new SolvedGroup($userConstraints, $allocation->obligations());
     $fnType = $member->monotype;
     foreach (\array_reverse(dictionaryConstraints($solved->dicts)) as $constraint) {
-        $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
+        $fnType = new TArrow(new TCon('__Dict_' . $constraint->class, $constraint->args), $fnType);
     }
 
     prependEvidenceParams($fn, $solved->dicts);

@@ -17,7 +17,7 @@ program
     intrinsic intEq#
       variable a
       variable b
-  function __ev_MyEq_T_Op3d3d3d :: __Dict_MyEq -> T -> T -> Bool
+  function __ev_MyEq_T_Op3d3d3d :: __Dict_MyEq TV -> T -> T -> Bool
     pat_var __ev_MyEq
     pat_var __v0
     pat_var __v1

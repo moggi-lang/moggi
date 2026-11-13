@@ -155,7 +155,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     $userConstraints = [];
     $constraintEnv = [];
     $group = new SolvedGroup([], []);
-    $origFnType = null;
+    $declaredFnType = null;
     $origConstraints = [];
     $origUserConstraints = [];
     $skolemNames = [];
@@ -177,19 +177,23 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
             $group = new SolvedGroup($userConstraints, $constraints);
             $constraintEnv = buildConstraintEnv($state, $constraints);
             $fnType = astType($state, $bodyTypeAst);
+            $declaredFnType = $fnType;
             [$fnType, $forallSkolems] = openSignatureForalls($state, $fnType);
             Kinds\assertKind($state, $fnType, new Kinds\KType(), $state->varKinds, $fn);
-            $state->checkedParameterKinds[\spl_object_id($fn)] = Kinds\declarationParameterKinds($state, $fnType);
-            foreach (\array_reverse(dictionaryConstraints($constraints)) as $constraint) {
-                $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
+            $dictArgs = [];
+            foreach ($constraints as $constraint) {
+                foreach ($constraint->args as $arg) {
+                    $dictArgs[] = $arg;
+                }
             }
+            $state->checkedParameterKinds[\spl_object_id($fn)] = Kinds\declarationParameterKinds($state, $fnType, $dictArgs);
+            $fnType = wrapDictionaryConstraints($fnType, $constraints);
         } finally {
             Kinds\restoreKindScope($state, $kindScope);
         }
 
         prependEvidenceParams($fn, $constraints);
 
-        $origFnType = $fnType;
         $origConstraints = $constraints;
         $origUserConstraints = $userConstraints;
         $skolemSubst = $forallSkolems + skolemizeSignatureVars($state, $fnType, $constraints);
@@ -199,6 +203,13 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
             $userConstraints = substitutePendingConstraints($userConstraints, $skolemSubst);
             $allocation->substitute($skolemSubst);
             $constraintEnv = buildConstraintEnv($state, $constraints);
+            $fixedKinds = $state->checkedParameterKinds[\spl_object_id($fn)] ?? [];
+            foreach ($skolemSubst as $source => $skolem) {
+                if (isset($fixedKinds[$skolem->name]) && ! isset($fixedKinds[$source])) {
+                    $fixedKinds[$source] = $fixedKinds[$skolem->name];
+                }
+            }
+            $state->checkedParameterKinds[\spl_object_id($fn)] = $fixedKinds;
             $skolemNames = \array_map(
                 static fn (TVar $skolem): string => $skolem->name,
                 \array_values($skolemSubst),
@@ -284,7 +295,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     unify($state, $bodyType, $bodyExpected, $fn->body);
 
     if ($hasSignature) {
-        $fnType = $origFnType;
+        $fnType = wrapDictionaryConstraints($declaredFnType, $origConstraints);
         $constraints = $origConstraints;
         $userConstraints = $origUserConstraints;
     } else {
@@ -303,9 +314,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         $constraints = $allocation->obligations();
         $group = new SolvedGroup($userConstraints, $constraints);
 
-        foreach (\array_reverse(dictionaryConstraints($constraints)) as $constraint) {
-            $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
-        }
+        $fnType = wrapDictionaryConstraints($fnType, $constraints);
 
         prependEvidenceParams($fn, $constraints);
         if ($constraints !== []) {
@@ -479,7 +488,23 @@ function settleCheckedBody(
         $fn,
     );
 
+    defaultAmbiguousStringVars(
+        $state,
+        $fn->body,
+        $restricted
+            ? []
+            : quantifiedVars($state, peelDictArrows($fnType, \count($group->dicts)))
+                + \array_fill_keys($skolemNames, true)
+                + obligationVars($state, $group->dicts),
+        $fn,
+    );
+
     resolveDeferredInfixPrimops($state, $fn->body);
+    // A `Coercible` obligation parked while its types were open fixes the types
+    // of the terms it was parked over (`(coerce inc) 41`: the argument's number
+    // type is the function's domain). Literals and evidence below can only be
+    // settled at the types this pass leaves behind, so it runs first.
+    solveDeferredCoercionsInExpr($state, $fn->body);
     $fn->body = resolvePendingEvidenceInExpr($state, $fn->body);
     $fn->body = tryResolveValueEvidence($state, $fn->body);
     $fn->body = elaborateNumericLiterals($state, $fn->body);
@@ -531,6 +556,9 @@ function settleCheckedBody(
     }
 
     [$forallNames, $forallKinds] = $hadDeclaredSignature ? declaredForallBinders($fn->type) : [[], []];
+    if ($forallNames !== []) {
+        $renderedType = peelForalls($renderedType);
+    }
     $renderedType = rebindForallSkolems($renderedType, $forallNames);
     $renderedSignature = signatureTypeAst(
         $renderedType,

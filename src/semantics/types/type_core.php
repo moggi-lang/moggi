@@ -45,6 +45,9 @@ function substituteInstanceTypeAst(Ast\TypeNode $type, array $mapping): Ast\Type
         Ast\TypeVar::class => isset($mapping[$type->name])
             ? internalTypeToAst($mapping[$type->name], [])
             : $type,
+        Ast\TypeKindAnnot::class => isset($mapping[$type->name])
+            ? internalTypeToAst($mapping[$type->name], [])
+            : $type,
         Ast\TypeApp::class => new Ast\TypeApp(
             substituteInstanceTypeAst($type->con, $mapping),
             \array_map(
@@ -212,6 +215,16 @@ function instantiateScheme(TypeCheckState $state, Scheme $scheme): array
         $mapping[$var] = freshType($state);
     }
 
+    $type = $scheme->type;
+    while ($type instanceof TForall) {
+        foreach ($type->binders as $binder) {
+            if (! isset($mapping[$binder->name])) {
+                $mapping[$binder->name] = freshType($state);
+            }
+        }
+        $type = $type->body;
+    }
+
     $constraints = [];
     foreach ($scheme->constraints as $constraint) {
         $constraints[] = new Ast\PendingConstraint(
@@ -230,7 +243,7 @@ function instantiateScheme(TypeCheckState $state, Scheme $scheme): array
     }
 
     return [
-        'type' => openForallsFresh($state, substitute($scheme->type, $mapping)),
+        'type' => openForallsFresh($state, substitute($type, $mapping)),
         'constraints' => $constraints,
         'dicts' => $dicts,
     ];
@@ -387,7 +400,7 @@ function typeVars(Type $type): array
 function typeAstVars(Ast\TypeNode $type): array
 {
     return match ($type::class) {
-        Ast\TypeVar::class => [$type->name => true],
+        Ast\TypeVar::class, Ast\TypeKindAnnot::class => [$type->name => true],
         Ast\TypeUnit::class,
         Ast\TypeCon::class,
         Ast\TypePromoted::class,
@@ -415,14 +428,27 @@ function typeAstVars(Ast\TypeNode $type): array
     };
 }
 
-function freshenTypeVars(TypeCheckState $state, Type $type): Type
+function freshenTypeVars(TypeCheckState $state, Type $type, bool $keepKinds = false): Type
 {
     $mapping = [];
+    $kinds = [];
     foreach (\array_keys(typeVars($type)) as $var) {
         $mapping[$var] = freshType($state);
     }
+    if ($keepKinds) {
+        foreach ($mapping as $var => $fresh) {
+            if ($fresh instanceof TVar && isset($state->varKinds[$var])) {
+                $kinds[$fresh->name] = $state->varKinds[$var];
+            }
+        }
+    }
 
-    return substitute($type, $mapping);
+    $fresh = substitute($type, $mapping);
+    foreach ($kinds as $name => $kind) {
+        $state->varKinds[$name] = $kind;
+    }
+
+    return $fresh;
 }
 
 /**
@@ -594,19 +620,69 @@ function dictArgConstraintText(TCon $type): string
     return \trim($class . ' ' . \implode(' ', $args));
 }
 
+/**
+ * Peel leading `__Dict_*` arrows and return the constraints they stand for.
+ *
+ * @return array{0: Type, 1: list<Ast\PendingConstraint>}
+ */
+function peelLeadingDictArrows(TypeCheckState $state, Type $type): array
+{
+    $givens = [];
+    $cursor = $type;
+    while ($cursor instanceof TArrow
+        && $cursor->from instanceof TCon
+        && \str_starts_with($cursor->from->name, '__Dict_')
+    ) {
+        $givens[] = new Ast\PendingConstraint(
+            \substr($cursor->from->name, \strlen('__Dict_')),
+            $cursor->from->args,
+            '',
+        );
+        $cursor = prune($state, $cursor->to);
+    }
+
+    return [$cursor, $givens];
+}
+
+/**
+ * Whether a type is a function that takes a dictionary somewhere in its leading
+ * arrows, directly or under a quantifier.
+ */
+function typeCarriesDictArrows(?Type $type): bool
+{
+    if ($type === null) {
+        return false;
+    }
+
+    while ($type instanceof TForall) {
+        $type = $type->body;
+    }
+
+    return $type instanceof TArrow
+        && $type->from instanceof TCon
+        && \str_starts_with($type->from->name, '__Dict_');
+}
+
 /** Peel leading `__Dict_*` arrows that encode method-local constraints. */
 function peelDictArrows(Type $type, int $count): Type
 {
-    for ($i = 0; $i < $count; ++$i) {
-        if (! $type instanceof TArrow
-            || ! $type->from instanceof TCon
-            || ! \str_starts_with($type->from->name, '__Dict_')) {
-            break;
-        }
-        $type = $type->to;
+    if ($count <= 0) {
+        return $type;
     }
 
-    return $type;
+    if ($type instanceof TForall) {
+        $body = peelDictArrows($type->body, $count);
+
+        return $body === $type->body ? $type : new TForall($type->binders, $body);
+    }
+
+    if (! $type instanceof TArrow
+        || ! $type->from instanceof TCon
+        || ! \str_starts_with($type->from->name, '__Dict_')) {
+        return $type;
+    }
+
+    return peelDictArrows($type->to, $count - 1);
 }
 
 /** @param array{name: string, kind: Kinds\Kind|Ast\KindNode} $param */
@@ -636,7 +712,7 @@ function applyArgsToHead(Type $head, array $args): Type
     return match ($head::class) {
         TVar::class => new TVarApp($head->name, $args),
         TVarApp::class => new TVarApp($head->name, [...$head->args, ...$args]),
-        TCon::class => new TCon($head->name, [...$head->args, ...$args]),
+        TCon::class => new TCon($head->name, [...$head->args, ...$args], $head->module),
         TPromoted::class => new TPromoted($head->name, [...$head->args, ...$args]),
         default => throw new \InvalidArgumentException('cannot apply arguments to ' . $head::class),
     };
@@ -697,7 +773,7 @@ function applyConSubst(TCon $head, array $extraArgs, array $mapping): Type
         $mergedArgs[] = substitute($arg, $mapping);
     }
 
-    return new TCon($head->name, $mergedArgs);
+    return new TCon($head->name, $mergedArgs, $head->module);
 }
 
 /** @param array<string, Type> $mapping */
@@ -990,7 +1066,7 @@ function substituteCon(TCon $type, array $mapping): Type
     $head = $mapping[$type->name] ?? null;
 
     return match (true) {
-        $head === null => new TCon($type->name, $substitutedArgs()),
+        $head === null => new TCon($type->name, $substitutedArgs(), $type->module),
         $head instanceof TCon => applyConSubst($head, $type->args, $mapping),
         $head instanceof TVar, $head instanceof TVarApp => applyArgsToHead($head, $substitutedArgs()),
         default => throw new \InvalidArgumentException('invalid mapping for type constructor'),
@@ -1068,6 +1144,39 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
 {
     $left = prune($state, $left);
     $right = prune($state, $right);
+
+    // A dictionary arrow is not a value argument. `forall b. C b => b -> b` is a
+    // function of `b` whose dictionary the caller supplies, so when only one side
+    // of a comparison carries leading dictionary arrows -- an argument written as
+    // a plain lambda against a constrained rank-2 expectation, or a constrained
+    // function handed a plain one -- the arrows are peeled and their constraints
+    // taken as givens while the rest of the types are compared.
+    $leftDicts = $left instanceof TArrow && $left->from instanceof TCon
+        && \str_starts_with($left->from->name, '__Dict_');
+    $rightDicts = $right instanceof TArrow && $right->from instanceof TCon
+        && \str_starts_with($right->from->name, '__Dict_');
+    if ($leftDicts !== $rightDicts) {
+        [$peeled, $givens] = peelLeadingDictArrows($state, $leftDicts ? $left : $right);
+        $savedAmbient = $state->ambientConstraints;
+        $savedByClass = $state->ambientConstraintsByClass;
+        foreach ($givens as $given) {
+            $state->ambientConstraints[] = $given;
+            $state->ambientConstraintsByClass[$given->class][] = $given;
+        }
+        try {
+            unify(
+                $state,
+                $leftDicts ? $peeled : $left,
+                $leftDicts ? $right : $peeled,
+                $at,
+            );
+        } finally {
+            $state->ambientConstraints = $savedAmbient;
+            $state->ambientConstraintsByClass = $savedByClass;
+        }
+
+        return;
+    }
 
     if ($left instanceof TForall || $right instanceof TForall) {
         subsume($state, $left, $right, $at);
@@ -1605,7 +1714,7 @@ function prune(TypeCheckState $state, Type $type): Type
         }
 
         return $type instanceof TCon
-            ? new TCon($type->name, $args)
+            ? new TCon($type->name, $args, $type->module)
             : new TPromoted($type->name, $args);
     }
 
@@ -1781,6 +1890,7 @@ function zonkInferredTypesInPattern(TypeCheckState $state, ?Ast\AstNode $pattern
                 zonkInferredTypesInPattern($state, $field->pattern);
             }
         })(),
+        Ast\PatView::class => zonkInferredTypesInPattern($state, $pattern->pattern),
         default => null,
     };
 }
@@ -1944,7 +2054,7 @@ function canonicalizePrimitiveTypes(Type $type): Type
         ),
         TCon::class => $type->args === []
             ? canonicalPrimitiveType($type)
-            : new TCon($type->name, \array_map(canonicalizePrimitiveTypes(...), $type->args)),
+            : new TCon($type->name, \array_map(canonicalizePrimitiveTypes(...), $type->args), $type->module),
         TVarApp::class => new TVarApp(
             $type->name,
             \array_map(canonicalizePrimitiveTypes(...), $type->args),
@@ -2068,6 +2178,9 @@ function typeToString(Type $type, array $rename = []): string
                 }
 
                 return '(->)';
+            }
+            if (\str_starts_with($type->name, '__Dict_')) {
+                return $type->name;
             }
             if ($type->name === 'List' && \count($type->args) === 1) {
                 return '[' . typeToString($type->args[0], $rename) . ']';
