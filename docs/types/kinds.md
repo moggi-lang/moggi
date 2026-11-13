@@ -123,11 +123,24 @@ synonym's parameters take the kind its right-hand side implies.
 
 Both are covered in [DataKinds](data-kinds.md).
 
-There is **no kind polymorphism**: a parameter cannot be declared "of any kind
-`k`". `data Proxy (a :: k) = Proxy` is a parse error (`expected kind, found
-identifier 'k'`). A declaration that must work at several kinds needs one
-declaration per kind, or an ordinary type parameter where a kind would be
-expected.
+A lowercase name in a parameter's kind annotation is a **kind variable**:
+`data Proxy (a :: k) = Proxy` declares `a` at any kind, and the variable is
+generalised so one declaration serves several kinds:
+
+```moggi
+data Proxy (a :: k) = Proxy
+
+pInt :: Proxy Int
+pInt = Proxy
+
+pList :: Proxy List
+pList = Proxy
+```
+
+Two parameters may share one kind variable (`data Pair2 (a :: k) (b :: k)`),
+which requires both arguments to have the same kind. A named kind in the
+annotation (`Nat`, `Symbol`, a promoted data kind) is not a variable: it fixes
+that parameter to that kind.
 
 ## Inspecting a kind
 
@@ -145,7 +158,8 @@ kind errors always name the constructor and both kinds.
 
 ## Limits
 
-* **No kind polymorphism**, as above.
+* **Kind variables only in data declarations.** A class parameter's annotation
+  still defaults to `Type`, and `forall` binders take named kinds only.
 * **No kind signatures on type synonyms.**
 * **No promotion of functions or type constructors** to the type level; only
   data constructors and the two literal kinds are promoted

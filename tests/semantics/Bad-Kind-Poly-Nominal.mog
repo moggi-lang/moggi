@@ -1,0 +1,3 @@
+-- `Nat` is a nominal kind, not a binder: the field cannot use `a` at `Type`.
+data OnlyNat (a :: Nat) where
+  MkOnlyNat :: OnlyNat Int

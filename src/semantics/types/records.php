@@ -38,14 +38,10 @@ function registerRecordFieldSelectors(TypeCheckState $state, Ast\DataDecl $decl)
     $selectors = [];
     $params = $state->data[$decl->name]['params'];
 
-    foreach ($state->data[$decl->name]['paramKinds'] ?? [] as $kind) {
-        if (! $kind instanceof Kinds\KType && ! $kind instanceof Kinds\KVar) {
-            $state->data[$decl->name]['fieldSelectors'] = $selectors;
-
-            return;
-        }
-    }
-
+    // A selector is a function over every parameter, higher-kinded ones
+    // included: `unP :: forall (f :: Type -> Type) a. P f a -> f a` is as
+    // ordinary as a selector over a plain parameter, so the kinds of the
+    // parameters do not decide whether a record has selectors.
     $paramTypes = [];
     foreach ($params as $param) {
         $paramTypes[] = new TVar($param);

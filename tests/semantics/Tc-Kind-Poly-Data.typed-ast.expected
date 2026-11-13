@@ -1,0 +1,23 @@
+program
+  data Proxy (a :: k)
+    constructor Proxy
+  function pInt :: Proxy Int
+    constructor_ref Proxy
+  function pList :: Proxy List
+    constructor_ref Proxy
+  data Rep
+    constructor Rep
+  data TypeRep (a :: k)
+    constructor TypeRep :: Rep -> TypeRep a
+  data SomeTypeRep
+    constructor SomeTypeRep :: TypeRep a -> SomeTypeRep
+  data Pair2 (a :: k) (b :: k)
+    constructor Pair2
+      field  :: a
+      field  :: b
+  function both :: Pair2 Int Bool
+    apply
+      apply
+        constructor_ref Pair2
+        integer 1
+      constructor_ref True

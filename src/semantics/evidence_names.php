@@ -148,6 +148,12 @@ function canonicalTypeKey(Ast\TypeNode $type): string
                 'args' => [],
             ],
             Ast\TypeVar::class => ['tag' => 'type_var', 'name' => $node->name],
+            Ast\TypeKindAnnot::class => ['tag' => 'type_var', 'name' => $node->name],
+            Ast\TypeQualified::class => [
+                'tag' => 'type_qualified',
+                'module' => $node->module,
+                'name' => $node->name,
+            ],
             Ast\TypeApp::class => [
                 'tag' => 'type_app',
                 'con' => $normalize($node->con),
@@ -183,6 +189,16 @@ function typeAstToArray(Ast\TypeNode $type): array
     return match ($type::class) {
         Ast\TypeCon::class => ['tag' => 'type_con', 'name' => $type->name],
         Ast\TypeVar::class => ['tag' => 'type_var', 'name' => $type->name],
+        Ast\TypeKindAnnot::class => [
+            'tag' => 'type_kind_annot',
+            'name' => $type->name,
+            'kind' => \Moggi\Syntax\Ast\dumpKindInline($type->kind),
+        ],
+        Ast\TypeQualified::class => [
+            'tag' => 'type_qualified',
+            'module' => $type->module,
+            'name' => $type->name,
+        ],
         Ast\TypeApp::class => [
             'tag' => 'type_app',
             'con' => typeAstToArray($type->con),

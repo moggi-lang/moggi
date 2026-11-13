@@ -1,0 +1,5 @@
+-- Both parameters share `k`; `Int` and `List` have different kinds.
+data Pair2 (a :: k) (b :: k) = Pair2 a b
+
+data Bad where
+  Bad :: Pair2 Int List -> Bad

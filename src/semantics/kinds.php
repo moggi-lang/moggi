@@ -28,8 +28,14 @@ final class KType implements Kind
 
 final class KVar implements Kind
 {
+    /** A process-wide identity: two walks may print the same name for different variables. */
+    private static int $nextId = 0;
+
+    public readonly int $id;
+
     public function __construct(public readonly string $name)
     {
+        $this->id = self::$nextId++;
     }
 }
 
@@ -59,6 +65,9 @@ final class KindInferCtx
 
     /** @var array<string, Kind> */
     public array $varKinds = [];
+
+    /** @var array<string, Kind> */
+    public array $kindVars = [];
 
     /** @var array<string, array{data: string, argKinds?: list<Kind>}> */
     public array $promoted = [];
@@ -229,7 +238,7 @@ function sameKind(Kind $left, Kind $right): bool
 
     return match ($left::class) {
         KType::class => true,
-        KVar::class => $left->name === $right->name,
+        KVar::class => $left->id === $right->id,
         KCon::class => $left->name === $right->name,
         KArrow::class => sameKind($left->from, $right->from)
             && sameKind($left->to, $right->to),
@@ -244,8 +253,8 @@ function freshKindVar(KindInferCtx $ctx): KVar
 
 function pruneKind(KindInferCtx $ctx, Kind $kind): Kind
 {
-    while ($kind instanceof KVar && isset($ctx->subst[$kind->name])) {
-        $kind = $ctx->subst[$kind->name];
+    while ($kind instanceof KVar && isset($ctx->subst[$kind->id])) {
+        $kind = $ctx->subst[$kind->id];
     }
 
     if ($kind instanceof KArrow) {
@@ -270,12 +279,12 @@ function unifyKind(KindInferCtx $ctx, Kind $left, Kind $right): void
     $right = pruneKind($ctx, $right);
 
     if ($left instanceof KVar) {
-        if ($right instanceof KVar && $left->name === $right->name) {
+        if ($right instanceof KVar && $left->id === $right->id) {
             return;
         }
 
-        occursKind($ctx, $left->name, $right);
-        $ctx->subst[$left->name] = $right;
+        occursKind($ctx, $left->id, $right);
+        $ctx->subst[$left->id] = $right;
 
         return;
     }
@@ -306,11 +315,11 @@ function unifyKind(KindInferCtx $ctx, Kind $left, Kind $right): void
     );
 }
 
-function occursKind(KindInferCtx $ctx, string $var, Kind $kind): void
+function occursKind(KindInferCtx $ctx, int $var, Kind $kind): void
 {
     $kind = pruneKind($ctx, $kind);
     if ($kind instanceof KVar) {
-        if ($kind->name === $var) {
+        if ($kind->id === $var) {
             throw new \InvalidArgumentException("infinite kind involving {$var}");
         }
 
@@ -321,6 +330,29 @@ function occursKind(KindInferCtx $ctx, string $var, Kind $kind): void
         occursKind($ctx, $var, $kind->from);
         occursKind($ctx, $var, $kind->to);
     }
+}
+
+/**
+ * A kind read from a declaration, with every variable renamed into this walk's own context.
+ *
+ * Class parameter kinds and `state->kindEnv` entries are shared values. Binding one inside a
+ * local inference context must not alias a variable that context invents: both counters name
+ * variables `k…`, so a shared variable and a fresh one can spell the same name, and the walk
+ * would then see a variable inside its own kind. Each use site is also entitled to its own
+ * instantiation of a poly-kinded parameter.
+ */
+function importedKind(Kind $kind, KindInferCtx $ctx): Kind
+{
+    $renamed = [];
+    $rename = static function (Kind $current) use (&$rename, &$renamed, $ctx): Kind {
+        return match ($current::class) {
+            KVar::class => $renamed[$current->id] ??= freshKindVar($ctx),
+            KArrow::class => new KArrow($rename($current->from), $rename($current->to)),
+            default => $current,
+        };
+    };
+
+    return $rename($kind);
 }
 
 /**
@@ -345,14 +377,14 @@ function bindClassConstraintKinds(KindInferCtx $ctx, Ast\AstNode $constraint): v
             continue;
         }
 
-        $ctx->varKinds[$arg->name] = $paramKinds[$index];
+        $ctx->varKinds[$arg->name] = importedKind($paramKinds[$index], $ctx);
     }
 }
 
 function inferKindAst(KindInferCtx $ctx, Ast\TypeNode $typeAst): Kind
 {
     return match ($typeAst::class) {
-        Ast\TypeVar::class => $ctx->varKinds[$typeAst->name] ?? new KType(),
+        Ast\TypeVar::class => $ctx->varKinds[$typeAst->name] ??= freshKindVar($ctx),
         Ast\TypeUnit::class => new KType(),
         Ast\TypeCon::class => kindOfTypeConAst($ctx, $typeAst->name),
         Ast\TypePromoted::class => kindOfPromotedAst($ctx, $typeAst->name),
@@ -431,6 +463,20 @@ function inferKindApp(KindInferCtx $ctx, Ast\TypeNode $con, array $args): Kind
 
 function kindOfTypeConAst(KindInferCtx $ctx, string $name): Kind
 {
+    // A class's kind is the kinds of its parameters, and each use reads them afresh: the
+    // registered kind of a poly-kinded class (`Typeable (a :: k)`) holds one variable, and sharing
+    // it between a superclass (`Typeable a`) and a method constraint (`Typeable t`) would unify
+    // `a` with `t` -- the two are independent hypotheses.
+    $classParams = $ctx->classParams[$name] ?? null;
+    if ($classParams !== null) {
+        $kind = new KType();
+        foreach (\array_reverse($classParams) as $paramKind) {
+            $kind = new KArrow(importedKind($paramKind, $ctx), $kind);
+        }
+
+        return $kind;
+    }
+
     if (isset($ctx->env[$name])) {
         return pruneKind($ctx, instantiateKindVarsIn($ctx->env[$name], $ctx));
     }
@@ -481,7 +527,7 @@ function inferDataKind(TypeCheckState $state, Ast\DataDecl $decl): Kind
     foreach ($decl->params as $param) {
         $ctx->varKinds[$param->name] = $param->kind instanceof Ast\KindInfer
             ? freshKindVar($ctx)
-            : astKind($state, $param->kind, $decl);
+            : annotatedKind($state, $ctx, $param->kind, $decl);
     }
 
     $dataKind = freshKindVar($ctx);
@@ -524,9 +570,9 @@ function generalizeKindVars(Kind $kind): Kind
     $names = [];
     $rename = function (Kind $kind) use (&$rename, &$names): Kind {
         if ($kind instanceof KVar) {
-            $names[$kind->name] ??= '$' . \count($names);
+            $names[$kind->id] ??= '$' . \count($names);
 
-            return new KVar($names[$kind->name]);
+            return new KVar($names[$kind->id]);
         }
 
         if ($kind instanceof KArrow) {
@@ -595,7 +641,7 @@ function inferClassParamKinds(TypeCheckState $state, Ast\ClassDecl $decl): array
         if ($param->kind instanceof Ast\KindInfer) {
             $kind = freshKindVar($ctx);
         } else {
-            $kind = astKind($state, $param->kind);
+            $kind = annotatedKind($state, $ctx, $param->kind);
         }
 
         $paramKinds[$param->name] = $kind;
@@ -625,7 +671,11 @@ function inferClassParamKinds(TypeCheckState $state, Ast\ClassDecl $decl): array
 
     $resolved = [];
     foreach ($decl->params as $param) {
-        $resolved[$param->name] = defaultUnresolvedKindVars(pruneKind($ctx, $paramKinds[$param->name]));
+        $kind = pruneKind($ctx, $paramKinds[$param->name]);
+        $resolved[$param->name] = $param->kind instanceof Ast\KindCon
+            && isKindVariableName($param->kind->name)
+            ? generalizeKindVars($kind)
+            : defaultUnresolvedKindVars($kind);
     }
 
     return $resolved;
@@ -645,13 +695,55 @@ function astKind(TypeCheckState $state, Ast\KindNode $kindAst, ?Ast\AstNode $at 
 {
     return match ($kindAst::class) {
         Ast\KindType::class => new KType(),
-        Ast\KindCon::class => new KCon($kindAst->name),
+        Ast\KindCon::class => namedKind($kindAst->name),
         Ast\KindArrow::class => new KArrow(
             astKind($state, $kindAst->from, $at),
             astKind($state, $kindAst->to, $at),
         ),
         default => throw typeFail($state, 'unknown kind', $at ?? ($kindAst instanceof Ast\AstNode ? $kindAst : null)),
     };
+}
+
+/**
+ * A surface kind annotation as a kind, binding a lowercase name as a kind
+ * variable.
+ *
+ * `data TypeRep (a :: k)` says only that `a` has some kind: `k` is a binder, not
+ * a nominal kind, so a field can instantiate it at `Type`. An uppercase name
+ * (`Type`, `Nat`, `Symbol`, `Bool`) keeps its nominal meaning.
+ */
+function annotatedKind(
+    TypeCheckState $state,
+    KindInferCtx $ctx,
+    Ast\KindNode $kindAst,
+    ?Ast\AstNode $at = null,
+): Kind {
+    return match ($kindAst::class) {
+        Ast\KindType::class => new KType(),
+        Ast\KindCon::class => isKindVariableName($kindAst->name)
+            ? ($ctx->kindVars[$kindAst->name] ??= freshKindVar($ctx))
+            : namedKind($kindAst->name),
+        Ast\KindArrow::class => new KArrow(
+            annotatedKind($state, $ctx, $kindAst->from, $at),
+            annotatedKind($state, $ctx, $kindAst->to, $at),
+        ),
+        default => throw typeFail($state, 'unknown kind', $at ?? ($kindAst instanceof Ast\AstNode ? $kindAst : null)),
+    };
+}
+
+function isKindVariableName(string $name): bool
+{
+    return $name !== '' && $name[0] >= 'a' && $name[0] <= 'z';
+}
+
+/**
+ * The kind a surface name denotes. `Constraint` is `Data.Kind`'s kind of
+ * constraints: like `Type`, it describes parameters that are ordinary types,
+ * so it denotes that kind rather than a promoted data kind.
+ */
+function namedKind(string $name): Kind
+{
+    return $name === 'Constraint' ? new KType() : new KCon($name);
 }
 
 /** @param array<string, Kind> $varKinds */
@@ -907,7 +999,7 @@ function parseKind(string $text): Kind
     return match ($text) {
         'Type' => new KType(),
         '' => throw new \InvalidArgumentException('empty kind'),
-        default => new KCon($text),
+        default => namedKind($text),
     };
 }
 
@@ -1058,11 +1150,18 @@ function signatureKindErrors(TypeCheckState $facts, Type $type, array $parameter
  * `Int` are the names a module writes. Registering `IO#`'s kind under `IO#`
  * would put it where nothing looks.
  */
-function registerTypeKind(TypeCheckState $state, string $name, Kind $kind): void
+function registerTypeKind(TypeCheckState $state, string $name, Kind $kind, ?string $module = null): void
 {
     $canonical = canonicalTypeConName($name);
     $state->kindEnv[$canonical] = $kind;
     $state->kindEnvByArity[$canonical][kindArity($kind)] ??= $kind;
+
+    $declaredIn = $module
+        ?? ($state->data[$name]['declaringModule'] ?? null)
+        ?? ($state->currentModule ?? $state->module ?? null);
+    if (\is_string($declaredIn) && $declaredIn !== '') {
+        $state->kindEnvByModule[$declaredIn][$canonical] ??= $kind;
+    }
 }
 
 /** How many arguments a constructor of this kind takes before the result is a type. */
@@ -1184,11 +1283,20 @@ function bootstrapKindEnv(TypeCheckState $state): void
 /** @param array{name: string, kind?: Kind|Ast\KindNode, resolvedKind?: Kind} $param */
 function classParamKind(TypeCheckState $state, array $param, ?Ast\AstNode $at = null): Kind
 {
+    if (($param['polyKinded'] ?? false) === true) {
+        return freshStateKindVar($state);
+    }
+
     if (isset($param['resolvedKind'])) {
         return $param['resolvedKind'];
     }
 
-    return astKind($state, $param['kind'], $at);
+    $declared = $param['kind'] ?? null;
+    if ($declared instanceof Ast\KindCon && isKindVariableName($declared->name)) {
+        return freshStateKindVar($state);
+    }
+
+    return astKind($state, $declared, $at);
 }
 
 /** @param list<array{name: string, kind?: mixed, resolvedKind?: mixed}> $params @return list<string> */
@@ -1205,7 +1313,7 @@ function kindAstToKind(KindInferCtx $ctx, Ast\KindNode $kind): Kind
 {
     return match ($kind::class) {
         Ast\KindType::class => new KType(),
-        Ast\KindCon::class => new KCon($kind->name),
+        Ast\KindCon::class => namedKind($kind->name),
         Ast\KindArrow::class => new KArrow(kindAstToKind($ctx, $kind->from), kindAstToKind($ctx, $kind->to)),
         default => throw new \InvalidArgumentException('unknown kind: ' . $kind::class),
     };

@@ -1,0 +1,4 @@
+tests/semantics/Bad-Kind-Poly-Conflict.mog:4:6: type error: kind error in data type `Bad`: could not unify kind `Type` with `Type -> Type`
+
+  4 | data Bad where
+    |      ^^^

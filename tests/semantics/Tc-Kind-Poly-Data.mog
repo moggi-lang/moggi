@@ -1,0 +1,22 @@
+-- A lowercase name in a kind annotation is a binder, not a nominal kind.
+-- `k` is generalised, so one declaration serves several kinds.
+data Proxy (a :: k) = Proxy
+
+pInt :: Proxy Int
+pInt = Proxy
+
+pList :: Proxy List
+pList = Proxy
+
+data Rep = Rep
+
+data TypeRep (a :: k) where
+  TypeRep :: Rep -> TypeRep a
+
+data SomeTypeRep where
+  SomeTypeRep :: TypeRep a -> SomeTypeRep
+
+data Pair2 (a :: k) (b :: k) = Pair2 a b
+
+both :: Pair2 Int Bool
+both = Pair2 1 True
