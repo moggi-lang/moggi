@@ -2,17 +2,15 @@
 
 namespace Tc\Stdlib;
 
-const __MOGGI_MAP = [[36 => 0, 37 => 0, 38 => 0, 42 => 1, 43 => 1, 47 => 2, 48 => 2, 52 => 3, 53 => 3, 54 => 3, 55 => 3, 59 => 4, 60 => 4, 64 => 5, 68 => 6, 69 => 6, 70 => 6, 71 => 6, 76 => 7, 77 => 7, 82 => 8, 83 => 8], ['Tc\\Stdlib\\mapLookupDemo' => 0, 'Tc\\Stdlib\\mapSizeDemo' => 1, 'Tc\\Stdlib\\setMemberDemo' => 2, 'Tc\\Stdlib\\setUnionDemo' => 3, 'Tc\\Stdlib\\clampDemo' => 4, 'Tc\\Stdlib\\charDemo' => 5, 'Tc\\Stdlib\\altMaybeDemo' => 6, 'Tc\\Stdlib\\altListDemo' => 7, 'Tc\\Stdlib\\pairDemo' => 8], [], [], [[0, 0, 14, 3], [1, 0, 17, 15], [2, 0, 20, 17], [3, 0, 24, 3], [4, 0, 27, 13], [5, 0, 30, 12], [6, 0, 33, 16], [7, 0, 36, 15], [8, 0, 39, 12]], ['Tc.Stdlib.mapLookupDemo', 'Tc.Stdlib.mapSizeDemo', 'Tc.Stdlib.setMemberDemo', 'Tc.Stdlib.setUnionDemo', 'Tc.Stdlib.clampDemo', 'Tc.Stdlib.charDemo', 'Tc.Stdlib.altMaybeDemo', 'Tc.Stdlib.altListDemo', 'Tc.Stdlib.pairDemo'], ['tests/backend/codegen/Tc-Stdlib.mog']];
+const __MOGGI_MAP = [[26 => 0, 27 => 0, 31 => 1, 35 => 2, 36 => 2, 37 => 2, 38 => 2, 43 => 3, 44 => 3, 49 => 4, 50 => 4], ['Tc\\Stdlib\\clampDemo' => 0, 'Tc\\Stdlib\\charDemo' => 1, 'Tc\\Stdlib\\altMaybeDemo' => 2, 'Tc\\Stdlib\\altListDemo' => 3, 'Tc\\Stdlib\\pairDemo' => 4], [], [], [[0, 0, 11, 13], [1, 0, 14, 12], [2, 0, 17, 16], [3, 0, 20, 15], [4, 0, 23, 12]], ['Tc.Stdlib.clampDemo', 'Tc.Stdlib.charDemo', 'Tc.Stdlib.altMaybeDemo', 'Tc.Stdlib.altListDemo', 'Tc.Stdlib.pairDemo'], ['tests/backend/codegen/Tc-Stdlib.mog']];
 
 require_once __DIR__ . '/../../../libraries/base/src/Control/Applicative.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Char.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Double.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Eq.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/List.php';
-require_once __DIR__ . '/../../../libraries/containers/src/Data/Map.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Maybe.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Ord.php';
-require_once __DIR__ . '/../../../libraries/containers/src/Data/Set.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Tuple.php';
 require_once __DIR__ . '/../../../libraries/base/src/Moggi/Internal/Base.php';
 
@@ -20,44 +18,13 @@ use function Control\Applicative\__ev_Alternative_Maybe;
 use function Data\Char\isDigit;
 use function Data\Eq\__ev_Eq_Int;
 use function Data\List\__ev_Alternative_List;
-use function Data\Map\empty_;
-use function Data\Map\insert;
-use function Data\Map\lookup;
-use function Data\Map\size;
 use function Data\Ord\__ev_Ord_Int;
 use function Data\Ord\clamp;
-use function Data\Set\fromList as setFromList;
-use function Data\Set\member;
-use function Data\Set\size as setSize;
-use function Data\Set\union;
 use function Data\Tuple\fst;
 
-function mapLookupDemo() {
-    $__t0 = insert(__ev_Eq_Int(), __ev_Ord_Int(), 2, 20, empty_());
-    $__t1 = insert(__ev_Eq_Int(), __ev_Ord_Int(), 1, 10, $__t0);
-    return lookup(__ev_Eq_Int(), __ev_Ord_Int(), 2, $__t1);
-}
-
-function mapSizeDemo() {
-    $__t3 = insert(__ev_Eq_Int(), __ev_Ord_Int(), 1, 2, empty_());
-    return size($__t3);
-}
-
-function setMemberDemo() {
-    $__t5 = setFromList(__ev_Eq_Int(), __ev_Ord_Int(), [1, 2, 3]);
-    return member(__ev_Eq_Int(), __ev_Ord_Int(), 2, $__t5);
-}
-
-function setUnionDemo() {
-    $__t7 = setFromList(__ev_Eq_Int(), __ev_Ord_Int(), [1, 2]);
-    $__t8 = setFromList(__ev_Eq_Int(), __ev_Ord_Int(), [2, 3]);
-    $__t9 = union(__ev_Eq_Int(), __ev_Ord_Int(), $__t7, $__t8);
-    return setSize($__t9);
-}
-
 function clampDemo() {
-    $__t11 = [0, 10];
-    return clamp(__ev_Eq_Int(), __ev_Ord_Int(), $__t11, 99);
+    $__t0 = [0, 10];
+    return clamp(__ev_Eq_Int(), __ev_Ord_Int(), $__t0, 99);
 }
 
 function charDemo() {
@@ -65,20 +32,20 @@ function charDemo() {
 }
 
 function altMaybeDemo() {
-    $__t14 = ["Just", 1];
-    $__t15 = ["Just", 2];
-    $__t17 = __ev_Alternative_Maybe();
-    $__t16 = ($__t17["<|>"])($__t14, $__t15);
-    return $__t16;
+    $__t3 = ["Just", 1];
+    $__t4 = ["Just", 2];
+    $__t6 = __ev_Alternative_Maybe();
+    $__t5 = ($__t6["<|>"])($__t3, $__t4);
+    return $__t5;
 }
 
 function altListDemo() {
-    $__t19 = __ev_Alternative_List();
-    $__t18 = ($__t19["<|>"])([1], [2, 3]);
-    return $__t18;
+    $__t8 = __ev_Alternative_List();
+    $__t7 = ($__t8["<|>"])([1], [2, 3]);
+    return $__t7;
 }
 
 function pairDemo() {
-    $__t20 = [41, true];
-    return fst($__t20);
+    $__t9 = [41, true];
+    return fst($__t9);
 }

@@ -4,6 +4,27 @@
 -- while `++` covers `[a]`.
 import Data.Real
 import Data.List
+import Data.Char qualified as C
+import Data.List qualified as L
+import Data.Maybe (Maybe(..))
+import Data.String (String)
+import Data.String qualified as S
+
+data Tag = Tag String deriving (Show)
+
+tagKey :: Tag -> String
+tagKey (Tag s) = S.pack (L.map C.toLower (S.unpack s))
+
+instance Eq Tag where
+  (==) a b = tagKey a == tagKey b
+  (/=) a b = case tagKey a == tagKey b of
+    True -> False
+    False -> True
+
+instance Ord Tag where
+  compare a b = compare (tagKey a) (tagKey b)
+
+data RecL = RecL { recList :: [Tag], recMaybe :: Maybe Tag } deriving (Eq, Ord, Show)
 
 main :: IO ()
 main = do
@@ -60,3 +81,11 @@ main = do
   putStrLn (show (genericReplicate (3 :: Integer) (7 :: Int)))
   putStrLn (show (genericTake (fromIntegral (2 :: Int) :: Integer) [1, 2, 3, 4]))
   putStrLn (show (genericIndex [10, 20, 30] (fromIntegral (2 :: Int) :: Integer)))
+  putStrLn (show ([Tag "a", Tag "b"] == [Tag "A", Tag "B"]))
+  putStrLn (show ([Tag "a"] == [Tag "B"]))
+  putStrLn (show (compare [Tag "a"] [Tag "B"]))
+  putStrLn (show (compare [Tag "a"] []))
+  putStrLn (show (sort [Tag "b", Tag "A", Tag "c"]))
+  putStrLn (show (maximum [Tag "a", Tag "C"]))
+  putStrLn (show (RecL [Tag "a"] (Just (Tag "x")) == RecL [Tag "A"] (Just (Tag "X"))))
+  putStrLn (show (compare (RecL [] Nothing) (RecL [Tag "a"] Nothing)))
