@@ -1,0 +1,106 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The errors a string decoder reports, and the handlers a caller picks from.
+--
+-- A decoder that meets a byte it cannot use asks an 'OnDecodeError' what to do:
+-- it is given the message and the byte the error is about, and answers with the
+-- character to put in its place, or 'Nothing' to give up. That is the whole
+-- interface, so a caller can be as strict or as forgiving as its format needs
+-- without the decoder knowing which it is.
+--
+module Data.String.Encoding.Error
+  ( UnicodeException (..)
+  , OnError
+  , OnDecodeError
+  , OnEncodeError
+  , lenientDecode
+  , strictDecode
+  , strictEncode
+  , ignore
+  , replace
+  ) where
+
+import Data.Bool (Bool (..), (&&))
+import Data.Char (Char, chr)
+import Data.Enum (fromEnum)
+import Data.Eq ((==))
+import Data.Int (Int)
+import Data.Maybe (Maybe (..))
+import Data.Num ((+))
+import Data.Ord ((<))
+import Data.Real (Integral (div, mod))
+import Data.Semigroup ((<>))
+import Data.String (String)
+import Data.String qualified as S
+import Data.Word (Word8)
+import Moggi.Err (error)
+import Text.Show
+
+-- | An error in a coding operation: a message, and the value that caused it
+-- when the operation has one to name.
+data UnicodeException
+  = DecodeError String (Maybe Word8)
+  | EncodeError String (Maybe Char)
+
+instance Eq UnicodeException where
+  (==) left right = case left of
+    DecodeError msg byte -> case right of
+      DecodeError msg' byte' -> msg == msg' && byte == byte'
+      EncodeError _ _ -> False
+    EncodeError msg char -> case right of
+      EncodeError msg' char' -> msg == msg' && char == char'
+      DecodeError _ _ -> False
+
+instance Show UnicodeException where
+  show e = case e of
+    DecodeError desc byte -> case byte of
+      Just b -> "Cannot decode byte '\\x" <> showHex (fromEnum b) <> "': " <> desc
+      Nothing -> "Cannot decode input: " <> desc
+    EncodeError desc char -> case char of
+      Just c -> "Cannot encode character '\\x" <> showHex (fromEnum c) <> "': " <> desc
+      Nothing -> "Cannot encode input: " <> desc
+
+showHex :: Int -> String
+showHex n =
+  if n < 16 then
+    S.singleton (hexDigit n)
+  else
+    showHex (div n 16) <> S.singleton (hexDigit (mod n 16))
+
+hexDigit :: Int -> Char
+hexDigit n = if n < 10 then chr (48 + n) else chr (87 + n)
+
+-- | Function type for handling a coding error. It is supplied with two inputs:
+-- a 'String' that describes the error, and the input value that caused it --
+-- 'Nothing' when the error arose at the end of the input or could not be pinned
+-- to a single value.
+type OnError a b = String -> Maybe a -> Maybe b
+
+-- | The handler a decoder uses: the offending byte, and the character to put in
+-- its place.
+type OnDecodeError = OnError Word8 Char
+
+-- | Refuse the first error: the operation stops, raising the 'UnicodeException'
+-- the message and byte name.
+strictDecode :: OnDecodeError
+strictDecode desc byte = error (show (DecodeError desc byte))
+
+-- | Discard the offending input, at any input and output type.
+ignore :: OnError a b
+ignore _ _ = Nothing
+
+-- | The handler an encoder uses: the offending character, and the byte to
+-- write in its place.
+type OnEncodeError = OnError Char Word8
+
+-- | Refuse the first error: the operation stops, raising the
+-- 'UnicodeException' the message and character name.
+strictEncode :: OnEncodeError
+strictEncode desc char = error (show (EncodeError desc char))
+
+-- | Put the given value in place of every bad input and carry on.
+replace :: b -> OnError a b
+replace c _ _ = Just c
+
+-- | Replace an invalid input byte with U+FFFD REPLACEMENT CHARACTER.
+lenientDecode :: OnDecodeError
+lenientDecode = replace (chr 65533)

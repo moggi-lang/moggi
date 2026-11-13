@@ -38,7 +38,6 @@ import Data.Bool
 import Moggi.Internal.Base
 import Control.Applicative
 import Control.Monad
-import Data.ByteString.Char8 qualified as C
 import Data.Double
 import Data.Either
 import Data.Eq
@@ -49,6 +48,7 @@ import Data.Maybe
 import Data.Num
 import Data.Ord
 import Data.String hiding (pack, unpack, length, take, drop, isPrefixOf, isSuffixOf)
+import Data.String.Encoding (decodeUtf8, encodeUtf8)
 import Data.ByteString (ByteString)
 import Data.JSON.Types
 import Moggi.Err (error)
@@ -163,7 +163,7 @@ listGet xs i = rawListGet xs (int32FromInt# i)
 
 currentTokenId p = int32ToInt# (rawCurrentTokenId p)
 
-bsToStr b = C.toString b
+bsToStr b = decodeUtf8 b
 
 -- Class tokens (CAFs): Class.forName once per type, not per encKind call.
 booleanClass :: Class
@@ -226,7 +226,7 @@ tokenNull = 11
 -- Public Encoding API
 
 encodeEncoding :: Encoding -> ByteString
-encodeEncoding enc = C.fromString (encodeToString enc)
+encodeEncoding enc = encodeUtf8 (encodeToString enc)
 
 -- PE must not rematerialize StringWriter: nullary foreign seeds can be
 -- duplicated when inlined at multiple use sites. Bind the writer once as a

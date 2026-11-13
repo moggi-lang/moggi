@@ -36,7 +36,6 @@ import Data.Bool
 import Moggi.Internal.Base hiding (take, drop, unpack)
 import Control.Applicative
 import Control.Monad
-import Data.ByteString.Char8 qualified as C
 import Data.Double
 import Data.Either
 import Data.Eq
@@ -47,6 +46,7 @@ import Data.Maybe
 import Data.Ord
 import Data.Semigroup
 import Data.String hiding (pack, unpack, length, take, drop, isPrefixOf, isSuffixOf)
+import Data.String.Encoding (decodeUtf8, encodeUtf8)
 import Data.ByteString (ByteString)
 import Data.JSON.Types
 import Moggi.Internal.Prim
@@ -89,7 +89,7 @@ foreign php function integerIsInt "is_int" :: Integer -> Bool
 foreign php function digitsToInteger "bcadd" :: String -> String -> Integer
 foreign php function implode "implode" :: String -> [String] -> String
 
-bsToStr b = C.toString b
+bsToStr b = decodeUtf8 b
 
 -- JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
 jsonEncodeFlags :: Int
@@ -99,7 +99,7 @@ jsonDecodeFlags :: Int
 jsonDecodeFlags = 2
 
 encodeEncoding :: Encoding -> ByteString
-encodeEncoding enc = C.fromString (encodeEncText enc)
+encodeEncoding enc = encodeUtf8 (encodeEncText enc)
 
 -- Containers are walked in Moggi so kind-7 digit strings emit as raw JSON
 -- numbers. Scalar leaves go through json_encode (correct escaping / floats).

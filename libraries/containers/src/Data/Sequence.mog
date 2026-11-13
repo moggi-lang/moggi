@@ -1,15 +1,128 @@
 -- |
--- General-purpose finite sequences, in the spirit of Haskell's 'Data.Sequence'.
+-- Module      :  Data.Sequence
+-- Copyright   :  (c) Ross Paterson 2005
+--                (c) Louis Wasserman 2009
+--                (c) Bertram Felgenhauer, David Feuer, Ross Paterson, and
+--                    Milan Straka 2014
+-- License     :  BSD-style
+-- Maintainer  :  libraries@haskell.org
+-- Portability :  portable
 --
--- This module is a deliberate port of the classic 'Seq' API, not of the
--- finger-tree implementation: a sequence is a plain list under the hood, so
--- every operation costs what the same operation costs on lists. The exported
--- API is the subset a program reaches for most often; finger-tree
--- asymptotics and the 'Empty' \/ ':<|' \/ ':|>' pattern synonyms are not
--- defined here. There are no pattern synonyms at all (Moggi does not have
--- them yet): deconstruct with 'viewl' and 'viewr', whose 'ViewL' \/ 'ViewR'
--- results use ordinary constructors.
+-- = Finite sequences
 --
+-- The @'Seq' a@ type represents a finite sequence of values of
+-- type @a@.
+--
+-- Sequences generally behave very much like lists.
+--
+-- * The class instances for sequences are all based very closely on those for
+-- lists.
+--
+-- * Many functions in this module have the same names as functions in
+-- the "Prelude" or in "Data.List". In almost all cases, these functions
+-- behave analogously. For example, 'filter' filters a sequence in exactly the
+-- same way that @"Prelude".'Prelude.filter'@ filters a list. The only major
+-- exception is the 'lookup' function, which is based on the function by
+-- that name in "Data.IntMap" rather than the one in "Prelude".
+--
+-- There are two major differences between sequences and lists:
+--
+-- * Sequences support a wider variety of efficient operations than
+-- do lists. Notably, they offer
+--
+--     * Constant-time access to both the front and the rear with
+--     '<|', '|>', 'viewl', 'viewr'. For recent GHC versions, this can
+--     be done more conveniently using the bidirectional patterns 'Empty',
+--     ':<|', and ':|>'. See the detailed explanation in the \"Pattern synonyms\"
+--     section.
+--     * Logarithmic-time concatenation with '><'
+--     * Logarithmic-time splitting with 'splitAt', 'take' and 'drop'
+--     * Logarithmic-time access to any element with
+--     'lookup', '!?', 'index', 'insertAt', 'deleteAt', 'adjust'', and 'update'
+--
+--   Note that sequences are typically /slower/ than lists when using only
+--   operations for which they have the same big-\(O\) complexity: sequences
+--   make rather mediocre stacks!
+--
+-- * Whereas lists can be either finite or infinite, sequences are
+-- always finite. As a result, a sequence is strict in its
+-- length. Ignoring efficiency, you can imagine that 'Seq' is defined
+--
+--     @ data Seq a = Empty | a :<| !(Seq a) @
+--
+--     This means that many operations on sequences are stricter than
+--     those on lists. For example,
+--
+--     @ (1 : undefined) !! 0 = 1 @
+--
+--     but
+--
+--     @ (1 :<| undefined) ``index`` 0 = undefined @
+--
+-- Sequences may also be compared to immutable
+-- [arrays](https://hackage.haskell.org/package/array)
+-- or [vectors](https://hackage.haskell.org/package/vector).
+-- Like these structures, sequences support fast indexing,
+-- although not as fast. But editing an immutable array or vector,
+-- or combining it with another, generally requires copying the
+-- entire structure; sequences generally avoid that, copying only
+-- the portion that has changed.
+--
+-- == Detailed performance information
+--
+-- An amortized running time is given for each operation, with \(n\) referring
+-- to the length of the sequence and /i/ being the integral index used by
+-- some operations. These bounds hold even in a persistent (shared) setting.
+--
+-- Despite sequences being structurally strict from a semantic standpoint,
+-- they are in fact implemented using laziness internally. As a result,
+-- many operations can be performed /incrementally/, producing their results
+-- as they are demanded. This greatly improves performance in some cases. These
+-- functions include
+--
+-- * The 'Functor' methods 'fmap' and '<$', along with 'mapWithIndex'
+-- * The 'Applicative' methods '<*>', '*>', and '<*'
+-- * The zips: 'zipWith', 'zip', etc.
+-- * 'inits', 'tails'
+-- * 'fromFunction', 'replicate', 'intersperse', and 'cycleTaking'
+-- * 'reverse'
+-- * 'chunksOf'
+--
+-- Note that the 'Monad' method, '>>=', is not particularly lazy. It will
+-- take time proportional to the sum of the logarithms of the individual
+-- result sequences to produce anything whatsoever.
+--
+-- Several functions take special advantage of sharing to produce
+-- results using much less time and memory than one might expect. These
+-- are documented individually for functions, but also include certain
+-- class methods:
+--
+-- '<$' and '*>' each take time and space proportional
+-- to the logarithm of the size of their result.
+--
+-- '<*' takes time and space proportional to the product of the length
+-- of its first argument and the logarithm of the length of its second
+-- argument.
+--
+-- == Warning
+--
+-- The size of a 'Seq' must not exceed @maxBound::Int@. Violation
+-- of this condition is not detected and if the size limit is exceeded, the
+-- behaviour of the sequence is undefined. This is unlikely to occur in most
+-- applications, but some care may be required when using '><', '<*>', '*>', or
+-- '>>', particularly repeatedly and particularly in combination with
+-- 'replicate' or 'fromFunction'.
+--
+-- == Implementation
+--
+-- The implementation uses 2-3 finger trees annotated with sizes,
+-- as described in section 4.2 of
+--
+--    * Ralf Hinze and Ross Paterson,
+--      \"/Finger trees: a simple general-purpose data structure/\",
+--      Journal of Functional Programming 16:2 (2006) pp 197-217.
+--      <http://staff.city.ac.uk/~ross/papers/FingerTree.html>.
+
 module Data.Sequence
   ( Seq
   , empty
