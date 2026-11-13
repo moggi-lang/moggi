@@ -1,0 +1,179 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The primitive encoder types shared by "Data.ByteString.Builder.Prim" and
+-- its encoding modules.
+--
+-- The shape is upstream's: 'FixedPrim' and 'BoundedPrim' are distinct types
+-- built by 'fixedPrim' and 'boundedPrim', the 'Contravariant' and 'Monoidal'
+-- classes give @(>$<)@ and @(>*<)@ for both, and 'toB' lifts a fixed primitive
+-- to a bounded one. Upstream a primitive writes through a pointer and returns
+-- the advanced pointer; Moggi has no pointer writes, so an encoder is a
+-- 'Builder' for one value instead. Only 'storableToF' is missing, because it
+-- converts a 'Storable' instance, which needs the foreign-pointer machinery
+-- base does not have.
+module Data.ByteString.Builder.Prim.Internal
+  ( Size
+  , FixedPrim
+  , fixedPrim
+  , size
+  , runF
+  , emptyF
+  , contramapF
+  , pairF
+  , BoundedPrim
+  , boundedPrim
+  , sizeBound
+  , runB
+  , emptyB
+  , contramapB
+  , pairB
+  , eitherB
+  , condB
+  , toB
+  , liftFixedToBounded
+  , (>$<)
+  , (>*<)
+  , caseWordSize_32_64
+  , boudedPrim
+  ) where
+
+import Data.Bool (Bool (..))
+import Data.ByteString.Builder.Internal (Builder)
+import Data.Either (Either (..))
+import Data.Int (Int)
+import Data.Monoid (Monoid (..))
+import Data.Num ((+))
+import Data.Ord ((<))
+import Data.Semigroup ((<>))
+
+-- | The type used for sizes and size bounds.
+type Size = Int
+
+-- | Contravariant functors, as in the @contravariant@ package: a primitive
+-- consumes its argument, so mapping runs before the encoding rather than after.
+class Contravariant f where
+  contramap :: (b -> a) -> f a -> f b
+
+infixl 4 >$<
+
+-- | Type constructors supporting lifting of type products, so the size of a
+-- pair is the sum of its parts.
+class Monoidal f where
+  pair :: f a -> f b -> f (a, b)
+
+infixr 5 >*<
+
+-- | A primitive that always produces exactly the given number of bytes.
+data FixedPrim a = FP Size (a -> Builder)
+
+-- | Build a fixed-size primitive from its exact size and its encoder.
+fixedPrim :: Size -> (a -> Builder) -> FixedPrim a
+fixedPrim width encode = FP width encode
+
+-- | The exact size of the sequences produced by a fixed primitive.
+size :: FixedPrim a -> Size
+size (FP width _) = width
+
+-- | Run a fixed-size primitive on one value.
+runF :: FixedPrim a -> a -> Builder
+runF (FP _ encode) value = encode value
+
+-- | The fixed primitive that always produces the zero-length sequence.
+emptyF :: FixedPrim a
+emptyF = FP 0 (\_ -> mempty)
+
+-- | Concatenate two fixed primitives, encoding a pair.
+pairF :: FixedPrim a -> FixedPrim b -> FixedPrim (a, b)
+pairF (FP widthA encodeA) (FP widthB encodeB) =
+  FP (widthA + widthB) (\value -> case value of
+    (a, b) -> encodeA a <> encodeB b)
+
+-- | Change the value a fixed primitive is applied to before encoding it.
+contramapF :: (b -> a) -> FixedPrim a -> FixedPrim b
+contramapF f (FP width encode) = FP width (\value -> encode (f value))
+
+-- | A primitive that produces no more than the given bound of bytes.
+data BoundedPrim a = BP Size (a -> Builder)
+
+-- | Build a bounded primitive from its bound and its encoder.
+boundedPrim :: Size -> (a -> Builder) -> BoundedPrim a
+boundedPrim bound encode = BP bound encode
+
+-- | The bound on the size of the sequences produced by a bounded primitive.
+sizeBound :: BoundedPrim a -> Size
+sizeBound (BP bound _) = bound
+
+-- | Run a bounded primitive on one value.
+runB :: BoundedPrim a -> a -> Builder
+runB (BP _ encode) value = encode value
+
+-- | The bounded primitive that always produces the zero-length sequence.
+emptyB :: BoundedPrim a
+emptyB = BP 0 (\_ -> mempty)
+
+-- | Change the value a bounded primitive is applied to before encoding it.
+contramapB :: (b -> a) -> BoundedPrim a -> BoundedPrim b
+contramapB f (BP bound encode) = BP bound (\value -> encode (f value))
+
+-- | Concatenate two bounded primitives, encoding a pair.
+pairB :: BoundedPrim a -> BoundedPrim b -> BoundedPrim (a, b)
+pairB (BP boundA encodeA) (BP boundB encodeB) =
+  BP (boundA + boundB) (\value -> case value of
+    (a, b) -> encodeA a <> encodeB b)
+
+-- | The larger of two bounds.
+maxOf :: Size -> Size -> Size
+maxOf a b = case a < b of
+  True -> b
+  False -> a
+
+-- | Encode an 'Either' value using the first primitive for 'Left' values and
+-- the second for 'Right' values.
+eitherB :: BoundedPrim a -> BoundedPrim b -> BoundedPrim (Either a b)
+eitherB (BP boundA encodeA) (BP boundB encodeB) =
+  BP (maxOf boundA boundB) (\value -> case value of
+    Left a -> encodeA a
+    Right b -> encodeB b)
+
+-- | Encode with one of two primitives, depending on the value.
+condB :: (a -> Bool) -> BoundedPrim a -> BoundedPrim a -> BoundedPrim a
+condB choose (BP boundYes encodeYes) (BP boundNo encodeNo) =
+  BP (maxOf boundYes boundNo) (\value -> case choose value of
+    True -> encodeYes value
+    False -> encodeNo value)
+
+-- | Convert a fixed-size primitive to a bounded one.
+toB :: FixedPrim a -> BoundedPrim a
+toB (FP width encode) = BP width encode
+
+-- | Lift a fixed-size primitive to a bounded one.
+liftFixedToBounded :: FixedPrim a -> BoundedPrim a
+liftFixedToBounded (FP width encode) = BP width encode
+
+-- | A mapping operator for primitives, bounded and fixed size alike.
+(>$<) :: Contravariant f => (b -> a) -> f a -> f b
+(>$<) f prim = contramap f prim
+
+-- | A pairing operator for primitives, bounded and fixed size alike.
+(>*<) :: Monoidal f => f a -> f b -> f (a, b)
+(>*<) left right = pair left right
+
+-- | The value for the word size of the machine: every backend moggi targets
+-- has 64-bit words, so the second argument is the one used.
+caseWordSize_32_64 :: a -> a -> a
+caseWordSize_32_64 for32 for64 = for64
+
+-- | Deprecated upstream spelling of 'boundedPrim', kept for parity.
+boudedPrim :: Size -> (a -> Builder) -> BoundedPrim a
+boudedPrim bound encode = BP bound encode
+
+instance Contravariant FixedPrim where
+  contramap f prim = contramapF f prim
+
+instance Contravariant BoundedPrim where
+  contramap f prim = contramapB f prim
+
+instance Monoidal FixedPrim where
+  pair left right = pairF left right
+
+instance Monoidal BoundedPrim where
+  pair left right = pairB left right

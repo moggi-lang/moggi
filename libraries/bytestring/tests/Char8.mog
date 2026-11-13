@@ -1,0 +1,105 @@
+-- Data.ByteString.Char8: the whole surface of the module in one program —
+-- the Latin-1 `pack`/`unpack` truncation and zero extension, the list
+-- operations (`lines`/`words`/`split`/`foldl`/`takeWhile`), `readInt`/
+-- `readInteger`, and the `Char`-taking wrappers (`cons`/`map`/`filter`/
+-- `elem`/`replicate`). One assertion per behaviour, in the order the sections
+-- below are described.
+
+module Char8 (char8Suite) where
+
+import Data.Bool (Bool(True, False))
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as B
+import Data.ByteString.Char8 qualified as C
+import Data.Char (chr, ord, toUpper)
+import Data.Enum (toEnum, fromEnum)
+import Data.Eq ((==), (/=))
+import Data.Int (Int)
+import Data.Integer (integerFromInt)
+import Data.Maybe (Maybe(Just, Nothing))
+import Data.String (String)
+import Data.Tuple (fst, snd)
+import Text.Show (show)
+import Support (assertTrue, expect)
+
+mapOrd cs = case cs of
+  [] -> []
+  c : rest -> ord c : mapOrd rest
+
+showOrds b = show (mapOrd (C.unpack b))
+
+inc n ignored = n + 1
+
+checkThree xs = case xs of
+  a : b : c : [] -> checkThreeUnpacked (C.unpack a) (C.unpack b) (C.unpack c)
+  _ -> False
+
+checkThreeUnpacked a b c = case a of
+  'a' : [] -> case b of
+    'b' : [] -> case c of
+      'c' : [] -> True
+      _ -> False
+    _ -> False
+  _ -> False
+
+char8Suite :: IO ()
+char8Suite = do
+  assertTrue "pack/unpack ascii" (case C.unpack (C.pack "abc") of
+    'a' : 'b' : 'c' : [] -> True
+    _ -> False)
+  assertTrue "singleton truncates 0x100" (case B.unpack (C.singleton (chr 256)) of
+    w : [] -> fromEnum w == 0
+    _ -> False)
+  assertTrue "singleton truncates 0x20ac" (case B.unpack (C.singleton (chr 8364)) of
+    w : [] -> fromEnum w == 172
+    _ -> False)
+  assertTrue "unpack zero-extends" (case C.unpack (B.singleton (toEnum 172)) of
+    c : [] -> ord c == 172
+    _ -> False)
+  expect "showOrds of pack \"Hi\"" (showOrds (C.pack "Hi")) "[72,105]"
+  assertTrue "lines" (checkThree (C.lines (C.pack "a\nb\nc")))
+  assertTrue "unlines" (case C.unpack (C.unlines (C.lines (C.pack "a\nb"))) of
+    'a' : '\n' : 'b' : '\n' : [] -> True
+    _ -> False)
+  assertTrue "words" (checkThree (C.words (C.pack "a b  c")))
+  assertTrue "takeWhile" (case C.unpack (C.takeWhile (\c -> c /= ' ') (C.pack "hi there")) of
+    'h' : 'i' : [] -> True
+    _ -> False)
+  assertTrue "foldl" (C.foldl inc 0 (C.pack "abcd") == 4)
+  assertTrue "split" (checkThree (C.split ',' (C.pack "a,b,c")))
+  assertTrue "readInt leaves the rest" (case C.readInt (C.pack "42xyz") of
+    Just pair -> case (fst pair, C.unpack (snd pair)) of
+      (42, 'x' : 'y' : 'z' : []) -> True
+      _ -> False
+    _ -> False)
+  assertTrue "readInt reads a negative" (case C.readInt (C.pack "-7") of
+    Just pair -> case (fst pair == (0 - 7), C.null (snd pair)) of
+      (True, True) -> True
+      _ -> False
+    _ -> False)
+  assertTrue "readInt rejects a non-number" (case C.readInt (C.pack "abc") of
+    Nothing -> True
+    _ -> False)
+  assertTrue "readInteger" (case C.readInteger (C.pack "1000!") of
+    Just pair -> case (fst pair == integerFromInt 1000, C.unpack (snd pair)) of
+      (True, '!' : []) -> True
+      _ -> False
+    _ -> False)
+  assertTrue "readInt rejects the empty string" (case C.readInt (C.pack "") of
+    Nothing -> True
+    _ -> False)
+  assertTrue "cons/uncons" (case C.uncons (C.cons 'x' (C.pack "yz")) of
+    Just pair -> case (fst pair, C.unpack (snd pair)) of
+      ('x', 'y' : 'z' : []) -> True
+      _ -> False
+    _ -> False)
+  assertTrue "map" (case C.unpack (C.map toUpper (C.pack "ab")) of
+    'A' : 'B' : [] -> True
+    _ -> False)
+  assertTrue "elem" (C.elem 'b' (C.pack "abc"))
+  assertTrue "filter" (case C.unpack (C.filter (\c -> c /= 'b') (C.pack "abc")) of
+    'a' : 'c' : [] -> True
+    _ -> False)
+  assertTrue "replicate" (case C.unpack (C.replicate 3 'z') of
+    'z' : 'z' : 'z' : [] -> True
+    _ -> False)

@@ -1,0 +1,170 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Fixed-size encodings of numbers as their binary representation.
+--
+-- Each encoder is a 'FixedPrim', so a builder is 'primFixed' of it, exactly as
+-- upstream. The byte sequence is the value's two's-complement bits, most
+-- significant first for the big-endian variants and least significant first for
+-- the little-endian ones. The host-dependent variants are the native order of
+-- the machine the program runs on; every backend moggi targets is little-endian
+-- with 64-bit words, so they agree with the little-endian ones there.
+--
+-- @floatLE@, @floatBE@ and @floatHost@ are absent because base has no 'Float'
+-- type, only 'Double'; 'doubleLE', 'doubleBE' and 'doubleHost' are present.
+module Data.ByteString.Builder.Prim.Binary
+  ( int8
+  , word8
+  , int16BE
+  , int32BE
+  , int64BE
+  , word16BE
+  , word32BE
+  , word64BE
+  , doubleBE
+  , int16LE
+  , int32LE
+  , int64LE
+  , word16LE
+  , word32LE
+  , word64LE
+  , doubleLE
+  , intHost
+  , int16Host
+  , int32Host
+  , int64Host
+  , wordHost
+  , word16Host
+  , word32Host
+  , word64Host
+  , doubleHost
+  ) where
+
+import Data.ByteString (pack)
+import Data.ByteString.Builder.Internal (Builder, power2)
+import Data.ByteString.Builder.Internal qualified as I
+import Data.ByteString.Builder.Prim.Internal (FixedPrim, fixedPrim)
+import Data.Double (Double, castDoubleToWord64)
+import Data.Int (Int, Int16, Int32, Int64, Int8)
+import Data.Integer (Integer)
+import Data.List ((:))
+import Data.List qualified as L
+import Data.Num ((*), (-))
+import Data.Real (Integral (div, mod, toInteger), fromIntegral)
+import Data.Word (Word, Word16, Word32, Word64, Word8)
+
+-- | The bytes of a value, most significant first, cut to the given width.
+beBytes :: Integer -> Int -> [Word8]
+beBytes n width = case width of
+  0 -> []
+  _ -> fromIntegral (mod (div n (power2 (8 * (width - 1)))) 256) : beBytes n (width - 1)
+
+-- | The bytes of a value, least significant first, cut to the given width.
+leBytes :: Integer -> Int -> [Word8]
+leBytes n width = L.reverse (beBytes n width)
+
+-- | The big-endian bytes of a value, as one chunk.
+beChunk :: Int -> Integer -> Builder
+beChunk width n = I.byteString (pack (beBytes n width))
+
+-- | The little-endian bytes of a value, as one chunk.
+leChunk :: Int -> Integer -> Builder
+leChunk width n = I.byteString (pack (leBytes n width))
+
+-- | Encode an 'Int8' as-is.
+int8 :: FixedPrim Int8
+int8 = fixedPrim 1 (\i -> beChunk 1 (toInteger i))
+
+-- | Encode a 'Word8' as-is.
+word8 :: FixedPrim Word8
+word8 = fixedPrim 1 (\w -> beChunk 1 (toInteger w))
+
+-- | Encode an 'Int16' in big endian format.
+int16BE :: FixedPrim Int16
+int16BE = fixedPrim 2 (\i -> beChunk 2 (toInteger i))
+
+-- | Encode an 'Int32' in big endian format.
+int32BE :: FixedPrim Int32
+int32BE = fixedPrim 4 (\i -> beChunk 4 (toInteger i))
+
+-- | Encode an 'Int64' in big endian format.
+int64BE :: FixedPrim Int64
+int64BE = fixedPrim 8 (\i -> beChunk 8 (toInteger i))
+
+-- | Encode a 'Word16' in big endian format.
+word16BE :: FixedPrim Word16
+word16BE = fixedPrim 2 (\w -> beChunk 2 (toInteger w))
+
+-- | Encode a 'Word32' in big endian format.
+word32BE :: FixedPrim Word32
+word32BE = fixedPrim 4 (\w -> beChunk 4 (toInteger w))
+
+-- | Encode a 'Word64' in big endian format.
+word64BE :: FixedPrim Word64
+word64BE = fixedPrim 8 (\w -> beChunk 8 (toInteger w))
+
+-- | Encode a 'Double' in big endian format.
+doubleBE :: FixedPrim Double
+doubleBE = fixedPrim 8 (\d -> beChunk 8 (toInteger (castDoubleToWord64 d)))
+
+-- | Encode an 'Int16' in little endian format.
+int16LE :: FixedPrim Int16
+int16LE = fixedPrim 2 (\i -> leChunk 2 (toInteger i))
+
+-- | Encode an 'Int32' in little endian format.
+int32LE :: FixedPrim Int32
+int32LE = fixedPrim 4 (\i -> leChunk 4 (toInteger i))
+
+-- | Encode an 'Int64' in little endian format.
+int64LE :: FixedPrim Int64
+int64LE = fixedPrim 8 (\i -> leChunk 8 (toInteger i))
+
+-- | Encode a 'Word16' in little endian format.
+word16LE :: FixedPrim Word16
+word16LE = fixedPrim 2 (\w -> leChunk 2 (toInteger w))
+
+-- | Encode a 'Word32' in little endian format.
+word32LE :: FixedPrim Word32
+word32LE = fixedPrim 4 (\w -> leChunk 4 (toInteger w))
+
+-- | Encode a 'Word64' in little endian format.
+word64LE :: FixedPrim Word64
+word64LE = fixedPrim 8 (\w -> leChunk 8 (toInteger w))
+
+-- | Encode a 'Double' in little endian format.
+doubleLE :: FixedPrim Double
+doubleLE = fixedPrim 8 (\d -> leChunk 8 (toInteger (castDoubleToWord64 d)))
+
+-- | Encode an 'Int' in the machine's native order.
+intHost :: FixedPrim Int
+intHost = fixedPrim 8 (\i -> leChunk 8 (toInteger i))
+
+-- | Encode an 'Int16' in the machine's native order.
+int16Host :: FixedPrim Int16
+int16Host = int16LE
+
+-- | Encode an 'Int32' in the machine's native order.
+int32Host :: FixedPrim Int32
+int32Host = int32LE
+
+-- | Encode an 'Int64' in the machine's native order.
+int64Host :: FixedPrim Int64
+int64Host = int64LE
+
+-- | Encode a 'Word' in the machine's native order.
+wordHost :: FixedPrim Word
+wordHost = fixedPrim 8 (\w -> leChunk 8 (toInteger w))
+
+-- | Encode a 'Word16' in the machine's native order.
+word16Host :: FixedPrim Word16
+word16Host = word16LE
+
+-- | Encode a 'Word32' in the machine's native order.
+word32Host :: FixedPrim Word32
+word32Host = word32LE
+
+-- | Encode a 'Word64' in the machine's native order.
+word64Host :: FixedPrim Word64
+word64Host = word64LE
+
+-- | Encode a 'Double' in the machine's native order.
+doubleHost :: FixedPrim Double
+doubleHost = doubleLE

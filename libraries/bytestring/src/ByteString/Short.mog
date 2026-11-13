@@ -1,0 +1,16 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The short byte-string type.
+--
+-- Upstream distinguishes a pinned 'Data.ByteString.ByteString' from an
+-- unpinned @ShortByteString@ used for many small values. Moggi's byte vector
+-- is a single representation, so the short type is that same type under its
+-- short name: the builder functions that take a @ShortByteString@ take an
+-- ordinary 'Data.ByteString.ByteString'.
+module Data.ByteString.Short
+  ( ShortByteString
+  ) where
+
+import Data.ByteString (ByteString)
+
+-- | The byte vector type, under its short name.
+type ShortByteString = ByteString

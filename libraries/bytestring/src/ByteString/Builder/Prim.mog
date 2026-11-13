@@ -1,0 +1,91 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Builder primitives: the lower-level encoders that the builder encoders are
+-- written in terms of.
+--
+-- A primitive encodes one value. A 'BoundedPrim' knows the most bytes it can
+-- produce and a 'FixedPrim' its exact size; the combinators combine primitives
+-- so their bounds add up without inspecting any value.
+module Data.ByteString.Builder.Prim
+  ( BoundedPrim
+  , emptyB
+  , (>*<)
+  , (>$<)
+  , eitherB
+  , condB
+  , primBounded
+  , primMapListBounded
+  , primUnfoldrBounded
+  , primMapByteStringBounded
+  , FixedPrim
+  , emptyF
+  , liftFixedToBounded
+  , primFixed
+  , primMapListFixed
+  , primUnfoldrFixed
+  , primMapByteStringFixed
+  , module Data.ByteString.Builder.Prim.Binary
+  , module Data.ByteString.Builder.Prim.ASCII
+  , char8
+  , charUtf8
+  , boundedPrim
+  , runB
+  , sizeBound
+  ) where
+
+import Data.ByteString (ByteString, unpack)
+import Data.ByteString.Builder.Internal (Builder)
+import Data.ByteString.Builder.Internal qualified as I
+import Data.ByteString.Builder.Prim.ASCII
+import Data.ByteString.Builder.Prim.Binary
+import Data.ByteString.Builder.Prim.Internal
+import Data.Char (Char)
+import Data.Int (Int)
+import Data.List (foldr)
+import Data.Maybe (Maybe (..))
+import Data.Monoid (Monoid (..))
+import Data.Semigroup ((<>))
+import Data.Word (Word8)
+
+-- | Encode one value with a primitive.
+primBounded :: BoundedPrim a -> a -> Builder
+primBounded = runB
+
+-- | Encode a list from left to right.
+primMapListBounded :: BoundedPrim a -> [a] -> Builder
+primMapListBounded w xs = foldr (\x rest -> runB w x <> rest) mempty xs
+
+-- | Encode a sequence generated from a seed, from left to right.
+primUnfoldrBounded :: BoundedPrim b -> (a -> Maybe (b, a)) -> a -> Builder
+primUnfoldrBounded w next seed = case next seed of
+  Nothing -> mempty
+  Just (value, seed') -> runB w value <> primUnfoldrBounded w next seed'
+
+-- | Encode every byte of a strict byte string from left to right.
+primMapByteStringBounded :: BoundedPrim Word8 -> ByteString -> Builder
+primMapByteStringBounded w bytes = primMapListBounded w (unpack bytes)
+
+-- | Encode one value with a fixed-size primitive.
+primFixed :: FixedPrim a -> a -> Builder
+primFixed = runF
+
+-- | Encode a list from left to right with a fixed-size primitive.
+primMapListFixed :: FixedPrim a -> [a] -> Builder
+primMapListFixed w xs = foldr (\x rest -> runF w x <> rest) mempty xs
+
+-- | Encode a generated sequence with a fixed-size primitive.
+primUnfoldrFixed :: FixedPrim b -> (a -> Maybe (b, a)) -> a -> Builder
+primUnfoldrFixed w next seed = case next seed of
+  Nothing -> mempty
+  Just (value, seed') -> runF w value <> primUnfoldrFixed w next seed'
+
+-- | Encode every byte of a strict byte string with a fixed-size primitive.
+primMapByteStringFixed :: FixedPrim Word8 -> ByteString -> Builder
+primMapByteStringFixed w bytes = primMapListFixed w (unpack bytes)
+
+-- | Char8 encode a 'Char': the codepoint truncated to 8 bits.
+char8 :: FixedPrim Char
+char8 = fixedPrim 1 (\c -> I.char8 c)
+
+-- | UTF-8 encode a 'Char': one to four bytes.
+charUtf8 :: BoundedPrim Char
+charUtf8 = boundedPrim 4 (\c -> I.charUtf8 c)
