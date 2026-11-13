@@ -172,6 +172,16 @@ function prepareProject(
         ensureUnitProgram($units, $moduleName);
     }
 
+    // One record of the fact every product key of the module mixes in, taken while the source AST
+    // is in hand: the AST itself does not survive to the emit of a released project.
+    foreach ($units as &$unit) {
+        $program = $unit['program'] ?? null;
+        if ($program instanceof Ast\Program) {
+            $unit['declaresForeign'] = programDeclaresForeign($program);
+        }
+    }
+    unset($unit);
+
     synthesizeTypeableInstances($units);
 
     $sortedModules = sortModulesByDependencies($units, $context->backendId);
@@ -426,6 +436,12 @@ function prepareProject(
             );
             $checked[$moduleName] = $checkedFull;
             $units[$moduleName]['checkedProgram'] = $checkedFull;
+        } else {
+            // Nothing below this module needs its checked program: it is on disk (a released
+            // product) or this prepare never holds one. Drop the local reference before the
+            // collector runs — while one exists the graph cannot be reclaimed, and a module's
+            // checked program is the largest thing a build allocates.
+            unset($checkedFull, $exportedInferredSchemes);
         }
 
         Memory\tick();
