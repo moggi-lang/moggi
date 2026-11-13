@@ -2,7 +2,7 @@
 
 namespace Tc\List;
 
-const __MOGGI_MAP = [[44 => 2, 49 => 3, 54 => 4, 58 => 5, 59 => 5, 64 => 6, 68 => 7, 76 => 9, 85 => 11, 107 => 36, 141 => 17, 145 => 18, 149 => 19, 153 => 20, 157 => 21, 161 => 22, 162 => 22, 167 => 23, 171 => 24, 175 => 25, 179 => 26, 183 => 27, 187 => 28, 191 => 29, 192 => 29, 197 => 30, 209 => 33, 210 => 33, 215 => 34, 216 => 34, 221 => 35, 222 => 35, 231 => 26, 232 => 26, 240 => 27, 241 => 27, 249 => 27], ['Tc\\List\\literal' => 0, 'Tc\\List\\joined' => 1, 'Tc\\List\\listLength' => 2, 'Tc\\List\\listFoldl' => 3, 'Tc\\List\\len' => 4, 'Tc\\List\\total' => 5, 'Tc\\List\\doubled' => 6, 'Tc\\List\\leftFold' => 7, 'Tc\\List\\built' => 8, 'Tc\\List\\fromCons' => 9, 'Tc\\List\\same' => 10, 'Tc\\List\\builtLen' => 11, 'Tc\\List\\sumHead' => 12, 'Tc\\List\\sumList' => 13, 'Tc\\List\\headOrZero' => 14, 'Tc\\List\\pairSum' => 15, 'Tc\\List\\xs' => 16, 'Tc\\List\\taken' => 17, 'Tc\\List\\dropped' => 18, 'Tc\\List\\evens' => 19, 'Tc\\List\\triples' => 20, 'Tc\\List\\zipped' => 21, 'Tc\\List\\found' => 22, 'Tc\\List\\whileTaken' => 23, 'Tc\\List\\whileDropped' => 24, 'Tc\\List\\compDoubled' => 25, 'Tc\\List\\compEvens' => 26, 'Tc\\List\\pairs' => 27, 'Tc\\List\\emptyGuard' => 28, 'Tc\\List\\format' => 29, 'Tc\\List\\shown' => 30, 'Tc\\List\\__lambda_0' => 31, 'Tc\\List\\__lambda_1' => 32, 'Tc\\List\\__lambda_2' => 33, 'Tc\\List\\__lambda_3' => 34, 'Tc\\List\\__lambda_4' => 35], [], [], [[0, 0, 10, 11], [1, 0, 13, 10], [2, 0, 16, 17], [3, 0, 19, 20], [4, 0, 22, 7], [5, 0, 25, 9], [6, 0, 28, 11], [7, 0, 31, 12], [8, 0, 34, 9], [9, 0, 37, 12], [10, 0, 40, 8], [11, 0, 43, 12], [12, 0, 46, 14], [13, 0, 51, 14], [14, 0, 56, 17], [15, 0, 61, 14], [16, 0, 66, 6], [17, 0, 69, 9], [18, 0, 72, 11], [19, 0, 75, 9], [20, 0, 78, 11], [21, 0, 81, 10], [22, 0, 84, 9], [23, 0, 87, 14], [24, 0, 90, 16], [25, 0, 93, 15], [26, 0, 96, 13], [27, 0, 99, 9], [28, 0, 102, 14], [29, 0, 105, 13], [30, 0, 108, 9], [31, 0, 28, 28], [32, 0, 31, 33], [33, 0, 75, 23], [34, 0, 87, 31], [35, 0, 90, 33], [13, 0, 53, 15]], ['Tc.List.literal', 'Tc.List.joined', 'Tc.List.listLength', 'Tc.List.listFoldl', 'Tc.List.len', 'Tc.List.total', 'Tc.List.doubled', 'Tc.List.leftFold', 'Tc.List.built', 'Tc.List.fromCons', 'Tc.List.same', 'Tc.List.builtLen', 'Tc.List.sumHead', 'Tc.List.sumList', 'Tc.List.headOrZero', 'Tc.List.pairSum', 'Tc.List.xs', 'Tc.List.taken', 'Tc.List.dropped', 'Tc.List.evens', 'Tc.List.triples', 'Tc.List.zipped', 'Tc.List.found', 'Tc.List.whileTaken', 'Tc.List.whileDropped', 'Tc.List.compDoubled', 'Tc.List.compEvens', 'Tc.List.pairs', 'Tc.List.emptyGuard', 'Tc.List.format', 'Tc.List.shown', 'Tc.List.λ0', 'Tc.List.λ1', 'Tc.List.λ2', 'Tc.List.λ3', 'Tc.List.λ4'], ['tests/backend/codegen/Tc-List.mog']];
+const __MOGGI_MAP = [[45 => 2, 50 => 3, 55 => 4, 59 => 5, 60 => 5, 65 => 6, 69 => 7, 77 => 9, 82 => 10, 83 => 10, 88 => 11, 110 => 36, 144 => 17, 148 => 18, 152 => 19, 156 => 20, 160 => 21, 164 => 22, 165 => 22, 170 => 23, 174 => 24, 178 => 25, 182 => 26, 186 => 27, 190 => 28, 194 => 29, 195 => 29, 200 => 30, 212 => 33, 213 => 33, 218 => 34, 219 => 34, 224 => 35, 225 => 35, 234 => 26, 235 => 26, 243 => 27, 244 => 27, 252 => 27], ['Tc\\List\\literal' => 0, 'Tc\\List\\joined' => 1, 'Tc\\List\\listLength' => 2, 'Tc\\List\\listFoldl' => 3, 'Tc\\List\\len' => 4, 'Tc\\List\\total' => 5, 'Tc\\List\\doubled' => 6, 'Tc\\List\\leftFold' => 7, 'Tc\\List\\built' => 8, 'Tc\\List\\fromCons' => 9, 'Tc\\List\\same' => 10, 'Tc\\List\\builtLen' => 11, 'Tc\\List\\sumHead' => 12, 'Tc\\List\\sumList' => 13, 'Tc\\List\\headOrZero' => 14, 'Tc\\List\\pairSum' => 15, 'Tc\\List\\xs' => 16, 'Tc\\List\\taken' => 17, 'Tc\\List\\dropped' => 18, 'Tc\\List\\evens' => 19, 'Tc\\List\\triples' => 20, 'Tc\\List\\zipped' => 21, 'Tc\\List\\found' => 22, 'Tc\\List\\whileTaken' => 23, 'Tc\\List\\whileDropped' => 24, 'Tc\\List\\compDoubled' => 25, 'Tc\\List\\compEvens' => 26, 'Tc\\List\\pairs' => 27, 'Tc\\List\\emptyGuard' => 28, 'Tc\\List\\format' => 29, 'Tc\\List\\shown' => 30, 'Tc\\List\\__lambda_0' => 31, 'Tc\\List\\__lambda_1' => 32, 'Tc\\List\\__lambda_2' => 33, 'Tc\\List\\__lambda_3' => 34, 'Tc\\List\\__lambda_4' => 35], [], [], [[0, 0, 10, 11], [1, 0, 13, 10], [2, 0, 16, 17], [3, 0, 19, 20], [4, 0, 22, 7], [5, 0, 25, 9], [6, 0, 28, 11], [7, 0, 31, 12], [8, 0, 34, 9], [9, 0, 37, 12], [10, 0, 40, 8], [11, 0, 43, 12], [12, 0, 46, 14], [13, 0, 51, 14], [14, 0, 56, 17], [15, 0, 61, 14], [16, 0, 66, 6], [17, 0, 69, 9], [18, 0, 72, 11], [19, 0, 75, 9], [20, 0, 78, 11], [21, 0, 81, 10], [22, 0, 84, 9], [23, 0, 87, 14], [24, 0, 90, 16], [25, 0, 93, 15], [26, 0, 96, 13], [27, 0, 99, 9], [28, 0, 102, 14], [29, 0, 105, 13], [30, 0, 108, 9], [31, 0, 28, 28], [32, 0, 31, 33], [33, 0, 75, 23], [34, 0, 87, 31], [35, 0, 90, 33], [13, 0, 53, 15]], ['Tc.List.literal', 'Tc.List.joined', 'Tc.List.listLength', 'Tc.List.listFoldl', 'Tc.List.len', 'Tc.List.total', 'Tc.List.doubled', 'Tc.List.leftFold', 'Tc.List.built', 'Tc.List.fromCons', 'Tc.List.same', 'Tc.List.builtLen', 'Tc.List.sumHead', 'Tc.List.sumList', 'Tc.List.headOrZero', 'Tc.List.pairSum', 'Tc.List.xs', 'Tc.List.taken', 'Tc.List.dropped', 'Tc.List.evens', 'Tc.List.triples', 'Tc.List.zipped', 'Tc.List.found', 'Tc.List.whileTaken', 'Tc.List.whileDropped', 'Tc.List.compDoubled', 'Tc.List.compEvens', 'Tc.List.pairs', 'Tc.List.emptyGuard', 'Tc.List.format', 'Tc.List.shown', 'Tc.List.λ0', 'Tc.List.λ1', 'Tc.List.λ2', 'Tc.List.λ3', 'Tc.List.λ4'], ['tests/backend/codegen/Tc-List.mog']];
 
 require_once __DIR__ . '/../../../libraries/base/src/Data/Eq.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Foldable.php';
@@ -13,6 +13,7 @@ require_once __DIR__ . '/../../../libraries/base/src/Text/Show.php';
 
 use function Data\Eq\__ev_Eq_Int;
 use function Data\Foldable\concatMap;
+use function Data\List\__ev_Eq_List_1;
 use function Data\List\__ev_Foldable_List;
 use function Data\List\__ev_Show_List_1;
 use function Data\List\drop;
@@ -78,7 +79,9 @@ function fromCons() {
 }
 
 function same() {
-    return (built() === [1, 2, 3]);
+    $__t9 = __ev_Eq_List_1(__ev_Eq_Int());
+    $__t8 = ($__t9["=="])(built(), [1, 2, 3]);
+    return $__t8;
 }
 
 function builtLen() {
@@ -104,8 +107,8 @@ function sumList($xs) {
         $__scrut_1 = $xs;
         $x = $__scrut_1[0];
         $rest = \array_slice($__scrut_1, 1);
-        $__t11 = sumList(\array_slice($xs, 1));
-        return moggi_i64_add($xs[0], $__t11);
+        $__t13 = sumList(\array_slice($xs, 1));
+        return moggi_i64_add($xs[0], $__t13);
     }
 }
 
@@ -158,9 +161,9 @@ function zipped() {
 }
 
 function found() {
-    $__t22 = __ev_Foldable_List();
-    $__t21 = ($__t22["elem"])(__ev_Eq_Int(), 3, xs());
-    return $__t21;
+    $__t24 = __ev_Foldable_List();
+    $__t23 = ($__t24["elem"])(__ev_Eq_Int(), 3, xs());
+    return $__t23;
 }
 
 function whileTaken() {
@@ -188,9 +191,9 @@ function emptyGuard() {
 }
 
 function format($__ev_Show, $xs) {
-    $__t42 = __ev_Show_List_1($__ev_Show);
-    $__t41 = ($__t42["show"])($xs);
-    return $__t41;
+    $__t44 = __ev_Show_List_1($__ev_Show);
+    $__t43 = ($__t44["show"])($xs);
+    return $__t43;
 }
 
 function shown() {
@@ -206,21 +209,21 @@ function __lambda_1($acc, $x) {
 }
 
 function __lambda_2($x) {
-    $__t17 = __ev_Foldable_List();
-    $__t16 = ($__t17["elem"])(__ev_Eq_Int(), $x, [2, 4]);
-    return $__t16;
+    $__t19 = __ev_Foldable_List();
+    $__t18 = ($__t19["elem"])(__ev_Eq_Int(), $x, [2, 4]);
+    return $__t18;
 }
 
 function __lambda_3($x) {
-    $__t24 = __ev_Foldable_List();
-    $__t23 = ($__t24["elem"])(__ev_Eq_Int(), $x, [1, 2, 3]);
-    return $__t23;
+    $__t26 = __ev_Foldable_List();
+    $__t25 = ($__t26["elem"])(__ev_Eq_Int(), $x, [1, 2, 3]);
+    return $__t25;
 }
 
 function __lambda_4($x) {
-    $__t27 = __ev_Foldable_List();
-    $__t26 = ($__t27["elem"])(__ev_Eq_Int(), $x, [1, 2]);
-    return $__t26;
+    $__t29 = __ev_Foldable_List();
+    $__t28 = ($__t29["elem"])(__ev_Eq_Int(), $x, [1, 2]);
+    return $__t28;
 }
 
 function __lambda_5($x) {
@@ -228,18 +231,18 @@ function __lambda_5($x) {
 }
 
 function __lambda_6($x) {
-    $__t31 = __ev_Foldable_List();
-    $__t30 = ($__t31["elem"])(__ev_Eq_Int(), $x, [3, 4, 5]);
-    return match ($__t30) {
+    $__t33 = __ev_Foldable_List();
+    $__t32 = ($__t33["elem"])(__ev_Eq_Int(), $x, [3, 4, 5]);
+    return match ($__t32) {
         true => [$x],
         false => [],
     };
 }
 
 function __lambda_8($x, $y) {
-    $__t35 = __ev_Foldable_List();
-    $__t34 = ($__t35["elem"])(__ev_Eq_Int(), (\is_int($__m64 = $x + $y) ? $__m64 : moggi_u64_add($x, $y)), [21, 22]);
-    return match ($__t34) {
+    $__t37 = __ev_Foldable_List();
+    $__t36 = ($__t37["elem"])(__ev_Eq_Int(), (\is_int($__m64 = $x + $y) ? $__m64 : moggi_u64_add($x, $y)), [21, 22]);
+    return match ($__t36) {
         true => [(\is_int($__m64 = $x + $y) ? $__m64 : moggi_u64_add($x, $y))],
         false => [],
     };

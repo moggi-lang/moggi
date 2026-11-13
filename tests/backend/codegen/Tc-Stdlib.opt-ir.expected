@@ -1,41 +1,22 @@
 module
-  function mapLookupDemo()
-      t0 = call insert(@__ev_Eq_Int, @__ev_Ord_Int, 2, 20, @empty)
-      t1 = call insert(@__ev_Eq_Int, @__ev_Ord_Int, 1, 10, t0)
-      t2 = call lookup(@__ev_Eq_Int, @__ev_Ord_Int, 2, t1)
-      ret t2
-  function mapSizeDemo()
-      t3 = call insert(@__ev_Eq_Int, @__ev_Ord_Int, 1, 2, @empty)
-      t4 = call size(t3)
-      ret t4
-  function setMemberDemo()
-      t5 = call setFromList(@__ev_Eq_Int, @__ev_Ord_Int, [1, 2, 3])
-      t6 = call member(@__ev_Eq_Int, @__ev_Ord_Int, 2, t5)
-      ret t6
-  function setUnionDemo()
-      t7 = call setFromList(@__ev_Eq_Int, @__ev_Ord_Int, [1, 2])
-      t8 = call setFromList(@__ev_Eq_Int, @__ev_Ord_Int, [2, 3])
-      t9 = call union(@__ev_Eq_Int, @__ev_Ord_Int, t7, t8)
-      t10 = call setSize(t9)
-      ret t10
   function clampDemo()
-      t11 = call __tuple2(0, 10)
-      t12 = call clamp(@__ev_Eq_Int, @__ev_Ord_Int, t11, 99)
-      ret t12
+      t0 = call __tuple2(0, 10)
+      t1 = call clamp(@__ev_Eq_Int, @__ev_Ord_Int, t0, 99)
+      ret t1
   function charDemo()
-      t13 = call isDigit('\u{37}')
-      ret t13
+      t2 = call isDigit('\u{37}')
+      ret t2
   function altMaybeDemo()
-      t14 = call Just(1)
-      t15 = call Just(2)
-      t17 = call __ev_Alternative_Maybe()
-      t16 = dict_call t17-><|>(t14, t15)
-      ret t16
+      t3 = call Just(1)
+      t4 = call Just(2)
+      t6 = call __ev_Alternative_Maybe()
+      t5 = dict_call t6-><|>(t3, t4)
+      ret t5
   function altListDemo()
-      t19 = call __ev_Alternative_List()
-      t18 = dict_call t19-><|>([1], [2, 3])
-      ret t18
+      t8 = call __ev_Alternative_List()
+      t7 = dict_call t8-><|>([1], [2, 3])
+      ret t7
   function pairDemo()
-      t20 = call __tuple2(41, @True)
-      t21 = call fst(t20)
-      ret t21
+      t9 = call __tuple2(41, @True)
+      t10 = call fst(t9)
+      ret t10

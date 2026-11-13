@@ -196,12 +196,34 @@ instance Functor Maybe where
     Nothing -> Nothing
     Just x -> Just (f x)
 
-instance Eq (Maybe a) where
-  (==) a b = maybeEq# a b
-  (/=) a b = maybeNe# a b
+-- The element's own instances decide inside a 'Just', so a type with a custom
+-- 'Eq' or 'Ord' (one that ignores case, say) keeps that behaviour here.
+maybeEquals :: Eq a => Maybe a -> Maybe a -> Bool
+maybeEquals x y = case x of
+  Nothing -> case y of
+    Nothing -> True
+    Just _ -> False
+  Just xv -> case y of
+    Nothing -> False
+    Just yv -> xv == yv
 
-instance Ord (Maybe a) where
-  compare a b = maybeCompare# a b
+maybeOrdering :: Ord a => Maybe a -> Maybe a -> Ordering
+maybeOrdering x y = case x of
+  Nothing -> case y of
+    Nothing -> EQ
+    Just _ -> LT
+  Just xv -> case y of
+    Nothing -> GT
+    Just yv -> compare xv yv
+
+instance Eq a => Eq (Maybe a) where
+  (==) = maybeEquals
+  (/=) x y = case maybeEquals x y of
+    True -> False
+    False -> True
+
+instance Ord a => Ord (Maybe a) where
+  compare = maybeOrdering
 
 instance Semigroup a => Semigroup (Maybe a) where
   (<>) x y = case x of

@@ -809,12 +809,38 @@ instance Semigroup (List a) where
 instance Monoid (List a) where
   mempty = []
 
-instance Eq (List a) where
-  (==) a b = listEq# a b
-  (/=) a b = listNe# a b
+-- The element's own instances decide, so a type with a custom 'Eq' or 'Ord'
+-- (one that ignores case, say) keeps that behaviour inside a list.
+listEquals :: Eq a => List a -> List a -> Bool
+listEquals xs ys = case xs of
+  [] -> case ys of
+    [] -> True
+    _ : _ -> False
+  x : xs' -> case ys of
+    [] -> False
+    y : ys' -> case x == y of
+      True -> listEquals xs' ys'
+      False -> False
 
-instance Ord (List a) where
-  compare a b = listCompare# a b
+listOrdering :: Ord a => List a -> List a -> Ordering
+listOrdering xs ys = case xs of
+  [] -> case ys of
+    [] -> EQ
+    _ : _ -> LT
+  x : xs' -> case ys of
+    [] -> GT
+    y : ys' -> case compare x y of
+      EQ -> listOrdering xs' ys'
+      other -> other
+
+instance Eq a => Eq (List a) where
+  (==) = listEquals
+  (/=) x y = case listEquals x y of
+    True -> False
+    False -> True
+
+instance Ord a => Ord (List a) where
+  compare = listOrdering
 
 -- The defaults for these four answer through `foldr` and a composed `Endo`,
 -- which is one stack frame per element when the fold is applied; a list is

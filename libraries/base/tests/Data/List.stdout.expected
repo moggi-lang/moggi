@@ -51,3 +51,11 @@ Nothing
 [7,7,7]
 [1,2]
 30
+True
+False
+LT
+GT
+[Tag "A",Tag "b",Tag "c"]
+Tag "C"
+True
+LT

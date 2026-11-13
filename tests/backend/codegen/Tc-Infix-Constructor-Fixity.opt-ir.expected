@@ -9,7 +9,9 @@ module
         arm x :> xs
             t4 = match intrinsic intEq#(x, 1)
               arm True
-                  t4 = intrinsic listEq#(xs, [2, 3])
+                  t6 = call __ev_Eq_List_1(@__ev_Eq_Int)
+                  t5 = dict_call t6->==(xs, [2, 3])
+                  t4 = t5
               arm False
                   t4 = @False
             ret t4

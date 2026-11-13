@@ -2,9 +2,14 @@
 
 namespace Tc\Infix\Constructor\Fixity;
 
-const __MOGGI_MAP = [[], ['Tc\\Infix\\Constructor\\Fixity\\nested' => 0, 'Tc\\Infix\\Constructor\\Fixity\\ok' => 1], [], [], [[0, 0, 14, 1], [1, 0, 18, 6]], ['Tc.Infix.Constructor.Fixity.nested', 'Tc.Infix.Constructor.Fixity.ok'], ['tests/backend/codegen/Tc-Infix-Constructor-Fixity.mog']];
+const __MOGGI_MAP = [[28 => 2, 29 => 2], ['Tc\\Infix\\Constructor\\Fixity\\nested' => 0, 'Tc\\Infix\\Constructor\\Fixity\\ok' => 1], [], [], [[0, 0, 14, 1], [1, 0, 18, 6], [1, 0, 19, 24]], ['Tc.Infix.Constructor.Fixity.nested', 'Tc.Infix.Constructor.Fixity.ok'], ['tests/backend/codegen/Tc-Infix-Constructor-Fixity.mog']];
 
+require_once __DIR__ . '/../../../libraries/base/src/Data/Eq.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/List.php';
 require_once __DIR__ . '/../../../libraries/base/src/Moggi/Internal/Base.php';
+
+use function Data\Eq\__ev_Eq_Int;
+use function Data\List\__ev_Eq_List_1;
 
 function __fn_3a3e($v0, $v1) {
     return [':>', $v0, $v1];
@@ -20,7 +25,9 @@ function ok() {
         $x = $__scrut_0[1];
         $xs = $__scrut_0[2];
         if (($x === 1) === true) {
-            $__t4 = ($xs === [2, 3]);
+            $__t6 = __ev_Eq_List_1(__ev_Eq_Int());
+            $__t5 = ($__t6["=="])($xs, [2, 3]);
+            $__t4 = $__t5;
         }
         elseif (($x === 1) === false) {
             $__t4 = false;
