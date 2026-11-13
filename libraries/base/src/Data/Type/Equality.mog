@@ -52,8 +52,9 @@ data (:~:) a b where
 
 -- | Kind heterogeneous propositional equality. Like ':~:', @a :~~: b@ is
 -- inhabited by a terminating value if and only if @a@ is the same type as @b@.
-data (:~~:) a b where
-  HRefl :: a :~~: a
+-- The two sides may be of different kinds; @'HRefl'@ fixes both to one.
+data (:~~:) (a :: k1) (b :: k2) where
+  HRefl :: (:~~:) a a
 
 -- with credit to Conal Elliott for 'ty', Erik Hesselink & Martijn van
 -- Steenbergen for 'type-equality', Edward Kmett for 'eq', and Gabor Greif

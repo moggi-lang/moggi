@@ -123,9 +123,13 @@ function declaredClassFacts(Ast\ClassDecl $decl): array
 {
     $params = [];
     foreach ($decl->params as $param) {
+        $polyKinded = $param->kind instanceof Ast\KindCon
+            && isKindVariableName($param->kind->name);
         $params[] = [
             'name' => $param->name,
-            'resolvedKind' => declaredParamKind($decl, $param->name),
+            'kind' => $param->kind,
+            'resolvedKind' => $polyKinded ? null : declaredParamKind($decl, $param->name),
+            'polyKinded' => $polyKinded,
         ];
     }
 

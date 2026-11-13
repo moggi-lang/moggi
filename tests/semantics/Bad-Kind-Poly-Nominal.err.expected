@@ -1,0 +1,4 @@
+tests/semantics/Bad-Kind-Poly-Nominal.mog:2:6: type error: kind error in data type `OnlyNat`: could not unify kind `Nat` with `Type`
+
+  2 | data OnlyNat (a :: Nat) where
+    |      ^^^^^^^

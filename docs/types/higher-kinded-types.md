@@ -137,8 +137,8 @@ possible:
   synonym.
 * **No higher-rank signatures**, so a class method cannot itself require a
   polymorphic argument ([Polymorphism § Limits](polymorphism.md#limits)).
-* **No kind polymorphism**, so a class ranges over constructors of one fixed
-  kind ([Kinds § Limits](kinds.md#limits)).
+* **No kind polymorphism for classes**, so a class ranges over constructors of
+  one fixed kind ([Kinds § Limits](kinds.md#limits)).
 * **No functional dependencies**, so a class cannot say that one parameter
   determines another; use an associated type
   ([Classes](classes.md#associated-type-families)).
