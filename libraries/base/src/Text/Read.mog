@@ -261,13 +261,23 @@ lexCharsQuoted c cs = case c == '\'' || c == '"' of
   False -> [(singleton c, pack (dropChars 1 cs))]
 
 quotedToken :: Char -> [Char] -> [(String, String)]
-quotedToken q cs = case lexLitChar (pack (dropChars 1 cs)) of
-  (body, after) : _ -> case unpack after of
-    close : rest -> case close == q of
-      True -> [(stringAppend# (singleton q) (stringAppend# body (singleton q)), pack rest)]
-      False -> []
-    [] -> []
-  [] -> []
+quotedToken q cs = case lexLitCharsUpTo q (pack (dropChars 1 cs)) of
+  Nothing -> []
+  Just (body, rest) -> [(stringAppend# (singleton q) (stringAppend# body (singleton q)), rest)]
+
+-- The body of a quoted literal: every character literal up to the first
+-- unescaped occurrence of the opening quote, which is consumed. The text is
+-- kept verbatim so the token still reads back as written.
+lexLitCharsUpTo :: Char -> String -> Maybe (String, String)
+lexLitCharsUpTo q s = case unpack s of
+  [] -> Nothing
+  c : rest -> case c == q of
+    True -> Just ("", pack rest)
+    False -> case lexLitChar s of
+      (body, after) : _ -> case lexLitCharsUpTo q after of
+        Nothing -> Nothing
+        Just (more, rest2) -> Just (stringAppend# body more, rest2)
+      [] -> Nothing
 
 -- | What 'readList' does by default: the @[a,b]@ form the 'Show' instance for
 -- lists renders.
@@ -604,15 +614,15 @@ instance Read String where
     [] -> []
 
 stringBody :: String -> Maybe String
-stringBody s = case readLitChar s of
+stringBody s = case unpack s of
   [] -> Nothing
-  (c, after) : _ -> case unpack after of
-    q : _ -> case q == '"' of
-      True -> Just (singleton c)
-      False -> case stringBody after of
+  c : rest -> case c == '"' of
+    True -> Just ""
+    False -> case readLitChar s of
+      (ch, after) : _ -> case stringBody after of
         Nothing -> Nothing
-        Just text -> Just (stringAppend# (singleton c) text)
-    [] -> Nothing
+        Just text -> Just (stringAppend# (singleton ch) text)
+      [] -> Nothing
 
 -- | Reads what 'Show' writes: @"True"@ and @"False"@. Lives here (where
 -- 'Read' is defined) rather than in 'Data.Bool', which sits below
