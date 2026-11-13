@@ -1,0 +1,31 @@
+import Data.Num
+import System.IO
+import Text.Show
+
+-- ---- Exec-Tuple-Param-Action ----
+
+-- An action entry decomposes a non-variable parameter in a prologue. The body runs in
+-- the entry's worker, so the prologue has to be lowered into the worker's block too.
+checkPair :: (Int, String) -> IO ()
+checkPair (n, s) = do
+  putStrLn (show n)
+  putStrLn s
+
+data Pair = Pair Int String
+
+checkConstructed :: Pair -> IO ()
+checkConstructed (Pair n s) = do
+  putStrLn (show n)
+  putStrLn s
+
+checkNested :: ((Int, Int), String) -> IO ()
+checkNested ((a, b), s) = do
+  putStrLn (show (a + b))
+  putStrLn s
+
+main :: IO ()
+main = do
+  checkPair (1, "one")
+  checkPair (2, "two")
+  checkConstructed (Pair 3 "three")
+  checkNested ((4, 5), "nine")
