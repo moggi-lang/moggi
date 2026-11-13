@@ -168,13 +168,15 @@ function prepareProject(
 
     $fullParseModules = \array_keys($pending);
 
-    $sortedModules = sortModulesByDependencies($units, $context->backendId);
-    assignModuleCacheKeys($units, $sortedModules, $context);
-    hydrateModuleDiskArtifacts($units, $sortedModules, $context);
-
     foreach ($fullParseModules as $moduleName) {
         ensureUnitProgram($units, $moduleName);
     }
+
+    synthesizeTypeableInstances($units);
+
+    $sortedModules = sortModulesByDependencies($units, $context->backendId);
+    assignModuleCacheKeys($units, $sortedModules, $context);
+    hydrateModuleDiskArtifacts($units, $sortedModules, $context);
 
     $instanceWorld = InstanceWorld::forUnits($units, $fullParseModules);
     $projectClasses = [];
@@ -345,6 +347,17 @@ function prepareProject(
             moduleLocalDataNames($units, $moduleName),
         );
         $importContexts[$moduleName] = $importContext;
+
+        $importedPatternSynonyms = $importContext->interface->patternSynonyms();
+        $qualifiedPatternSynonyms = $importContext->interface->qualifiedPatternSynonyms();
+        if ($importedPatternSynonyms !== [] || $qualifiedPatternSynonyms !== []) {
+            reparseModuleWithPatternSynonyms(
+                $units,
+                $moduleName,
+                $importedPatternSynonyms,
+                $qualifiedPatternSynonyms,
+            );
+        }
 
         $purpose = $context->purposeFor($moduleName);
         $interface = null;
@@ -810,6 +823,7 @@ function prepareProjectExtendingFocus(
     ];
 
     ensureUnitProgram($units, $focusModule);
+    synthesizeTypeableInstances($units);
 
     $sampleCtx = null;
     foreach ($base->importContexts as $ctx) {
@@ -858,6 +872,17 @@ function prepareProjectExtendingFocus(
         moduleLocalValueNames($units, $focusModule),
         moduleLocalDataNames($units, $focusModule),
     );
+
+    $importedPatternSynonyms = $importContext->interface->patternSynonyms();
+    $qualifiedPatternSynonyms = $importContext->interface->qualifiedPatternSynonyms();
+    if ($importedPatternSynonyms !== [] || $qualifiedPatternSynonyms !== []) {
+        reparseModuleWithPatternSynonyms(
+            $units,
+            $focusModule,
+            $importedPatternSynonyms,
+            $qualifiedPatternSynonyms,
+        );
+    }
 
     $purpose = $context->purposeFor($focusModule);
     $interface = null;
@@ -1100,13 +1125,14 @@ function hydrateModuleDiskArtifacts(array &$units, array $sortedModules, Compila
 }
 
 /** @param array<string, array<string, mixed>> $units */
-function ensureUnitProgram(array &$units, string $moduleName): void
+function ensureUnitProgram(array &$units, string $moduleName, array $importedPatternSynonyms = []): void
 {
     if (($units[$moduleName]['parsed'] ?? false) === true) {
         return;
     }
 
     $unit = &$units[$moduleName];
+    $importedPatternSynonyms = $unit['importedPatternSynonyms'] ?? $importedPatternSynonyms;
     $tokens = $unit['tokens'] ?? null;
     if ($tokens === null) {
         $tokens = lex($unit['source'], $unit['path']);
@@ -1118,6 +1144,7 @@ function ensureUnitProgram(array &$units, string $moduleName): void
         $unit['importedFixity'],
         $unit['localFixity'],
         $unit['imports'],
+        $importedPatternSynonyms,
     );
 
     if (isset($unit['halfSource']) && $unit['halfSource'] !== '') {
@@ -1128,6 +1155,7 @@ function ensureUnitProgram(array &$units, string $moduleName): void
             $unit['halfImportedFixity'] ?? [],
             $unit['halfLocalFixity'] ?? [],
             $unit['halfImports'] ?? [],
+            $importedPatternSynonyms,
         );
         $program = mergeBackendHalfProgram(
             $program,
@@ -1137,9 +1165,567 @@ function ensureUnitProgram(array &$units, string $moduleName): void
         );
     }
 
+    appendSyntheticUnitDecls($program, $unit);
     $unit['program'] = $program;
     $unit['parsed'] = true;
     unset($unit['tokens']);
+}
+
+/**
+ * Add the declarations preparation synthesized to a module's parsed program.
+ *
+ * A module is parsed more than once -- pattern synonyms reparse it once their
+ * definitions are known -- so the synthetic parts are kept on the unit and
+ * re-applied to every parse rather than living only in the first tree.
+ *
+ * @param array<string, mixed> $unit
+ */
+function appendSyntheticUnitDecls(Ast\Program $program, array $unit): void
+{
+    $synthetic = [];
+    foreach ($unit['typeableInstances'] ?? [] as $instance) {
+        if ($instance instanceof Ast\InstanceDecl) {
+            $name = syntheticInstanceTypeName($instance);
+            if ($name !== null) {
+                $synthetic[$name][] = $instance;
+            } else {
+                $program->items[] = $instance;
+            }
+        }
+    }
+
+    if ($synthetic === []) {
+        return;
+    }
+
+    // A synthesized instance belongs to the declaration it was built from, the
+    // way a deriving clause does: it goes right after the data declaration, so
+    // the type it is about is in scope and anything written later -- an
+    // `instance Data (W a)`, whose `Typeable` superclass this instance is what
+    // discharges -- sees it already registered.
+    $items = [];
+    foreach ($program->items as $item) {
+        $items[] = $item;
+        if ($item instanceof Ast\DataDecl) {
+            foreach ($synthetic[$item->name] ?? [] as $instance) {
+                $items[] = $instance;
+            }
+            unset($synthetic[$item->name]);
+        }
+    }
+    foreach ($synthetic as $leftovers) {
+        foreach ($leftovers as $instance) {
+            $items[] = $instance;
+        }
+    }
+
+    $program->items = $items;
+}
+
+/**
+ * The type constructor a synthesized instance is for, read off its head.
+ *
+ * The head is the declaration's name, applied to its parameters when the
+ * instance is the one that reflects them; walking the application's spine
+ * finds the name either way.
+ */
+function syntheticInstanceTypeName(Ast\InstanceDecl $instance): ?string
+{
+    $head = $instance->head;
+    while ($head instanceof Ast\TypeApp) {
+        $head = $head->con;
+    }
+
+    return $head instanceof Ast\TypeCon ? $head->name : null;
+}
+
+/**
+ * Give every data type a 'Typeable' instance, built from its declaration.
+ *
+ * A type's representation is its constructor's module and name applied to its
+ * parameters' representations, which an instance can state without knowing
+ * anything a deriving strategy would need. The instances are synthesized once
+ * the whole project is parsed and before the instance world is built, so every
+ * module -- not only the one declaring the type -- resolves them like written
+ * instances.
+ *
+ * Nothing is synthesized unless Type.Reflection is part of the build, and a
+ * module Type.Reflection itself imports is left alone: it cannot import the
+ * reflection API back without an import cycle. Its types either have written
+ * instances or do not participate in reflection.
+ *
+ * @param array<string, array<string, mixed>> $units
+ */
+function synthesizeTypeableInstances(array &$units): void
+{
+    if (! isset($units['Type.Reflection'])) {
+        return;
+    }
+
+    $reflection = $units['Type.Reflection'];
+    if (($reflection['parsed'] ?? false) !== true || ! ($reflection['program'] ?? null) instanceof Ast\Program) {
+        return;
+    }
+
+    if (! \array_key_exists('typeableInstances', $units['Type.Reflection'])) {
+        $tupleInstances = synthesizedTupleTypeableInstances();
+        $units['Type.Reflection']['typeableInstances'] = $tupleInstances;
+        appendSyntheticUnitDecls($units['Type.Reflection']['program'], $units['Type.Reflection']);
+    }
+
+    $reachedByReflection = typeableReachedModules($units, 'Type.Reflection');
+    $writtenInstances = manualTypeableTypeNames($units);
+
+    foreach ($units as $moduleName => &$unit) {
+        if (($unit['synthetic'] ?? false) === true || \array_key_exists('typeableInstances', $unit)) {
+            continue;
+        }
+
+        if (($unit['parsed'] ?? false) !== true) {
+            continue;
+        }
+
+        $program = $unit['program'] ?? null;
+        if (! $program instanceof Ast\Program) {
+            continue;
+        }
+
+        if ($moduleName === 'Type.Reflection' || isset($reachedByReflection[$moduleName])) {
+            continue;
+        }
+
+        $package = \str_contains((string) ($unit['path'] ?? ''), '/libraries/') ? 'base' : 'main';
+        $instances = [];
+        foreach ($program->items as $item) {
+            if (! $item instanceof Ast\DataDecl || isset($writtenInstances[$moduleName . "\0" . $item->name])) {
+                continue;
+            }
+
+            // A constructor is typeable at its own kind as well as at the kind
+            // of its saturation: `Typeable (W a)` is the declared type, and
+            // `Typeable W` is the constructor itself, which anything that
+            // builds a representation of a partially applied type asks for
+            // (`gcast1` needs it for the `W` in `c (W a)`). GHC keeps the
+            // latter in the solver rather than in an instance; here instances
+            // are what a data declaration generates, so both are generated.
+            if ($item->params === []) {
+                $instances[] = synthesizedTypeableInstance($item, $moduleName, $package, false);
+            } else {
+                $instances[] = synthesizedTypeableInstance($item, $moduleName, $package, true);
+                if (typeableConstructorInstanceKindIsConcrete($item)) {
+                    $instances[] = synthesizedTypeableInstance($item, $moduleName, $package, false);
+                }
+            }
+        }
+
+        $unit['typeableInstances'] = $instances;
+        if ($instances !== [] && $moduleName !== 'Type.Reflection') {
+            foreach (synthesizedTypeableImports() as $import) {
+                $unit['imports'][] = $import;
+                $program->imports[] = $import;
+            }
+        }
+
+        appendSyntheticUnitDecls($program, $unit);
+    }
+    unset($unit);
+}
+
+/**
+ * The modules whose imports `$start` reaches, itself included.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @return array<string, true>
+ */
+function typeableReachedModules(array $units, string $start): array
+{
+    $reached = [];
+    $stack = [$start];
+    while ($stack !== []) {
+        $moduleName = \array_pop($stack);
+        if (isset($reached[$moduleName])) {
+            continue;
+        }
+        $reached[$moduleName] = true;
+
+        foreach ($units[$moduleName]['imports'] ?? [] as $import) {
+            if ($import instanceof Ast\ImportDecl) {
+                $stack[] = Ast\moduleName($import->path);
+            }
+        }
+    }
+
+    return $reached;
+}
+
+/**
+ * The type constructors a module already gives a written 'Typeable' instance.
+ *
+ * A type constructor's name is not unique across a project -- `Sum` and `Product`
+ * are declared both by `Data.Semigroup` and by `Data.Functor.Sum`/`Product` -- so
+ * the answer is which *declaration* an instance covers, resolved the way the
+ * writing module resolves the name: its own declarations first, then whatever it
+ * imports. Keying by the bare name instead let `Type.Reflection`'s written
+ * `Typeable Sum` suppress the instances `Data.Functor.Sum`'s own `Sum` needs.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @return array<string, true> keyed `"<module>\0<type>"`
+ */
+function manualTypeableTypeNames(array $units): array
+{
+    /** @var array<string, list<string>> $declaredIn */
+    $declaredIn = [];
+    /** @var list<array{0: string, 1: string}> $written */
+    $written = [];
+    foreach ($units as $moduleName => $unit) {
+        $program = $unit['program'] ?? null;
+        if (! $program instanceof Ast\Program) {
+            continue;
+        }
+
+        foreach ($program->items as $item) {
+            if ($item instanceof Ast\DataDecl) {
+                $declaredIn[$item->name][] = $moduleName;
+
+                continue;
+            }
+            if (! $item instanceof Ast\InstanceDecl) {
+                continue;
+            }
+
+            $className = $item->class;
+            $separator = \strrpos($className, '.');
+            if ($separator !== false) {
+                $className = \substr($className, $separator + 1);
+            }
+            if ($className !== 'Typeable') {
+                continue;
+            }
+
+            $name = typeableTypeName($item->head);
+            if ($name !== null) {
+                $written[] = [$moduleName, $name];
+            }
+        }
+    }
+
+    $names = [];
+    foreach ($written as [$moduleName, $name]) {
+        $candidates = $declaredIn[$name] ?? [];
+        $reachable = $candidates === [] ? [] : typeableReachedModules($units, $moduleName);
+        $selected = [];
+        foreach ($candidates as $candidate) {
+            if ($candidate === $moduleName || isset($reachable[$candidate])) {
+                $selected[] = $candidate;
+            }
+        }
+        // Nothing in the writer's own imports declares the name: the instance can
+        // only be about the declaration the checker will resolve it to, but that is
+        // not known here, so every declaration of the name keeps its suppression.
+        if ($selected === []) {
+            $selected = $candidates;
+        }
+
+        foreach ($selected as $candidate) {
+            $names[$candidate . "\0" . $name] = true;
+        }
+    }
+
+    return $names;
+}
+
+/** The type constructor an instance head is applied to, or null when it is not a name. */
+function typeableTypeName(Ast\TypeNode $head): ?string
+{
+    while ($head instanceof Ast\TypeApp) {
+        $head = $head->con;
+    }
+
+    return $head instanceof Ast\TypeCon || $head instanceof Ast\TypeQualified ? $head->name : null;
+}
+
+/**
+ * One synthesized instance and its method body.
+ *
+ * The head names the declaration's own spelling, which the module declaring
+ * the type has in scope; the body reads each parameter's representation through
+ * the instance's `Typeable` context, so the instance is as general as the data
+ * declaration.
+ */
+/**
+ * A parameter's type in a synthesized instance head.
+ *
+ * A GADT written without kind annotations (`data Coercion a b where`) leaves
+ * its parameters as kind variables, so the instance's `Typeable a` context
+ * never resolves. Pinning those parameters to `Type` gives the context a
+ * concrete kind. Regular declarations keep their inferred kinds: `Rec1 f p`
+ * needs `f` at `Type -> Type`.
+ */
+function typeableInstanceParameterType(Ast\DataParam $param, Ast\DataDecl $decl): Ast\TypeNode
+{
+    $isGadt = false;
+    foreach ($decl->constructors as $ctor) {
+        if ($ctor->signature !== null) {
+            $isGadt = true;
+            break;
+        }
+    }
+
+    if ($isGadt && $param->kind instanceof Ast\KindInfer) {
+        return new Ast\TypeKindAnnot($param->name, new Ast\KindType());
+    }
+
+    return new Ast\TypeVar($param->name);
+}
+
+/** Whether a bare instance for the constructor has a monomorphic kind. */
+function typeableConstructorInstanceKindIsConcrete(Ast\DataDecl $decl): bool
+{
+    foreach ($decl->params as $param) {
+        if (! $param->kind instanceof Ast\KindType) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * `Typeable` instances for the built-in tuple constructors `Tuple8`..`Tuple64`.
+ *
+ * Lower arities are written in `Type.Reflection`; these are the same shape
+ * generated once, so the representation and its kind stay in step with the
+ * compiler's tuple table instead of being repeated 57 times.
+ *
+ * @return list<Ast\InstanceDecl>
+ */
+function synthesizedTupleTypeableInstances(): array
+{
+    $instances = [];
+    for ($arity = 8; $arity <= 64; ++$arity) {
+        $constraints = [];
+        $arguments = [];
+        $head = new Ast\TypeCon('Tuple' . $arity);
+
+        for ($i = 1; $i <= $arity; ++$i) {
+            $name = 'a' . $i;
+            $head = new Ast\TypeApp($head, [new Ast\TypeVar($name)]);
+            $constraints[] = new Ast\TypeApp(new Ast\TypeCon('Typeable'), [new Ast\TypeVar($name)]);
+            $arguments[] = new Ast\Apply(
+                new Ast\Variable('SomeTypeRep'),
+                new Ast\TypeAsc(
+                    new Ast\Variable('typeRep'),
+                    new Ast\TypeApp(new Ast\TypeCon('TypeRep'), [new Ast\TypeVar($name)]),
+                ),
+            );
+        }
+
+        $kind = new Ast\Variable('trLiftedRep');
+        for ($i = 0; $i < $arity; ++$i) {
+            $kind = synthesizedApply(new Ast\Variable('kindFun'), [
+                new Ast\Variable('trLiftedRep'),
+                $kind,
+            ]);
+        }
+
+        $body = synthesizedApply(new Ast\Variable('tupleRep'), [
+            new Ast\StringLit('(' . \str_repeat(',', $arity - 1) . ')'),
+            $kind,
+            new Ast\ListLit($arguments),
+        ]);
+
+        $instances[] = new Ast\InstanceDecl(
+            'Typeable',
+            $head,
+            [new Ast\FunctionDecl(
+                'typeRepOf',
+                null,
+                [],
+                $body,
+                instanceMethod: true,
+                line: 1,
+                col: 1,
+                endCol: 1,
+            )],
+            $constraints,
+            1,
+            1,
+            1,
+        );
+    }
+
+    return $instances;
+}
+
+function synthesizedTypeableInstance(Ast\DataDecl $decl, string $moduleName, string $package, bool $withArguments): Ast\InstanceDecl
+{
+    $head = new Ast\TypeCon($decl->name);
+    $constraints = [];
+    $arguments = [];
+    if ($withArguments) {
+        foreach ($decl->params as $param) {
+            $head = new Ast\TypeApp($head, [typeableInstanceParameterType($param, $decl)]);
+            $constraints[] = new Ast\TypeApp(new Ast\TypeCon('Typeable'), [new Ast\TypeVar($param->name)]);
+            $arguments[] = new Ast\Apply(
+                new Ast\QualifiedRef('MoggiTypeable', 'SomeTypeRep'),
+                new Ast\TypeAsc(
+                    new Ast\QualifiedRef('MoggiTypeable', 'typeRep'),
+                    new Ast\TypeApp(new Ast\TypeQualified('MoggiTypeable', 'TypeRep'), [new Ast\TypeVar($param->name)]),
+                ),
+            );
+        }
+    }
+
+    $body = synthesizedApply(new Ast\QualifiedRef('MoggiTypeable', 'mkTyConApp'), [
+        synthesizedApply(new Ast\QualifiedRef('MoggiTypeable', 'mkTyCon'), [
+            new Ast\StringLit($moduleName),
+            new Ast\StringLit($package),
+            new Ast\StringLit($decl->name),
+        ]),
+        new Ast\ListLit($arguments),
+        typeableKindRepresentation(typeableDeclarationKind($decl->params)),
+    ]);
+
+    return new Ast\InstanceDecl(
+        'Typeable',
+        $head,
+        [new Ast\FunctionDecl(
+            'typeRepOf',
+            null,
+            [],
+            $body,
+            instanceMethod: true,
+            line: $decl->line,
+            col: $decl->col,
+            endCol: $decl->endCol,
+        )],
+        $constraints,
+        $decl->line,
+        $decl->col,
+        $decl->endCol,
+    );
+}
+
+/** @param list<Ast\AstNode> $arguments */
+function synthesizedApply(Ast\AstNode $function, array $arguments): Ast\AstNode
+{
+    foreach ($arguments as $argument) {
+        $function = new Ast\Apply($function, $argument);
+    }
+
+    return $function;
+}
+
+/**
+ * The kind of the declared type: one arrow per parameter, ending in `Type`.
+ *
+ * @param list<Ast\DataParam> $params
+ */
+function typeableDeclarationKind(array $params): Ast\KindNode
+{
+    $kind = new Ast\KindType();
+    foreach (\array_reverse($params) as $param) {
+        $kind = new Ast\KindArrow($param->kind, $kind);
+    }
+
+    return $kind;
+}
+
+/** The representation of a kind, as the builders 'kindFun' and 'trLiftedRep' spell it. */
+function typeableKindRepresentation(Ast\KindNode $kind): Ast\AstNode
+{
+    if ($kind instanceof Ast\KindArrow) {
+        return synthesizedApply(new Ast\QualifiedRef('MoggiTypeable', 'kindFun'), [
+            typeableKindRepresentation($kind->from),
+            typeableKindRepresentation($kind->to),
+        ]);
+    }
+
+    return new Ast\QualifiedRef('MoggiTypeable', 'trLiftedRep');
+}
+
+/**
+ * The imports that put the class and the representation builders in scope.
+ *
+ * Only the class is imported unqualified: an instance head names its class
+ * without a qualifier. The builders are imported under an alias of the
+ * compiler's own, because the names a module has in scope are not the
+ * compiler's to rely on -- `Data.Typeable` exports @TypeRep@ as the synonym
+ * @SomeTypeRep@, so an unqualified @TypeRep a@ in generated code would be an
+ * application of a constructor that takes no arguments.
+ *
+ * @return list<Ast\ImportDecl>
+ */
+function synthesizedTypeableImports(): array
+{
+    return [
+        new Ast\ImportDecl(
+            ['Type.Reflection'],
+            'named',
+            [new Ast\ImportItem('Typeable')],
+        ),
+        new Ast\ImportDecl(
+            ['Type.Reflection'],
+            'qualifiedAs',
+            [
+                new Ast\ImportItem('typeRep'),
+                new Ast\ImportItem('TypeRep'),
+                new Ast\ImportItem('SomeTypeRep', methods: 'every'),
+                new Ast\ImportItem('mkTyCon'),
+                new Ast\ImportItem('mkTyConApp'),
+                new Ast\ImportItem('kindFun'),
+                new Ast\ImportItem('trLiftedRep'),
+            ],
+            asName: 'MoggiTypeable',
+            qualifiedOnly: true,
+        ),
+    ];
+}
+
+/**
+ * Parse a module again, this time knowing the pattern synonyms it imports.
+ *
+ * A synonym expands while the module is parsed, so an imported one has to be in
+ * the parser's table before that parse. The definitions exist only once the
+ * declaring modules are checked -- which the importing module's own check
+ * already requires -- so the parse is redone immediately before that check.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @param array<string, array<string, mixed>> $patternSynonyms
+ */
+function reparseModuleWithPatternSynonyms(
+    array &$units,
+    string $moduleName,
+    array $patternSynonyms,
+    array $qualifiedPatternSynonyms = [],
+): void {
+    $table = $patternSynonyms;
+    foreach ($units[$moduleName]['imports'] ?? [] as $import) {
+        if (! $import instanceof Ast\ImportDecl) {
+            continue;
+        }
+
+        $target = Ast\moduleName($import->path);
+        $prefixes = [$import->asName ?? $target];
+        if ($import->asName !== null && ! $import->qualifiedOnly) {
+            $prefixes[] = $target;
+        }
+
+        foreach ($qualifiedPatternSynonyms as $name => $definition) {
+            if (($definition['module'] ?? null) !== $target) {
+                continue;
+            }
+
+            foreach ($prefixes as $prefix) {
+                $table[$prefix . '.' . $name] = $definition;
+            }
+        }
+    }
+
+    $units[$moduleName]['importedPatternSynonyms'] = $table;
+    $units[$moduleName]['parsed'] = false;
+    unset($units[$moduleName]['tokens'], $units[$moduleName]['program']);
+    ensureUnitProgram($units, $moduleName, $table);
 }
 
 /** @return list<string> */

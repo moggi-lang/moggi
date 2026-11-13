@@ -7,20 +7,23 @@
 -- Type-indexed type representations: a 'TypeRep' names a type as a value, so a
 -- program can ask what a type is and take it apart.
 --
--- A representation is a heading 'TyCon' applied to argument representations.
--- The compiler builds one for a type it knows; the 'Typeable' constraint is how
--- a function receives one from its caller.
+-- A representation is a heading 'TyCon' applied to argument representations,
+-- together with the representation of its kind, so 'typeRepKind' can answer
+-- without rebuilding anything. The compiler builds one for a type it knows;
+-- the 'Typeable' constraint is how a function receives one from its caller.
 --
--- Note: the representation is a plain structure behind a phantom index, so it
--- can be built, named and taken apart, but it carries no kind information:
--- @eqTypeRep@, @decTypeRep@, @typeRepKind@ and the @App@/@Con@/@Fun@ views
--- arrive with kind-indexed representations. Every type is 'Typeable' once the
--- compiler answers the constraint itself; until then the instances below cover
--- the builtin types.
+-- The compiler gives every declared data type a 'Typeable' instance, built
+-- from the constructor's module and name and its parameters' own
+-- representations, and one for the constructor itself. The reflection API's
+-- own dependency closure keeps the written instances below: the scalar types,
+-- function types, lists, tuples, 'IO', 'Void', 'NonEmpty', 'Maybe' and
+-- 'Either' either have no declaration to synthesize one from or are imported
+-- by this module and cannot import it back.
 module Type.Reflection
   ( -- * The Typeable class
     Typeable
   , typeRep
+  , typeRepProxy
   , typeOf
 
     -- * Propositional equality
@@ -28,13 +31,33 @@ module Type.Reflection
   , (:~~:)(HRefl)
 
     -- * Type representations
-  , TypeRep
+  , data TypeRep
   , typeRepTyCon
   , rnfTypeRep
+  , eqTypeRep
+  , decTypeRep
+  , typeRepKind
+  , typeRepFingerprint
+  , showsTypeRep
+  , Fingerprint
+  , mkTyCon
+  , mkTyConApp
+  , kindFun
+  , mkFunTy
+  , funResultTy
+  , trLiftedRep
   , splitApps
+  , splitTyConApp
+
+    -- * Pattern synonyms
+  , data App
+  , data Con
+  , data Con'
+  , data Fun
 
     -- ** Quantified
   , SomeTypeRep(..)
+  , someTypeRep
   , someTypeRepTyCon
   , rnfSomeTypeRep
 
@@ -44,6 +67,7 @@ module Type.Reflection
   , tyConModule
   , tyConName
   , rnfTyCon
+  , tyConFingerprint
 
     -- * Module names
   , Module
@@ -52,13 +76,45 @@ module Type.Reflection
   , rnfModule
   ) where
 
-import Data.List (reverse)
+import Control.Applicative (WrappedArrow)
+import Control.Monad (WrappedMonad)
+import Data.Bits (And, Ior, Xor, Iff)
+import Data.Bool (Bool(..))
+import Data.Char (GeneralCategory)
+import Data.Double (FFFormat)
+import Data.Either (Either(..))
+import Data.Eq (Eq(..))
+import Data.Functor.Const (Const)
+import Data.Functor.Identity (Identity)
+import Data.List (length, reverse, (++))
+import Data.Monoid (Alt, Ap)
+import Data.Monoid (First, Last) qualified as Monoid
+import Data.Num (Num(..))
+import Data.Ord (Down)
+import Data.Real (Ratio)
+import Data.Semigroup (Min, Max, First, Last, Arg, WrappedMonoid, Dual, Endo, Sum, Product, All, Any)
+import Data.Semigroup (First, Last) qualified as Semigroup
+import Data.String (pack, unpack)
+import Data.Proxy (Proxy)
+import Data.Tuple (Solo, Tuple2)
+import Data.Version (Version)
+import Data.Maybe (Maybe(..))
 import Data.Type.Equality ((:~:)(..), (:~~:)(..))
+import Data.Void (Void)
+import Moggi.Err (error)
+import Moggi.Exception.Type (ErrorCall, ArithException)
 import Moggi.Internal.Base
 import Moggi.Internal.Prim
+import Moggi.IO.Exception (IOErrorType, IOException, HostException)
+import System.IO.Base (IO)
+import System.IO.Types (Handle, Resource, IOMode)
+import Text.ParserCombinators.ReadPrec (ReadPrec)
+import Text.Read (Lexeme)
+import Text.Show (Show(..))
+import Unsafe.Coerce (UnsafeEquality, unsafeCoerce)
 
--- | The name of a representation: the package a constructor came from and the
--- module within it, as the compiler records them.
+-- | The name of a representation: the module a constructor came from and the
+-- package that module belongs to, as the compiler records them.
 data Module = Module String String
 
 -- | The module's name, such as @Data.Int@.
@@ -92,50 +148,119 @@ tyConName t = case t of
 rnfTyCon :: TyCon -> ()
 rnfTyCon _ = ()
 
--- | The shape of a representation, independent of the type it names: a
--- constructor, an application of one representation to another, or a function.
+-- | The shape of a representation, independent of the type it names.
 --
--- This is the structure the compiler emits for a type; 'TypeRep' adds the type
--- index a program reasons with, so the index costs nothing at run time.
+-- 'RepTyCon' carries the kind variables the constructor was instantiated at and
+-- the representation of its kind; 'RepApp' carries the kind of its result;
+-- 'RepFun' is a saturated function type, whose kind is always @Type@. The
+-- representation of @Type@ is 'RepType'.
 data Rep
-  = RepCon TyCon
-  | RepApp Rep Rep
+  = RepType
+  | RepTyCon TyCon [SomeTypeRep] Rep
+  | RepApp Rep Rep Rep
   | RepFun Rep Rep
 
--- | A representation of the type @a@.
+-- | A representation of the type @a@, at any kind.
 --
 -- The index is the type being described, so a 'TypeRep' for @Int@ and one for
 -- @Bool@ are different types even though they share a runtime shape.
-data TypeRep a where
+data TypeRep (a :: k) where
   TypeRep :: Rep -> TypeRep a
+
+-- | A representation whose type is not known statically — what a program has
+-- after taking one apart.
+data SomeTypeRep where
+  SomeTypeRep :: TypeRep a -> SomeTypeRep
 
 -- | What the type is, as a value. The compiler answers a @Typeable a@
 -- obligation from the type it resolved @a@ to.
-class Typeable a where
+class Typeable (a :: k) where
   typeRepOf :: TypeRep a
 
 -- | The representation of the type this call is instantiated at.
 typeRep :: Typeable a => TypeRep a
 typeRep = typeRepOf
 
+-- | The representation of the type a proxy stands for.
+typeRepProxy :: forall proxy a. Typeable a => proxy a -> TypeRep a
+typeRepProxy _ = typeRepOf
+
 -- | The representation of the argument's type.
 typeOf :: Typeable a => a -> TypeRep a
 typeOf _ = typeRep
 
+-- | The representation of a type application, built from the representations of
+-- its parts. This is the general shape of @base@'s type-application evidence:
+-- one instance below covers every application, so no type gets an instance of
+-- its own and partially applied constructors such as @Sum f@ are represented
+-- the way GHC's solver represents them.
+typeRepApp :: forall k1 k (f :: k1 -> k) a. (Typeable f, Typeable a) => TypeRep (f a)
+typeRepApp = App (typeRep :: TypeRep f) (typeRep :: TypeRep a)
+
+instance (Typeable f, Typeable a) => Typeable (f a) where
+  typeRepOf = typeRepApp
+
+repOf :: TypeRep a -> Rep
+repOf t = case t of
+  TypeRep r -> r
+
+-- --- Building representations ------------------------------------------------
+--
+-- A synthesized 'Typeable' instance builds its representation from these: the
+-- two runtime shapes below are the ones the instances written out here spell
+-- with the constructors directly.
+
+-- | The constructor of a declared type, by the module and package that declare
+-- it and the name it was declared with.
+mkTyCon :: String -> String -> String -> TyCon
+mkTyCon mod pkg name = TyCon (Module mod pkg) name
+
+-- | A constructor of the given kind applied to argument representations.
+--
+-- The applications are 'RepApp' nodes, the shape a written instance builds,
+-- so 'splitApps', 'typeRepTyCon' and 'showsTypeRep' see the arguments.
+mkTyConApp :: TyCon -> [SomeTypeRep] -> TypeRep k -> TypeRep a
+mkTyConApp tc args kind = unsafeCoerce (TypeRep (applyTypeRepArgs (RepTyCon tc [] (repOf kind)) args))
+
+applyTypeRepArgs :: Rep -> [SomeTypeRep] -> Rep
+applyTypeRepArgs r args = case args of
+  [] -> r
+  x : rest -> case x of
+    SomeTypeRep t -> applyTypeRepArgs (RepApp r (repOf t) (appResultKind r)) rest
+
+-- | The representation of a function kind: @a -> b@ at the kind level.
+kindFun :: TypeRep a -> TypeRep b -> TypeRep c
+kindFun a b = unsafeCoerce (TypeRep (RepFun (repOf a) (repOf b)))
+
+-- | The representation of a representation's kind.
+typeRepKind :: TypeRep (a :: k) -> TypeRep k
+typeRepKind t = case t of
+  TypeRep r -> TypeRep (kindOfRep r)
+
+kindOfRep :: Rep -> Rep
+kindOfRep r = case r of
+  RepType -> RepType
+  RepTyCon _ _ k -> k
+  RepApp _ _ k -> k
+  RepFun _ _ -> RepType
+
 -- | The constructor at the head of a representation: @Maybe@ for
 -- @Maybe Int@, and @(->)@ for @Int -> Bool@.
 typeRepTyCon :: TypeRep a -> TyCon
-typeRepTyCon tr = case tr of
-  TypeRep r -> headTyCon r
+typeRepTyCon t = headTyCon (repOf t)
 
 headTyCon :: Rep -> TyCon
 headTyCon r = case r of
-  RepCon tc -> tc
-  RepApp f _ -> headTyCon f
+  RepType -> typeTyCon
+  RepTyCon tc _ _ -> tc
+  RepApp f _ _ -> headTyCon f
   RepFun _ _ -> functionTyCon
 
--- | The built-in constructors a program cannot name itself: functions and lists
--- have no declaration to take a name from.
+-- | The built-in constructors a program cannot name itself: functions, lists
+-- and @Type@ have no declaration to take a name from.
+typeTyCon :: TyCon
+typeTyCon = TyCon (Module "GHC.Types" "base") "Type"
+
 functionTyCon :: TyCon
 functionTyCon = TyCon (Module "GHC.Types" "base") "->"
 
@@ -145,23 +270,516 @@ listTyCon = TyCon (Module "GHC.Types" "base") "[]"
 -- | A representation with the head and its arguments apart: the constructor
 -- alone, and one 'SomeTypeRep' per argument in the order written.
 splitApps :: TypeRep a -> (TyCon, [SomeTypeRep])
-splitApps tr = case tr of
-  TypeRep r -> case peel r [] of
-    (head, args) -> (headTyCon head, args)
+splitApps t = peel (repOf t) []
 
-peel :: Rep -> [SomeTypeRep] -> (Rep, [SomeTypeRep])
+-- | 'splitApps' under the name @base@'s 'Type.Reflection' uses.
+splitTyConApp :: TypeRep a -> (TyCon, [SomeTypeRep])
+splitTyConApp = splitApps
+
+peel :: Rep -> [SomeTypeRep] -> (TyCon, [SomeTypeRep])
 peel r acc = case r of
-  RepApp f x -> peel f (SomeTypeRep (TypeRep x) : acc)
-  RepFun _ _ -> (r, reverse acc)
-  RepCon _ -> (r, reverse acc)
+  RepApp f x _ -> peel f (SomeTypeRep (TypeRep x) : acc)
+  _ -> (headTyCon r, acc)
+
+-- | A type application or a type constructor, as @splitApp@ sees it.
+data AppOrCon where
+  IsApp :: TypeRep f -> TypeRep x -> AppOrCon
+  IsCon :: TyCon -> [SomeTypeRep] -> AppOrCon
+
+splitApp :: TypeRep a -> AppOrCon
+splitApp t = case repOf t of
+  RepApp f x _ -> IsApp (TypeRep f) (TypeRep x)
+  RepFun a b -> IsApp (TypeRep (RepApp arrowRep a (RepFun RepType RepType))) (TypeRep b)
+  RepTyCon tc ks _ -> IsCon tc ks
+  RepType -> IsCon typeTyCon []
+
+arrowRep :: Rep
+arrowRep = RepTyCon functionTyCon [] (RepFun RepType (RepFun RepType RepType))
+
+-- | A type application.
+--
+-- In expression position this builds the representation of @f x@; in a pattern
+-- it matches one, yielding both halves.
+pattern App f x <- (splitApp -> IsApp f x)
+  where
+    App f x = TypeRep (RepApp (repOf f) (repOf x) (appResultKind (repOf f)))
+
+-- | Pattern match on a type constructor.
+pattern Con con <- (splitApp -> IsCon con _)
+
+-- | Pattern match on a type constructor including its instantiated kind
+-- variables.
+pattern Con' con ks <- (splitApp -> IsCon con ks)
+
+-- | A function type, its argument and result apart.
+pattern Fun :: forall a b. TypeRep a -> TypeRep b -> TypeRep (a -> b)
+pattern Fun arg res <- (viewFun -> Just (SomeTypeRep arg, SomeTypeRep res))
+  where
+    Fun arg res = TypeRep (RepFun (repOf arg) (repOf res))
+
+viewFun :: TypeRep a -> Maybe (SomeTypeRep, SomeTypeRep)
+viewFun t = case repOf t of
+  RepFun a b -> Just (SomeTypeRep (TypeRep a), SomeTypeRep (TypeRep b))
+  _ -> Nothing
+
+appResultKind :: Rep -> Rep
+appResultKind r = case kindOfRep r of
+  RepFun _ k -> k
+  _ -> RepType
+
+-- | A fingerprint of a representation: equal for equal representations.
+--
+-- @base@ hashes a representation into two 'Word64's. Moggi's fingerprint is the
+-- printed structure itself, so two fingerprints are equal exactly when the
+-- representations are and there is no hash to collide.
+data Fingerprint = Fingerprint String
+
+instance Eq Fingerprint where
+  (==) a b = case a of
+    Fingerprint x -> case b of
+      Fingerprint y -> x == y
+
+typeRepFingerprint :: TypeRep a -> Fingerprint
+typeRepFingerprint t = Fingerprint (typeRepString t)
+
+tyConFingerprint :: TyCon -> Fingerprint
+tyConFingerprint t = Fingerprint (appendString (tyConPackage t) (appendString ":" (appendString (tyConModule t) (appendString ":" (tyConName t)))))
+
+-- | The representation as the text @base@'s 'showsTypeRep' would print.
+typeRepString :: TypeRep a -> String
+typeRepString t = case repOf t of
+  RepFun arg res -> appendString (funArgString (TypeRep arg)) (appendString " -> " (typeRepString (TypeRep res)))
+  _ -> case splitApps t of
+    (tc, args) -> case tupleArity tc of
+      Just _ -> tupleTypeString args
+      Nothing -> appendString (tyConName tc) (argsString args)
+
+-- | How many components a tuple constructor names, or nothing when it is not
+-- one. The names are the erased spelling @(,)@, @(,,)@ and so on.
+tupleArity :: TyCon -> Maybe Int
+tupleArity tc = case unpack (tyConName tc) of
+  '(' : rest -> case reverse rest of
+    ')' : inner -> case allCommas inner of
+      True -> Just (length inner + 1)
+      False -> Nothing
+    _ -> Nothing
+  _ -> Nothing
+
+allCommas :: [Char] -> Bool
+allCommas chars = case chars of
+  [] -> True
+  c : rest -> case c == ',' of
+    True -> allCommas rest
+    False -> False
+
+tupleTypeString :: [SomeTypeRep] -> String
+tupleTypeString args = appendString "(" (appendString (tupleArgsString args) ")")
+
+tupleArgsString :: [SomeTypeRep] -> String
+tupleArgsString args = case args of
+  [] -> ""
+  x : rest -> case rest of
+    [] -> someTypeRepString x
+    _ -> appendString (someTypeRepString x) (appendString ", " (tupleArgsString rest))
+
+someTypeRepString :: SomeTypeRep -> String
+someTypeRepString s = case s of
+  SomeTypeRep t -> typeRepString t
+
+-- | A function's argument, parenthesised when it is itself a function
+-- (`(Int -> Bool) -> Bool`).
+funArgString :: TypeRep a -> String
+funArgString t = case repOf t of
+  RepFun _ _ -> appendString "(" (appendString (typeRepString t) ")")
+  _ -> typeRepString t
+
+argsString :: [SomeTypeRep] -> String
+argsString args = case args of
+  [] -> ""
+  x : rest -> appendString " " (appendString (argString x) (argsString rest))
+
+argString :: SomeTypeRep -> String
+argString s = case s of
+  SomeTypeRep t -> case splitApps t of
+    (tc, []) -> tyConName tc
+    (tc, _) -> case tupleArity tc of
+      Just _ -> typeRepString t
+      Nothing -> appendString "(" (appendString (typeRepString t) ")")
+
+-- 'String' is its own type, not a list of 'Char', so the list append is
+-- applied to the unpacked characters and the result packed again.
+appendString :: String -> String -> String
+appendString a b = pack (unpack a ++ unpack b)
+
+-- | Build a function type from its argument and result representations.
+--
+-- @base@ spells this as the 'Fun' pattern; this is the same representation the
+-- pattern's builder produces, for callers that build one without matching.
+mkFunTy :: TypeRep a -> TypeRep b -> TypeRep (a -> b)
+mkFunTy a b = case isTypeKind a of
+  True -> case isTypeKind b of
+    True -> TypeRep (RepFun (repOf a) (repOf b))
+    False -> error "Type.Reflection.mkFunTy: result type is not of kind Type"
+  False -> error "Type.Reflection.mkFunTy: argument type is not of kind Type"
+
+isTypeKind :: TypeRep a -> Bool
+isTypeKind t = case kindOfRep (repOf t) of
+  RepType -> True
+  _ -> False
+
+-- | The representation as `ShowS` renders it.
+showsTypeRep :: TypeRep a -> String -> String
+showsTypeRep t s = appendString (typeRepString t) s
+
+-- | Apply a function representation to an argument representation, answering
+-- the result when the argument matches.
+funResultTy :: SomeTypeRep -> SomeTypeRep -> Maybe SomeTypeRep
+funResultTy f x = case f of
+  SomeTypeRep ft -> case repOf ft of
+    RepFun arg res -> case x of
+      SomeTypeRep xt -> case eqTypeRep (TypeRep arg) xt of
+        Just HRefl -> Just (SomeTypeRep (TypeRep res))
+        Nothing -> Nothing
+    _ -> Nothing
+
+-- | The representation of the kind @Type@.
+trLiftedRep :: TypeRep Type
+trLiftedRep = TypeRep RepType
+
+-- | Type equality.
+eqTypeRep :: forall k1 k2 (a :: k1) (b :: k2). TypeRep a -> TypeRep b -> Maybe (a :~~: b)
+eqTypeRep x y = case decTypeRep x y of
+  Right p -> Just p
+  Left _ -> Nothing
+
+-- | Type equality decision.
+decTypeRep :: forall k1 k2 (a :: k1) (b :: k2). TypeRep a -> TypeRep b -> Either (a :~~: b -> Void) (a :~~: b)
+decTypeRep x y = case sameTypeRep x y of
+  True -> Right (unsafeCoerce HRefl)
+  False -> Left impossibleEquality
+
+-- | There is no proof to give: two representations that compare unequal
+-- cannot be proved equal, so the failure branch can only be bottom.
+impossibleEquality :: a :~~: b -> Void
+impossibleEquality HRefl = error "Type.Reflection.decTypeRep: impossible equality proof"
+
+sameTypeRep :: TypeRep a -> TypeRep b -> Bool
+sameTypeRep x y = sameRep (repOf x) (repOf y)
+
+sameRep :: Rep -> Rep -> Bool
+sameRep a b = case a of
+  RepType -> case b of
+    RepType -> True
+    _ -> False
+  RepTyCon ta _ _ -> case b of
+    RepTyCon tb _ _ -> sameTyCon ta tb
+    _ -> False
+  RepApp fa xa _ -> case b of
+    RepApp fb xb _ -> sameRep fa fb && sameRep xa xb
+    _ -> False
+  RepFun fa ra -> case b of
+    RepFun fb rb -> sameRep fa fb && sameRep ra rb
+    _ -> False
+
+sameTyCon :: TyCon -> TyCon -> Bool
+sameTyCon a b = case a of
+  TyCon ma na -> case b of
+    TyCon mb nb -> na == nb && sameModule ma mb
+
+sameModule :: Module -> Module -> Bool
+sameModule a b = case a of
+  Module na pa -> case b of
+    Module nb pb -> na == nb && pa == pb
+
+-- | Modules, constructors and representations compare by what they name, the
+-- same test 'decTypeRep' uses.
+instance Eq Module where
+  (==) a b = sameModule a b
+
+instance Eq TyCon where
+  (==) a b = sameTyCon a b
+
+instance Eq (TypeRep a) where
+  (==) a b = sameTypeRep a b
+
+instance Eq SomeTypeRep where
+  (==) a b = case a of
+    SomeTypeRep x -> case b of
+      SomeTypeRep y -> sameTypeRep x y
+
+-- | Showing a representation is the text 'showsTypeRep' produces; a 'TyCon'
+-- or 'Module' shows its own name.
+instance Show Module where
+  show m = moduleName m
+
+instance Show TyCon where
+  show t = tyConName t
+
+instance Show (TypeRep a) where
+  show t = typeRepString t
+
+instance Show SomeTypeRep where
+  show s = case s of
+    SomeTypeRep t -> typeRepString t
+
+-- The reflection module's own exported types are ordinary nullary types; they
+-- are written here because this module cannot import the synthesized instances
+-- it defines.
+reflectionModuleTyCon :: TyCon
+reflectionModuleTyCon = TyCon (Module "Type.Reflection" "base") "Module"
+
+reflectionTyConTyCon :: TyCon
+reflectionTyConTyCon = TyCon (Module "Type.Reflection" "base") "TyCon"
+
+reflectionSomeTypeRepTyCon :: TyCon
+reflectionSomeTypeRepTyCon = TyCon (Module "Type.Reflection" "base") "SomeTypeRep"
+
+instance Typeable Module where
+  typeRepOf = TypeRep (RepTyCon reflectionModuleTyCon [] RepType)
+
+instance Typeable TyCon where
+  typeRepOf = TypeRep (RepTyCon reflectionTyConTyCon [] RepType)
+
+instance Typeable SomeTypeRep where
+  typeRepOf = TypeRep (RepTyCon reflectionSomeTypeRepTyCon [] RepType)
+
+-- The equality witnesses live in modules this one imports, so their instances
+-- are written here, where the class and the representation builders are in
+-- scope. Each is the constructor applied to both sides' representations.
+equalityTyCon :: TyCon
+equalityTyCon = TyCon (Module "Data.Type.Equality" "base") ":~:"
+
+heteroEqualityTyCon :: TyCon
+heteroEqualityTyCon = TyCon (Module "Data.Type.Equality" "base") ":~~:"
+
+unsafeEqualityTyCon :: TyCon
+unsafeEqualityTyCon = TyCon (Module "Unsafe.Coerce" "base") "UnsafeEquality"
+
+equalityKind :: TypeRep k
+equalityKind = kindFun trLiftedRep (kindFun trLiftedRep trLiftedRep)
+
+instance (Typeable a, Typeable b) => Typeable ((a :: Type) :~: (b :: Type)) where
+  typeRepOf = mkTyConApp equalityTyCon [SomeTypeRep (typeRep :: TypeRep a), SomeTypeRep (typeRep :: TypeRep b)] equalityKind
+
+instance (Typeable a, Typeable b) => Typeable ((a :: Type) :~~: (b :: Type)) where
+  typeRepOf = mkTyConApp heteroEqualityTyCon [SomeTypeRep (typeRep :: TypeRep a), SomeTypeRep (typeRep :: TypeRep b)] equalityKind
+
+instance (Typeable a, Typeable b) => Typeable (UnsafeEquality (a :: Type) (b :: Type)) where
+  typeRepOf = mkTyConApp unsafeEqualityTyCon [SomeTypeRep (typeRep :: TypeRep a), SomeTypeRep (typeRep :: TypeRep b)] equalityKind
+
+-- The rest of base's types lie inside this module's import closure, so the
+-- synthesis pass cannot add their instances: importing Type.Reflection back
+-- would close a cycle. They are written here instead, where the class and the
+-- representation builders are in scope. Each is its constructor applied to the
+-- representation of every parameter, so splitTyConApp sees the arguments.
+unaryTyKind :: TypeRep k
+unaryTyKind = kindFun trLiftedRep trLiftedRep
+
+binaryTyKind :: TypeRep k
+binaryTyKind = kindFun trLiftedRep unaryTyKind
+
+hktUnaryTyKind :: TypeRep k
+hktUnaryTyKind = kindFun (kindFun trLiftedRep trLiftedRep) unaryTyKind
+
+wrappedArrowTyKind :: TypeRep k
+wrappedArrowTyKind = kindFun (kindFun trLiftedRep (kindFun trLiftedRep trLiftedRep)) (kindFun trLiftedRep (kindFun trLiftedRep trLiftedRep))
+
+mkBareTy :: String -> String -> TypeRep k -> TypeRep a
+mkBareTy mod name kind = mkTyConApp (mkTyCon mod "base" name) [] kind
+
+mkUnaryTy :: String -> String -> TypeRep k -> TypeRep a -> TypeRep b
+mkUnaryTy mod name kind arg = mkTyConApp (mkTyCon mod "base" name) [SomeTypeRep arg] kind
+
+mkBinaryTy :: String -> String -> TypeRep k -> TypeRep a -> TypeRep b -> TypeRep c
+mkBinaryTy mod name kind first second = mkTyConApp (mkTyCon mod "base" name) [SomeTypeRep first, SomeTypeRep second] kind
+
+mkTernaryTy :: String -> String -> TypeRep k -> TypeRep a -> TypeRep b -> TypeRep c -> TypeRep d
+mkTernaryTy mod name kind first second third = mkTyConApp (mkTyCon mod "base" name) [SomeTypeRep first, SomeTypeRep second, SomeTypeRep third] kind
+
+instance Typeable And where
+  typeRepOf = mkBareTy "Data.Bits" "And" unaryTyKind
+
+instance Typeable a => Typeable (And a) where
+  typeRepOf = mkUnaryTy "Data.Bits" "And" unaryTyKind (typeRep :: TypeRep a)
+
+instance Typeable Ior where
+  typeRepOf = mkBareTy "Data.Bits" "Ior" unaryTyKind
+
+instance Typeable a => Typeable (Ior a) where
+  typeRepOf = mkUnaryTy "Data.Bits" "Ior" unaryTyKind (typeRep :: TypeRep a)
+
+instance Typeable Xor where
+  typeRepOf = mkBareTy "Data.Bits" "Xor" unaryTyKind
+
+instance Typeable a => Typeable (Xor a) where
+  typeRepOf = mkUnaryTy "Data.Bits" "Xor" unaryTyKind (typeRep :: TypeRep a)
+
+instance Typeable Iff where
+  typeRepOf = mkBareTy "Data.Bits" "Iff" unaryTyKind
+
+instance Typeable a => Typeable (Iff a) where
+  typeRepOf = mkUnaryTy "Data.Bits" "Iff" unaryTyKind (typeRep :: TypeRep a)
+
+instance (Typeable a, Typeable b, Typeable c) => Typeable (WrappedArrow a b c) where
+  typeRepOf = mkTernaryTy "Control.Applicative" "WrappedArrow" wrappedArrowTyKind (typeRep :: TypeRep a) (typeRep :: TypeRep b) (typeRep :: TypeRep c)
+
+instance (Typeable m, Typeable a) => Typeable (WrappedMonad m a) where
+  typeRepOf = mkBinaryTy "Control.Monad" "WrappedMonad" hktUnaryTyKind (typeRep :: TypeRep m) (typeRep :: TypeRep a)
+
+instance Typeable GeneralCategory where
+  typeRepOf = mkBareTy "Data.Char" "GeneralCategory" trLiftedRep
+
+instance Typeable FFFormat where
+  typeRepOf = mkBareTy "Data.Double" "FFFormat" trLiftedRep
+
+instance Typeable Const where
+  typeRepOf = mkBareTy "Data.Functor.Const" "Const" binaryTyKind
+
+instance (Typeable a, Typeable b) => Typeable (Const a b) where
+  typeRepOf = mkBinaryTy "Data.Functor.Const" "Const" binaryTyKind (typeRep :: TypeRep a) (typeRep :: TypeRep b)
+
+instance Typeable Identity where
+  typeRepOf = mkBareTy "Data.Functor.Identity" "Identity" unaryTyKind
+
+instance Typeable a => Typeable (Identity a) where
+  typeRepOf = mkUnaryTy "Data.Functor.Identity" "Identity" unaryTyKind (typeRep :: TypeRep a)
+
+-- The two `First`/`Last` pairs are different declarations that happen to share
+-- a spelling. Their heads are qualified so the checker keeps the declaring
+-- module in the type they resolve to and in the evidence key.
+
+instance Typeable a => Typeable (Monoid.First a) where
+  typeRepOf = mkUnaryTy "Data.Monoid" "First" unaryTyKind (typeRep :: TypeRep a)
+
+instance Typeable a => Typeable (Monoid.Last a) where
+  typeRepOf = mkUnaryTy "Data.Monoid" "Last" unaryTyKind (typeRep :: TypeRep a)
+
+instance (Typeable f, Typeable a) => Typeable (Alt f a) where
+  typeRepOf = mkBinaryTy "Data.Monoid" "Alt" hktUnaryTyKind (typeRep :: TypeRep f) (typeRep :: TypeRep a)
+
+instance (Typeable f, Typeable a) => Typeable (Ap f a) where
+  typeRepOf = mkBinaryTy "Data.Monoid" "Ap" hktUnaryTyKind (typeRep :: TypeRep f) (typeRep :: TypeRep a)
+
+instance Typeable Down where
+  typeRepOf = mkBareTy "Data.Ord" "Down" unaryTyKind
+
+instance Typeable a => Typeable (Down a) where
+  typeRepOf = mkUnaryTy "Data.Ord" "Down" unaryTyKind (typeRep :: TypeRep a)
+
+instance Typeable Ratio where
+  typeRepOf = mkBareTy "Data.Real" "Ratio" unaryTyKind
+
+instance Typeable a => Typeable (Ratio a) where
+  typeRepOf = mkUnaryTy "Data.Real" "Ratio" unaryTyKind (typeRep :: TypeRep a)
+
+instance Typeable Solo where
+  typeRepOf = mkBareTy "Data.Tuple" "Solo" unaryTyKind
+
+instance Typeable a => Typeable (Solo a) where
+  typeRepOf = mkUnaryTy "Data.Tuple" "Solo" unaryTyKind (typeRep :: TypeRep a)
+
+instance Typeable a => Typeable (Min a) where
+  typeRepOf = mkUnaryTy "Moggi.Internal.Data.Semigroup" "Min" unaryTyKind (typeRep :: TypeRep a)
+
+instance Typeable a => Typeable (Max a) where
+  typeRepOf = mkUnaryTy "Moggi.Internal.Data.Semigroup" "Max" unaryTyKind (typeRep :: TypeRep a)
+
+instance Typeable a => Typeable (Semigroup.First a) where
+  typeRepOf = mkUnaryTy "Moggi.Internal.Data.Semigroup" "First" unaryTyKind (typeRep :: TypeRep a)
+
+instance Typeable a => Typeable (Semigroup.Last a) where
+  typeRepOf = mkUnaryTy "Moggi.Internal.Data.Semigroup" "Last" unaryTyKind (typeRep :: TypeRep a)
+
+instance (Typeable a, Typeable b) => Typeable (Arg a b) where
+  typeRepOf = mkBinaryTy "Moggi.Internal.Data.Semigroup" "Arg" binaryTyKind (typeRep :: TypeRep a) (typeRep :: TypeRep b)
+
+instance Typeable m => Typeable (WrappedMonoid m) where
+  typeRepOf = mkUnaryTy "Moggi.Internal.Data.Semigroup" "WrappedMonoid" unaryTyKind (typeRep :: TypeRep m)
+
+instance Typeable Dual where
+  typeRepOf = mkBareTy "Moggi.Internal.Data.Semigroup" "Dual" unaryTyKind
+
+instance Typeable a => Typeable (Dual a) where
+  typeRepOf = mkUnaryTy "Moggi.Internal.Data.Semigroup" "Dual" unaryTyKind (typeRep :: TypeRep a)
+
+instance Typeable a => Typeable (Endo a) where
+  typeRepOf = mkUnaryTy "Moggi.Internal.Data.Semigroup" "Endo" unaryTyKind (typeRep :: TypeRep a)
+
+instance Typeable All where
+  typeRepOf = mkBareTy "Moggi.Internal.Data.Semigroup" "All" trLiftedRep
+
+instance Typeable Any where
+  typeRepOf = mkBareTy "Moggi.Internal.Data.Semigroup" "Any" trLiftedRep
+
+instance Typeable Sum where
+  typeRepOf = mkBareTy "Moggi.Internal.Data.Semigroup" "Sum" binaryTyKind
+
+instance Typeable a => Typeable (Sum a) where
+  typeRepOf = mkUnaryTy "Moggi.Internal.Data.Semigroup" "Sum" unaryTyKind (typeRep :: TypeRep a)
+
+instance Typeable Product where
+  typeRepOf = mkBareTy "Moggi.Internal.Data.Semigroup" "Product" binaryTyKind
+
+instance Typeable a => Typeable (Product a) where
+  typeRepOf = mkUnaryTy "Moggi.Internal.Data.Semigroup" "Product" unaryTyKind (typeRep :: TypeRep a)
+
+instance Typeable Alt where
+  typeRepOf = mkBareTy "Data.Monoid" "Alt" hktUnaryTyKind
+
+instance Typeable Ap where
+  typeRepOf = mkBareTy "Data.Monoid" "Ap" hktUnaryTyKind
+
+
+instance Typeable ErrorCall where
+  typeRepOf = mkBareTy "Moggi.Exception.Type" "ErrorCall" trLiftedRep
+
+instance Typeable ArithException where
+  typeRepOf = mkBareTy "Moggi.Exception.Type" "ArithException" trLiftedRep
+
+instance Typeable IOErrorType where
+  typeRepOf = mkBareTy "Moggi.IO.Exception" "IOErrorType" trLiftedRep
+
+instance Typeable IOException where
+  typeRepOf = mkBareTy "Moggi.IO.Exception" "IOException" trLiftedRep
+
+instance Typeable HostException where
+  typeRepOf = mkBareTy "Moggi.IO.Exception" "HostException" trLiftedRep
+
+instance Typeable Resource where
+  typeRepOf = mkBareTy "System.IO.Types" "Resource" trLiftedRep
+
+instance Typeable Handle where
+  typeRepOf = mkBareTy "System.IO.Types" "Handle" trLiftedRep
+
+instance Typeable IOMode where
+  typeRepOf = mkBareTy "System.IO.Types" "IOMode" trLiftedRep
+
+instance Typeable ReadPrec where
+  typeRepOf = mkBareTy "Text.ParserCombinators.ReadPrec" "ReadPrec" unaryTyKind
+
+instance Typeable a => Typeable (ReadPrec a) where
+  typeRepOf = mkUnaryTy "Text.ParserCombinators.ReadPrec" "ReadPrec" unaryTyKind (typeRep :: TypeRep a)
+
+instance Typeable Lexeme where
+  typeRepOf = mkBareTy "Text.Read" "Lexeme" trLiftedRep
+
+instance Typeable Rep where
+  typeRepOf = mkBareTy "Type.Reflection" "Rep" trLiftedRep
+
+instance Typeable AppOrCon where
+  typeRepOf = mkBareTy "Type.Reflection" "AppOrCon" trLiftedRep
+
+instance Typeable Fingerprint where
+  typeRepOf = mkBareTy "Type.Reflection" "Fingerprint" trLiftedRep
+
+instance Typeable a => Typeable (TypeRep a) where
+  typeRepOf = mkUnaryTy "Type.Reflection" "TypeRep" trLiftedRep (typeRep :: TypeRep a)
 
 rnfTypeRep :: TypeRep a -> ()
 rnfTypeRep _ = ()
 
--- | A representation whose type is not known statically — what a program has
--- after taking one apart.
-data SomeTypeRep where
-  SomeTypeRep :: TypeRep a -> SomeTypeRep
+someTypeRep :: TypeRep a -> SomeTypeRep
+someTypeRep = SomeTypeRep
 
 someTypeRepTyCon :: SomeTypeRep -> TyCon
 someTypeRepTyCon s = case s of
@@ -172,8 +790,8 @@ rnfSomeTypeRep _ = ()
 
 -- --- The builtin types -------------------------------------------------------
 --
--- Each instance is the representation of one type: its constructor's name, and
--- for a type with parameters, the representation of each argument.
+-- Each instance is the representation of one type: its constructor's name, no
+-- kind variables, and @Type@ as its kind.
 
 intTyCon :: TyCon
 intTyCon = TyCon (Module "Data.Int" "base") "Int"
@@ -190,26 +808,231 @@ doubleTyCon = TyCon (Module "Data.Double" "base") "Double"
 unitTyCon :: TyCon
 unitTyCon = TyCon (Module "GHC.Types" "base") "()"
 
+instance Typeable Int where
+  typeRepOf = TypeRep (RepTyCon intTyCon [] RepType)
+
+instance Typeable Bool where
+  typeRepOf = TypeRep (RepTyCon boolTyCon [] RepType)
+
+instance Typeable Char where
+  typeRepOf = TypeRep (RepTyCon charTyCon [] RepType)
+
+instance Typeable Double where
+  typeRepOf = TypeRep (RepTyCon doubleTyCon [] RepType)
+
+instance Typeable () where
+  typeRepOf = TypeRep (RepTyCon unitTyCon [] RepType)
+
+-- | The orderings and the scalar types are kernel types or synonyms over
+-- them: they have no declaration whose module could carry a synthesized
+-- instance, so each is written here.
+orderingTyCon :: TyCon
+orderingTyCon = TyCon (Module "GHC.Types" "base") "Ordering"
+
+int8TyCon :: TyCon
+int8TyCon = TyCon (Module "GHC.Int" "base") "Int8"
+
+int16TyCon :: TyCon
+int16TyCon = TyCon (Module "GHC.Int" "base") "Int16"
+
+int32TyCon :: TyCon
+int32TyCon = TyCon (Module "GHC.Int" "base") "Int32"
+
+int64TyCon :: TyCon
+int64TyCon = TyCon (Module "GHC.Int" "base") "Int64"
+
+wordTyCon :: TyCon
+wordTyCon = TyCon (Module "GHC.Word" "base") "Word"
+
+word8TyCon :: TyCon
+word8TyCon = TyCon (Module "GHC.Word" "base") "Word8"
+
+word16TyCon :: TyCon
+word16TyCon = TyCon (Module "GHC.Word" "base") "Word16"
+
+word32TyCon :: TyCon
+word32TyCon = TyCon (Module "GHC.Word" "base") "Word32"
+
+word64TyCon :: TyCon
+word64TyCon = TyCon (Module "GHC.Word" "base") "Word64"
+
+integerTyCon :: TyCon
+integerTyCon = TyCon (Module "GHC.Num" "base") "Integer"
+
+instance Typeable Ordering where
+  typeRepOf = TypeRep (RepTyCon orderingTyCon [] RepType)
+
+instance Typeable Int8 where
+  typeRepOf = TypeRep (RepTyCon int8TyCon [] RepType)
+
+instance Typeable Int16 where
+  typeRepOf = TypeRep (RepTyCon int16TyCon [] RepType)
+
+instance Typeable Int32 where
+  typeRepOf = TypeRep (RepTyCon int32TyCon [] RepType)
+
+instance Typeable Int64 where
+  typeRepOf = TypeRep (RepTyCon int64TyCon [] RepType)
+
+instance Typeable Word where
+  typeRepOf = TypeRep (RepTyCon wordTyCon [] RepType)
+
+instance Typeable Word8 where
+  typeRepOf = TypeRep (RepTyCon word8TyCon [] RepType)
+
+instance Typeable Word16 where
+  typeRepOf = TypeRep (RepTyCon word16TyCon [] RepType)
+
+instance Typeable Word32 where
+  typeRepOf = TypeRep (RepTyCon word32TyCon [] RepType)
+
+instance Typeable Word64 where
+  typeRepOf = TypeRep (RepTyCon word64TyCon [] RepType)
+
+instance Typeable Integer where
+  typeRepOf = TypeRep (RepTyCon integerTyCon [] RepType)
+
+voidTyCon :: TyCon
+voidTyCon = TyCon (Module "Data.Void" "base") "Void"
+
+instance Typeable Void where
+  typeRepOf = TypeRep (RepTyCon voidTyCon [] RepType)
+
+nonEmptyTyCon :: TyCon
+nonEmptyTyCon = TyCon (Module "Moggi.Internal.Base" "base") "NonEmpty"
+
+instance Typeable NonEmpty where
+  typeRepOf = TypeRep (RepTyCon nonEmptyTyCon [] (RepFun RepType RepType))
+
+instance Typeable a => Typeable (NonEmpty a) where
+  typeRepOf = TypeRep (RepApp (repOf (typeRepOf :: TypeRep NonEmpty)) (repOf (typeRepOf :: TypeRep a)) RepType)
+
+-- | @IO@ is a synonym for the kernel's action type; its representation is the
+-- action constructor applied to its result.
+ioTyCon :: TyCon
+ioTyCon = TyCon (Module "GHC.Types" "base") "IO"
+
+-- The representation is built beside the instances: an ascription naming
+-- @TypeRep IO@ is an expression annotation mentioning IO, which the pure/IO
+-- boundary rejects even though the value describes IO rather than runs it.
+ioRep :: Rep
+ioRep = RepTyCon ioTyCon [] (RepFun RepType RepType)
+
+instance Typeable IO where
+  typeRepOf = TypeRep ioRep
+
+instance Typeable a => Typeable (IO a) where
+  typeRepOf = TypeRep (RepApp ioRep (repOf (typeRepOf :: TypeRep a)) RepType)
+
 maybeTyCon :: TyCon
 maybeTyCon = TyCon (Module "Data.Maybe" "base") "Maybe"
 
-instance Typeable Int where
-  typeRepOf = TypeRep (RepCon intTyCon)
+eitherTyCon :: TyCon
+eitherTyCon = TyCon (Module "Data.Either" "base") "Either"
 
-instance Typeable Bool where
-  typeRepOf = TypeRep (RepCon boolTyCon)
+-- 'Maybe' and 'Either' are declared types, so their instances are the
+-- synthesized ones; the constructors above are kept for the API's sake.
 
-instance Typeable Char where
-  typeRepOf = TypeRep (RepCon charTyCon)
+-- A type constructor is represented at its own kind: `Maybe` is a constructor
+-- of one argument whose result is `Type`, so `typeRepKind (typeRep :: TypeRep
+-- Maybe)` is `Type -> Type`. Applying it to a representation builds `Maybe a`.
+instance Typeable Maybe where
+  typeRepOf = TypeRep (RepTyCon maybeTyCon [] (RepFun RepType RepType))
 
-instance Typeable Double where
-  typeRepOf = TypeRep (RepCon doubleTyCon)
+instance Typeable Either where
+  typeRepOf = TypeRep (RepTyCon eitherTyCon [] (RepFun RepType (RepFun RepType RepType)))
 
-instance Typeable () where
-  typeRepOf = TypeRep (RepCon unitTyCon)
+-- A container's representation is its constructor's applied to its argument's,
+-- which the instance context supplies: `instance Typeable a => Typeable (Maybe a)`
+-- reads the argument's representation through the given `Typeable a`.
+instance Typeable a => Typeable (Maybe a) where
+  typeRepOf = TypeRep (RepApp (repOf (typeRepOf :: TypeRep Maybe)) (repOf (typeRepOf :: TypeRep a)) RepType)
 
--- A container's representation is its constructor applied to its argument's,
--- so `instance Typeable a => Typeable [a]` needs the argument's representation
--- from its own context. That instance is what the compiler answers itself; it
--- is not written here because a constrained instance whose method consults its
--- own context is not accepted yet.
+instance Typeable a => Typeable (Either a) where
+  typeRepOf = TypeRep (RepApp (repOf (typeRepOf :: TypeRep Either)) (repOf (typeRepOf :: TypeRep a)) (RepFun RepType RepType))
+
+instance (Typeable a, Typeable b) => Typeable (Either a b) where
+  typeRepOf = TypeRep (RepApp (repOf (typeRepOf :: TypeRep (Either a))) (repOf (typeRepOf :: TypeRep b)) RepType)
+
+-- | A function type. Both sides are representations of their own types, and
+-- the whole is a 'RepFun' whatever the argument and result are.
+instance (Typeable a, Typeable b) => Typeable (a -> b) where
+  typeRepOf = TypeRep (RepFun (repOf (typeRepOf :: TypeRep a)) (repOf (typeRepOf :: TypeRep b)))
+
+-- | A list, represented as the built-in @[]@ constructor applied to its
+-- element's representation.
+instance Typeable a => Typeable [a] where
+  typeRepOf = TypeRep (RepApp (RepTyCon listTyCon [] (RepFun RepType RepType)) (repOf (typeRepOf :: TypeRep a)) RepType)
+
+-- | The list constructor itself, which a unary cast dispatches on: `dataCast1`
+-- for `[a]` asks for `Typeable []`, not for the element type.
+instance Typeable List where
+  typeRepOf = TypeRep (RepTyCon listTyCon [] (RepFun RepType RepType))
+
+-- --- Tuples -----------------------------------------------------------------
+
+-- | A tuple's representation: the tuple constructor applied to each
+-- component's representation, with the constructor's kind.
+tupleRep :: String -> TypeRep k -> [SomeTypeRep] -> TypeRep a
+tupleRep name kind args = mkTyConApp (mkTyCon "GHC.Tuple" "base" name) args kind
+
+twoTupleKind :: TypeRep k
+twoTupleKind = kindFun trLiftedRep (kindFun trLiftedRep trLiftedRep)
+
+threeTupleKind :: TypeRep k
+threeTupleKind = kindFun trLiftedRep twoTupleKind
+
+fourTupleKind :: TypeRep k
+fourTupleKind = kindFun trLiftedRep threeTupleKind
+
+fiveTupleKind :: TypeRep k
+fiveTupleKind = kindFun trLiftedRep fourTupleKind
+
+sixTupleKind :: TypeRep k
+sixTupleKind = kindFun trLiftedRep fiveTupleKind
+
+sevenTupleKind :: TypeRep k
+sevenTupleKind = kindFun trLiftedRep sixTupleKind
+
+instance (Typeable a, Typeable b) => Typeable (a, b) where
+  typeRepOf = tupleRep "(,)" twoTupleKind [SomeTypeRep (typeRep :: TypeRep a), SomeTypeRep (typeRep :: TypeRep b)]
+
+instance (Typeable a, Typeable b, Typeable c) => Typeable (a, b, c) where
+  typeRepOf = tupleRep "(,,)" threeTupleKind [SomeTypeRep (typeRep :: TypeRep a), SomeTypeRep (typeRep :: TypeRep b), SomeTypeRep (typeRep :: TypeRep c)]
+
+instance (Typeable a, Typeable b, Typeable c, Typeable d) => Typeable (a, b, c, d) where
+  typeRepOf = tupleRep "(,,,)" fourTupleKind [SomeTypeRep (typeRep :: TypeRep a), SomeTypeRep (typeRep :: TypeRep b), SomeTypeRep (typeRep :: TypeRep c), SomeTypeRep (typeRep :: TypeRep d)]
+
+instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e) => Typeable (a, b, c, d, e) where
+  typeRepOf = tupleRep "(,,,,)" fiveTupleKind [SomeTypeRep (typeRep :: TypeRep a), SomeTypeRep (typeRep :: TypeRep b), SomeTypeRep (typeRep :: TypeRep c), SomeTypeRep (typeRep :: TypeRep d), SomeTypeRep (typeRep :: TypeRep e)]
+
+instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f) => Typeable (a, b, c, d, e, f) where
+  typeRepOf = tupleRep "(,,,,,)" sixTupleKind [SomeTypeRep (typeRep :: TypeRep a), SomeTypeRep (typeRep :: TypeRep b), SomeTypeRep (typeRep :: TypeRep c), SomeTypeRep (typeRep :: TypeRep d), SomeTypeRep (typeRep :: TypeRep e), SomeTypeRep (typeRep :: TypeRep f)]
+
+instance (Typeable a, Typeable b, Typeable c, Typeable d, Typeable e, Typeable f, Typeable g) => Typeable (a, b, c, d, e, f, g) where
+  typeRepOf = tupleRep "(,,,,,,)" sevenTupleKind [SomeTypeRep (typeRep :: TypeRep a), SomeTypeRep (typeRep :: TypeRep b), SomeTypeRep (typeRep :: TypeRep c), SomeTypeRep (typeRep :: TypeRep d), SomeTypeRep (typeRep :: TypeRep e), SomeTypeRep (typeRep :: TypeRep f), SomeTypeRep (typeRep :: TypeRep g)]
+
+-- | A constructor used as the parameter of a cast. `dataCast1`/`dataCast2`
+-- dispatch on the type constructor itself, so `Proxy` and the tuple pair need
+-- representations at their own kinds, and the applied forms their instances'
+-- superclasses ask for.
+instance Typeable Proxy where
+  typeRepOf = mkBareTy "Data.Proxy" "Proxy" unaryTyKind
+
+instance Typeable t => Typeable (Proxy t) where
+  typeRepOf = mkUnaryTy "Data.Proxy" "Proxy" unaryTyKind (typeRep :: TypeRep t)
+
+instance Typeable Tuple2 where
+  typeRepOf = mkBareTy "Data.Tuple" "Tuple2" binaryTyKind
+
+instance Typeable Version where
+  typeRepOf = mkBareTy "Data.Version" "Version" trLiftedRep
+
+instance Typeable String where
+  typeRepOf = mkBareTy "Data.String" "String" trLiftedRep
+
+instance Typeable Monoid.First where
+  typeRepOf = mkBareTy "Data.Monoid" "First" unaryTyKind
+
+instance Typeable Monoid.Last where
+  typeRepOf = mkBareTy "Data.Monoid" "Last" unaryTyKind

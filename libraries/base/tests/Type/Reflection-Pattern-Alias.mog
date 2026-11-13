@@ -1,0 +1,14 @@
+module Main where
+
+import Type.Reflection (TypeRep, typeRep, App as AppP, Fun as FunP)
+
+describe :: TypeRep a -> String
+describe t = case t of
+  FunP arg res -> "function"
+  AppP f x -> "application"
+  _ -> "other"
+
+main :: IO ()
+main = do
+  putStrLn (describe (typeRep :: TypeRep (Maybe Int)))
+  putStrLn (describe (FunP (typeRep :: TypeRep Int) (typeRep :: TypeRep Bool)))

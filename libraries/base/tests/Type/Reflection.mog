@@ -1,6 +1,38 @@
 module Main where
 
+import Control.Applicative (WrappedArrow)
+import Control.Monad (WrappedMonad)
+import Data.Bits (And, Ior, Xor, Iff)
+import Data.Char (GeneralCategory)
+import Data.Double (FFFormat)
+import Data.Functor.Const (Const)
+import Data.Functor.Identity (Identity)
+import Data.Int (Int8, Int16, Int32, Int64)
+import Data.List (intercalate)
+import Data.List.NonEmpty (NonEmpty)
+import Data.Monoid (Alt, Ap)
+import Data.Monoid (First, Last) qualified as Monoid
+import Data.Ord (Down)
+import Data.Proxy (Proxy(..))
+import Data.Real (Ratio)
+import Data.Semigroup (Min, Max, First, Last, Arg, WrappedMonoid, Dual, Endo, Sum, Product, All, Any)
+import Data.Semigroup (First, Last) qualified as Semigroup
+import Data.String (pack, unpack)
+import Data.Tuple (Solo)
+import Data.Void (Void)
+import Data.Word (Word, Word8, Word16, Word32, Word64)
+import Moggi.Exception.Type (ErrorCall, ArithException)
+import Moggi.IO.Exception (IOErrorType, IOException, HostException)
+import System.IO.Types (Handle, Resource, IOMode)
+import Text.ParserCombinators.ReadPrec (ReadPrec)
+import Text.Read (Lexeme)
 import Type.Reflection
+import Unsafe.Coerce (UnsafeEquality)
+
+report :: Typeable a => Proxy a -> String -> IO ()
+report _ label = putStrLn (pack (intercalate (unpack " ")
+  (case splitTyConApp (typeRep :: TypeRep a) of
+     (tc, args) -> [unpack label, unpack (showsTypeRep (typeRep :: TypeRep a) ""), unpack (tyConName tc), unpack (show (length args))])))
 
 main :: IO ()
 main = do
@@ -10,3 +42,108 @@ main = do
   putStrLn (tyConName (typeRepTyCon (typeOf True)))
   putStrLn (tyConModule (typeRepTyCon (typeOf 'x')))
   putStrLn (tyConName (typeRepTyCon (typeOf ())))
+  putStrLn (showsTypeRep (typeRep :: TypeRep (Int -> Bool)) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep [Int]) "")
+  putStrLn (show ((typeRep :: TypeRep (Int -> Bool)) == (typeRep :: TypeRep (Int -> Bool))))
+  putStrLn (show (typeRepTyCon (typeRep :: TypeRep Int) == typeRepTyCon (typeRep :: TypeRep Bool)))
+  putStrLn (tyConModule (typeRepTyCon (typeRep :: TypeRep (First Int))))
+  putStrLn (tyConModule (typeRepTyCon (typeRep :: TypeRep (Monoid.First Int))))
+  putStrLn (tyConModule (typeRepTyCon (typeRep :: TypeRep (Last Int))))
+  putStrLn (tyConModule (typeRepTyCon (typeRep :: TypeRep (Monoid.Last Int))))
+  putStrLn (showsTypeRep (typeRep :: TypeRep (Int, Bool)) "")
+  putStrLn (tyConName (typeRepTyCon (typeRep :: TypeRep (Int, Bool))))
+  putStrLn (case splitApps (typeRep :: TypeRep (Int, Bool)) of (_, args) -> show (length args))
+  putStrLn (showsTypeRep (typeRep :: TypeRep (IO ())) "")
+  putStrLn (tyConName (typeRepTyCon (typeRep :: TypeRep (IO ()))))
+  putStrLn (case splitApps (typeRep :: TypeRep (IO ())) of (_, args) -> show (length args))
+  putStrLn (showsTypeRep (typeRep :: TypeRep Int8) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep Word64) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep Integer) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep Ordering) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep (Maybe Int)) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep Module) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep TyCon) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep SomeTypeRep) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep (Either Int Bool)) "")
+  putStrLn (tyConName (typeRepTyCon (typeRep :: TypeRep (Either Int Bool))))
+  putStrLn (case splitTyConApp (typeRep :: TypeRep (Either Int Bool)) of (_, args) -> show (length args))
+  putStrLn (showsTypeRep (typeRep :: TypeRep (Int, Bool, Char)) "")
+  putStrLn (tyConName (typeRepTyCon (typeRep :: TypeRep (Int, Bool, Char))))
+  putStrLn (case splitTyConApp (typeRep :: TypeRep (Int, Bool, Char)) of (_, args) -> show (length args))
+  putStrLn (showsTypeRep (typeRep :: TypeRep (Int, Bool, Char, Int, Bool, Char, Int)) "")
+  putStrLn (tyConName (typeRepTyCon (typeRep :: TypeRep (Int, Bool, Char, Int, Bool, Char, Int))))
+  putStrLn (case splitTyConApp (typeRep :: TypeRep (Int, Bool, Char, Int, Bool, Char, Int)) of (_, args) -> show (length args))
+  putStrLn (showsTypeRep (typeRep :: TypeRep Double) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep Int16) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep Int32) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep Int64) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep Word) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep Word8) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep Word16) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep Word32) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep Void) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep (NonEmpty Int)) "")
+  putStrLn (showsTypeRep (typeRep :: TypeRep (Int :~: Int)) "")
+  putStrLn (tyConName (typeRepTyCon (typeRep :: TypeRep (Int :~: Int))))
+  putStrLn (case splitTyConApp (typeRep :: TypeRep (Int :~: Int)) of (_, args) -> show (length args))
+  putStrLn (showsTypeRep (typeRep :: TypeRep (Int :~~: Int)) "")
+  putStrLn (case splitTyConApp (typeRep :: TypeRep (Int :~~: Int)) of (_, args) -> show (length args))
+  putStrLn (showsTypeRep (typeRep :: TypeRep (UnsafeEquality Int Bool)) "")
+  putStrLn (case splitTyConApp (typeRep :: TypeRep (UnsafeEquality Int Bool)) of (_, args) -> show (length args))
+  report (Proxy :: Proxy (Int, Bool)) "pair"
+  report (Proxy :: Proxy (IO ())) "io"
+  report (Proxy :: Proxy (Maybe Int)) "maybe"
+  report (Proxy :: Proxy (Int :~: Int)) "equality"
+  report (Proxy :: Proxy (Int :~~: Int)) "hetero"
+  report (Proxy :: Proxy (UnsafeEquality Int Bool)) "unsafeEquality"
+  report (Proxy :: Proxy (And Int)) "and"
+  report (Proxy :: Proxy (Ior Int)) "ior"
+  report (Proxy :: Proxy (Xor Int)) "xor"
+  report (Proxy :: Proxy (Iff Int)) "iff"
+  report (Proxy :: Proxy (WrappedArrow Either Int Bool)) "wrappedArrow"
+  report (Proxy :: Proxy (WrappedMonad Maybe Int)) "wrappedMonad"
+  report (Proxy :: Proxy GeneralCategory) "generalCategory"
+  report (Proxy :: Proxy FFFormat) "ffFormat"
+  report (Proxy :: Proxy Const) "const"
+  report (Proxy :: Proxy (Const Int Bool)) "constApplied"
+  report (Proxy :: Proxy Identity) "identity"
+  report (Proxy :: Proxy (Identity Int)) "identityApplied"
+  report (Proxy :: Proxy (Alt Maybe Int)) "alt"
+  report (Proxy :: Proxy (Ap Maybe Int)) "ap"
+  report (Proxy :: Proxy Down) "down"
+  report (Proxy :: Proxy (Down Int)) "downApplied"
+  report (Proxy :: Proxy Ratio) "ratio"
+  report (Proxy :: Proxy (Ratio Int)) "ratioApplied"
+  report (Proxy :: Proxy (Solo Int)) "solo"
+  report (Proxy :: Proxy (Min Int)) "min"
+  report (Proxy :: Proxy (Max Int)) "max"
+  report (Proxy :: Proxy (First Int)) "first"
+  report (Proxy :: Proxy (Last Int)) "last"
+  report (Proxy :: Proxy (Semigroup.First Int)) "semigroupFirst"
+  report (Proxy :: Proxy (Semigroup.Last Int)) "semigroupLast"
+  report (Proxy :: Proxy (Monoid.First Int)) "monoidFirst"
+  report (Proxy :: Proxy (Monoid.Last Int)) "monoidLast"
+  report (Proxy :: Proxy (Arg Int Bool)) "arg"
+  report (Proxy :: Proxy (WrappedMonoid Int)) "wrappedMonoid"
+  report (Proxy :: Proxy (Dual Int)) "dual"
+  report (Proxy :: Proxy (Endo Int)) "endo"
+  report (Proxy :: Proxy All) "all"
+  report (Proxy :: Proxy Any) "any"
+  report (Proxy :: Proxy (Sum Int)) "sum"
+  report (Proxy :: Proxy (Product Int)) "product"
+  report (Proxy :: Proxy ErrorCall) "errorCall"
+  report (Proxy :: Proxy ArithException) "arithException"
+  report (Proxy :: Proxy IOErrorType) "ioErrorType"
+  report (Proxy :: Proxy IOException) "ioException"
+  report (Proxy :: Proxy HostException) "hostException"
+  report (Proxy :: Proxy Resource) "resource"
+  report (Proxy :: Proxy Handle) "handle"
+  report (Proxy :: Proxy IOMode) "ioMode"
+  report (Proxy :: Proxy (ReadPrec Int)) "readPrec"
+  report (Proxy :: Proxy Lexeme) "lexeme"
+  report (Proxy :: Proxy Fingerprint) "fingerprint"
+  report (Proxy :: Proxy (TypeRep Int)) "typeRep"
+  report (Proxy :: Proxy ()) "unit"
+  report (Proxy :: Proxy (Int, Int, Int, Int, Int, Int, Int, Int)) "tuple8"
+  report (Proxy :: Proxy (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)) "tuple15"
+  report (Proxy :: Proxy (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)) "tuple64"

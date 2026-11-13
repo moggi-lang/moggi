@@ -4,3 +4,108 @@ base
 Bool
 Data.Char
 ()
+Int -> Bool
+[] Int
+True
+False
+Moggi.Internal.Data.Semigroup
+Data.Monoid
+Moggi.Internal.Data.Semigroup
+Data.Monoid
+(Int, Bool)
+(,)
+2
+IO ()
+IO
+1
+Int8
+Word64
+Integer
+Ordering
+Maybe Int
+Module
+TyCon
+SomeTypeRep
+Either Int Bool
+Either
+2
+(Int, Bool, Char)
+(,,)
+3
+(Int, Bool, Char, Int, Bool, Char, Int)
+(,,,,,,)
+7
+Double
+Int16
+Int32
+Int64
+Word
+Word8
+Word16
+Word32
+Void
+NonEmpty Int
+:~: Int Int
+:~:
+2
+:~~: Int Int
+2
+UnsafeEquality Int Bool
+2
+pair (Int, Bool) (,) 2
+io IO () IO 1
+maybe Maybe Int Maybe 1
+equality :~: Int Int :~: 2
+hetero :~~: Int Int :~~: 2
+unsafeEquality UnsafeEquality Int Bool UnsafeEquality 2
+and And Int And 1
+ior Ior Int Ior 1
+xor Xor Int Xor 1
+iff Iff Int Iff 1
+wrappedArrow WrappedArrow Either Int Bool WrappedArrow 3
+wrappedMonad WrappedMonad Maybe Int WrappedMonad 2
+generalCategory GeneralCategory GeneralCategory 0
+ffFormat FFFormat FFFormat 0
+const Const Const 0
+constApplied Const Int Bool Const 2
+identity Identity Identity 0
+identityApplied Identity Int Identity 1
+alt Alt Maybe Int Alt 2
+ap Ap Maybe Int Ap 2
+down Down Down 0
+downApplied Down Int Down 1
+ratio Ratio Ratio 0
+ratioApplied Ratio Int Ratio 1
+solo Solo Int Solo 1
+min Min Int Min 1
+max Max Int Max 1
+first First Int First 1
+last Last Int Last 1
+semigroupFirst First Int First 1
+semigroupLast Last Int Last 1
+monoidFirst First Int First 1
+monoidLast Last Int Last 1
+arg Arg Int Bool Arg 2
+wrappedMonoid WrappedMonoid Int WrappedMonoid 1
+dual Dual Int Dual 1
+endo Endo Int Endo 1
+all All All 0
+any Any Any 0
+sum Sum Int Sum 1
+product Product Int Product 1
+errorCall ErrorCall ErrorCall 0
+arithException ArithException ArithException 0
+ioErrorType IOErrorType IOErrorType 0
+ioException IOException IOException 0
+hostException HostException HostException 0
+resource Resource Resource 0
+handle Handle Handle 0
+ioMode IOMode IOMode 0
+readPrec ReadPrec Int ReadPrec 1
+lexeme Lexeme Lexeme 0
+fingerprint Fingerprint Fingerprint 0
+typeRep TypeRep Int TypeRep 1
+unit () () 0
+tuple8 (Int, Int, Int, Int, Int, Int, Int, Int) (,,,,,,,) 8
+tuple15 (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int) (,,,,,,,,,,,,,,) 15
+tuple64 (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int) (,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,) 64
