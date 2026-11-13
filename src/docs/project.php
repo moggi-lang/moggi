@@ -51,11 +51,24 @@ function loadDocProject(
     array $extraLibDirs = [],
     ?array $docClosure = null,
 ): array {
-    if ($docClosure !== null) {
-        [$root, $files] = $docClosure;
-        $prepared = prepareProjectCached($files, $root, $context);
-    } else {
-        $prepared = loadPreparedProject($inputPath, $extraLibDirs, $context);
+    // A documentation load reads the parsed and checked trees; the term elaboration it would publish
+    // is read only by lowering and by the module cache. Skip it when nothing is being cached -- a
+    // load that writes the checked product keeps publishing, because that product is what a later
+    // compilation lowers from.
+    $publishing = \Moggi\Semantics\Effects\ElaborationPublishing::$enabled;
+    if (! \Moggi\Cache\cacheEnabled()) {
+        \Moggi\Semantics\Effects\ElaborationPublishing::$enabled = false;
+    }
+
+    try {
+        if ($docClosure !== null) {
+            [$root, $files] = $docClosure;
+            $prepared = prepareProjectCached($files, $root, $context);
+        } else {
+            $prepared = loadPreparedProject($inputPath, $extraLibDirs, $context);
+        }
+    } finally {
+        \Moggi\Semantics\Effects\ElaborationPublishing::$enabled = $publishing;
     }
 
     return [
