@@ -11,6 +11,7 @@
 -- units. The scalar behaviour is the one documented here.
 module Data.String
   ( String
+  , IsString(..)
   , singleton
   , pack
   , unpack
@@ -43,6 +44,13 @@ import Data.Semigroup
 import Text.Show
 import Moggi.Internal.Base
 import Moggi.Internal.Prim
+
+-- | A type whose values can be built from a 'String'. Moggi has one string
+-- type, so this is the single place a conversion from a string is spelled:
+-- `fromString` is the identity on 'String' and the wrapping (or decoding)
+-- function everywhere else.
+class IsString a where
+  fromString :: String -> a
 
 -- | Construct a string from a single char.
 singleton :: Char -> String
@@ -144,6 +152,9 @@ showLitString cs = \s ->
 -- `Eq String` and `Ord String` live with their classes -- in `Data.Eq` and
 -- `Data.Ord`: those modules are below every module that compares a `String`,
 -- and this one is not (its own machine modules do).
+instance IsString String where
+  fromString s = s
+
 instance Monoid String where
   mempty = ""
 
