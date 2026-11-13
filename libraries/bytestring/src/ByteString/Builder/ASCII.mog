@@ -1,0 +1,201 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Decimal and hexadecimal encodings of numbers and byte strings.
+--
+-- The decimal encoders are the 'Show' instance of each type spelled into a
+-- builder. The hexadecimal encoders are lowercase, without a @0x@ prefix: the
+-- unfixed ones use as few digits as possible and the fixed ones pad with
+-- leading zeros to the width of their type.
+--
+-- Upstream also exports @floatDec@, @floatHexFixed@ and @lazyByteStringHex@.
+-- The first two need a 'Float' type, which base does not have (only 'Double';
+-- 'doubleDec' and 'doubleHexFixed' are here), and the last needs the lazy
+-- 'ByteString' this package deliberately does not carry.
+module Data.ByteString.Builder.ASCII
+  ( int8Dec
+  , int16Dec
+  , int32Dec
+  , int64Dec
+  , intDec
+  , integerDec
+  , word8Dec
+  , word16Dec
+  , word32Dec
+  , word64Dec
+  , wordDec
+  , doubleDec
+  , word8Hex
+  , word16Hex
+  , word32Hex
+  , word64Hex
+  , wordHex
+  , int8HexFixed
+  , int16HexFixed
+  , int32HexFixed
+  , int64HexFixed
+  , word8HexFixed
+  , word16HexFixed
+  , word32HexFixed
+  , word64HexFixed
+  , doubleHexFixed
+  , byteStringHex
+  ) where
+
+import Data.Bool (Bool (..))
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as BS
+import Data.ByteString.Builder.Internal (Builder, power2, string7)
+import Data.ByteString.Builder.RealFloat (doubleDec)
+import Data.Char (Char, chr)
+import Data.Double (Double, castDoubleToWord64)
+import Data.Int (Int, Int16, Int32, Int64, Int8)
+import Data.Integer (Integer)
+import Data.List qualified as L
+import Data.Monoid (Monoid (..))
+import Data.Num ((*), (+), (-))
+import Data.Ord ((<), (>))
+import Data.Real (Integral (div, mod, toInteger), fromIntegral)
+import Data.Semigroup ((<>))
+import Data.String qualified as S
+import Data.Word (Word, Word16, Word32, Word64, Word8)
+import Text.Show (show)
+
+-- | Decimal encoding of an 'Int8'.
+int8Dec :: Int8 -> Builder
+int8Dec i = string7 (show i)
+
+-- | Decimal encoding of an 'Int16'.
+int16Dec :: Int16 -> Builder
+int16Dec i = string7 (show i)
+
+-- | Decimal encoding of an 'Int32'.
+int32Dec :: Int32 -> Builder
+int32Dec i = string7 (show i)
+
+-- | Decimal encoding of an 'Int64'.
+int64Dec :: Int64 -> Builder
+int64Dec i = string7 (show i)
+
+-- | Decimal encoding of an 'Int'.
+intDec :: Int -> Builder
+intDec i = string7 (show i)
+
+-- | Decimal encoding of an 'Integer'.
+integerDec :: Integer -> Builder
+integerDec i = string7 (show i)
+
+-- | Decimal encoding of a 'Word8'.
+word8Dec :: Word8 -> Builder
+word8Dec w = string7 (show w)
+
+-- | Decimal encoding of a 'Word16'.
+word16Dec :: Word16 -> Builder
+word16Dec w = string7 (show w)
+
+-- | Decimal encoding of a 'Word32'.
+word32Dec :: Word32 -> Builder
+word32Dec w = string7 (show w)
+
+-- | Decimal encoding of a 'Word64'.
+word64Dec :: Word64 -> Builder
+word64Dec w = string7 (show w)
+
+-- | Decimal encoding of a 'Word'.
+wordDec :: Word -> Builder
+wordDec w = string7 (show w)
+
+-- | One lowercase hexadecimal digit.
+hexDigit :: Int -> Char
+hexDigit d = case d < 10 of
+  True -> chr (48 + d)
+  False -> chr (87 + d)
+
+-- | The hexadecimal digits of a non-negative value, most significant first.
+hexChars :: Integer -> [Char]
+hexChars n = case n < 16 of
+  True -> [hexDigit (fromIntegral n)]
+  False -> hexChars (div n 16) <> [hexDigit (fromIntegral (mod n 16))]
+
+-- | The number of characters in a list.
+charLen :: [Char] -> Int
+charLen chars = case chars of
+  [] -> 0
+  _ : rest -> 1 + charLen rest
+
+-- | Pad a character list on the left with the given character.
+padLeft :: Int -> Char -> [Char] -> [Char]
+padLeft width c chars = case width > charLen chars of
+  True -> L.replicate (width - charLen chars) c <> chars
+  False -> chars
+
+-- | Lowercase hexadecimal, as few digits as possible.
+hexShort :: Integer -> Builder
+hexShort n = string7 (S.pack (hexChars n))
+
+-- | Lowercase hexadecimal, padded to the given number of digits.
+hexFixed :: Int -> Integer -> Builder
+hexFixed digits n = string7 (S.pack (padLeft digits '0' (hexChars (mod n (power2 (4 * digits))))))
+
+-- | Lowercase hexadecimal encoding of a 'Word8', as few digits as possible.
+word8Hex :: Word8 -> Builder
+word8Hex w = hexShort (toInteger w)
+
+-- | Lowercase hexadecimal encoding of a 'Word16', as few digits as possible.
+word16Hex :: Word16 -> Builder
+word16Hex w = hexShort (toInteger w)
+
+-- | Lowercase hexadecimal encoding of a 'Word32', as few digits as possible.
+word32Hex :: Word32 -> Builder
+word32Hex w = hexShort (toInteger w)
+
+-- | Lowercase hexadecimal encoding of a 'Word64', as few digits as possible.
+word64Hex :: Word64 -> Builder
+word64Hex w = hexShort (toInteger w)
+
+-- | Lowercase hexadecimal encoding of a 'Word', as few digits as possible.
+wordHex :: Word -> Builder
+wordHex w = hexShort (toInteger w)
+
+-- | Lowercase hexadecimal encoding of an 'Int8', padded to 2 digits.
+int8HexFixed :: Int8 -> Builder
+int8HexFixed i = hexFixed 2 (toInteger i)
+
+-- | Lowercase hexadecimal encoding of an 'Int16', padded to 4 digits.
+int16HexFixed :: Int16 -> Builder
+int16HexFixed i = hexFixed 4 (toInteger i)
+
+-- | Lowercase hexadecimal encoding of an 'Int32', padded to 8 digits.
+int32HexFixed :: Int32 -> Builder
+int32HexFixed i = hexFixed 8 (toInteger i)
+
+-- | Lowercase hexadecimal encoding of an 'Int64', padded to 16 digits.
+int64HexFixed :: Int64 -> Builder
+int64HexFixed i = hexFixed 16 (toInteger i)
+
+-- | Lowercase hexadecimal encoding of a 'Word8', padded to 2 digits.
+word8HexFixed :: Word8 -> Builder
+word8HexFixed w = hexFixed 2 (toInteger w)
+
+-- | Lowercase hexadecimal encoding of a 'Word16', padded to 4 digits.
+word16HexFixed :: Word16 -> Builder
+word16HexFixed w = hexFixed 4 (toInteger w)
+
+-- | Lowercase hexadecimal encoding of a 'Word32', padded to 8 digits.
+word32HexFixed :: Word32 -> Builder
+word32HexFixed w = hexFixed 8 (toInteger w)
+
+-- | Lowercase hexadecimal encoding of a 'Word64', padded to 16 digits.
+word64HexFixed :: Word64 -> Builder
+word64HexFixed w = hexFixed 16 (toInteger w)
+
+-- | Lowercase hexadecimal encoding of a 'Double', padded to 16 digits.
+doubleHexFixed :: Double -> Builder
+doubleHexFixed d = hexFixed 16 (toInteger (castDoubleToWord64 d))
+
+-- | Lowercase hexadecimal encoding of every byte, two digits each.
+byteStringHex :: ByteString -> Builder
+byteStringHex bytes = hexBytes (BS.unpack bytes)
+
+hexBytes :: [Word8] -> Builder
+hexBytes bytes = case bytes of
+  [] -> mempty
+  b : rest -> word8HexFixed b <> hexBytes rest

@@ -1,0 +1,176 @@
+-- The binary and textual encoders of the builder modules, byte for byte.
+--
+-- Each numbered value is chosen so that the little-endian and big-endian
+-- spellings differ in the bytes, not merely in the function name: the cases
+-- below read the whole result, so a reversed word order or a silently
+-- host-ordered `...LE` fails instead of passing. Negative values check that a
+-- signed encoder writes the two's complement bits rather than a minus sign, and
+-- the hexadecimal cases check the width and case conventions.
+--
+-- The combinators are exercised on both primitive types: `char7` is a
+-- `FixedPrim` and `charUtf8` is a `BoundedPrim`, so `>*<`/`>$<` have to work for
+-- each, and `toB`/`liftFixedToBounded` have to keep the bytes.
+
+module Encoders (encoderSuite) where
+
+import Data.ByteString qualified as BS
+import Data.ByteString.Builder (Builder)
+import Data.ByteString.Builder qualified as B
+import Data.ByteString.Builder.ASCII qualified as A
+import Data.ByteString.Builder.Internal qualified as BI
+import Data.ByteString.Builder.Prim ((>$<), (>*<))
+import Data.ByteString.Builder.Prim qualified as P
+import Data.ByteString.Builder.Prim.Internal qualified as PI
+import Data.Char (chr, ord)
+import Data.Either (Either (..))
+import Data.List qualified as L
+import Data.Ord ((<))
+import Data.Real (fromIntegral)
+import Data.String (String)
+import Data.String qualified as S
+import Data.Word (Word32, Word8)
+import Support (expect)
+import Text.Show (show)
+
+-- The bytes a builder produces.
+bytes :: BI.Builder -> [Word8]
+bytes builder = BS.unpack (BI.toByteString builder)
+
+-- The bytes a builder produces, read back as text. Every caller is ASCII or
+-- writes ASCII hex digits, so each byte is its own character.
+ascii :: BI.Builder -> String
+ascii builder = S.pack (L.map toChar (bytes builder))
+
+toChar :: Word8 -> Char
+toChar w = chr (fromIntegral w)
+
+isAscii :: Char -> Bool
+isAscii c = ord c < 128
+
+-- A value whose four bytes all differ, so order is visible.
+mixed :: Word32
+mixed = 305419896
+
+-- A string literal at the Builder type goes through the IsString instance and
+-- therefore through the UTF-8 encoder.
+literalBuilder :: Builder
+literalBuilder = "hi"
+
+-- The empty fixed primitive, named at a concrete type so its size is not an
+-- unresolved type variable.
+emptyFixed :: PI.FixedPrim Char
+emptyFixed = PI.emptyF
+
+encoderSuite :: IO ()
+encoderSuite = do
+  -- Single bytes.
+  expect "word8 writes the byte" (show (bytes (B.word8 42))) "[42]"
+  expect "int8 writes the two's complement byte" (show (bytes (B.int8 (-1)))) "[255]"
+
+  -- Sixteen-bit words, both orders.
+  expect "int16BE orders the high byte first" (show (bytes (B.int16BE 4660))) "[18,52]"
+  expect "int16LE orders the low byte first" (show (bytes (B.int16LE 4660))) "[52,18]"
+  expect "int16BE writes a negative as two's complement" (show (bytes (B.int16BE (-2)))) "[255,254]"
+  expect "int16LE writes a negative as two's complement" (show (bytes (B.int16LE (-2)))) "[254,255]"
+  expect "word16BE orders the high byte first" (show (bytes (B.word16BE 42435))) "[165,195]"
+  expect "word16LE orders the low byte first" (show (bytes (B.word16LE 42435))) "[195,165]"
+
+  -- Thirty-two-bit words, both orders.
+  expect "int32BE orders the bytes" (show (bytes (B.int32BE 16909060))) "[1,2,3,4]"
+  expect "int32LE reverses them" (show (bytes (B.int32LE 16909060))) "[4,3,2,1]"
+  expect "int32BE writes a negative as two's complement" (show (bytes (B.int32BE (-2)))) "[255,255,255,254]"
+  expect "int32LE writes a negative as two's complement" (show (bytes (B.int32LE (-2)))) "[254,255,255,255]"
+  expect "word32BE orders the bytes" (show (bytes (B.word32BE mixed))) "[18,52,86,120]"
+  expect "word32LE reverses them" (show (bytes (B.word32LE mixed))) "[120,86,52,18]"
+
+  -- Sixty-four-bit words, both orders.
+  expect "int64BE orders the bytes" (show (bytes (B.int64BE 72623859790382856))) "[1,2,3,4,5,6,7,8]"
+  expect "int64LE reverses them" (show (bytes (B.int64LE 72623859790382856))) "[8,7,6,5,4,3,2,1]"
+  expect "int64BE writes a negative as two's complement" (show (bytes (B.int64BE (-2)))) "[255,255,255,255,255,255,255,254]"
+  expect "int64LE writes a negative as two's complement" (show (bytes (B.int64LE (-2)))) "[254,255,255,255,255,255,255,255]"
+  expect "word64BE orders the bytes" (show (bytes (B.word64BE 72623859790382856))) "[1,2,3,4,5,6,7,8]"
+  expect "word64LE reverses them" (show (bytes (B.word64LE 72623859790382856))) "[8,7,6,5,4,3,2,1]"
+
+  -- Doubles: the IEEE-754 bits of 1.0 are 0x3FF0000000000000.
+  expect "doubleBE writes the IEEE-754 bytes" (show (bytes (B.doubleBE 1.0))) "[63,240,0,0,0,0,0,0]"
+  expect "doubleLE reverses them" (show (bytes (B.doubleLE 1.0))) "[0,0,0,0,0,0,240,63]"
+
+  -- The host-order primitives are the little-endian ones on every backend here.
+  expect "int16Host agrees with int16LE" (show (bytes (P.primFixed P.int16Host 4660))) "[52,18]"
+  expect "word32Host agrees with word32LE" (show (bytes (P.primFixed P.word32Host mixed))) "[120,86,52,18]"
+  expect "word64Host agrees with word64LE" (show (bytes (P.primFixed P.word64Host 72623859790382856))) "[8,7,6,5,4,3,2,1]"
+  expect "doubleHost agrees with doubleLE" (show (bytes (P.primFixed P.doubleHost 1.0))) "[0,0,0,0,0,0,240,63]"
+
+  -- Primitive combinators on fixed-size primitives.
+  expect "pairing two fixed primitives writes both" (ascii (P.primFixed (P.char7 >*< P.char7) ('a', 'b'))) "ab"
+  expect "contramapping a fixed primitive feeds both halves" (ascii (P.primFixed (((\c -> (c, c)) >$< (P.char7 >*< P.char7))) 'z')) "zz"
+  expect "contramapF maps before encoding" (ascii (P.primFixed (PI.contramapF (\c -> (c, c)) (P.char7 >*< P.char7)) 'y')) "yy"
+  expect "pairF is the fixed pairing" (show (bytes (P.primFixed (PI.pairF P.char8 P.char8) ('a', 'b')))) "[97,98]"
+
+  -- Primitive combinators on bounded primitives.
+  expect "contramapping a bounded primitive feeds both halves" (show (bytes (P.primBounded (((\c -> (c, c)) >$< (P.charUtf8 >*< P.charUtf8))) (chr 233)))) "[195,169,195,169]"
+  expect "contramapB maps before encoding" (show (bytes (P.primBounded (PI.contramapB (\c -> (c, c)) (PI.toB (P.char8 >*< P.char8))) 'a'))) "[97,97]"
+  expect "pairB is the bounded pairing" (show (bytes (P.primBounded (PI.pairB (PI.toB P.char8) (PI.toB P.char8)) ('a', 'b')))) "[97,98]"
+  expect "eitherB takes the Left primitive" (show (bytes (P.primBounded (P.eitherB (PI.toB P.char7) (PI.toB P.char8)) (Left 'a')))) "[97]"
+  expect "eitherB takes the Right primitive" (show (bytes (P.primBounded (P.eitherB (PI.toB P.char7) (PI.toB P.char8)) (Right (chr 233))))) "[233]"
+  expect "condB takes the first primitive when it chooses" (show (bytes (P.primBounded (P.condB isAscii (PI.toB P.char7) (PI.toB P.char8)) 'z'))) "[122]"
+  expect "condB takes the second primitive when it declines" (show (bytes (P.primBounded (P.condB isAscii (PI.toB P.char7) (PI.toB P.char8)) (chr 233)))) "[233]"
+
+  -- Lifting and mapping primitives one value at a time.
+  expect "primMapListFixed maps a list" (ascii (P.primMapListFixed P.word8HexFixed (BS.unpack (BS.pack [10, 11])))) "0a0b"
+  expect "primMapByteStringFixed maps the bytes" (ascii (P.primMapByteStringFixed P.word8HexFixed (BS.pack [10, 11]))) "0a0b"
+  expect "toB keeps the fixed encoder" (show (bytes (P.primBounded (PI.toB P.word16BE) 4660))) "[18,52]"
+  expect "liftFixedToBounded keeps the fixed encoder" (show (bytes (P.primBounded (P.liftFixedToBounded P.word16LE) 4660))) "[52,18]"
+
+  -- The prim-level textual encoders, not only the Builder ones.
+  expect "prim word16Hex drops leading zeros" (ascii (P.primBounded P.word16Hex 2576)) "a10"
+  expect "prim word16HexFixed pads" (ascii (P.primFixed P.word16HexFixed 2576)) "0a10"
+  expect "prim int8Dec writes a negative" (ascii (P.primBounded P.int8Dec (-42))) "-42"
+  expect "prim doubleHexFixed writes the bits" (ascii (P.primFixed P.doubleHexFixed 1.0)) "3ff0000000000000"
+
+  -- Bounds are the sum of the parts, as upstream computes them.
+  expect "size of a fixed primitive is its width" (show (PI.size P.word32BE)) "4"
+  expect "size of a fixed pair adds the sizes" (show (PI.size (P.char7 >*< P.int16BE))) "3"
+  expect "sizeBound of a bounded primitive is its bound" (show (P.sizeBound (PI.toB P.char7))) "1"
+  expect "sizeBound of emptyB is zero" (show (P.sizeBound P.emptyB)) "0"
+  expect "size of emptyF is zero" (show (PI.size emptyFixed)) "0"
+  expect "caseWordSize_32_64 picks the 64-bit value" (show (PI.caseWordSize_32_64 4 8)) "8"
+
+  -- The Builder monoid, with empty chunks dropped rather than emitted.
+  expect "mempty contributes no bytes" (show (bytes (mempty <> B.char7 'a' <> mempty))) "[97]"
+  expect "mconcat joins the chunks in order" (show (bytes (mconcat [B.char7 'a', B.char7 'b']))) "[97,98]"
+
+  -- A Builder literal goes through the IsString instance and stringUtf8.
+  expect "a literal at the Builder type is UTF-8" (show (bytes literalBuilder)) "[104,105]"
+
+  -- Decimal encoders.
+  expect "intDec writes a positive number" (ascii (A.intDec 42)) "42"
+  expect "intDec writes a negative number" (ascii (A.intDec (-42))) "-42"
+  expect "int8Dec writes the signed value" (ascii (A.int8Dec (-1))) "-1"
+  expect "word8Dec writes the unsigned value" (ascii (A.word8Dec 255)) "255"
+  expect "int16Dec writes the signed value" (ascii (A.int16Dec (-32768))) "-32768"
+  expect "word16Dec writes the unsigned value" (ascii (A.word16Dec 65535)) "65535"
+  expect "int32Dec writes the signed value" (ascii (A.int32Dec (-2147483648))) "-2147483648"
+  expect "int64Dec writes a wide value" (ascii (A.int64Dec 1000000000000)) "1000000000000"
+  expect "word64Dec writes an unsigned value" (ascii (A.word64Dec 255)) "255"
+  expect "wordDec writes an unsigned value" (ascii (A.wordDec 255)) "255"
+
+  -- Unfixed hexadecimal: as few lowercase digits as possible.
+  expect "word8Hex drops leading zeros" (ascii (A.word8Hex 10)) "a"
+  expect "word16Hex drops leading zeros" (ascii (A.word16Hex 2576)) "a10"
+  expect "word32Hex writes all significant digits" (ascii (A.word32Hex mixed)) "12345678"
+  expect "word64Hex drops leading zeros" (ascii (A.word64Hex 255)) "ff"
+  expect "wordHex drops leading zeros" (ascii (A.wordHex 255)) "ff"
+
+  -- Fixed-width hexadecimal: padded to the width of the type.
+  expect "word8HexFixed pads to two digits" (ascii (A.word8HexFixed 10)) "0a"
+  expect "word16HexFixed pads to four digits" (ascii (A.word16HexFixed 2576)) "0a10"
+  expect "word32HexFixed pads to eight digits" (ascii (A.word32HexFixed mixed)) "12345678"
+  expect "word64HexFixed pads to sixteen digits" (ascii (A.word64HexFixed 255)) "00000000000000ff"
+  expect "int8HexFixed writes the byte bits" (ascii (A.int8HexFixed (-1))) "ff"
+  expect "int16HexFixed writes the word bits" (ascii (A.int16HexFixed (-2))) "fffe"
+  expect "int32HexFixed writes the word bits" (ascii (A.int32HexFixed (-2))) "fffffffe"
+  expect "int64HexFixed writes the word bits" (ascii (A.int64HexFixed (-1))) "ffffffffffffffff"
+  expect "doubleHexFixed writes the IEEE-754 bits" (ascii (A.doubleHexFixed 1.0)) "3ff0000000000000"
+  expect "byteStringHex writes two digits per byte" (ascii (A.byteStringHex (BS.pack [0, 255]))) "00ff"
+  expect "byteStringHex of empty writes nothing" (ascii (A.byteStringHex (BS.pack []))) ""

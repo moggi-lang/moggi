@@ -1,0 +1,81 @@
+-- Data.ByteString.Builder: the character encoders and the byte-copy path for
+-- non-ASCII input.
+--
+-- Every string here is built at runtime from 'chr' and 'Data.String.pack', so
+-- no source escape can quietly turn a code point into ASCII digits. The code
+-- points are U+00E9 (two UTF-8 bytes), U+20AC (three) and U+1F600 (four); the
+-- expected bytes are the encodings of those scalars, not of the characters
+-- '2', '3', '3' that an escape would have produced.
+--
+-- The second group sits on both sides of each UTF-8 length switch, so a wrong
+-- comparison in the encoder shows up as the neighbouring class rather than as
+-- a plausible-looking encoding: 0x7F/0x80 (one to two bytes), 0x7FF/0x800
+-- (two to three), 0xFFFF/0x10000 (three to four).
+
+module Builder (builderSuite) where
+
+import Data.ByteString qualified as BS
+import Data.ByteString.Builder qualified as B
+import Data.ByteString.Builder.ASCII qualified as A
+import Data.ByteString.Builder.Internal qualified as BI
+import Data.ByteString.Builder.RealFloat qualified as RF
+import Data.Char (chr)
+import Data.String qualified as S
+import Data.Word (Word8)
+import Support (expect)
+
+bytes :: BI.Builder -> [Word8]
+bytes = BS.unpack . BI.toByteString
+
+eAccent = chr 233
+
+euro = chr 8364
+
+grin = chr 128512
+
+three = S.pack [eAccent, euro, grin]
+
+u7f = chr 127
+
+u80 = chr 128
+
+u7ff = chr 2047
+
+u800 = chr 2048
+
+uffff = chr 65535
+
+u10000 = chr 65536
+
+-- One code point from each side of each length switch, in ascending order.
+boundaries = S.pack [u7f, u80, u7ff, u800, uffff, u10000]
+
+builderSuite :: IO ()
+builderSuite = do
+  expect "char7 e-acute keeps 7 bits" (show (bytes (B.char7 eAccent))) "[105]"
+  expect "char7 euro keeps 7 bits" (show (bytes (B.char7 euro))) "[44]"
+  expect "char7 emoji keeps 7 bits" (show (bytes (B.char7 grin))) "[0]"
+  expect "char8 e-acute keeps 8 bits" (show (bytes (B.char8 eAccent))) "[233]"
+  expect "char8 euro keeps 8 bits" (show (bytes (B.char8 euro))) "[172]"
+  expect "char8 emoji keeps 8 bits" (show (bytes (B.char8 grin))) "[0]"
+  expect "charUtf8 e-acute is two bytes" (show (bytes (B.charUtf8 eAccent))) "[195,169]"
+  expect "charUtf8 euro is three bytes" (show (bytes (B.charUtf8 euro))) "[226,130,172]"
+  expect "charUtf8 emoji is four bytes" (show (bytes (B.charUtf8 grin))) "[240,159,152,128]"
+  expect "string7 of three code points" (show (bytes (B.string7 three))) "[105,44,0]"
+  expect "string8 of three code points" (show (bytes (B.string8 three))) "[233,172,0]"
+  expect "stringUtf8 of three code points" (show (bytes (B.stringUtf8 three))) "[195,169,226,130,172,240,159,152,128]"
+  expect "byteString copies the UTF-8 bytes" (show (bytes (B.byteString (BS.pack [195, 169, 226, 130, 172, 240, 159, 152, 128])))) "[195,169,226,130,172,240,159,152,128]"
+  expect "shortByteString copies the bytes" (show (bytes (B.shortByteString (BS.pack [233, 172, 0])))) "[233,172,0]"
+  expect "sliceOfShortByteString takes a slice" (show (bytes (B.sliceOfShortByteString 1 2 (BS.pack [233, 172, 0])))) "[172,0]"
+  expect "intDec stays ASCII beside UTF-8" (show (bytes (B.charUtf8 eAccent <> A.intDec 42 <> B.charUtf8 euro))) "[195,169,52,50,226,130,172]"
+  expect "formatDouble stays ASCII beside UTF-8" (show (bytes (B.stringUtf8 (S.pack [eAccent]) <> RF.formatDouble RF.generic 12.5))) "[195,169,49,50,46,53]"
+  expect "byteStringHex stays ASCII beside UTF-8" (show (bytes (B.charUtf8 grin <> A.byteStringHex (BS.pack [255])))) "[240,159,152,128,102,102]"
+  expect "charUtf8 U+007F is one byte" (show (bytes (B.charUtf8 u7f))) "[127]"
+  expect "charUtf8 U+0080 is two bytes" (show (bytes (B.charUtf8 u80))) "[194,128]"
+  expect "charUtf8 U+07FF is two bytes" (show (bytes (B.charUtf8 u7ff))) "[223,191]"
+  expect "charUtf8 U+0800 is three bytes" (show (bytes (B.charUtf8 u800))) "[224,160,128]"
+  expect "charUtf8 U+FFFF is three bytes" (show (bytes (B.charUtf8 uffff))) "[239,191,191]"
+  expect "charUtf8 U+10000 is four bytes" (show (bytes (B.charUtf8 u10000))) "[240,144,128,128]"
+  expect "char7 keeps 7 bits at the boundaries" (show (bytes (B.string7 boundaries))) "[127,0,127,0,127,0]"
+  expect "char8 keeps 8 bits at the boundaries" (show (bytes (B.string8 boundaries))) "[127,128,255,0,255,0]"
+  expect "stringUtf8 switches length at the boundaries" (show (bytes (B.stringUtf8 boundaries))) "[127,194,128,223,191,224,160,128,239,191,191,240,144,128,128]"

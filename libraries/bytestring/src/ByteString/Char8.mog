@@ -80,6 +80,7 @@ module Data.ByteString.Char8
   , partition
   , index
   , indexMaybe
+  , (!?)
   , elemIndex
   , elemIndices
   , elemIndexEnd
@@ -93,6 +94,16 @@ module Data.ByteString.Char8
   , unzip
   , sort
   , readInt
+  , readInt8
+  , readInt16
+  , readInt32
+  , readInt64
+  , readWord
+  , readWord8
+  , readWord16
+  , readWord32
+  , readWord64
+  , readNatural
   , readInteger
   , copy
   , getLine
@@ -108,9 +119,7 @@ module Data.ByteString.Char8
   , hPut
   , hPutStr
   , hPutStrLn
-    -- Moggi host bridges (not in bytestring-0.12.2.0 Char8):
-  , fromString
-  , toString
+  , hPutNonBlocking
   ) where
 
 import Data.Bool
@@ -142,9 +151,11 @@ import Data.List.NonEmpty qualified as NE
 import Data.Maybe
 import Data.Num
 import Data.Ord
+import Data.Real (fromIntegral)
 import Data.String qualified as S
 import Data.Tuple
-import Data.Word (Word8)
+import Data.Word (Word, Word8, Word16, Word32, Word64)
+import Numeric.Natural (Natural)
 import Moggi.Err
 import Moggi.Internal.Base hiding (take, drop, unpack)
 import Moggi.Internal.Prim ((:), bytesToString#, bytesFromString#, word8FromInt#, word8ToInt#)
@@ -191,34 +202,50 @@ listFoldr1 f xs = case xs of
 
 -- Introducing / eliminating
 
+-- | /O(1)/ Convert a 'Char' into a 'ByteString'
 singleton :: Char -> ByteString
 singleton c = B.singleton (c2w c)
 
+-- | /O(n)/ Convert a 'String' into a 'ByteString'
+--
+-- For applications with large numbers of string literals, pack can be a
+-- bottleneck.
 pack :: String -> ByteString
 pack s = packChars (S.unpack s)
 
+-- | /O(n)/ Converts a 'ByteString' to a 'String'.
 unpack :: ByteString -> [Char]
 unpack b = listMap w2c (B.unpack b)
 
 -- Basic interface (Char wrappers)
 
+-- | /O(n)/ 'cons' is analogous to (:) for lists, but of different
+-- complexity, as it requires a memcpy.
 cons :: Char -> ByteString -> ByteString
 cons c b = B.cons (c2w c) b
 
+-- | /O(n)/ Append a Char to the end of a 'ByteString'. Similar to
+-- 'cons', this function performs a memcpy.
 snoc :: ByteString -> Char -> ByteString
 snoc b c = B.snoc b (c2w c)
 
+-- | /O(1)/ Extract the first element of a ByteString, which must be non-empty.
 head :: ByteString -> Char
 head b = w2c (B.head b)
 
+-- | /O(1)/ Extract the last element of a packed string, which must be non-empty.
 last :: ByteString -> Char
 last b = w2c (B.last b)
 
+-- | /O(1)/ Extract the head and tail of a ByteString, returning Nothing
+-- if it is empty.
 uncons :: ByteString -> Maybe (Char, ByteString)
 uncons b = case unpack b of
   [] -> Nothing
   c : rest -> Just (c, packChars rest)
 
+-- | /O(1)/ Extract the 'init' and 'last' of a ByteString, returning Nothing
+-- if it is empty.
 unsnoc :: ByteString -> Maybe (ByteString, Char)
 unsnoc b = case L.unsnoc (unpack b) of
   Nothing -> Nothing
@@ -226,9 +253,13 @@ unsnoc b = case L.unsnoc (unpack b) of
 
 -- Transforming
 
+-- | /O(n)/ 'map' @f xs@ is the ByteString obtained by applying @f@ to each element of @xs@
 map :: (Char -> Char) -> ByteString -> ByteString
 map f b = B.map (\w -> c2w (f (w2c w))) b
 
+-- | /O(n)/ The 'intersperse' function takes a Char and a 'ByteString'
+-- and `intersperses' that Char between the elements of the
+-- 'ByteString'.  It is analogous to the intersperse function on Lists.
 intersperse :: Char -> ByteString -> ByteString
 intersperse c b = packChars (L.intersperse c (unpack b))
 
@@ -249,63 +280,125 @@ foldCharsR f z cs = case cs of
 foldCharsL :: (a -> Char -> a) -> a -> [Char] -> a
 foldCharsL f z cs = foldCharsR (\c acc -> f acc c) z (L.reverse cs)
 
+-- | 'foldl', applied to a binary operator, a starting value (typically
+-- the left-identity of the operator), and a ByteString, reduces the
+-- ByteString using the binary operator, from left to right.
 foldl :: (a -> Char -> a) -> a -> ByteString -> a
 foldl f z b = foldCharsL f z (unpack b)
 
+-- | 'foldr', applied to a binary operator, a starting value
+-- (typically the right-identity of the operator), and a packed string,
+-- reduces the packed string using the binary operator, from right to left.
 foldr :: (Char -> a -> a) -> a -> ByteString -> a
 foldr f z b = foldCharsR f z (unpack b)
 
+-- | 'foldl1' is a variant of 'foldl' that has no starting value
+-- argument, and thus must be applied to non-empty 'ByteString's.
 foldl1 :: (Char -> Char -> Char) -> ByteString -> Char
 foldl1 f b = listFoldl1 f (unpack b)
 
+-- | 'foldr1' is a variant of 'foldr' that has no starting value argument,
+-- and thus must be applied to non-empty 'ByteString's
 foldr1 :: (Char -> Char -> Char) -> ByteString -> Char
 foldr1 f b = listFoldr1 f (unpack b)
 
+-- | Map a function over a 'ByteString' and concatenate the results
 concatMap :: (Char -> ByteString) -> ByteString -> ByteString
 concatMap f b = concat (listMap f (unpack b))
 
+-- | Applied to a predicate and a ByteString, 'any' determines if
+-- any element of the 'ByteString' satisfies the predicate.
 any :: (Char -> Bool) -> ByteString -> Bool
 any p b = B.any (\w -> p (w2c w)) b
 
+-- | Applied to a predicate and a 'ByteString', 'all' determines if
+-- all elements of the 'ByteString' satisfy the predicate.
 all :: (Char -> Bool) -> ByteString -> Bool
 all p b = B.all (\w -> p (w2c w)) b
 
+-- | 'maximum' returns the maximum value from a 'ByteString'
 maximum :: ByteString -> Char
 maximum b = listMaximum (unpack b)
 
+-- | 'minimum' returns the minimum value from a 'ByteString'
 minimum :: ByteString -> Char
 minimum b = listMinimum (unpack b)
 
 -- Scans / mapAccum / unfold
 
+-- | 'scanl' is similar to 'foldl', but returns a list of successive
+-- reduced values from the left:
+--
+-- > scanl f z [x1, x2, ...] == [z, z `f` x1, (z `f` x1) `f` x2, ...]
+--
+-- Note that
+--
+-- > last (scanl f z xs) == foldl f z xs.
 scanl :: (Char -> Char -> Char) -> Char -> ByteString -> ByteString
 scanl f z b = packChars (L.scanl f z (unpack b))
 
+-- | 'scanl1' is a variant of 'scanl' that has no starting value argument:
+--
+-- > scanl1 f [x1, x2, ...] == [x1, x1 `f` x2, ...]
 scanl1 :: (Char -> Char -> Char) -> ByteString -> ByteString
 scanl1 f b = packChars (L.scanl1 f (unpack b))
 
+-- | scanr is the right-to-left dual of scanl.
 scanr :: (Char -> Char -> Char) -> Char -> ByteString -> ByteString
 scanr f z b = packChars (L.scanr f z (unpack b))
 
+-- | 'scanr1' is a variant of 'scanr' that has no starting value argument.
 scanr1 :: (Char -> Char -> Char) -> ByteString -> ByteString
 scanr1 f b = packChars (L.scanr1 f (unpack b))
 
+-- | The 'mapAccumL' function behaves like a combination of 'map' and
+-- 'foldl'; it applies a function to each element of a ByteString,
+-- passing an accumulating parameter from left to right, and returning a
+-- final value of this accumulator together with the new ByteString.
 mapAccumL :: (acc -> Char -> (acc, Char)) -> acc -> ByteString -> (acc, ByteString)
 mapAccumL f z b =
   let pair = L.mapAccumL f z (unpack b)
   in (fst pair, packChars (snd pair))
 
+-- | The 'mapAccumR' function behaves like a combination of 'map' and
+-- 'foldr'; it applies a function to each element of a ByteString,
+-- passing an accumulating parameter from right to left, and returning a
+-- final value of this accumulator together with the new ByteString.
 mapAccumR :: (acc -> Char -> (acc, Char)) -> acc -> ByteString -> (acc, ByteString)
 mapAccumR f z b =
   let pair = L.mapAccumR f z (unpack b)
   in (fst pair, packChars (snd pair))
 
+-- | /O(n)/ 'replicate' @n x@ is a ByteString of length @n@ with @x@
+-- the value of every element. The following holds:
+--
+-- > replicate w c = unfoldr w (\u -> Just (u,u)) c
+--
+-- This implementation uses @memset(3)@
 replicate :: Int -> Char -> ByteString
 replicate n c = B.replicate n (c2w c)
 
+-- | /O(n)/, where /n/ is the length of the result.  The 'unfoldr'
+-- function is analogous to the List 'unfoldr'.  'unfoldr' builds a
+-- ByteString from a seed value.  The function takes the element and
+-- returns 'Nothing' if it is done producing the ByteString or returns
+-- 'Just' @(a,b)@, in which case, @a@ is the next character in the string,
+-- and @b@ is the seed value for further production.
+--
+-- Examples:
+--
+-- > unfoldr (\x -> if x <= '9' then Just (x, succ x) else Nothing) '0' == "0123456789"
 unfoldr :: (a -> Maybe (Char, a)) -> a -> ByteString
 unfoldr f z = packChars (L.unfoldr f z)
 
+-- | /O(n)/ Like 'unfoldr', 'unfoldrN' builds a ByteString from a seed
+-- value.  However, the length of the result is limited by the first
+-- argument to 'unfoldrN'.  This function is more efficient than 'unfoldr'
+-- when the maximum length of the result is known.
+--
+-- The following equation relates 'unfoldrN' and 'unfoldr':
+--
+-- > unfoldrN n f s == take n (unfoldr f s)
 unfoldrN :: Int -> (a -> Maybe (Char, a)) -> a -> (ByteString, Maybe a)
 unfoldrN n f z =
   let pair = unfoldrNGo n f z
@@ -346,42 +439,73 @@ dropEnd n b =
       GT -> empty
       _ -> take (len - n) b
 
+-- | 'takeWhile', applied to a predicate @p@ and a ByteString @xs@,
+-- returns the longest prefix (possibly empty) of @xs@ of elements that
+-- satisfy @p@.
 takeWhile :: (Char -> Bool) -> ByteString -> ByteString
 takeWhile p b = packChars (L.takeWhile p (unpack b))
 
+-- | 'takeWhileEnd', applied to a predicate @p@ and a ByteString @xs@,
+-- returns the longest suffix (possibly empty) of @xs@ of elements that
+-- satisfy @p@.
 takeWhileEnd :: (Char -> Bool) -> ByteString -> ByteString
 takeWhileEnd p b = packChars (L.reverse (L.takeWhile p (L.reverse (unpack b))))
 
+-- | 'dropWhile' @p xs@ returns the suffix remaining after 'takeWhile' @p xs@.
 dropWhile :: (Char -> Bool) -> ByteString -> ByteString
 dropWhile p b = packChars (L.dropWhile p (unpack b))
 
+-- | 'dropWhileEnd' @p xs@ returns the prefix remaining after 'takeWhileEnd' @p
+-- xs@.
 dropWhileEnd :: (Char -> Bool) -> ByteString -> ByteString
 dropWhileEnd p b = packChars (L.dropWhileEnd p (unpack b))
 
+-- | 'dropSpace' efficiently returns the 'ByteString' argument with
+-- white space Chars removed from the front. It is more efficient than
+-- calling dropWhile for removing whitespace. I.e.
+--
+-- > dropWhile isSpace == dropSpace
 dropSpace :: ByteString -> ByteString
 dropSpace b = dropWhile isSpace b
 
+-- | 'span' @p xs@ breaks the ByteString into two segments. It is
+-- equivalent to @('takeWhile' p xs, 'dropWhile' p xs)@
 span :: (Char -> Bool) -> ByteString -> (ByteString, ByteString)
 span p b =
   let pair = L.span p (unpack b)
   in (packChars (fst pair), packChars (snd pair))
 
+-- | 'spanEnd' behaves like 'span' but from the end of the 'ByteString'.
+-- We have
+--
+-- > spanEnd (not.isSpace) "x y z" == ("x y ","z")
+--
+-- and
+--
+-- > spanEnd (not . isSpace) ps
+-- >    ==
+-- > let (x,y) = span (not.isSpace) (reverse ps) in (reverse y, reverse x)
 spanEnd :: (Char -> Bool) -> ByteString -> (ByteString, ByteString)
 spanEnd p b =
   let pair = L.span p (L.reverse (unpack b))
   in (packChars (L.reverse (snd pair)), packChars (L.reverse (fst pair)))
 
+-- | 'break' @p@ is equivalent to @'span' ('not' . p)@.
 break :: (Char -> Bool) -> ByteString -> (ByteString, ByteString)
 break p b =
   let pair = L.break p (unpack b)
   in (packChars (fst pair), packChars (snd pair))
 
+-- | 'breakEnd' behaves like 'break' but from the end of the 'ByteString'
+--
+-- breakEnd p == spanEnd (not.p)
 breakEnd :: (Char -> Bool) -> ByteString -> (ByteString, ByteString)
 breakEnd p b = spanEnd (\c -> not (p c)) b
 
 group :: ByteString -> [ByteString]
 group b = listMap packChars (L.group (unpack b))
 
+-- | The 'groupBy' function is the non-overloaded version of 'group'.
 groupBy :: (Char -> Char -> Bool) -> ByteString -> [ByteString]
 groupBy eq b = listMap packChars (L.groupBy eq (unpack b))
 
@@ -397,6 +521,7 @@ initsNE b = NE.fromList (inits b)
 tailsNE :: ByteString -> NE.NonEmpty ByteString
 tailsNE b = NE.fromList (tails b)
 
+-- | Remove leading and trailing white space from a 'ByteString'.
 strip :: ByteString -> ByteString
 strip b = dropWhile isSpace (dropWhileEnd isSpace b)
 
@@ -413,9 +538,32 @@ stripSuffix suf b =
     Nothing -> Nothing
     Just cs -> Just (packChars (L.reverse cs))
 
+-- | /O(n)/ Break a 'ByteString' into pieces separated by the byte
+-- argument, consuming the delimiter. I.e.
+--
+-- > split '\n' "a\nb\nd\ne" == ["a","b","d","e"]
+-- > split 'a'  "aXaXaXa"    == ["","X","X","X",""]
+-- > split 'x'  "x"          == ["",""]
+-- > split undefined ""      == []  -- and not [""]
+--
+-- and
+--
+-- > intercalate [c] . split c == id
+-- > split == splitWith . (==)
+--
+-- As for all splitting functions in this library, this function does
+-- not copy the substrings, it just constructs new 'ByteString's that
+-- are slices of the original.
 split :: Char -> ByteString -> [ByteString]
 split c b = splitWith (\x -> x == c) b
 
+-- | /O(n)/ Splits a 'ByteString' into components delimited by
+-- separators, where the predicate returns True for a separator element.
+-- The resulting components do not contain the separators.  Two adjacent
+-- separators result in an empty component in the output.  eg.
+--
+-- > splitWith (=='a') "aabbaca" == ["","","bb","c",""]
+-- > splitWith undefined ""      == []  -- and not [""]
 splitWith :: (Char -> Bool) -> ByteString -> [ByteString]
 splitWith p b = case null b of
   True -> []
@@ -429,6 +577,10 @@ splitWithGo p cs =
     [] -> [packChars hd]
     _ : rest -> packChars hd : splitWithGo p rest
 
+-- | 'lines' breaks a ByteString up into a list of ByteStrings at
+-- newline Chars (@'\\n'@). The resulting strings do not contain newlines.
+--
+-- Note that it __does not__ regard CR (@'\\r'@) as a newline character.
 lines :: ByteString -> [ByteString]
 lines b = linesChars (unpack b)
 
@@ -443,12 +595,19 @@ linesChars cs = case cs of
       [] -> [packChars hd]
       _ : rest -> packChars hd : linesChars rest
 
+-- | 'words' breaks a ByteString up into a list of words, which
+-- were delimited by Chars representing white space.
 words :: ByteString -> [ByteString]
 words b = L.filter (\x -> not (null x)) (splitWith isSpace b)
 
+-- | 'unlines' joins lines, appending a terminating newline after each.
+--
+-- Equivalent to
+--     @'concat' . Data.List.concatMap (\\x -> [x, 'singleton' '\\n'])@.
 unlines :: [ByteString] -> ByteString
 unlines bss = concat (listMap (\b -> snoc b '\n') bss)
 
+-- | The 'unwords' function is analogous to the 'unlines' function, on words.
 unwords :: [ByteString] -> ByteString
 unwords bss = intercalate (singleton ' ') bss
 
@@ -469,17 +628,26 @@ breakSubstringGo ncs hcs acc = case L.isPrefixOf ncs hcs of
     [] -> (packChars (L.reverse acc), empty)
     c : rest -> breakSubstringGo ncs rest (c : acc)
 
+-- | /O(n)/ 'elem' is the 'ByteString' membership predicate. This
+-- implementation uses @memchr(3)@.
 elem :: Char -> ByteString -> Bool
 elem c b = B.elem (c2w c) b
 
+-- | /O(n)/ 'notElem' is the inverse of 'elem'
 notElem :: Char -> ByteString -> Bool
 notElem c b = B.notElem (c2w c) b
 
+-- | /O(n)/ The 'find' function takes a predicate and a ByteString,
+-- and returns the first element in matching the predicate, or 'Nothing'
+-- if there is no such element.
 find :: (Char -> Bool) -> ByteString -> Maybe Char
 find p b = case B.find (\w -> p (w2c w)) b of
   Nothing -> Nothing
   Just w -> Just (w2c w)
 
+-- | /O(n)/ 'filter', applied to a predicate and a ByteString,
+-- returns a ByteString containing those characters that satisfy the
+-- predicate.
 filter :: (Char -> Bool) -> ByteString -> ByteString
 filter p b = B.filter (\w -> p (w2c w)) b
 
@@ -490,9 +658,13 @@ partition p b =
 
 -- Indexing
 
+-- | /O(1)/ 'ByteString' index (subscript) operator, starting from 0.
 index :: ByteString -> Int -> Char
 index b n = w2c (B.index b n)
 
+-- | /O(1)/ 'ByteString' index, starting from 0, that returns 'Just' if:
+--
+-- > 0 <= n < length bs
 indexMaybe :: ByteString -> Int -> Maybe Char
 indexMaybe b n = case compare n 0 of
   LT -> Nothing
@@ -500,12 +672,25 @@ indexMaybe b n = case compare n 0 of
     LT -> Just (index b n)
     _ -> Nothing
 
+-- | /O(n)/ The 'elemIndex' function returns the index of the first
+-- element in the given 'ByteString' which is equal (by memchr) to the
+-- query element, or 'Nothing' if there is no such element.
 elemIndex :: Char -> ByteString -> Maybe Int
 elemIndex c b = L.elemIndex c (unpack b)
 
+-- | /O(n)/ The 'elemIndices' function extends 'elemIndex', by returning
+-- the indices of all elements equal to the query element, in ascending order.
 elemIndices :: Char -> ByteString -> [Int]
 elemIndices c b = L.elemIndices c (unpack b)
 
+-- | /O(n)/ The 'elemIndexEnd' function returns the last index of the
+-- element in the given 'ByteString' which is equal to the query
+-- element, or 'Nothing' if there is no such element. The following
+-- holds:
+--
+-- > elemIndexEnd c xs = case elemIndex c (reverse xs) of
+-- >   Nothing -> Nothing
+-- >   Just i  -> Just (length xs - 1 - i)
 elemIndexEnd :: Char -> ByteString -> Maybe Int
 elemIndexEnd c b =
   let m = elemIndex c (reverse b) in
@@ -513,12 +698,19 @@ elemIndexEnd c b =
     Nothing -> Nothing
     Just i -> Just ((length b - 1) - i)
 
+-- | The 'findIndex' function takes a predicate and a 'ByteString' and
+-- returns the index of the first element in the ByteString satisfying the predicate.
 findIndex :: (Char -> Bool) -> ByteString -> Maybe Int
 findIndex p b = L.findIndex p (unpack b)
 
+-- | The 'findIndices' function extends 'findIndex', by returning the
+-- indices of all elements satisfying the predicate, in ascending order.
 findIndices :: (Char -> Bool) -> ByteString -> [Int]
 findIndices p b = L.findIndices p (unpack b)
 
+-- | /O(n)/ The 'findIndexEnd' function takes a predicate and a 'ByteString' and
+-- returns the index of the last element in the ByteString
+-- satisfying the predicate.
 findIndexEnd :: (Char -> Bool) -> ByteString -> Maybe Int
 findIndexEnd p b =
   let m = findIndex p (reverse b) in
@@ -526,6 +718,15 @@ findIndexEnd p b =
     Nothing -> Nothing
     Just i -> Just ((length b - 1) - i)
 
+-- | count returns the number of times its argument appears in the ByteString
+--
+-- > count = length . elemIndices
+--
+-- Also
+--
+-- > count '\n' == length . lines
+--
+-- But more efficiently than using length on the intermediate list.
 count :: Char -> ByteString -> Int
 count c b = listLength (elemIndices c b)
 
@@ -536,15 +737,28 @@ listLength xs = case xs of
 
 -- Zip / ordered
 
+-- | /O(n)/ 'zip' takes two ByteStrings and returns a list of
+-- corresponding pairs of Chars. If one input ByteString is short,
+-- excess elements of the longer ByteString are discarded. This is
+-- equivalent to a pair of 'unpack' operations, and so space
+-- usage may be large for multi-megabyte ByteStrings
 zip :: ByteString -> ByteString -> [(Char, Char)]
 zip a b = L.zip (unpack a) (unpack b)
 
+-- | 'zipWith' generalises 'zip' by zipping with the function given as
+-- the first argument, instead of a tupling function.  For example,
+-- @'zipWith' (+)@ is applied to two ByteStrings to produce the list
+-- of corresponding sums.
 zipWith :: (Char -> Char -> a) -> ByteString -> ByteString -> [a]
 zipWith f a b = L.zipWith f (unpack a) (unpack b)
 
+-- | A specialised version of `zipWith` for the common case of a
+-- simultaneous map over two ByteStrings, to build a 3rd.
 packZipWith :: (Char -> Char -> Char) -> ByteString -> ByteString -> ByteString
 packZipWith f a b = packChars (L.zipWith f (unpack a) (unpack b))
 
+-- | 'unzip' transforms a list of pairs of Chars into a pair of
+-- ByteStrings. Note that this performs two 'pack' operations.
 unzip :: [(Char, Char)] -> (ByteString, ByteString)
 unzip pairs =
   let pair = L.unzip pairs
@@ -643,9 +857,14 @@ bsToString b = toString b
 putStr :: ByteString -> IO ()
 putStr b = IO.putStr (bsToString b)
 
+-- | Write a ByteString to 'stdout', appending a newline byte.
+--
+-- Unlike 'putStr', this is not atomic: other threads might write
+-- to 'stdout' between writing of the bytestring and the newline.
 putStrLn :: ByteString -> IO ()
 putStrLn b = IO.putStrLn (bsToString b)
 
+-- | Read a line from stdin.
 getLine :: IO ByteString
 getLine = IO.getLine >>= (\s -> pure (fromString s))
 
@@ -664,6 +883,7 @@ writeFile p b = IO.writeFile p (bsToString b)
 appendFile :: FilePath -> ByteString -> IO ()
 appendFile p b = IO.appendFile p (bsToString b)
 
+-- | Read a line from a handle
 hGetLine :: Handle -> IO ByteString
 hGetLine h = IO.hGetLine h >>= (\m -> case m of
   Nothing -> error "Data.ByteString.Char8.hGetLine: end of input"
@@ -675,8 +895,95 @@ hGetContents h = IO.hGetContents h >>= (\s -> pure (fromString s))
 hPutStr :: Handle -> ByteString -> IO ()
 hPutStr h b = IO.hPutStr h (bsToString b)
 
+-- | Write a ByteString to a handle, appending a newline byte.
+--
+-- Unlike 'hPutStr', this is not atomic: other threads might write
+-- to the handle between writing of the bytestring and the newline.
 hPutStrLn :: Handle -> ByteString -> IO ()
 hPutStrLn h b = IO.hPutStrLn h (bsToString b)
 
 hPut :: Handle -> ByteString -> IO ()
 hPut h b = hPutStr h b
+
+(!?) :: ByteString -> Int -> Maybe Char
+(!?) b n = indexMaybe b n
+
+-- Reading fixed-width values. The parse is the same as 'readInteger', and a
+-- value outside the type's range is not a value of that type, so it is refused
+-- rather than wrapped.
+
+inRange :: Integer -> Integer -> Integer -> Bool
+inRange lo hi n = n >= lo && n <= hi
+
+readInt8 :: ByteString -> Maybe (Int8, ByteString)
+readInt8 b = case readInteger b of
+  Nothing -> Nothing
+  Just pair -> case inRange (-128) 127 (fst pair) of
+    False -> Nothing
+    True -> Just (fromIntegral (fst pair), snd pair)
+
+readInt16 :: ByteString -> Maybe (Int16, ByteString)
+readInt16 b = case readInteger b of
+  Nothing -> Nothing
+  Just pair -> case inRange (-32768) 32767 (fst pair) of
+    False -> Nothing
+    True -> Just (fromIntegral (fst pair), snd pair)
+
+readInt32 :: ByteString -> Maybe (Int32, ByteString)
+readInt32 b = case readInteger b of
+  Nothing -> Nothing
+  Just pair -> case inRange (-2147483648) 2147483647 (fst pair) of
+    False -> Nothing
+    True -> Just (fromIntegral (fst pair), snd pair)
+
+readInt64 :: ByteString -> Maybe (Int64, ByteString)
+readInt64 b = case readInteger b of
+  Nothing -> Nothing
+  Just pair -> case inRange (-9223372036854775808) 9223372036854775807 (fst pair) of
+    False -> Nothing
+    True -> Just (fromIntegral (fst pair), snd pair)
+
+readWord :: ByteString -> Maybe (Word, ByteString)
+readWord b = case readInteger b of
+  Nothing -> Nothing
+  Just pair -> case inRange 0 18446744073709551615 (fst pair) of
+    False -> Nothing
+    True -> Just (fromIntegral (fst pair), snd pair)
+
+readWord8 :: ByteString -> Maybe (Word8, ByteString)
+readWord8 b = case readInteger b of
+  Nothing -> Nothing
+  Just pair -> case inRange 0 255 (fst pair) of
+    False -> Nothing
+    True -> Just (fromIntegral (fst pair), snd pair)
+
+readWord16 :: ByteString -> Maybe (Word16, ByteString)
+readWord16 b = case readInteger b of
+  Nothing -> Nothing
+  Just pair -> case inRange 0 65535 (fst pair) of
+    False -> Nothing
+    True -> Just (fromIntegral (fst pair), snd pair)
+
+readWord32 :: ByteString -> Maybe (Word32, ByteString)
+readWord32 b = case readInteger b of
+  Nothing -> Nothing
+  Just pair -> case inRange 0 4294967295 (fst pair) of
+    False -> Nothing
+    True -> Just (fromIntegral (fst pair), snd pair)
+
+readWord64 :: ByteString -> Maybe (Word64, ByteString)
+readWord64 b = case readInteger b of
+  Nothing -> Nothing
+  Just pair -> case inRange 0 18446744073709551615 (fst pair) of
+    False -> Nothing
+    True -> Just (fromIntegral (fst pair), snd pair)
+
+readNatural :: ByteString -> Maybe (Natural, ByteString)
+readNatural b = case readInteger b of
+  Nothing -> Nothing
+  Just pair -> case inRange 0 999999999999999999999999999999 (fst pair) of
+    False -> Nothing
+    True -> Just (fromIntegral (fst pair), snd pair)
+
+hPutNonBlocking :: Handle -> ByteString -> IO ()
+hPutNonBlocking h b = hPut h b

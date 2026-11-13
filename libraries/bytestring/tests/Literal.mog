@@ -1,0 +1,61 @@
+-- String literals as ByteStrings: `instance IsString ByteString` turns the text
+-- a literal spells into its bytes, and the conversion has to happen wherever a
+-- `ByteString` is what the context asks for -- a signature, a parameter's type,
+-- a tuple element, a list element. Each case below is one of those contexts, and
+-- the bytes are checked, so a conversion that never happened fails instead of
+-- passing quietly.
+
+module Literal (literalSuite) where
+
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as B
+import Data.Enum (fromEnum)
+import Data.Int (Int)
+import Data.String (String, IsString(..))
+import Data.Tuple (fst, snd)
+import Data.Word (Word8)
+import Support (assertTrue, expect)
+import Text.Show (show)
+
+ints :: [Word8] -> [Int]
+ints ws = case ws of
+  [] -> []
+  w : rest -> fromEnum w : ints rest
+
+-- The bytes a value holds, printed so a conversion is what makes the case pass.
+ordsOf :: ByteString -> String
+ordsOf bytes = show (ints (B.unpack bytes))
+
+-- The context is the signature.
+tagged :: ByteString
+tagged = "hi"
+
+-- The context is the parameter's type.
+useB :: ByteString -> String
+useB bytes = ordsOf bytes
+
+taken :: String
+taken = useB "hi"
+
+-- The context is the tuple's element types.
+pair :: (ByteString, ByteString)
+pair = ("ab", "cd")
+
+-- The context is the list's element type.
+listOf :: [ByteString]
+listOf = ["ab", "cd"]
+
+firstOf :: [ByteString] -> ByteString
+firstOf xs = case xs of
+  x : _ -> x
+  [] -> B.empty
+
+literalSuite :: IO ()
+literalSuite = do
+  expect "a literal at a ByteString signature" (ordsOf tagged) "[104,105]"
+  expect "a literal at a ByteString parameter" taken "[104,105]"
+  expect "a literal as a tuple element" (ordsOf (fst pair)) "[97,98]"
+  expect "a literal as the second tuple element" (ordsOf (snd pair)) "[99,100]"
+  expect "a literal as a list element" (ordsOf (firstOf listOf)) "[97,98]"
+  assertTrue "the converted value holds the text's bytes"
+    (ordsOf tagged == "[104,105]")

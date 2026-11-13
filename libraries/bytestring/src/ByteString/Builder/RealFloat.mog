@@ -1,0 +1,61 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Decimal formatting of floating point numbers.
+--
+-- A 'Double' is written either in fixed-point notation, in exponent notation,
+-- or in the shortest notation that reads back as the same value. The format is
+-- chosen when the builder is built, so no string is produced before the bytes
+-- are.
+--
+-- Upstream also exports @floatDec@ and @formatFloat@; both take a 'Float', which
+-- base does not have, so only the 'Double' halves are provided.
+module Data.ByteString.Builder.RealFloat
+  ( doubleDec
+  , formatDouble
+  , FloatFormat
+  , standard
+  , standardDefaultPrecision
+  , scientific
+  , generic
+  ) where
+
+import Data.ByteString.Builder.Internal (Builder, string7)
+import Data.Double (Double, FFFormat (..), formatRealFloat)
+import Data.Int (Int)
+import Data.Maybe (Maybe (..))
+import Text.Show (show)
+
+data FormatMode = FScientific | FStandard | FGeneric
+
+-- | How a 'Double' is written: a notation and an optional precision.
+data FloatFormat = MkFloatFormat FormatMode (Maybe Int)
+
+-- | Fixed-point notation with the given number of decimal places.
+standard :: Int -> FloatFormat
+standard places = MkFloatFormat FStandard (Just places)
+
+-- | Fixed-point notation with the default number of decimal places.
+standardDefaultPrecision :: FloatFormat
+standardDefaultPrecision = MkFloatFormat FStandard Nothing
+
+-- | Exponent notation.
+scientific :: FloatFormat
+scientific = MkFloatFormat FScientific Nothing
+
+-- | The shortest notation that reads back as the same value.
+generic :: FloatFormat
+generic = MkFloatFormat FGeneric Nothing
+
+-- | Format a 'Double' with the given format.
+formatDouble :: FloatFormat -> Double -> Builder
+formatDouble (MkFloatFormat mode places) d =
+  string7 (formatRealFloat (ffOf mode) places d)
+
+ffOf :: FormatMode -> FFFormat
+ffOf mode = case mode of
+  FScientific -> FFExponent
+  FStandard -> FFFixed
+  FGeneric -> FFGeneric
+
+-- | The shortest decimal notation that reads back as the same 'Double'.
+doubleDec :: Double -> Builder
+doubleDec d = string7 (show d)

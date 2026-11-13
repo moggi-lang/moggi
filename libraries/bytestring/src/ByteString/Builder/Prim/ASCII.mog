@@ -1,0 +1,147 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Fixed- and bounded-size encodings of numbers as ASCII text.
+--
+-- The types are upstream's: the fixed-width hexadecimal encoders are 'FixedPrim'
+-- because their output is always exactly the width of the type, while the
+-- decimal and unfixed hexadecimal encoders are 'BoundedPrim' because how many
+-- digits a value needs depends on the value.
+module Data.ByteString.Builder.Prim.ASCII
+  ( char7
+  , int8Dec
+  , int16Dec
+  , int32Dec
+  , int64Dec
+  , intDec
+  , word8Dec
+  , word16Dec
+  , word32Dec
+  , word64Dec
+  , wordDec
+  , word8Hex
+  , word16Hex
+  , word32Hex
+  , word64Hex
+  , wordHex
+  , int8HexFixed
+  , int16HexFixed
+  , int32HexFixed
+  , int64HexFixed
+  , word8HexFixed
+  , word16HexFixed
+  , word32HexFixed
+  , word64HexFixed
+  , doubleHexFixed
+  ) where
+
+import Data.ByteString.Builder.ASCII qualified as A
+import Data.ByteString.Builder.Internal qualified as I
+import Data.ByteString.Builder.Prim.Internal
+  ( BoundedPrim
+  , FixedPrim
+  , boundedPrim
+  , fixedPrim
+  )
+import Data.Char (Char)
+import Data.Double (Double)
+import Data.Int (Int, Int16, Int32, Int64, Int8)
+import Data.Word (Word, Word16, Word32, Word64, Word8)
+
+-- | Encode a 'Char' as ASCII: the codepoint truncated to 7 bits.
+char7 :: FixedPrim Char
+char7 = fixedPrim 1 (\c -> I.char7 c)
+
+-- | Decimal encoding of an 'Int8'.
+int8Dec :: BoundedPrim Int8
+int8Dec = boundedPrim 4 A.int8Dec
+
+-- | Decimal encoding of an 'Int16'.
+int16Dec :: BoundedPrim Int16
+int16Dec = boundedPrim 6 A.int16Dec
+
+-- | Decimal encoding of an 'Int32'.
+int32Dec :: BoundedPrim Int32
+int32Dec = boundedPrim 11 A.int32Dec
+
+-- | Decimal encoding of an 'Int64'.
+int64Dec :: BoundedPrim Int64
+int64Dec = boundedPrim 20 A.int64Dec
+
+-- | Decimal encoding of an 'Int'.
+intDec :: BoundedPrim Int
+intDec = boundedPrim 20 A.intDec
+
+-- | Decimal encoding of a 'Word8'.
+word8Dec :: BoundedPrim Word8
+word8Dec = boundedPrim 3 A.word8Dec
+
+-- | Decimal encoding of a 'Word16'.
+word16Dec :: BoundedPrim Word16
+word16Dec = boundedPrim 5 A.word16Dec
+
+-- | Decimal encoding of a 'Word32'.
+word32Dec :: BoundedPrim Word32
+word32Dec = boundedPrim 10 A.word32Dec
+
+-- | Decimal encoding of a 'Word64'.
+word64Dec :: BoundedPrim Word64
+word64Dec = boundedPrim 20 A.word64Dec
+
+-- | Decimal encoding of a 'Word'.
+wordDec :: BoundedPrim Word
+wordDec = boundedPrim 20 A.wordDec
+
+-- | Lowercase hexadecimal encoding of a 'Word8', as few digits as possible.
+word8Hex :: BoundedPrim Word8
+word8Hex = boundedPrim 2 A.word8Hex
+
+-- | Lowercase hexadecimal encoding of a 'Word16', as few digits as possible.
+word16Hex :: BoundedPrim Word16
+word16Hex = boundedPrim 4 A.word16Hex
+
+-- | Lowercase hexadecimal encoding of a 'Word32', as few digits as possible.
+word32Hex :: BoundedPrim Word32
+word32Hex = boundedPrim 8 A.word32Hex
+
+-- | Lowercase hexadecimal encoding of a 'Word64', as few digits as possible.
+word64Hex :: BoundedPrim Word64
+word64Hex = boundedPrim 16 A.word64Hex
+
+-- | Lowercase hexadecimal encoding of a 'Word', as few digits as possible.
+wordHex :: BoundedPrim Word
+wordHex = boundedPrim 16 A.wordHex
+
+-- | Lowercase hexadecimal encoding of an 'Int8', padded to 2 digits.
+int8HexFixed :: FixedPrim Int8
+int8HexFixed = fixedPrim 2 A.int8HexFixed
+
+-- | Lowercase hexadecimal encoding of an 'Int16', padded to 4 digits.
+int16HexFixed :: FixedPrim Int16
+int16HexFixed = fixedPrim 4 A.int16HexFixed
+
+-- | Lowercase hexadecimal encoding of an 'Int32', padded to 8 digits.
+int32HexFixed :: FixedPrim Int32
+int32HexFixed = fixedPrim 8 A.int32HexFixed
+
+-- | Lowercase hexadecimal encoding of an 'Int64', padded to 16 digits.
+int64HexFixed :: FixedPrim Int64
+int64HexFixed = fixedPrim 16 A.int64HexFixed
+
+-- | Lowercase hexadecimal encoding of a 'Word8', padded to 2 digits.
+word8HexFixed :: FixedPrim Word8
+word8HexFixed = fixedPrim 2 A.word8HexFixed
+
+-- | Lowercase hexadecimal encoding of a 'Word16', padded to 4 digits.
+word16HexFixed :: FixedPrim Word16
+word16HexFixed = fixedPrim 4 A.word16HexFixed
+
+-- | Lowercase hexadecimal encoding of a 'Word32', padded to 8 digits.
+word32HexFixed :: FixedPrim Word32
+word32HexFixed = fixedPrim 8 A.word32HexFixed
+
+-- | Lowercase hexadecimal encoding of a 'Word64', padded to 16 digits.
+word64HexFixed :: FixedPrim Word64
+word64HexFixed = fixedPrim 16 A.word64HexFixed
+
+-- | Lowercase hexadecimal encoding of a 'Double', padded to 16 digits.
+doubleHexFixed :: FixedPrim Double
+doubleHexFixed = fixedPrim 16 A.doubleHexFixed

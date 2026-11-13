@@ -1,0 +1,182 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The shared core of the builder modules: the 'Builder' type and the
+-- character encoders the other builder modules are written in terms of.
+--
+-- A 'Builder' is a difference list of strict chunks, so a caller can say what
+-- to write without joining the pieces first, and 'toByteString' joins them
+-- once. There is no buffer to fill, no continuation to resume and no signal to
+-- interpret: the bytes are simply the chunks, in order.
+--
+-- Mirroring decision: upstream's internal module represents a builder as
+-- @BuildStep@, a function from a @BufferRange@ (a @Ptr Word8@ plus its free
+-- space) to @IO (BuildSignal r)@, so building means writing bytes through
+-- pointers into a mutable 'Buffer' and then continuing, stopping or inserting a
+-- chunk. Base has no @Ptr@, no mutable byte array and no pointer writes, so
+-- that representation cannot even be stated here and no port could make the
+-- upstream bodies typecheck. The public modules keep upstream's names,
+-- argument orders and bytes on top of this chunk list instead.
+--
+-- Which upstream declarations that forces to differ, and why:
+--
+-- * Buffer machinery: @Buffer@, @BufferRange@, @bufferSize@, @newBuffer@,
+--   @byteStringFromBuffer@, @trimmedChunkFromBuffer@, @ChunkIOStream@,
+--   @yield1@, @ciosUnitToLazyByteString@, @ciosToLazyByteString@ -- they hold or
+--   copy through foreign pointers.
+-- * Step machinery: @BuildStep@, @BuildSignal@, @done@, @bufferFull@,
+--   @insertChunk@, @builder@, @finalBuildStep@, @runBuilder@, @runBuilderWith@,
+--   @ensureFree@, @flush@ -- continuations over a buffer being filled.
+-- * The @Put@ monad: @Put@, @put@, @runPut@, @putBuilder@, @fromPut@,
+--   @putLiftIO@, @hPut@ -- it fills a 'Handle' buffer in place; 'hPutBuilder'
+--   in "Data.ByteString.Builder" is its strict equivalent.
+-- * Pointer copy helpers: @byteStringCopyStep@, @byteStringThreshold@,
+--   @byteStringCopy@, @byteStringInsert@, @asciiLiteralCopy@, @modUtf8LitCopy@,
+--   @modUtf8_step@, @utf8_copyBytes@, @shortByteStringCopyStep@,
+--   @wrappedBytesCopyStep@, @wrappedBufferRangeCopyStep@ -- @memcpy@-style
+--   pointer writes.
+-- * Lazy surface: @lazyByteStringThreshold@, @lazyByteStringCopy@,
+--   @lazyByteStringInsert@ and the @cios*@ allocation strategies -- this package
+--   has no lazy 'ByteString'.
+-- * @instance IsList Builder@ -- base has no @IsList@ class.
+-- * @empty@, @append@, @stimesBuilder@, @stimesNegativeErr@ -- replaced by the
+--   'Semigroup' and 'Monoid' methods, which the instances below provide.
+--
+-- Two upstream declarations are not lost, only placed elsewhere: upstream's
+-- @shortByteString@ and @sliceOfShortByteString@ are one line over 'byteString'
+-- and live in "Data.ByteString.Builder", next to the other public drivers.
+-- 'toByteString' stands in for the @runBuilder ...@ driver, joining the chunks
+-- once where upstream would hand out a lazy chunk stream.
+module Data.ByteString.Builder.Internal
+  ( Builder
+  , toByteString
+  , byteString
+  , char7
+  , string7
+  , char8
+  , string8
+  , charUtf8
+  , stringUtf8
+  , power2
+  ) where
+
+import Data.Bool (Bool (..))
+import Data.ByteString (ByteString, concat, null, pack)
+import Data.Char (Char, ord)
+import Data.Int (Int)
+import Data.Integer (Integer)
+import Data.List ((:), foldr)
+import Data.Monoid (Monoid (..))
+import Data.Num ((*), (+), (-))
+import Data.Ord ((<))
+import Data.Real (Integral (div, mod))
+import Data.Semigroup ((<>))
+import Data.String (String)
+import Data.String qualified as S
+import Data.Word (Word8)
+import Moggi.Internal.Prim (word8FromInt#)
+
+-- | A sequence of bytes under construction, as a function that prepends its
+-- chunks to the chunks already collected.
+newtype Builder = Builder ([ByteString] -> [ByteString])
+
+-- | The chunks a builder contributes, in front of the given ones.
+unBuilder :: Builder -> [ByteString] -> [ByteString]
+unBuilder (Builder f) = f
+
+instance Semigroup Builder where
+  (<>) x y = Builder (\rest -> unBuilder x (unBuilder y rest))
+
+instance Monoid Builder where
+  mempty = Builder (\rest -> rest)
+  mconcat xs = foldr (<>) mempty xs
+
+-- | Append the chunk, unless it is empty.
+pushChunk :: ByteString -> [ByteString] -> [ByteString]
+pushChunk bs rest = case null bs of
+  True -> rest
+  False -> bs : rest
+
+-- | Collect the bytes a builder denotes.
+toByteString :: Builder -> ByteString
+toByteString builder = concat (unBuilder builder [])
+
+-- | Denote the same bytes as a strict 'ByteString'.
+byteString :: ByteString -> Builder
+byteString bs = Builder (\rest -> pushChunk bs rest)
+
+-- | The low @width@ bits of a codepoint, as one byte.
+maskByte :: Int -> Int -> Word8
+maskByte width n = word8FromInt# (mod n width)
+
+charWith :: Int -> Char -> Builder
+charWith width c = byteString (pack [maskByte width (ord c)])
+
+-- | The codepoint truncated to 7 bits, as a single byte.
+char7 :: Char -> Builder
+char7 c = charWith 128 c
+
+-- | Every codepoint truncated to 8 bits, one byte each.
+char8 :: Char -> Builder
+char8 c = charWith 256 c
+
+stringWith :: Int -> String -> Builder
+stringWith width s = Builder (\rest -> pushChunks (chunksWith width (S.unpack s)) rest)
+
+chunksWith :: Int -> [Char] -> [ByteString]
+chunksWith width chars = case chars of
+  [] -> []
+  c : rest -> pack [maskByte width (ord c)] : chunksWith width rest
+
+pushChunks :: [ByteString] -> [ByteString] -> [ByteString]
+pushChunks chunks rest = case chunks of
+  [] -> rest
+  c : more -> c : pushChunks more rest
+
+-- | The string with every codepoint truncated to 7 bits, one byte each.
+string7 :: String -> Builder
+string7 s = stringWith 128 s
+
+-- | The string with every codepoint truncated to 8 bits, one byte each.
+string8 :: String -> Builder
+string8 s = stringWith 256 s
+
+-- | The UTF-8 bytes of a character, in order.
+encodeChar :: Int -> [Word8]
+encodeChar code =
+  if code < 128 then
+    [byte code]
+  else if code < 2048 then
+    [byte (192 + div code 64), byte (128 + mod code 64)]
+  else if code < 65536 then
+    [ byte (224 + div code 4096)
+    , byte (128 + mod (div code 64) 64)
+    , byte (128 + mod code 64)
+    ]
+  else
+    [ byte (240 + div code 262144)
+    , byte (128 + mod (div code 4096) 64)
+    , byte (128 + mod (div code 64) 64)
+    , byte (128 + mod code 64)
+    ]
+
+-- | The low byte of a codepoint, as UTF-8 uses it in a single-byte case.
+byte :: Int -> Word8
+byte n = word8FromInt# (mod n 256)
+
+-- | Serialize a character as UTF-8.
+charUtf8 :: Char -> Builder
+charUtf8 c = byteString (pack (encodeChar (ord c)))
+
+-- | Serialize a string as UTF-8.
+stringUtf8 :: String -> Builder
+stringUtf8 s = Builder (\rest -> pushChunks (utf8Chunks (S.unpack s)) rest)
+
+utf8Chunks :: [Char] -> [ByteString]
+utf8Chunks chars = case chars of
+  [] -> []
+  c : rest -> pack (encodeChar (ord c)) : utf8Chunks rest
+
+-- | Two to the given power.
+power2 :: Int -> Integer
+power2 bits = case bits of
+  0 -> 1
+  _ -> 2 * power2 (bits - 1)

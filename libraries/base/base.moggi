@@ -12,7 +12,7 @@ email = saschaprolic@googlemail.com
 npub = npub1yywlmj053p4qp7z2qvqsrgcwz488mw0pr0t50xz3e5rx7s9uaelsjpdmfm
 
 [lib]
-source-dirs = .
+source-dirs = src
 
 [php]
 version = 8.5

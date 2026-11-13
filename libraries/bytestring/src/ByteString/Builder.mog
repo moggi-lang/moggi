@@ -1,0 +1,200 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | A 'Builder' denotes a sequence of bytes assembled from pieces, so encoders
+-- can say what to write without first joining the pieces together.
+--
+-- Each encoder here is one line over a primitive, as upstream: a fixed-size
+-- encoding is @'P.primFixed' P.word16BE@, a list of them is
+-- @'P.primMapListFixed'@, and the UTF-8 character is @'P.primBounded'@ because
+-- its size depends on the codepoint. The binary encodings themselves live in
+-- "Data.ByteString.Builder.Prim.Binary" and the character encodings in
+-- "Data.ByteString.Builder.Prim.ASCII" and
+-- "Data.ByteString.Builder.Prim", so this module only chooses a driver.
+--
+-- Moggi's 'Data.ByteString.ByteString' is strict and there is no write buffer,
+-- so a builder is a difference list of strict chunks and 'Data.ByteString.Builder.Internal.toByteString'
+-- joins them once. The drivers here are the strict ones: 'hPutBuilder' and
+-- 'writeFile'.
+--
+-- Porting notes: upstream, this module is a thin layer over
+-- "Data.ByteString.Builder.Internal", whose 'Builder' is a buffer-filling
+-- function over @Ptr Word8@ that returns a continuation signal. Base has no
+-- pointer, @CString@ or @Addr#@, so that representation cannot exist here and
+-- the internal module cannot be a line-for-line mirror; it keeps upstream's
+-- module name and entry points over a chunk difference list instead. The
+-- consequences, all recorded rather than worked around:
+--
+-- * 'hPutBuilder' is upstream's @putBuilder@ driver inlined as 'toByteString'
+--   followed by a strict 'hPut'; there is no handle buffer to fill in place.
+-- * @toLazyByteString@ and @lazyByteString@ are absent together with the lazy
+--   'ByteString' type, which this package does not have by design.
+-- * @floatLE@ and @floatBE@ are absent because base has no 'Float' type (only
+--   'Double'), so there is no argument type to name. Their 'Double' pairs,
+--   'doubleLE' and 'doubleBE', are present and byte-exact.
+-- * Everything else below keeps upstream's name, argument order and bytes.
+module Data.ByteString.Builder
+  ( Builder
+  , hPutBuilder
+  , writeFile
+  , byteString
+  , shortByteString
+  , sliceOfShortByteString
+  , int8
+  , word8
+  , int16BE
+  , int32BE
+  , int64BE
+  , word16BE
+  , word32BE
+  , word64BE
+  , doubleBE
+  , int16LE
+  , int32LE
+  , int64LE
+  , word16LE
+  , word32LE
+  , word64LE
+  , doubleLE
+  , char7
+  , string7
+  , char8
+  , string8
+  , charUtf8
+  , stringUtf8
+  , module Data.ByteString.Builder.ASCII
+  , module Data.ByteString.Builder.RealFloat
+  ) where
+
+import Data.ByteString (ByteString, drop, take)
+import Data.ByteString qualified as BS
+import Data.ByteString.Builder.ASCII
+import Data.ByteString.Builder.Internal (Builder, byteString, toByteString)
+import Data.ByteString.Builder.Prim qualified as P
+import Data.ByteString.Builder.RealFloat
+import Data.ByteString.Short (ShortByteString)
+import Data.Char (Char)
+import Data.Double (Double)
+import Data.Int (Int, Int16, Int32, Int64, Int8)
+import Data.String (String, IsString (..))
+import Data.String qualified as S
+import Data.Word (Word16, Word32, Word64, Word8)
+import System.IO (FilePath, Handle, IO, IOMode (..), withFile)
+
+-- | Write the bytes a builder denotes to a handle.
+hPutBuilder :: Handle -> Builder -> IO ()
+hPutBuilder handle builder = BS.hPut handle (toByteString builder)
+
+-- | Write a builder through a file opened with the given mode.
+--
+-- Upstream opens the file with @withBinaryFile@. Base exposes no binary mode --
+-- its handles are text streams -- so the two whole-file modes go through the
+-- byte-level writers, and the remaining modes are the closest equivalent
+-- available.
+modifyFile :: IOMode -> FilePath -> Builder -> IO ()
+modifyFile mode path builder = case mode of
+  WriteMode -> BS.writeFile path (toByteString builder)
+  AppendMode -> BS.appendFile path (toByteString builder)
+  _ -> withFile path mode (\handle -> BS.hPut handle (toByteString builder))
+
+-- | Write the bytes a builder denotes to a file.
+writeFile :: FilePath -> Builder -> IO ()
+writeFile path builder = modifyFile WriteMode path builder
+
+-- | Denote the same bytes as a short byte string.
+shortByteString :: ShortByteString -> Builder
+shortByteString bs = byteString bs
+
+-- | Denote a slice of the given bytes.
+sliceOfShortByteString :: Int -> Int -> ShortByteString -> Builder
+sliceOfShortByteString offset count bytes = byteString (take count (drop offset bytes))
+
+-- | Encode a single signed byte as-is.
+int8 :: Int8 -> Builder
+int8 = P.primFixed P.int8
+
+-- | Encode a single unsigned byte as-is.
+word8 :: Word8 -> Builder
+word8 = P.primFixed P.word8
+
+-- | Encode an 'Int16' in big endian format.
+int16BE :: Int16 -> Builder
+int16BE = P.primFixed P.int16BE
+
+-- | Encode an 'Int32' in big endian format.
+int32BE :: Int32 -> Builder
+int32BE = P.primFixed P.int32BE
+
+-- | Encode an 'Int64' in big endian format.
+int64BE :: Int64 -> Builder
+int64BE = P.primFixed P.int64BE
+
+-- | Encode a 'Word16' in big endian format.
+word16BE :: Word16 -> Builder
+word16BE = P.primFixed P.word16BE
+
+-- | Encode a 'Word32' in big endian format.
+word32BE :: Word32 -> Builder
+word32BE = P.primFixed P.word32BE
+
+-- | Encode a 'Word64' in big endian format.
+word64BE :: Word64 -> Builder
+word64BE = P.primFixed P.word64BE
+
+-- | Encode a 'Double' in big endian format.
+doubleBE :: Double -> Builder
+doubleBE = P.primFixed P.doubleBE
+
+-- | Encode an 'Int16' in little endian format.
+int16LE :: Int16 -> Builder
+int16LE = P.primFixed P.int16LE
+
+-- | Encode an 'Int32' in little endian format.
+int32LE :: Int32 -> Builder
+int32LE = P.primFixed P.int32LE
+
+-- | Encode an 'Int64' in little endian format.
+int64LE :: Int64 -> Builder
+int64LE = P.primFixed P.int64LE
+
+-- | Encode a 'Word16' in little endian format.
+word16LE :: Word16 -> Builder
+word16LE = P.primFixed P.word16LE
+
+-- | Encode a 'Word32' in little endian format.
+word32LE :: Word32 -> Builder
+word32LE = P.primFixed P.word32LE
+
+-- | Encode a 'Word64' in little endian format.
+word64LE :: Word64 -> Builder
+word64LE = P.primFixed P.word64LE
+
+-- | Encode a 'Double' in little endian format.
+doubleLE :: Double -> Builder
+doubleLE = P.primFixed P.doubleLE
+
+-- | Char7 encode a 'Char'.
+char7 :: Char -> Builder
+char7 = P.primFixed P.char7
+
+-- | Char7 encode a 'String'.
+string7 :: String -> Builder
+string7 s = P.primMapListFixed P.char7 (S.unpack s)
+
+-- | Char8 encode a 'Char'.
+char8 :: Char -> Builder
+char8 = P.primFixed P.char8
+
+-- | Char8 encode a 'String'.
+string8 :: String -> Builder
+string8 s = P.primMapListFixed P.char8 (S.unpack s)
+
+-- | UTF-8 encode a 'Char'.
+charUtf8 :: Char -> Builder
+charUtf8 = P.primBounded P.charUtf8
+
+-- | UTF-8 encode a 'String'.
+stringUtf8 :: String -> Builder
+stringUtf8 s = P.primMapListBounded P.charUtf8 (S.unpack s)
+
+-- | A string literal is its UTF-8 bytes, as upstream.
+instance IsString Builder where
+  fromString = stringUtf8
