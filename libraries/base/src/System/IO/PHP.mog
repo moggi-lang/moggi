@@ -238,7 +238,7 @@ hSetFileSize h size = do
   pure ()
 
 print :: Show a => a -> IO ()
-print x = putStr (show x)
+print x = putStrLn (show x)
 
 -- Temporary names are `template` plus 64 bits of randomness, created with
 -- `fopen` exclusive mode (`"x"`), which fails when the name is taken instead

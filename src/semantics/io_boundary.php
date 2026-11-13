@@ -355,11 +355,33 @@ function typeMentionsIo(Ast\TypeNode $type): bool
                 || isIoRefTypeConName($type->name)))
         || ($type instanceof Ast\TypeApp
             && (typeMentionsIo($type->con)
-                || \array_any($type->args, static fn (Ast\TypeNode $arg): bool => typeMentionsIo($arg))))
+                || (! isIoMetadataApplication($type)
+                    && \array_any($type->args, static fn (Ast\TypeNode $arg): bool => typeMentionsIo($arg)))))
         || ($type instanceof Ast\TypeArrow && (typeMentionsIo($type->from) || typeMentionsIo($type->to)))
         || ($type instanceof Ast\TypeConstrained
             && (\array_any($type->constraints, static fn (Ast\TypeNode $constraint): bool => typeMentionsIo($constraint))
                 || typeMentionsIo($type->body)));
+}
+
+/**
+ * A `TypeRep a` or `Proxy a` application: `a` is the type being described or
+ * tagged, not a value of that type, so an IO index here is metadata and not an
+ * IO value.
+ */
+function isIoMetadataApplication(Ast\TypeApp $type): bool
+{
+    $head = $type->con;
+    while ($head instanceof Ast\TypeApp) {
+        $head = $head->con;
+    }
+
+    if (! $head instanceof Ast\TypeCon) {
+        return false;
+    }
+
+    $name = canonicalTypeConName($head->name);
+
+    return $name === 'TypeRep' || $name === 'Proxy';
 }
 
 function validateStraightLineIoBody(Ast\AstNode $expr, string $source, string $filename): void

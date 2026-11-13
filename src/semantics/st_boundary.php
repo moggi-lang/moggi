@@ -241,6 +241,27 @@ function isNestedStType(Ast\TypeNode $type): bool
     return $inner instanceof Ast\TypeNode && isStType($inner);
 }
 
+/**
+ * A `TypeRep a` or `Proxy a` application: `a` is the type being described or
+ * tagged, not a value of that type, so an ST index here is metadata and not a
+ * confined value.
+ */
+function isStMetadataApplication(Ast\TypeApp $type): bool
+{
+    $head = $type->con;
+    while ($head instanceof Ast\TypeApp) {
+        $head = $head->con;
+    }
+
+    if (! $head instanceof Ast\TypeCon) {
+        return false;
+    }
+
+    $name = canonicalTypeConName($head->name);
+
+    return $name === 'TypeRep' || $name === 'Proxy';
+}
+
 function typeMentionsSt(Ast\TypeNode $type): bool
 {
     if ($type instanceof Ast\TypeCon) {
@@ -253,7 +274,8 @@ function typeMentionsSt(Ast\TypeNode $type): bool
 
     if ($type instanceof Ast\TypeApp) {
         return typeMentionsSt($type->con)
-            || \array_any($type->args, static fn (Ast\TypeNode $arg): bool => typeMentionsSt($arg));
+            || (! isStMetadataApplication($type)
+                && \array_any($type->args, static fn (Ast\TypeNode $arg): bool => typeMentionsSt($arg)));
     }
 
     if ($type instanceof Ast\TypeArrow) {
