@@ -96,6 +96,10 @@ final class ImportSymbol
         public readonly array $ambiguousOrigins = [],
         public readonly bool $actionReturn = false,
         public readonly ?string $worker = null,
+        /** @var array<string, mixed>|null the pattern synonym this spelling imports */
+        public readonly ?array $patternSynonym = null,
+        /** Whether only a module prefix may use this spelling's pattern synonym. */
+        public readonly bool $patternSynonymQualifiedOnly = false,
     ) {
     }
 
@@ -137,6 +141,8 @@ final class ImportSymbol
             ambiguousOrigins: $this->ambiguousOrigins,
             actionReturn: $this->actionReturn,
             worker: $this->worker,
+            patternSynonym: $this->patternSynonym,
+            patternSynonymQualifiedOnly: $this->patternSynonymQualifiedOnly,
         );
     }
 
@@ -186,6 +192,14 @@ final class ImportSymbol
         return $this->copy(intrinsicWrapper: $intrinsicWrapper);
     }
 
+    /** The same spelling, which is also an imported pattern synonym. */
+    public function withPatternSynonym(array $patternSynonym, bool $qualifiedOnly = false): self
+    {
+        return $this->patternSynonym !== null
+            ? $this
+            : $this->copy(patternSynonym: $patternSynonym, patternSynonymQualifiedOnly: $qualifiedOnly);
+    }
+
     /** The same name, reached through one more module prefix. */
     public function withQualified(string $prefix, ImportQualified $entry): self
     {
@@ -223,6 +237,8 @@ final class ImportSymbol
         ?array $ambiguousOrigins = null,
         ?bool $actionReturn = null,
         ?string $worker = null,
+        ?array $patternSynonym = null,
+        ?bool $patternSynonymQualifiedOnly = null,
     ): self {
         return new self(
             symbol: $symbol ?? $this->symbol,
@@ -237,6 +253,8 @@ final class ImportSymbol
             ambiguousOrigins: $ambiguousOrigins ?? $this->ambiguousOrigins,
             actionReturn: $actionReturn ?? $this->actionReturn,
             worker: $worker ?? $this->worker,
+            patternSynonym: $patternSynonym ?? $this->patternSynonym,
+            patternSynonymQualifiedOnly: $patternSynonymQualifiedOnly ?? $this->patternSynonymQualifiedOnly,
         );
     }
 }
@@ -275,6 +293,10 @@ final class ImportInterface
         public readonly array $trueBindings = [],
         public readonly array $summaries = [],
         public readonly array $classScopeArity = [],
+        /** @var array<string, array<string, array<string, mixed>>> data declarations by import prefix */
+        public readonly array $qualifiedData = [],
+        /** @var array<string, array<string, array<string, mixed>>> type synonyms by import prefix */
+        public readonly array $qualifiedTypeSynonyms = [],
     ) {
     }
 
@@ -294,6 +316,48 @@ final class ImportInterface
     public function symbol(string $name): ?ImportSymbol
     {
         return $this->record($name)?->asCallable();
+    }
+
+    /**
+     * The pattern synonyms this module imports, by the spelling it uses.
+     *
+     * A synonym travels as a fact on the spelling's record, beside the scheme a
+     * bidirectional synonym also has; an ambiguous spelling publishes none, the
+     * same way it publishes no scheme.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function patternSynonyms(): array
+    {
+        $definitions = [];
+        foreach ($this->symbols as $name => $imported) {
+            if ($imported->patternSynonym !== null
+                && ! $imported->patternSynonymQualifiedOnly
+                && $imported->ambiguousOrigins === []
+            ) {
+                $definitions[$name] = $imported->patternSynonym;
+            }
+        }
+
+        return $definitions;
+    }
+
+    /**
+     * Every imported pattern synonym, including the ones only a module prefix may
+     * use; the caller decides which prefix reaches each declaring module.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function qualifiedPatternSynonyms(): array
+    {
+        $definitions = [];
+        foreach ($this->symbols as $name => $imported) {
+            if ($imported->patternSynonym !== null) {
+                $definitions[$name] = $imported->patternSynonym;
+            }
+        }
+
+        return $definitions;
     }
 
     /**
@@ -449,6 +513,18 @@ final class ImportInterface
         }
 
         return $data;
+    }
+
+    /** @return array<string, array<string, array<string, mixed>>> data declarations by prefix */
+    public function qualifiedData(): array
+    {
+        return $this->qualifiedData;
+    }
+
+    /** @return array<string, array<string, array<string, mixed>>> type synonyms by prefix */
+    public function qualifiedTypeSynonyms(): array
+    {
+        return $this->qualifiedTypeSynonyms;
     }
 
     /** @return array<string, array<string, mixed>> */
@@ -697,6 +773,8 @@ final class ImportInterface
             trueBindings: $this->trueBindings,
             summaries: $this->summaries,
             classScopeArity: $classScopeArity ?? $this->classScopeArity,
+            qualifiedData: $this->qualifiedData,
+            qualifiedTypeSynonyms: $this->qualifiedTypeSynonyms,
         );
     }
 }

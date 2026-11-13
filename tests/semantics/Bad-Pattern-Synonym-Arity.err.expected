@@ -1,0 +1,4 @@
+tests/semantics/Bad-Pattern-Synonym-Arity.mog:6:10: parse error: pattern synonym `Cons` expects 2 argument(s), got 1
+
+  6 |   Cons y -> y
+    |          ^^

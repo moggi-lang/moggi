@@ -295,8 +295,13 @@ function lowerFunction(
             continue;
         }
 
-        bindPattern(lowerPatternTerm($term, $ctx), new Local($slotNames[$i]), $ctx);
+        bindPatternWithViews($pattern, new Local($slotNames[$i]), $ctx);
     }
+
+    // The prologue that decomposes a parameter pattern into its binders. An action body is
+    // lowered into its worker's block, not into this context's items, so the prologue has to
+    // travel with it: the worker's body is the only reader of those binders.
+    $paramItems = $ctx->items;
 
     if ($body->line > 0) {
         $ctx->stmtSrcLoc = srcLocFromAst($body, $moduleName, $fn->name, $sourceFile);
@@ -321,7 +326,7 @@ function lowerFunction(
                 $workerName,
                 $slotNames,
                 null,
-                new Block([...$bodyItems, new Ret($result)]),
+                new Block([...$paramItems, ...$bodyItems, new Ret($result)]),
                 new FunctionShape(
                     kind: FunctionKind::Worker,
                     origin: $fn->name,
@@ -515,6 +520,9 @@ function lowerPatternTerm(CheckedPattern $term, LowerCtx $ctx): Pattern
             $ctx->constructorRenames[$term->name] ?? ($term->name
                 ?? throw new \RuntimeException("the record pattern at {$term->origin} publishes no name")),
             recordPatternArgs($term, $ctx, $lower),
+        ),
+        PatternShape::View => throw new \RuntimeException(
+            "the view pattern at {$term->origin} is not lowered in this position",
         ),
     };
 }

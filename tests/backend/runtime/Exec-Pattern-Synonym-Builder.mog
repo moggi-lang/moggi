@@ -1,0 +1,38 @@
+import Data.Int
+import Text.Show
+import System.IO
+
+-- A bidirectional pattern synonym: the matcher is a view pattern and the
+-- `where` builder is used when the synonym appears in an expression.
+data Ymd = Ymd Int Int Int
+
+toYmd :: Ymd -> (Int, Int, Int)
+toYmd (Ymd y m d) = (y, m, d)
+
+fromYmd :: Int -> Int -> Int -> Ymd
+fromYmd y m d = Ymd y m d
+
+pattern YearMonthDay y m d <- (toYmd -> (y, m, d))
+  where
+    YearMonthDay y m d = fromYmd y m d
+
+yearOf :: Ymd -> Int
+yearOf (YearMonthDay y _ _) = y
+
+monthOf :: Ymd -> Int
+monthOf (YearMonthDay _ m _) = m
+
+dayOf :: Ymd -> Int
+dayOf (YearMonthDay _ _ d) = d
+
+nextYear :: Ymd -> Ymd
+nextYear (YearMonthDay y m d) = YearMonthDay (y + 1) m d
+
+main :: IO ()
+main = do
+  putStrLn (show (yearOf (YearMonthDay 2020 2 29)))
+  putStrLn (show (monthOf (YearMonthDay 2020 2 29)))
+  putStrLn (show (dayOf (YearMonthDay 2020 2 29)))
+  putStrLn (show (yearOf (nextYear (YearMonthDay 1999 12 31))))
+  putStrLn (show (monthOf (nextYear (YearMonthDay 1999 12 31))))
+  putStrLn (show (dayOf (nextYear (YearMonthDay 1999 12 31))))

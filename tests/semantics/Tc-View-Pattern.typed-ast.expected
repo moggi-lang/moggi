@@ -1,0 +1,30 @@
+program
+  function double :: Int -> Int
+    pat_var n
+    intrinsic intAdd#
+      variable n
+      variable n
+  function zero :: Int -> Bool
+    pat_var _p0
+    case
+      variable _p0
+      alt
+        pat_view
+          variable double
+          pat_lit 0
+        constructor_ref True
+      alt
+        pat_wild _
+        constructor_ref False
+  function classified :: Int -> Int
+    pat_var x
+    case
+      variable x
+      alt
+        pat_view
+          variable double
+          pat_lit 0
+        integer 1
+      alt
+        pat_wild _
+        integer 0

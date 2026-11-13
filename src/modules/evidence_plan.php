@@ -178,6 +178,9 @@ function checkedTermsIn(Ast\AstNode $root): CheckedTerms
         $children = [];
         $fields = [];
         switch (true) {
+            case $pattern instanceof Ast\PatView:
+                $children = [$publishPattern($pattern->pattern)];
+                break;
             case $pattern instanceof Ast\PatCons:
                 $children = [$publishPattern($pattern->head), $publishPattern($pattern->tail)];
                 break;

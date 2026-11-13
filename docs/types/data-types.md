@@ -184,6 +184,7 @@ parameters (lambdas accept variables only — destructure in the body instead).
 | `[]`, `x : xs` | the empty list, and a non-empty list head and tail |
 | `(a, b)` | a pair (up to 64-tuples are in the library) |
 | `x :| xs` | an infix constructor (see below) |
+| `(f -> p)` | `f` applied to the value, when its result matches `p` (a view pattern) |
 
 Patterns nest, and a function's clauses are tried in order:
 
@@ -215,6 +216,40 @@ sign m = case m of
          | otherwise -> "non-positive"
   Nothing -> "none"
 ```
+
+### View patterns
+
+`(expr -> pattern)` applies `expr` to the value being matched and matches the
+result. The expression is written in the scope around the pattern, so it can
+read the enclosing parameters; the pattern binds the names of the result:
+
+```moggi
+double :: Int -> Int
+double n = n + n
+
+zero :: Int -> Bool
+zero (double -> 0) = True
+zero _ = False
+```
+
+A result that does not match falls through to the next clause, so a view arm
+behaves like any other failed pattern:
+
+```moggi
+classify :: Int -> Int
+classify (double -> 0) = 10
+classify (double -> n) = n
+classify _ = 99
+```
+
+Views nest inside other patterns, and the expression is applied to the value
+that position bound: in `Just (double -> 0)` it is applied to the `Maybe`'s
+argument.
+
+The checker does not reason about what a view's expression returns, so an arm
+whose pattern contains one counts as covering everything in the exhaustiveness
+check (see below). A `case` the checker accepts can still fail at run time when
+no view matches, so keep a catch-all clause after views that may fail.
 
 ## Exhaustiveness
 
@@ -331,6 +366,13 @@ render (MkBox x) = show x
 The context is evidence the value carries, so `show` resolves through the
 dictionary stored in the constructor; the dictionary is a field the source never
 writes, and pattern matching binds it for you.
+
+The same quantification may be written in an ordinary declaration:
+`data Box = forall a. Box a` states the constructor's variable with `forall`
+instead of a `where` block, and the variable is existential either way. A
+context may follow the quantifier (`data Box = forall a. Show a => Box a`), and
+`newtype` accepts the form; both produce the constructor signature the `where`
+form gives.
 
 Other forms work as they do in an ordinary declaration: `forall` may be written
 out (`Anon :: forall b. b -> Box`), a quantifier and a context may precede a

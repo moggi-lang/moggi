@@ -279,6 +279,231 @@ function exposeDataType(
 }
 
 /**
+ * Record one pattern synonym, with everything its expansion will need.
+ *
+ * A synonym is not a declaration of a value: its matcher and builder are
+ * written in this module's scope, so an importing module can only check the
+ * expansion if the declarations those expressions name come with it. They are
+ * collected here, once, and travel as the definition's `support`.
+ *
+ * @param array<string, mixed> $available
+ * @param array{env: array<string, mixed>, data: array<string, mixed>, typeSynonyms: array<string, mixed>} $localTypes
+ * @param array<string, array<string, mixed>> $units
+ */
+function exposePatternSynonym(
+    array &$available,
+    array $localTypes,
+    array $units,
+    string $moduleName,
+    Ast\PatternSynonymDecl $decl,
+): void {
+    if ($decl->matcher === null) {
+        return;
+    }
+
+    $available['patternSynonyms'][$decl->name] = [
+        'name' => $decl->name,
+        'params' => $decl->params,
+        'matcher' => $decl->matcher,
+        'builder' => $decl->builder,
+        'module' => $moduleName,
+        'support' => patternSynonymSupport($decl->matcher, $decl->builder, $localTypes, $units, $moduleName),
+    ];
+}
+
+/**
+ * The declarations a synonym's matcher and builder name.
+ *
+ * The pattern side contributes the constructors it matches (`IsApp`) and the
+ * functions its view expressions call (`splitApp`); the builder contributes the
+ * values it builds with (`repOf`, `RepApp`). A parameter is bound by the
+ * matcher, so it is never a reference.
+ *
+ * @param array{env: array<string, mixed>, data: array<string, mixed>, typeSynonyms?: array<string, mixed>} $localTypes
+ * @param array<string, array<string, mixed>> $units
+ * @return array{env: array<string, mixed>, origins: array<string, array{module: string, namespace: string, phpName: string}>, data: array<string, mixed>, typeSynonyms: array<string, mixed>, intrinsicWrappers: array<string, string>}
+ */
+function patternSynonymSupport(
+    Ast\AstNode $matcher,
+    ?Ast\AstNode $builder,
+    array $localTypes,
+    array $units,
+    string $moduleName,
+): array {
+    $names = [];
+    collectPatternSynonymPatternNames($matcher, $names);
+    collectPatternSynonymExpressionNames($matcher, $names);
+    if ($builder !== null) {
+        collectExpressionReferenceNames($builder, $names);
+    }
+
+    $origins = [];
+    if ($names !== [] && isset($units[$moduleName])) {
+        $origins = classModuleConstructorOrigins(
+            $units,
+            $moduleName,
+            classModuleValueOrigins($units, $moduleName, $names),
+            $names,
+        );
+    }
+
+    $namespace = moduleNameToNamespace($moduleName);
+    $support = [
+        'env' => [],
+        'origins' => [],
+        'data' => [],
+        'typeSynonyms' => [],
+        'intrinsicWrappers' => [],
+    ];
+
+    foreach (\array_keys($names) as $name) {
+        $scheme = $localTypes['env'][$name] ?? null;
+        if ($scheme !== null && ! $scheme->classMethod) {
+            $support['env'][$name] = $scheme;
+            $support['origins'][$name] = $origins[$name] ?? exportOrigin($moduleName, $namespace, $name);
+            if (isset($localTypes['intrinsicWrappers'][$name])) {
+                $support['intrinsicWrappers'][$name] = $localTypes['intrinsicWrappers'][$name];
+            }
+        }
+
+        if (isset($localTypes['typeSynonyms'][$name])) {
+            $support['typeSynonyms'][$name] = $localTypes['typeSynonyms'][$name];
+        }
+
+        foreach ($localTypes['data'] ?? [] as $typeName => $info) {
+            if (isset($info['constructors'][$name])) {
+                $support['data'][$typeName] = $info;
+
+                break;
+            }
+        }
+    }
+
+    return $support;
+}
+
+/**
+ * Constructors a pattern names, including the ones inside its view expressions.
+ *
+ * @param array<string, true> $names
+ */
+function collectPatternSynonymPatternNames(Ast\AstWalkable $node, array &$names): void
+{
+    if ($node instanceof Ast\PatCon || $node instanceof Ast\PatRecord) {
+        $names[$node->name] = true;
+    }
+
+    foreach ($node->childValues() as $child) {
+        foreach (\is_array($child) ? $child : [$child] as $value) {
+            if ($value instanceof Ast\AstWalkable) {
+                collectPatternSynonymPatternNames($value, $names);
+            }
+        }
+    }
+}
+
+/**
+ * Free names of every view expression and of the builder.
+ *
+ * @param array<string, true> $names
+ */
+function collectPatternSynonymExpressionNames(Ast\AstWalkable $node, array &$names): void
+{
+    if ($node instanceof Ast\PatView) {
+        collectExpressionReferenceNames($node->expression, $names);
+    }
+
+    foreach ($node->childValues() as $child) {
+        foreach (\is_array($child) ? $child : [$child] as $value) {
+            if ($value instanceof Ast\AstWalkable) {
+                collectPatternSynonymExpressionNames($value, $names);
+            }
+        }
+    }
+}
+
+/**
+ * The values, constructors and operators one expression refers to.
+ *
+ * @param array<string, true> $names
+ */
+function collectExpressionReferenceNames(Ast\AstNode $expr, array &$names): void
+{
+    $evidenceParameter = static fn (Ast\EvidenceMethod $method): ?string
+        => $method->evidence === '' ? null : $method->evidence;
+    foreach (\Moggi\IR\freeVarsExpr($expr, [], $evidenceParameter) as $name) {
+        $names[$name] = true;
+    }
+    foreach (classScopeConstructorRefs($expr) as $name => $_) {
+        $names[$name] = true;
+    }
+    foreach (classScopeOperatorRefs($expr) as $name => $_) {
+        $names[$name] = true;
+    }
+}
+
+/**
+ * Add one exported pattern synonym, refusing a name the module does not declare.
+ *
+ * @param array<string, mixed> $exports
+ * @param array<string, mixed> $available
+ * @param array<string, mixed> $item the export item, for its source position
+ * @param array<string, array<string, mixed>> $units
+ */
+function addExportedPatternSynonym(
+    array &$exports,
+    array $available,
+    string $name,
+    string $moduleName,
+    array $item = [],
+    array $units = [],
+): void {
+    $unit = $units[$moduleName] ?? [];
+    if (! isset($available['patternSynonyms'][$name])) {
+        throw exportError(
+            appendDidYouMean(
+                "module `{$moduleName}` cannot export unknown pattern synonym `{$name}`",
+                $name,
+                \array_keys($available['patternSynonyms'] ?? []),
+            ),
+            $item,
+            $unit,
+        );
+    }
+
+    $definition = $available['patternSynonyms'][$name];
+    if (isset($exports['patternSynonyms'][$name])) {
+        if (($exports['patternSynonyms'][$name]['module'] ?? null) === ($definition['module'] ?? null)) {
+            return;
+        }
+
+        throw exportError("duplicate export `{$name}` in module `{$moduleName}`", $item, $unit);
+    }
+
+    $exports['patternSynonyms'][$name] = $definition;
+}
+
+/**
+ * Copy the declarations one imported synonym's expansion needs into a selection.
+ *
+ * They are ordinary facts about names the selection already carries, so they
+ * are merged as such; an entry the import itself selected wins.
+ *
+ * @param array<string, mixed> $selected
+ * @param array<string, mixed> $definition
+ */
+function mergePatternSynonymSupport(array &$selected, array $definition): void
+{
+    foreach ($definition['support'] ?? [] as $fact => $entries) {
+        foreach ($entries as $name => $value) {
+            if (! isset($selected[$fact][$name])) {
+                $selected[$fact][$name] = $value;
+            }
+        }
+    }
+}
+
+/**
  * @param array{env: array<string, mixed>, data: array<string, mixed>, typeSynonyms: array<string, mixed>} $localTypes
  * @param array<string, array<string, mixed>> $units
  * @return array{
@@ -301,6 +526,7 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
         'constructorRenames' => [],
         'ambientTypes' => [],
         'classes' => [],
+        'patternSynonyms' => [],
         'qualifiedModules' => [],
         'moduleAsNames' => [],
         'ambiguous' => [],
@@ -313,6 +539,7 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
         'data' => [],
         'origins' => [],
         'intrinsicWrappers' => [],
+        'patternSynonyms' => [],
         'qualifiedModules' => [],
         'moduleAsNames' => [],
         'ambiguous' => [],
@@ -338,6 +565,7 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
             ),
             Ast\ClassDecl::class => exposeClassMethods($available, $localTypes, $item),
             Ast\TypeSynonymDecl::class => exposeTypeSynonym($available, $localTypes, $item->name),
+            Ast\PatternSynonymDecl::class => exposePatternSynonym($available, $localTypes, $units, $moduleName, $item),
             Ast\DataDecl::class => exposeDataType($available, $localTypes, $moduleName, $namespace, $item),
             default => null,
         };
@@ -388,6 +616,27 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
             continue;
         }
 
+        if (($item['tag'] ?? '') === 'pattern') {
+            addExportedPatternSynonym($exports, $available, $item['name'], $moduleName, $item, $units);
+
+            continue;
+        }
+
+        if (($item['tag'] ?? '') === 'data' && isset($available['patternSynonyms'][$item['name']])) {
+            addExportedPatternSynonym($exports, $available, $item['name'], $moduleName, $item, $units);
+
+            continue;
+        }
+
+        if (($item['tag'] ?? '') === 'value'
+            && ! isset($available['env'][$item['name']])
+            && isset($available['patternSynonyms'][$item['name']])
+        ) {
+            addExportedPatternSynonym($exports, $available, $item['name'], $moduleName, $item, $units);
+
+            continue;
+        }
+
         $exportsBeforeItem = $exports;
         try {
             if ($item['tag'] === 'value' && ! isset($available['env'][$item['name']])
@@ -401,6 +650,9 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
 
             if ($item['tag'] === 'value') {
                 addExportedValue($exports, $available, $item['name'], $moduleName, $item, $units);
+                if (isset($available['patternSynonyms'][$item['name']])) {
+                    addExportedPatternSynonym($exports, $available, $item['name'], $moduleName, $item, $units);
+                }
                 if (isset($available['typeSynonyms'][$item['name']]) || isset($available['data'][$item['name']])) {
                     addExportedType($exports, $available, $program, $item, $moduleName, $units);
                 }
@@ -429,6 +681,9 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
 
             if ($item['tag'] === 'value') {
                 addExportedValue($exports, $available, $item['name'], $moduleName, $item, $units);
+                if (isset($available['patternSynonyms'][$item['name']])) {
+                    addExportedPatternSynonym($exports, $available, $item['name'], $moduleName, $item, $units);
+                }
                 if (isset($available['typeSynonyms'][$item['name']]) || isset($available['data'][$item['name']])) {
                     addExportedType($exports, $available, $program, $item, $moduleName, $units);
                 }
@@ -626,6 +881,18 @@ function mergeSelectedIntoExportsStrict(
 
         $exports['typeSynonyms'][$name] = $info;
     }
+
+    foreach ($selected['patternSynonyms'] ?? [] as $name => $definition) {
+        if (isset($exports['patternSynonyms'][$name])) {
+            if ($exports['patternSynonyms'][$name] === $definition) {
+                continue;
+            }
+
+            throw $duplicateExport($name);
+        }
+
+        $exports['patternSynonyms'][$name] = $definition;
+    }
 }
 
 /** @param ?array<string, mixed> $a @param ?array<string, mixed> $b */
@@ -738,6 +1005,16 @@ function exportAllLocalDeclarations(
                 $moduleName,
                 $units,
             ),
+            Ast\PatternSynonymDecl::class => isset($available['patternSynonyms'][$item->name])
+                ? addExportedPatternSynonym(
+                    $exports,
+                    $available,
+                    $item->name,
+                    $moduleName,
+                    declarationExportItem('pattern', $item->name, $item),
+                    $units,
+                )
+                : null,
             default => null,
         };
     }
@@ -1121,6 +1398,7 @@ function exportOrigin(string $moduleName, string $namespace, string $phpName): a
  *   typeSynonyms: array<string, mixed>,
  *   data: array<string, mixed>,
  *   origins: array<string, array{module: string, namespace: string, phpName: string}>,
+ *   patternSynonyms?: array<string, array<string, mixed>>,
  *   qualifiedModules: array<string, string>,
  *   moduleAsNames: array<string, string>
  * } $exports
@@ -1172,6 +1450,12 @@ function mergeIntoExports(array &$exports, array $selected, string $moduleName):
         }
 
         $exports['data'][$name] = $info;
+    }
+
+    foreach ($selected['patternSynonyms'] ?? [] as $name => $definition) {
+        if (! isset($exports['patternSynonyms'][$name])) {
+            $exports['patternSynonyms'][$name] = $definition;
+        }
     }
 }
 
@@ -1238,6 +1522,7 @@ function selectImportedNames(Ast\ImportDecl $import, array $exports): array
         'ambientTypes' => [],
         'origins' => [],
         'intrinsicWrappers' => [],
+        'patternSynonyms' => [],
     ];
     $hiding = \array_fill_keys($import->hiding, true);
 
@@ -1266,6 +1551,13 @@ function selectImportedNames(Ast\ImportDecl $import, array $exports): array
             }
         }
 
+        foreach ($exports['patternSynonyms'] ?? [] as $name => $definition) {
+            if (! isset($hiding[$name])) {
+                $selected['patternSynonyms'][$name] = $definition;
+                mergePatternSynonymSupport($selected, $definition);
+            }
+        }
+
         foreach ($exports['ambientTypes'] ?? [] as $name => $_) {
             if (! isset($hiding[$name])) {
                 $selected['ambientTypes'][$name] = true;
@@ -1286,6 +1578,22 @@ function selectImportedNames(Ast\ImportDecl $import, array $exports): array
             $name = $item->name;
             $localName = $item->asName ?? $name;
             if (isset($hiding[$localName])) {
+                continue;
+            }
+
+            if ($item->pattern) {
+                $definition = $exports['patternSynonyms'][$name] ?? null;
+                if ($definition === null) {
+                    throw new TypeError(appendDidYouMean(
+                        'module `' . Ast\moduleName($import->path) . "` does not export pattern `{$name}`",
+                        $name,
+                        \array_keys($exports['patternSynonyms'] ?? []),
+                    ));
+                }
+
+                $selected['patternSynonyms'][$localName] = $definition;
+                mergePatternSynonymSupport($selected, $definition);
+
                 continue;
             }
 
@@ -1315,6 +1623,12 @@ function selectImportedNames(Ast\ImportDecl $import, array $exports): array
 
             if (isset($exports['data'][$name])) {
                 $selected['data'][$localName] = $exports['data'][$name];
+                $matched = true;
+            }
+
+            if (isset($exports['patternSynonyms'][$name])) {
+                $selected['patternSynonyms'][$localName] = $exports['patternSynonyms'][$name];
+                mergePatternSynonymSupport($selected, $exports['patternSynonyms'][$name]);
                 $matched = true;
             }
 
@@ -1357,6 +1671,7 @@ function selectImportedNames(Ast\ImportDecl $import, array $exports): array
                     ...\array_keys($exports['env'] ?? []),
                     ...\array_keys($exports['typeSynonyms'] ?? []),
                     ...\array_keys($exports['data'] ?? []),
+                    ...\array_keys($exports['patternSynonyms'] ?? []),
                     ...\array_keys($exports['ambientTypes'] ?? []),
                     ...\array_keys($exports['classes'] ?? []),
                 ];
@@ -1393,6 +1708,13 @@ function selectImportedNames(Ast\ImportDecl $import, array $exports): array
     foreach ($exports['data'] as $name => $info) {
         if (! isset($hiding[$name])) {
             $selected['data'][$name] = $info;
+        }
+    }
+
+    foreach ($exports['patternSynonyms'] ?? [] as $name => $definition) {
+        if (! isset($hiding[$name])) {
+            $selected['patternSynonyms'][$name] = $definition;
+            mergePatternSynonymSupport($selected, $definition);
         }
     }
 

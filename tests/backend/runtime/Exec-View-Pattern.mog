@@ -1,0 +1,41 @@
+import Data.Int
+import Data.Maybe
+import Text.Show
+import System.IO
+
+-- `(expr -> pattern)` applies `expr` to the value being matched and matches the
+-- result. A result that does not match falls through to the next clause, exactly
+-- like a failed constructor test; a view under a constructor is applied to the
+-- argument that constructor bound.
+twice :: Int -> Int
+twice n = n + n
+
+classify :: Int -> Int
+classify (twice -> 0) = 10
+classify (twice -> n) = n
+classify _ = 99
+
+firstView :: [Int] -> Int
+firstView ((twice -> 0) : _) = 1
+firstView ((twice -> n) : _) = n
+firstView [] = 3
+
+unjust :: Maybe Int -> Int
+unjust (Just (twice -> 0)) = 1
+unjust (Just (twice -> n)) = n
+unjust Nothing = 3
+
+picked :: Int -> Int
+picked (twice -> n) | n > 5 = n
+picked _ = 0
+
+main :: IO ()
+main = do
+  putStrLn (show (classify 5))
+  putStrLn (show (firstView [4]))
+  putStrLn (show (firstView [0]))
+  putStrLn (show (unjust (Just 0)))
+  putStrLn (show (unjust (Just 4)))
+  putStrLn (show (unjust Nothing))
+  putStrLn (show (picked 4))
+  putStrLn (show (picked 1))

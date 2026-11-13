@@ -56,6 +56,18 @@ function bindRole(): string
     return 'bind';
 }
 
+/**
+ * The method a pattern that does not match runs.
+ *
+ * A `do` bind whose pattern is refutable is a match the monad may have to
+ * refuse (`Just x <- …` on `Nothing`), and the monad decides what refusing
+ * means: `fail` for `MonadFail`. The desugaring names the role, not the class.
+ */
+function failRole(): string
+{
+    return 'fail';
+}
+
 /** The action that produces a value and does nothing else: the monad's unit. */
 function pureRole(): string
 {
@@ -66,6 +78,18 @@ function pureRole(): string
 function literalRole(): string
 {
     return 'literal';
+}
+
+/**
+ * The method a string literal is converted with.
+ *
+ * The kernel has one string type, so a literal is a `String` wherever nothing
+ * asks for another type; a class declaring `String -> a` is what lets a literal
+ * stand for something else (markup, an attribute value, a byte string).
+ */
+function stringLiteralRole(): string
+{
+    return 'string-literal';
 }
 
 /**

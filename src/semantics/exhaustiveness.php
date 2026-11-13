@@ -436,7 +436,9 @@ function dataNameFromCasePatterns(TypeCheckState $state, Ast\CaseExpr $expr): ?s
 
 function patternCoversAll(Ast\AstNode $pattern): bool
 {
-    return $pattern instanceof Ast\PatWild || $pattern instanceof Ast\PatVar;
+    return $pattern instanceof Ast\PatWild
+        || $pattern instanceof Ast\PatVar
+        || $pattern instanceof Ast\PatView;
 }
 
 function coveredConstructors(TypeCheckState $state, Ast\AstNode $pattern): array

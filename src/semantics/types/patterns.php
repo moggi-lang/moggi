@@ -274,6 +274,9 @@ function declarePatternBinders(TypeCheckState $state, Ast\AstNode $pattern, arra
                 $walk($pattern->head);
                 $walk($pattern->tail);
             })(),
+            Ast\PatView::class => (static function () use ($pattern, $walk): void {
+                $walk($pattern->pattern);
+            })(),
             default => throw typeFail($state, 'unsupported pattern ' . $pattern::class),
         };
     };
@@ -317,8 +320,28 @@ function bindPattern(TypeCheckState $state, Ast\AstNode $pattern, Type $expected
         Ast\PatTuple::class => bindTuplePattern($state, $pattern, $expected, $env, $generalize, $constraints),
         Ast\PatNil::class => bindNilPattern($state, $expected, $env),
         Ast\PatCons::class => bindConsPattern($state, $pattern, $expected, $env, $generalize, $constraints),
+        Ast\PatView::class => bindViewPattern($state, $pattern, $expected, $env, $generalize, $constraints),
         default => throw typeFail($state, 'unsupported pattern ' . $pattern::class),
     };
+}
+
+/**
+ * Bind a view pattern: the expression turns the scrutinee into the value the
+ * sub-pattern matches.
+ *
+ * The expression is checked at `$expected -> $result` in the pattern's own
+ * environment, so it may read the enclosing parameters; it binds nothing, and
+ * the sub-pattern then binds `$result` exactly as it would in an ordinary
+ * pattern. Matching failure is the sub-pattern's, so a case arm falls through
+ * the way it does for any other pattern.
+ */
+function bindViewPattern(TypeCheckState $state, Ast\PatView $pattern, Type $expected, array $env, bool $generalize, array $constraints): array
+{
+    $viewType = inferExpr($state, $pattern->expression, $env);
+    $result = freshType($state);
+    unify($state, $viewType, new \Moggi\Semantics\TypeExpr\TArrow($expected, $result), $pattern->expression);
+
+    return bindPattern($state, $pattern->pattern, $result, $env, $generalize, $constraints);
 }
 
 /**
@@ -385,26 +408,106 @@ function pruneEnvSchemes(TypeCheckState $state, array $env): array
     return $env;
 }
 
-function bindConPattern(TypeCheckState $state, Ast\PatCon $pattern, Type $expected, array $env, bool $generalize, array $constraints = []): array
+/**
+ * Resolve the module prefix of a qualified constructor pattern.
+ *
+ * `M.Con` spells a constructor the module prefix M reaches. The typechecker
+ * keeps constructors by their local spelling, so the prefix is resolved here
+ * and the pattern continues as `Con`, carrying M's scheme when M alone imports
+ * it (a qualified-only import leaves no bare `Con` in scope).
+ *
+ * @return array{0: string, 1: ?Scheme} the local constructor name and the
+ *   scheme reached through the prefix, or null when the pattern is unqualified
+ */
+function qualifiedConstructorName(TypeCheckState $state, Ast\AstNode $pattern, string $name): array
 {
-    $meta = lookupConstructorMeta($state, $pattern->name);
-    if ($meta !== null && ! empty($meta['gadt'])) {
-        return bindGadtConPattern($state, $pattern, $pattern->args, $expected, $env, $generalize, $constraints, $meta);
+    if (! \str_contains($name, '.')) {
+        return [$name, null];
     }
 
-    $ctorScheme = $state->env[$pattern->name] ?? throw typeFail($state, "unknown constructor {$pattern->name}", $pattern);
+    $separator = \strrpos($name, '.');
+    $prefix = \substr($name, 0, $separator);
+    $local = \substr($name, $separator + 1);
+    if (! isset($state->qualifiedModules[$prefix])) {
+        throw typeFail(
+            $state,
+            appendDidYouMean(
+                "unknown module prefix `{$prefix}`",
+                $prefix,
+                \array_keys($state->qualifiedModules),
+            ),
+            $pattern,
+        );
+    }
+
+    $scheme = $state->qualifiedEnv[$prefix][$local] ?? $state->env[$local] ?? null;
+    if ($scheme === null) {
+        throw typeFail($state, "unknown constructor {$name}", $pattern);
+    }
+
+    return [$local, $scheme];
+}
+
+/**
+ * The environment a qualified GADT constructor pattern binds from.
+ *
+ * A GADT binds its constructor from the environment by local name; a
+ * qualified-only import has no bare name there, so the prefix's scheme is
+ * added for the alternative it heads.
+ *
+ * @param array<string, Scheme> $env
+ * @return array<string, Scheme>
+ */
+function gadtConstructorEnv(array $env, string $name, ?Scheme $scheme): array
+{
+    if ($scheme === null) {
+        return $env;
+    }
+
+    return [$name => $scheme] + $env;
+}
+
+function bindConPattern(TypeCheckState $state, Ast\PatCon $pattern, Type $expected, array $env, bool $generalize, array $constraints = []): array
+{
+    [$constructorName, $qualifiedScheme] = qualifiedConstructorName($state, $pattern, $pattern->name);
+    $pattern->name = $constructorName;
+
+    $meta = lookupConstructorMeta($state, $pattern->name);
+    if ($meta !== null && ! empty($meta['gadt'])) {
+        return bindGadtConPattern(
+            $state,
+            $pattern,
+            $pattern->args,
+            $expected,
+            gadtConstructorEnv($env, $pattern->name, $qualifiedScheme),
+            $generalize,
+            $constraints,
+            $meta,
+        );
+    }
+
+    $ctorScheme = $qualifiedScheme
+        ?? $state->env[$pattern->name]
+        ?? throw typeFail($state, "unknown constructor {$pattern->name}", $pattern);
     $ctorType = instantiate($state, $ctorScheme);
     $result = $ctorType;
-
+    $fieldTypes = [];
     foreach ($pattern->args as $arg) {
         if (! $result instanceof TArrow) {
             throw typeFail($state, "constructor {$pattern->name} applied to too many arguments", $pattern);
         }
-        [$argType, $env] = bindPattern($state, $arg, stripDictArgConstraints($result->from), $env, generalize: false, constraints: $constraints);
+        $fieldTypes[] = stripDictArgConstraints($result->from);
         $result = $result->to;
     }
 
+    // Meet the scrutinee before the sub-patterns, so a nested GADT pattern is
+    // bound against the scrutinee's own field type rather than a fresh
+    // variable that cannot carry the refinement.
     unify($state, $expected, $result);
+
+    foreach ($pattern->args as $i => $arg) {
+        [$argType, $env] = bindPattern($state, $arg, $fieldTypes[$i], $env, generalize: false, constraints: $constraints);
+    }
     if ($generalize) {
         $env = generalizePatternBindings($state, $pattern, $env, $constraints);
     }
@@ -450,13 +553,28 @@ function bindGadtConPattern(
         $env,
     );
 
+    // Refine the scrutinee before binding the sub-patterns: a nested pattern
+    // such as `Just HRefl` sees its field type only after the constructor's
+    // result type has met the scrutinee, and only then is that field type the
+    // one the equality proof is about.
     $result = $ctorType;
+    $fieldTypes = [];
     foreach ($subpatterns as $arg) {
         if (! $result instanceof TArrow) {
             throw typeFail($state, "constructor {$pattern->name} applied to too many arguments", $pattern);
         }
-        [$argType, $env] = bindPattern($state, $arg, stripDictArgConstraints($result->from), $env, generalize: false, constraints: $constraints);
+        $fieldTypes[] = stripDictArgConstraints($result->from);
         $result = $result->to;
+    }
+
+    // Refine the scrutinee before binding the sub-patterns: a nested pattern
+    // such as `Just HRefl` sees its field type only after the constructor's
+    // result type has met the scrutinee, and only then is that field type the
+    // one the equality proof is about.
+    unifyGadtResult($state, $expected, $result, $pattern);
+
+    foreach ($subpatterns as $i => $arg) {
+        [$argType, $env] = bindPattern($state, $arg, $fieldTypes[$i], $env, generalize: false, constraints: $constraints);
     }
 
     if ($contextPatterns !== []) {
@@ -479,7 +597,6 @@ function bindGadtConPattern(
         installConstraintMethods($state, $instantiated['constraints'], $env);
     }
 
-    unifyGadtResult($state, $expected, $result, $pattern);
     if ($generalize) {
         $env = generalizePatternBindings($state, $pattern, $env, $constraints);
     }
@@ -555,27 +672,44 @@ function bindTuplePattern(TypeCheckState $state, Ast\PatTuple $pattern, Type $ex
 
 function bindRecordPattern(TypeCheckState $state, Ast\PatRecord $pattern, Type $expected, array $env, bool $generalize, array $constraints = []): array
 {
+    [$constructorName, $qualifiedScheme] = qualifiedConstructorName($state, $pattern, $pattern->name);
+    $pattern->name = $constructorName;
+
     $meta = lookupConstructorMeta($state, $pattern->name)
         ?? throw typeFail($state, "unknown constructor {$pattern->name}", $pattern);
     $subpatterns = recordPatternFields($state, $pattern, $meta);
 
     if (! empty($meta['gadt'])) {
-        return bindGadtConPattern($state, $pattern, $subpatterns, $expected, $env, $generalize, $constraints, $meta);
+        return bindGadtConPattern(
+            $state,
+            $pattern,
+            $subpatterns,
+            $expected,
+            gadtConstructorEnv($env, $pattern->name, $qualifiedScheme),
+            $generalize,
+            $constraints,
+            $meta,
+        );
     }
 
-    $ctorScheme = $state->env[$pattern->name] ?? throw typeFail($state, "unknown constructor {$pattern->name}", $pattern);
+    $ctorScheme = $qualifiedScheme
+        ?? $state->env[$pattern->name]
+        ?? throw typeFail($state, "unknown constructor {$pattern->name}", $pattern);
     $ctorType = instantiate($state, $ctorScheme);
     $result = $ctorType;
-
+    $fieldTypes = [];
     foreach ($subpatterns as $subpattern) {
         if (! $result instanceof TArrow) {
             throw typeFail($state, "constructor {$pattern->name} applied to too many arguments", $pattern);
         }
-        [$_, $env] = bindPattern($state, $subpattern, stripDictArgConstraints($result->from), $env, generalize: false, constraints: $constraints);
+        $fieldTypes[] = stripDictArgConstraints($result->from);
         $result = $result->to;
     }
-
     unify($state, $expected, $result);
+
+    foreach ($subpatterns as $i => $subpattern) {
+        [$_, $env] = bindPattern($state, $subpattern, $fieldTypes[$i], $env, generalize: false, constraints: $constraints);
+    }
     if ($generalize) {
         $env = generalizePatternBindings($state, $pattern, $env, $constraints);
     }

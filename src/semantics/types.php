@@ -185,6 +185,7 @@ function checkRaw(
         ];
         match ($item::class) {
             Ast\ImportDecl::class => null,
+            Ast\PatternSynonymDecl::class => null,
             Ast\InstanceDecl::class => (function () use ($state, $item, &$items): void {
                 foreach (checkInstance($state, $item) as $fn) {
                     $items[] = $fn;
