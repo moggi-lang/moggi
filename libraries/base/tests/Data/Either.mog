@@ -1,0 +1,43 @@
+-- Data.Either: Eq and Ord answer through the element's own instances, so a type
+-- with a custom Eq/Ord (`Tag` compares case-insensitively) behaves the same
+-- inside `Left`/`Right`, and a derived record whose fields are an `Either` and a
+-- pair follows those instances too.
+
+import Data.Char qualified as C
+import Data.Either (Either(..))
+import Data.List qualified as L
+import Data.String (String)
+import Data.String qualified as S
+
+data Tag = Tag String deriving (Show)
+
+tagKey :: Tag -> String
+tagKey (Tag s) = S.pack (L.map C.toLower (S.unpack s))
+
+instance Eq Tag where
+  (==) a b = tagKey a == tagKey b
+  (/=) a b = case tagKey a == tagKey b of
+    True -> False
+    False -> True
+
+instance Ord Tag where
+  compare a b = compare (tagKey a) (tagKey b)
+
+data Rec = Rec { recEither :: Either Tag Tag, recPair :: (Tag, Tag) } deriving (Eq, Ord, Show)
+
+main :: IO ()
+main = do
+  putStrLn (show ((Left (Tag "a") :: Either Tag Tag) == Left (Tag "A")))
+  putStrLn (show ((Right (Tag "a") :: Either Tag Tag) == Right (Tag "A")))
+  putStrLn (show ((Left (Tag "a") :: Either Tag Tag) == Right (Tag "a")))
+  putStrLn (show ((Left (Tag "a") :: Either Tag Tag) /= Right (Tag "a")))
+  putStrLn (show (compare (Left (Tag "a") :: Either Tag Tag) (Left (Tag "A"))))
+  putStrLn (show (compare (Left (Tag "z") :: Either Tag Tag) (Right (Tag "a"))))
+  putStrLn (show (compare (Right (Tag "a") :: Either Tag Tag) (Left (Tag "z"))))
+  putStrLn (show (compare (Right (Tag "a") :: Either Tag Tag) (Right (Tag "B"))))
+  putStrLn (show ((Tag "a", Tag "b") == (Tag "A", Tag "B")))
+  putStrLn (show ((Tag "a", Tag "b") == (Tag "a", Tag "C")))
+  putStrLn (show (compare (Tag "a", Tag "b") (Tag "a", Tag "A")))
+  putStrLn (show (compare (Tag "a", Tag "b") (Tag "A", Tag "a")))
+  putStrLn (show (Rec (Left (Tag "a")) (Tag "x", Tag "y") == Rec (Left (Tag "A")) (Tag "X", Tag "Y")))
+  putStrLn (show (compare (Rec (Left (Tag "a")) (Tag "a", Tag "b")) (Rec (Right (Tag "a")) (Tag "a", Tag "b"))))

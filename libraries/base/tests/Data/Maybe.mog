@@ -1,0 +1,43 @@
+-- Data.Maybe: Eq and Ord answer through the element's own instances, so a type
+-- with a custom Eq/Ord (`Tag` compares case-insensitively) behaves the same
+-- inside a `Just`, and a derived record whose fields are a `Maybe` and a list
+-- follows those instances too.
+
+import Data.Char qualified as C
+import Data.List qualified as L
+import Data.Maybe (Maybe(..))
+import Data.String (String)
+import Data.String qualified as S
+
+data Tag = Tag String deriving (Show)
+
+tagKey :: Tag -> String
+tagKey (Tag s) = S.pack (L.map C.toLower (S.unpack s))
+
+instance Eq Tag where
+  (==) a b = tagKey a == tagKey b
+  (/=) a b = case tagKey a == tagKey b of
+    True -> False
+    False -> True
+
+instance Ord Tag where
+  compare a b = compare (tagKey a) (tagKey b)
+
+data Rec = Rec { recTag :: Maybe Tag, recTags :: [Tag] } deriving (Eq, Ord, Show)
+
+main :: IO ()
+main = do
+  putStrLn (show (Just (Tag "a") == Just (Tag "A")))
+  putStrLn (show (Just (Tag "a") == Just (Tag "B")))
+  putStrLn (show (Just (Tag "a") /= Just (Tag "B")))
+  putStrLn (show ((Nothing :: Maybe Tag) == Nothing))
+  putStrLn (show ((Nothing :: Maybe Tag) == Just (Tag "a")))
+  putStrLn (show (compare (Just (Tag "a")) (Just (Tag "A"))))
+  putStrLn (show (compare (Nothing :: Maybe Tag) (Just (Tag "a"))))
+  putStrLn (show (compare (Just (Tag "a")) (Just (Tag "B"))))
+  putStrLn (show (min (Just (Tag "b")) (Just (Tag "A"))))
+  putStrLn (show (max (Just (Tag "b")) (Just (Tag "C"))))
+  putStrLn (show (Rec (Just (Tag "a")) [Tag "x"] == Rec (Just (Tag "A")) [Tag "X"]))
+  putStrLn (show (Rec Nothing [] == Rec (Just (Tag "a")) []))
+  putStrLn (show (compare (Rec Nothing [Tag "b"]) (Rec (Just (Tag "a")) [])))
+  putStrLn (show (compare (Rec (Just (Tag "a")) [Tag "b"]) (Rec (Just (Tag "a")) [Tag "A"])))

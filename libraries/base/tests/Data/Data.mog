@@ -1,0 +1,84 @@
+module Main where
+
+import Data.Data
+import Data.Functor.Product (Product(Pair))
+import Data.Functor.Sum (Sum(InL, InR))
+import Data.Semigroup (All(..), Any(..), Dual(..))
+import Moggi.Err (errorWithoutStackTrace)
+import Moggi.Internal.Base
+import Text.Show
+
+data Colour = Red | Green | Blue deriving (Eq)
+
+instance Show Colour where
+  show c = case c of
+    Red -> "Red"
+    Green -> "Green"
+    Blue -> "Blue"
+
+colourType :: DataType
+colourType = mkAlgDataType "DD.Colour" (\_ -> [redConstr, greenConstr, blueConstr])
+
+redConstr :: Constr
+redConstr = mkConstr colourType "Red" [] Prefix
+
+greenConstr :: Constr
+greenConstr = mkConstr colourType "Green" [] Prefix
+
+blueConstr :: Constr
+blueConstr = mkConstr colourType "Blue" [] Prefix
+
+instance Data Colour where
+  gfoldl _ z c = z c
+  toConstr c = case c of
+    Red -> redConstr
+    Green -> greenConstr
+    Blue -> blueConstr
+  gunfold k z c = case constrIndex c of
+    1 -> z Red
+    2 -> z Green
+    3 -> z Blue
+    _ -> errorWithoutStackTrace "gunfold"
+  dataTypeOf _ = colourType
+
+main :: IO ()
+main = do
+  print (showConstr (toConstr Red))
+  print (constrIndex (toConstr Blue))
+  print (dataTypeName (dataTypeOf Red))
+  print (map showConstr (dataTypeConstrs colourType))
+  print (isAlgType (dataTypeOf Red))
+  print (constrFields (toConstr Green))
+  print (constrFixity (toConstr Green))
+  print (showConstr (toConstr (Just (1 :: Int))))
+  print (constrIndex (toConstr (Just (1 :: Int))))
+  print (constrIndex (toConstr (Nothing :: Maybe Int)))
+  print (dataTypeName (dataTypeOf (Just (1 :: Int))))
+  print (map showConstr (dataTypeConstrs (dataTypeOf (Just (1 :: Int)))))
+  print (length (gmapQ (const ()) (Just (1 :: Int))))
+  print (gmapQr (:) [] (const "e") (Just (1 :: Int)))
+  print (gmapQi 0 (const "zero") (Just (1 :: Int)))
+  print (gmapT id (Just (1 :: Int)))
+  print (gmapQl (+) 0 (const 1) (Just ()))
+  print (gcast (Just (1 :: Int)) :: Maybe (Maybe Int))
+  print (dataTypeName (dataTypeOf (Dual (1 :: Int))))
+  print (showConstr (toConstr (Dual (1 :: Int))))
+  print (constrFields (toConstr (Dual (1 :: Int))))
+  print (gmapQ (const 0) (Dual (1 :: Int)) :: [Int])
+  print (fromConstr (toConstr (Dual (0 :: Int))) :: Maybe (Dual Int))
+  print (dataTypeName (dataTypeOf (All True)))
+  print (gmapQ (const 0) (All True) :: [Int])
+  print (dataTypeName (dataTypeOf (Any False)))
+  print (showConstr (toConstr (Any False)))
+  print (gmapQ (const 0) (Any False) :: [Int])
+  print (dataTypeName (dataTypeOf (InL (Just 1) :: Sum Maybe Maybe Int)))
+  print (map showConstr (dataTypeConstrs (dataTypeOf (InL (Just 1) :: Sum Maybe Maybe Int))))
+  print (showConstr (toConstr (InR (Just 2) :: Sum Maybe Maybe Int)))
+  print (constrIndex (toConstr (InR Nothing :: Sum Maybe Maybe Int)))
+  print (gmapT id (InL (Just 1) :: Sum Maybe Maybe Int))
+  print (length (gmapQ (const ()) (InR (Just 3) :: Sum Maybe Maybe Int)))
+  print (dataTypeName (dataTypeOf (Pair (Just 1) (Just 2) :: Product Maybe Maybe Int)))
+  print (showConstr (toConstr (Pair (Just 1) (Just 2) :: Product Maybe Maybe Int)))
+  print (constrFields (toConstr (Pair (Just 1) (Just 2) :: Product Maybe Maybe Int)))
+  print (length (gmapQ (const ()) (Pair Nothing (Just 2) :: Product Maybe Maybe Int)))
+  print (gmapT id (Pair (Just 1) Nothing :: Product Maybe Maybe Int))

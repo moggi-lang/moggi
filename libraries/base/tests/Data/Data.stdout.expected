@@ -1,0 +1,39 @@
+"Red"
+3
+"DD.Colour"
+["Red","Green","Blue"]
+True
+[]
+Prefix
+"Just"
+2
+1
+"Prelude.Maybe"
+["Nothing","Just"]
+1
+["e"]
+"zero"
+Just 1
+1
+Just (Just 1)
+"Data.Semigroup.Internal.Dual"
+"Dual"
+["getDual"]
+[0]
+Nothing
+"Data.Semigroup.Internal.All"
+[0]
+"Data.Semigroup.Internal.Any"
+"Any"
+[0]
+"Data.Functor.Sum.Sum"
+["InL","InR"]
+"InR"
+2
+InL (Just 1)
+1
+"Data.Functor.Product.Product"
+"Pair"
+[]
+2
+Pair (Just 1) Nothing
