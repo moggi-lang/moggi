@@ -55,6 +55,22 @@ final class InstanceWorld
         return $this->index ??= indexProjectInstances($this->records);
     }
 
+    /** @var list<string>|null */
+    private ?array $ambiguousTypeNames = null;
+
+    /**
+     * Type names this compilation's instances declare in more than one module.
+     *
+     * The world is immutable, so the answer is computed once: every module's check reads the same
+     * world, and recomputing it per module walked every record of the build for each of them.
+     *
+     * @return list<string>
+     */
+    public function ambiguousTypeNames(): array
+    {
+        return $this->ambiguousTypeNames ??= \Moggi\Modules\ambiguousTypeNamesFromRecords($this->records);
+    }
+
     /** @return list<string> */
     public function modules(): array
     {
