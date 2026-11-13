@@ -29,6 +29,7 @@ use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\TypeNode;
 
+use function Moggi\Debug\normalizeDisplayPath;
 use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
 use function Moggi\Semantics\IntrinsicRegistry\isStIntrinsic;
 use function Moggi\Semantics\TypeExpr\collectTypeVars;
@@ -2090,7 +2091,12 @@ function instanceDeclarationSite(TypeCheckState $state, array $instance): string
     if ($line > 0) {
         // The declaration's own file when the parser recorded it; the file being
         // compiled when the instance lives in it; the module name otherwise.
-        $where = $file ?? ($module === (string) $state->currentModule ? $state->filename : $module);
+        // A file is cited the way every other source site is: a project-relative
+        // display path, so a Windows checkout does not spell it with backslashes
+        // in a message the same diagnostic renders with `/`.
+        $where = $file !== null && $file !== ''
+            ? normalizeDisplayPath($file)
+            : ($module === (string) $state->currentModule ? normalizeDisplayPath($state->filename) : $module);
 
         return ($where === '' ? '' : $where . ':') . $line . ':' . $col;
     }

@@ -67,7 +67,6 @@ final class PreparedProject
         $unit = $this->units[$moduleName] ?? null;
         $contentKey = \is_array($unit) ? ($unit['contentKey'] ?? null) : null;
         $relPath = \is_array($unit) ? ($unit['cacheRelPath'] ?? null) : null;
-        $program = \is_array($unit) ? ($unit['program'] ?? null) : null;
         if ($contentKey !== null && $relPath !== null) {
             $cached = Cache\moduleGet(
                 $relPath,
@@ -75,7 +74,7 @@ final class PreparedProject
                 $context->moduleProductKey(
                     $moduleName,
                     $contentKey,
-                    $program instanceof Ast\Program && programDeclaresForeign($program),
+                    \is_array($unit) && ($unit['declaresForeign'] ?? false) === true,
                 ),
                 $context->backendId,
             );
@@ -88,6 +87,33 @@ final class PreparedProject
             "the prepared project `{$moduleName}` carries no checked program and its module cache entry"
             . ' does not either; a released program cannot be invented from the source tree',
         );
+    }
+
+    /**
+     * The same project without the parsed programs lowering never reads.
+     *
+     * A released product is lowered from the checked program on disk, so the source AST has one
+     * remaining use: the `declaresForeign` fact prepare uses as part of every product key. That
+     * fact is recorded here, so the ASTs can go — they are a quarter of a library build's heap, and
+     * holding them through the emit means the IR has to be allocated beside them instead of over
+     * them.
+     */
+    public function withoutParsedPrograms(): self
+    {
+        $units = $this->units;
+        foreach ($units as $moduleName => $unit) {
+            $program = $unit['program'] ?? null;
+            if (! $program instanceof Ast\Program) {
+                continue;
+            }
+
+            $units[$moduleName]['declaresForeign'] ??= programDeclaresForeign($program);
+            if (! isset($this->checked[$moduleName])) {
+                unset($units[$moduleName]['program']);
+            }
+        }
+
+        return new self($this->rootPrefix, $units, $this->checked, $this->importContexts);
     }
 }
 

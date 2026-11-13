@@ -19,7 +19,6 @@ use Moggi\Syntax\Ast;
 use Moggi\Syntax\Parser\ParseError;
 
 use function Moggi\Backend\codegenWith;
-use function Moggi\Semantics\Foreign\programDeclaresForeign;
 use function Moggi\Backend\Jvm\Foreign\jvmInterfaceNamesFromPrograms;
 use function Moggi\IR\Callables\table;
 use function Moggi\IR\Dump\dump as dumpIr;
@@ -100,6 +99,16 @@ function compileProjectCached(array $paths, string $rootDir, CompilationContext 
     } finally {
         resume();
     }
+
+    // Lowering reads each module's checked program from the module cache, so the parsed programs
+    // have done their work once prepare recorded the facts their product keys use. The jvm's
+    // foreign-interface pass still reads them, so it keeps them.
+    if ($context->backendId !== 'jvm') {
+        $prepared = $prepared->withoutParsedPrograms();
+        // The ASTs went back to the allocator's free lists; handing the chunks themselves back to
+        // the system is what lets the IR lower into a heap this module no longer pays for.
+        \gc_mem_caches();
+    }
     $compiled = compilePreparedProjectImpl($prepared, $context, $optimize, $strip, $withDumps);
 
     Cache\artifactPut($emitKey, $compiled['product']);
@@ -170,12 +179,11 @@ function compilePreparedProjectImpl(PreparedProject $prepared, CompilationContex
 
     $lowerModule = function (string $moduleName) use ($prepared, $context, $optimize): Module {
         $unit = $prepared->units[$moduleName];
-        $program = ($unit['program'] ?? null) instanceof Ast\Program ? $unit['program'] : null;
         $irCacheKey = isset($unit['cacheRelPath'])
             ? $context->moduleProductKey(
                 $moduleName,
                 ($unit['contentKey'] ?? '') . '|opt=' . ($optimize ? '1' : '0'),
-                $program !== null && programDeclaresForeign($program),
+                ($unit['declaresForeign'] ?? false) === true,
             )
             : null;
         if ($irCacheKey !== null) {
@@ -404,8 +412,7 @@ function compilePreparedProjectImpl(PreparedProject $prepared, CompilationContex
                     . '|emit-layout=' . $emitProgramFingerprint
                     . '|plan=' . \hash('xxh128', \serialize($planned['plan']))
                     . '|path=' . ($unit['path'] ?? ''),
-                (($unit['program'] ?? null) instanceof Ast\Program)
-                    && programDeclaresForeign($unit['program']),
+                ($unit['declaresForeign'] ?? false) === true,
             );
             $cachedEmit = Cache\moduleGet($cacheRel, 'emit', $emitCacheKey, $context->backendId);
             if (\is_array($cachedEmit)) {

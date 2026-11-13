@@ -698,14 +698,31 @@ function writeLibBackendOutputs(string $projectRoot, string $backend, ?bool &$bu
         }
 
         $staging = $outDir . '.tmp.' . \getmypid() . '.' . \bin2hex(\random_bytes(4));
-        $outputs = \Moggi\Modules\compileProject(testLibraryFiles($projectRoot), $projectRoot, \Moggi\Pipeline\CompilationContext::for($backend, \Moggi\Pipeline\CompilePurpose::Library, sources: testLibraryFiles($projectRoot)));
-        foreach ($outputs as $relative => $source) {
-            $target = $staging . '/' . $relative;
-            @\mkdir(\dirname($target), 0777, true);
-            \file_put_contents($target, $source);
+        // In a process of its own: this build's heap is the largest in the run, and the chunks it
+        // leaves behind are never given back, so the caller keeps compiling in an arena that is
+        // already most of its `memory_limit` (see `lib_tree_build.php`).
+        $build = runCompiledProcess(
+            [
+                PHP_BINARY,
+                __DIR__ . '/../support/lib_tree_build.php',
+                $projectRoot,
+                $backend,
+                $staging,
+                \json_encode(testLibraryRoots($projectRoot)) ?: '[]',
+            ],
+            900,
+        );
+        if (($build['stderr'] ?? '') !== '') {
+            \fwrite(\STDERR, (string) $build['stderr']);
         }
-        unset($outputs);
-        \Moggi\Modules\clearPrepareProjectCaches();
+        if (($build['exitCode'] ?? 1) !== 0) {
+            removeDirectory($staging);
+
+            throw new \RuntimeException(
+                "cannot build the {$backend} library tree:\n"
+                    . \trim((string) ($build['stdout'] ?? '') . "\n" . (string) ($build['stderr'] ?? '')),
+            );
+        }
 
         if ($backend === 'php') {
             $runtimeDst = $staging . '/_runtime.php';
