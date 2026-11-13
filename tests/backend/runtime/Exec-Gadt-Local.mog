@@ -1,0 +1,120 @@
+module Main where
+
+import Moggi.Internal.Base
+
+-- Local signatures over a GADT. The five shapes below share one `Expr` (and one
+-- `Box`), so the module compiles once; each shape stays its own function, and
+-- `main` runs them in the order the goldens were written.
+
+data Expr a where
+  Lit :: Int -> Expr Int
+  Truth :: Expr Bool
+  Pair :: Expr a -> Expr b -> Expr (a, b)
+
+-- ---- Exec-Gadt-Local-Signature ----
+
+-- A signature on a local function binds its variables rigidly, exactly as a
+-- top-level one does: `go :: Expr b -> b` in a `where` block is the enclosing
+-- `b` under refinement, not a variable its first clause may pin to `Int` and
+-- its second must then contradict.
+
+eval :: Expr a -> a
+eval expr = go expr
+  where
+    go :: Expr b -> b
+    go (Lit n) = n
+    go Truth = True
+    go (Pair a b) = (go a, go b)
+
+-- The same helper without a GADT in its result: the signature still fixes the
+-- scrutinee's index per alternative.
+label :: Expr a -> String
+label expr = go expr
+  where
+    go :: Expr b -> String
+    go (Lit n) = "int " <> show n
+    go Truth = "bool"
+    go (Pair x y) = go x <> " & " <> go y
+
+runGadtLocalSignature :: IO ()
+runGadtLocalSignature = do
+  putStrLn (show (eval (Lit 7)))
+  putStrLn (show (eval Truth))
+  putStrLn (show (fst (eval (Pair (Lit 1) Truth))))
+  putStrLn (show (snd (eval (Pair (Lit 1) Truth))))
+  putStrLn (label (Pair (Lit 1) Truth))
+
+-- ---- Exec-Gadt-Local-Constrained ----
+
+data Box where
+  MkBox :: Show a => a -> Box
+
+renderBox :: Box -> String
+renderBox b = case b of
+  MkBox x -> go x
+  where
+    go :: Show c => c -> String
+    go v = "[" <> show v <> "]"
+
+runGadtLocalConstrained :: IO ()
+runGadtLocalConstrained = do
+  putStrLn (renderBox (MkBox 42))
+  putStrLn (renderBox (MkBox True))
+
+-- ---- Exec-Gadt-Local-Refined-Constrained ----
+
+-- A constrained local signature is rigid too: `go :: Show b => ExprI b -> String`
+-- keeps `b` the function's own variable, so its first clause proving `b ~ Int`
+-- does not stop the second clause from proving `b ~ Bool`. The index has two
+-- alternatives here, which is why this sub-case has its own GADT: a `Pair` arm
+-- would need `Show` on the components, and `Show b` does not give it.
+data ExprI a where
+  LitI :: Int -> ExprI Int
+  TruthI :: ExprI Bool
+
+renderRefined :: ExprI Int -> String
+renderRefined e = go e
+  where
+    go :: Show b => ExprI b -> String
+    go (LitI n) = show n
+    go TruthI = "truth"
+
+runGadtLocalRefinedConstrained :: IO ()
+runGadtLocalRefinedConstrained = putStrLn (renderRefined (LitI 3))
+
+-- ---- Exec-Gadt-Inferred-Local ----
+
+inferEval e = go e
+  where
+    go :: Expr b -> b
+    go (Lit n) = n
+    go Truth = True
+    go (Pair x y) = (go x, go y)
+
+runGadtInferredLocal :: IO ()
+runGadtInferredLocal = do
+  putStrLn (show (inferEval (Lit 5)))
+  putStrLn (show (fst (inferEval (Pair (Lit 1) Truth))))
+
+-- ---- Exec-Gadt-Recursive-Local ----
+
+depth :: Expr a -> Int
+depth e = go e
+  where
+    go :: Expr b -> Int
+    go (Lit _) = 1
+    go Truth = 1
+    go (Pair x y) = go x + go y
+
+runGadtRecursiveLocal :: IO ()
+runGadtRecursiveLocal = do
+  putStrLn (show (depth (Lit 1)))
+  putStrLn (show (depth (Pair (Lit 1) (Pair Truth Truth))))
+
+main :: IO ()
+main = do
+  runGadtLocalSignature
+  runGadtLocalConstrained
+  runGadtLocalRefinedConstrained
+  runGadtInferredLocal
+  runGadtRecursiveLocal

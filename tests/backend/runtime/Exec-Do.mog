@@ -1,0 +1,60 @@
+import System.IO
+
+-- The `do` spine: nesting and layout. One module, three sub-cases, because each
+-- was a separate compile for a handful of lines. (`Exec-Do-LetAction-Run` stays
+-- apart: it carries `.noopt` and pins the unoptimized path.)
+
+-- ---- Exec-Do-Nested-Bind ----
+
+-- Two shapes the IO spine classifies rather than recovers from:
+--   * a nested `do` in action position (`x <- (do …)`), which only the deleted
+--     `try`/`catch` used to lower and which is now its own arm;
+--   * a `let`-bound action whose spelling is reused in a nested scope, which the
+--     action store resolves by binder identity rather than by name.
+runDoNestedBind :: IO ()
+runDoNestedBind = do
+  let run = putStrLn "outer"
+  x <- (do
+          let run = putStrLn "inner"
+          _ <- run
+          pure ())
+  _ <- run
+  putStrLn (case x of
+    () -> "done")
+
+-- ---- Exec-Do-Multiline-If ----
+
+-- A multi-line `if` as a bare `do` statement: the `then`/`else` branches are laid out
+-- deeper than the block's column, so they continue the statement instead of starting a
+-- new one. The parser used to end the `then` branch at the first token of its own line
+-- and demand `else` there (`then putStrLn "pos"` stopped before `"pos"`).
+describe :: Int -> IO ()
+describe n = do
+  if n > 0
+    then putStrLn "pos"
+    else if n == 0
+      then putStrLn "zero"
+      else putStrLn "neg"
+  putStrLn "done"
+
+runDoMultilineIf :: IO ()
+runDoMultilineIf = do
+  describe 1
+  describe 0
+  describe (0 - 1)
+
+-- ---- Exec-Do-LetGroup ----
+
+-- Multi-bind let inside do must bind all names before the continuation.
+runDoLetGroup :: IO ()
+runDoLetGroup = do
+  let a = 1
+      b = 2
+  putStrLn (show a)
+  putStrLn (show b)
+
+main :: IO ()
+main = do
+  runDoNestedBind
+  runDoMultilineIf
+  runDoLetGroup
