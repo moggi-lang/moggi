@@ -1412,10 +1412,6 @@ function instanceHeadIndexKeyFromAst(Ast\AstNode $headAst): string
         return $headAst->name;
     }
     if ($headAst instanceof Ast\TypeArrow) {
-        // A function head has a spelling of its own, like any constructor: an
-        // arrow-headed instance answers arrow heads, and a universal (`*`)
-        // instance such as `Typeable (f a)` stays behind it instead of
-        // colliding with it in one bucket.
         return '->';
     }
     if ($headAst instanceof Ast\TypePromoted) {
@@ -1779,9 +1775,6 @@ function assertProjectInstanceUnambiguous(
     /** @var list<array<string, mixed>> $ties */
     $ties = [];
 
-    // The check is diagnostic: it must leave the typing state exactly as it
-    // found it, including the fresh-variable counter the typed-AST output is
-    // numbered with, so a program compiles byte-for-byte as it did before.
     $savedFresh = $state->fresh;
     $savedKindFresh = $state->kindFresh;
     $savedEvidenceParams = $state->nextEvidenceParam;
@@ -1790,14 +1783,10 @@ function assertProjectInstanceUnambiguous(
 
     try {
         foreach (matchingProjectInstances($state, $className, $requiredHead) as $instance) {
-            // A head the incumbent subsumes cannot win, and its context cannot
-            // matter, so it is skipped before the cheaper comparison is spent on it.
             if ($incumbent !== null && instanceStrictlyMoreSpecific($incumbent, $instance)) {
                 continue;
             }
 
-            // A candidate whose own context cannot be discharged does not answer
-            // the use site: it is not a contender, whether it arrives first or last.
             if (! instanceAnswersHead($state, $instance, $requiredHead)) {
                 continue;
             }
@@ -1815,23 +1804,17 @@ function assertProjectInstanceUnambiguous(
                 continue;
             }
 
-            if (instanceStrictlyMoreSpecific($incumbent, $instance)) {
-                continue;
-            }
-
-            // Neither head subsumes the other, so the two are equally specific.
-            if (instanceRecordsAreSameDeclaration($instance, $incumbent)) {
+            if (instanceStrictlyMoreSpecific($incumbent, $instance)
+                || instanceRecordsAreSameDeclaration($instance, $incumbent)
+            ) {
                 continue;
             }
 
             $superseded = false;
             foreach ($ties as $tie) {
-                if (instanceRecordsAreSameDeclaration($instance, $tie)) {
-                    $superseded = true;
-
-                    break;
-                }
-                if (instanceStrictlyMoreSpecific($tie, $instance)) {
+                if (instanceRecordsAreSameDeclaration($instance, $tie)
+                    || instanceStrictlyMoreSpecific($tie, $instance)
+                ) {
                     $superseded = true;
 
                     break;
@@ -1861,9 +1844,6 @@ function assertProjectInstanceUnambiguous(
         return;
     }
 
-    // Two instances written for different constructors that happen to share a
-    // short name (`Monoid.First`, `Semigroup.First`) are name resolution, not a
-    // specificity tie.
     $constructor = instanceHeadConstructorKey($incumbent);
     if ($constructor !== null) {
         $ties = \array_values(\array_filter(
@@ -2030,7 +2010,6 @@ function instanceHeadPatternMatches(Ast\TypeNode $pattern, Ast\TypeNode $target)
 
     $patternHead = $pattern->con;
     if ($patternHead instanceof Ast\TypeVar || $patternHead instanceof Ast\TypeKindAnnot) {
-        // A variable head absorbs the arguments the pattern leaves out.
         $targetArgs = \count($target->args);
         $patternArgs = \count($pattern->args);
         if ($patternArgs > $targetArgs) {
@@ -2089,11 +2068,6 @@ function instanceDeclarationSite(TypeCheckState $state, array $instance): string
     $line = (int) ($instance['line'] ?? ($head instanceof Ast\AstNode ? $head->line : 0));
     $col = (int) ($instance['col'] ?? ($head instanceof Ast\AstNode ? $head->col : 0));
     if ($line > 0) {
-        // The declaration's own file when the parser recorded it; the file being
-        // compiled when the instance lives in it; the module name otherwise.
-        // A file is cited the way every other source site is: a project-relative
-        // display path, so a Windows checkout does not spell it with backslashes
-        // in a message the same diagnostic renders with `/`.
         $where = $file !== null && $file !== ''
             ? normalizeDisplayPath($file)
             : ($module === (string) $state->currentModule ? normalizeDisplayPath($state->filename) : $module);
@@ -2405,11 +2379,6 @@ function matchInstanceHeadVars(
             $headName = $headCon->name;
         }
         if ($headCon instanceof Ast\TypeVar) {
-            // A variable head stands for a type constructor of any arity, so a
-            // pattern `f a` matches `F Int a` by splitting off the arguments the
-            // pattern does not name: `f := F Int`. This is the instance analogue
-            // of `unifyHktSplitVarHead`, and it is what lets one instance cover
-            // `Typeable (Sum Maybe Maybe)` as well as `Typeable (Sum Maybe)`.
             $targetArgs = match (true) {
                 $target instanceof TVarApp, $target instanceof TCon => $target->args,
                 default => null,
@@ -3171,9 +3140,6 @@ function checkInstanceMethod(
     }
 
     $unskolemize = static fn (Type $type): Type => $skolemBack === [] ? $type : substitute($type, $skolemBack);
-    // A dictionary type carries the instance head's arguments, as every other
-    // builder of `__Dict_*` does (`type_syntax.php`, `gadt.php`,
-    // `declarations.php`): `__Dict_C t3`, not a bare `__Dict_C`.
     foreach (\array_reverse(dictionaryConstraints($constraints)) as $constraint) {
         $fnType = new TArrow(new TCon('__Dict_' . $constraint->class, $constraint->args), $fnType);
     }

@@ -767,9 +767,6 @@ function applyTypeAppKinds(
     } elseif ($knownKind !== null) {
         $headKind = Kinds\instantiateKindVars($state, $knownKind);
     } else {
-        // Look the kind up by the arity being applied, as `kindOfTypeCon` does:
-        // a module-local `TypeRep` (0 parameters) and an imported one (1) share
-        // a name, and only the arity tells them apart.
         $canonical = Kinds\canonicalTypeConName($headName);
         $headKind = Kinds\instantiateKindVars(
             $state,

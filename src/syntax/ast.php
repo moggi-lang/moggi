@@ -143,9 +143,6 @@ function desugarListComp(AstNode $expr, array $qualifiers): AstNode
         return new Apply(
             new Apply(
                 new Variable('concatMap'),
-                // A list comprehension with a refutable generator keeps the
-                // elements its pattern matches and drops the rest, which is
-                // what `concatMap` does with the empty list.
                 desugarLambdaPatterns([$qual->pattern], $inner, new ListLit([])),
             ),
             $qual->expr,

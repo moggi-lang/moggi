@@ -463,10 +463,6 @@ function inferKindApp(KindInferCtx $ctx, Ast\TypeNode $con, array $args): Kind
 
 function kindOfTypeConAst(KindInferCtx $ctx, string $name): Kind
 {
-    // A class's kind is the kinds of its parameters, and each use reads them afresh: the
-    // registered kind of a poly-kinded class (`Typeable (a :: k)`) holds one variable, and sharing
-    // it between a superclass (`Typeable a`) and a method constraint (`Typeable t`) would unify
-    // `a` with `t` -- the two are independent hypotheses.
     $classParams = $ctx->classParams[$name] ?? null;
     if ($classParams !== null) {
         $kind = new KType();

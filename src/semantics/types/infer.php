@@ -514,11 +514,6 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
 
     $fnType = prune($state, inferMethodByArgument($state, $expr, $env));
 
-    // A value whose type begins with a dictionary arrow takes that dictionary from
-    // its caller: a rank-2 parameter (`forall b. C b => b -> b`), or a constrained
-    // function passed in at higher rank. That dictionary is not the argument
-    // written here, so peel the arrows and park their obligations on the callee --
-    // evidence elaboration prepends the dictionaries at the root of this call.
     if ($fnType instanceof TArrow
         && $fnType->from instanceof TCon
         && \str_starts_with($fnType->from->name, '__Dict_')
@@ -537,8 +532,6 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
             $fnType = prune($state, $fnType->to);
         }
 
-        // A callee whose own scheme already carries these constraints parked them
-        // when it was instantiated; the arrows are the same obligations in type form.
         if (pendingConstraintsAndDicts($state, $expr->function)[0] === []) {
             setPendingObligations(
                 $state,
@@ -565,9 +558,6 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
         return $fnType->to;
     }
 
-    // A lambda checked against a type that asks for dictionaries takes them as its
-    // leading parameters: `(forall b. C b => b -> b)` is a function of `b` whose
-    // dictionary the consumer supplies, so the value must accept it at run time.
     if ($expr->argument instanceof Ast\Lambda
         && $fnType instanceof TArrow
         && typeCarriesDictArrows($fnType->from)
@@ -575,15 +565,9 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
         checkConstrainedLambda($state, $expr->argument, $argEnv, $fnType->from);
         $argType = prune($state, $fnType->from);
     } else {
-        // A literal argument is typed at the parameter's type: that is what lets a
-        // string literal stand for a parameter type whose `fromString` builds it.
         $argExpected = $expr->argument instanceof Ast\StringLit && $fnType instanceof TArrow
             ? $fnType->from
             : null;
-        // A variable carries what it refers to as well as its type: inference
-        // records its origin and any dictionary it is a selection from. Its
-        // declared type is no substitute for that, so a variable is always
-        // inferred rather than answered from a type already known for the node.
         $knownArgType = $expr->argument instanceof Ast\Variable
             ? null
             : takeKnownOperandType($state, $expr->argument);
@@ -595,11 +579,6 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
         return $fnType;
     }
 
-    // The parameter is a function of its dictionaries, and this argument is not
-    // one: a plain function (`const ()`, `(+ 1)`) given where `forall d. Data d
-    // => d -> r` is expected. The consumer applies the dictionaries, so the
-    // argument is closed over them here -- `\d v -> arg v` -- which is the
-    // dictionary lambda a language without erased dictionaries has to write out.
     $domainDicts = typeCarriesDictArrows($fnType instanceof TArrow ? $fnType->from : null);
     if ($domainDicts
         && ! typeCarriesDictArrows($argType)
@@ -619,13 +598,6 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
         checkConstrainedLambda($state, $wrapper, $argEnv, $fnType->from);
         $argType = prune($state, $fnType->from);
     }
-
-    // A value whose type carries dictionary arrows is passed unsaturated: the
-    // consumer applies it and supplies the dictionaries from its own givens. The
-    // arrows the callee's type asks for are the same ones, so nothing here is
-    // this call's to resolve -- resolving would need a dictionary for a type the
-    // consumer has yet to choose. A variable's own scheme constraints are exactly
-    // those dictionaries, so they stay parked with it.
 
     if ($fnType instanceof TVar) {
         $result = freshType($state);
@@ -1123,15 +1095,6 @@ function checkConstrainedLambda(TypeCheckState $state, Ast\Lambda $expr, array $
             $body = $body->body;
         }
         $body = prune($state, substitute($body, $mapping));
-
-        // The arrows state the constraints the argument is written with; the
-        // dictionaries it receives are those constraints closed under
-        // superclasses, one parameter each -- the same list a signature's
-        // context becomes at a declaration. Building the parameters from that
-        // list and keeping their arrows in the type is what makes the body
-        // checked against the type's result: a peeled type would leave one more
-        // parameter than arrows, and `inferLambda` would take the body's type
-        // from a fresh variable instead.
         $written = [];
         $cursor = $body;
         while ($cursor instanceof TArrow
@@ -1150,10 +1113,6 @@ function checkConstrainedLambda(TypeCheckState $state, Ast\Lambda $expr, array $
             return;
         }
 
-        // The dictionaries the lambda receives are the written constraints
-        // closed under superclasses, one parameter each: that is the list the
-        // consumer of the argument passes, exactly as a signature's context is
-        // passed at a declaration.
         $dictParams = [];
         $dictTypes = [];
         foreach (expandConstraintsWithSuperclasses($state, $written) as $given) {
@@ -1172,9 +1131,6 @@ function checkConstrainedLambda(TypeCheckState $state, Ast\Lambda $expr, array $
             $withDicts = new TArrow($dictType, $withDicts);
         }
 
-        // A class default body is checked once per instance, and the lambda is
-        // the same node each time: its dictionary parameters must be added once,
-        // not once per check.
         $added = \count($dictParams) > 0 && \count($expr->params) >= \count($dictParams);
         if ($added) {
             foreach ($dictParams as $i => $param) {
@@ -1197,10 +1153,6 @@ function checkConstrainedLambda(TypeCheckState $state, Ast\Lambda $expr, array $
         inferLambda($state, $expr, $env, $withDicts);
 
         if ($dictParams !== []) {
-            // Obligations the body parked are discharged here, while the
-            // lambda's dictionaries are still givens: the pass over the whole
-            // declaration runs after they are restored, and by then the
-            // evidence they need is a parameter this lambda received.
             $expr->body = resolvePendingEvidenceInExpr($state, $expr->body);
         }
     } finally {

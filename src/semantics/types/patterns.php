@@ -500,9 +500,6 @@ function bindConPattern(TypeCheckState $state, Ast\PatCon $pattern, Type $expect
         $result = $result->to;
     }
 
-    // Meet the scrutinee before the sub-patterns, so a nested GADT pattern is
-    // bound against the scrutinee's own field type rather than a fresh
-    // variable that cannot carry the refinement.
     unify($state, $expected, $result);
 
     foreach ($pattern->args as $i => $arg) {
@@ -553,10 +550,6 @@ function bindGadtConPattern(
         $env,
     );
 
-    // Refine the scrutinee before binding the sub-patterns: a nested pattern
-    // such as `Just HRefl` sees its field type only after the constructor's
-    // result type has met the scrutinee, and only then is that field type the
-    // one the equality proof is about.
     $result = $ctorType;
     $fieldTypes = [];
     foreach ($subpatterns as $arg) {
@@ -567,10 +560,6 @@ function bindGadtConPattern(
         $result = $result->to;
     }
 
-    // Refine the scrutinee before binding the sub-patterns: a nested pattern
-    // such as `Just HRefl` sees its field type only after the constructor's
-    // result type has met the scrutinee, and only then is that field type the
-    // one the equality proof is about.
     unifyGadtResult($state, $expected, $result, $pattern);
 
     foreach ($subpatterns as $i => $arg) {

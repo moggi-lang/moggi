@@ -632,8 +632,6 @@ function elaborateStringLiteral(TypeCheckState $state, Ast\StringLit $expr): Ast
     }
 
     if ($type instanceof TVar) {
-        // Nothing asked this literal for another type, and the kernel has only
-        // one string type, so that is what it stands for.
         setPendingObligations($state, $expr, []);
         unify($state, $type, new TStr(), $expr);
 

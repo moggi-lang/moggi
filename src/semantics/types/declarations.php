@@ -780,10 +780,6 @@ function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $modul
         $paramKinds[$param['name']] = Kinds\classParamKind($state, $param, $decl);
     }
 
-    // A class's own methods may name the class in their constraints -- `Data`'s `gfoldl` threads
-    // `Data d =>` itself -- so the class has to be resolvable while its methods are read. The
-    // entry is provisional: the finished record (methods, roles, associated types) replaces it
-    // below, once the method walk is done.
     $state->classes[$name] = [
         'params' => $params,
         'methods' => [],
@@ -940,9 +936,6 @@ function impliedRole(string $method, Type $type, string $param): ?string
         return Kernel\stringLiteralRole();
     }
 
-    // The failure takes the kernel's string and produces the class's own type
-    // applied to a variable: `String -> m a`, the monad's answer to a pattern
-    // that does not match (`MonadFail.fail`).
     if (($type->from instanceof TStr
             || ($type->from instanceof TCon
                 && $type->from->args === []

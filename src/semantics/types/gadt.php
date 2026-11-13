@@ -135,21 +135,15 @@ function unifyGadtResult(TypeCheckState $state, Type $expected, Type $result, ?A
     if ($expected instanceof TVar && isset($state->rigidVars[$expected->name])) {
         if ($result instanceof TVar && ! isset($state->rigidVars[$result->name])) {
             unify($state, $result, $expected, $at);
-
             return;
         }
-        // Refining an existential here is sound: the new type holds only
-        // inside the alternative, and the branch's own type is checked for
-        // escapes by assertNoGadtEscape().
         refineGadt($state, $expected->name, $result);
-
         return;
     }
 
     if ($result instanceof TVar && isset($state->rigidVars[$result->name])) {
         if ($expected instanceof TVar && ! isset($state->rigidVars[$expected->name])) {
             unify($state, $expected, $result, $at);
-
             return;
         }
         refineGadt($state, $result->name, $expected);
@@ -160,7 +154,6 @@ function unifyGadtResult(TypeCheckState $state, Type $expected, Type $result, ?A
     if ($expected instanceof TArrow && $result instanceof TArrow) {
         unifyGadtResult($state, $expected->from, $result->from, $at);
         unifyGadtResult($state, $expected->to, $result->to, $at);
-
         return;
     }
 

@@ -230,10 +230,6 @@ function checkedCoreFor(TypeCheckState $state, array $items, string $module): Ch
 
         $evidence = evidenceVectorFor($state, $item, $scheme, $origin);
 
-        // A restricted declaration (a CAF, say) is settled from the end of the
-        // module, after every use site has had its say; the literals and
-        // obligations its body still parks are only resolvable now that those
-        // types are fixed, so both passes run here before the gate reports one.
         $item->body = elaborateNumericLiterals($state, $item->body);
         $item->body = resolvePendingEvidenceInExpr($state, $item->body);
         assertNoPendingConstraintsInExpr($state, $item->body, $item);

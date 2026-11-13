@@ -172,8 +172,6 @@ function prepareProject(
         ensureUnitProgram($units, $moduleName);
     }
 
-    // One record of the fact every product key of the module mixes in, taken while the source AST
-    // is in hand: the AST itself does not survive to the emit of a released project.
     foreach ($units as &$unit) {
         $program = $unit['program'] ?? null;
         if ($program instanceof Ast\Program) {
@@ -437,10 +435,6 @@ function prepareProject(
             $checked[$moduleName] = $checkedFull;
             $units[$moduleName]['checkedProgram'] = $checkedFull;
         } else {
-            // Nothing below this module needs its checked program: it is on disk (a released
-            // product) or this prepare never holds one. Drop the local reference before the
-            // collector runs — while one exists the graph cannot be reclaimed, and a module's
-            // checked program is the largest thing a build allocates.
             unset($checkedFull, $exportedInferredSchemes);
         }
 
@@ -1214,11 +1208,6 @@ function appendSyntheticUnitDecls(Ast\Program $program, array $unit): void
         return;
     }
 
-    // A synthesized instance belongs to the declaration it was built from, the
-    // way a deriving clause does: it goes right after the data declaration, so
-    // the type it is about is in scope and anything written later -- an
-    // `instance Data (W a)`, whose `Typeable` superclass this instance is what
-    // discharges -- sees it already registered.
     $items = [];
     foreach ($program->items as $item) {
         $items[] = $item;
@@ -1317,13 +1306,6 @@ function synthesizeTypeableInstances(array &$units): void
                 continue;
             }
 
-            // A constructor is typeable at its own kind as well as at the kind
-            // of its saturation: `Typeable (W a)` is the declared type, and
-            // `Typeable W` is the constructor itself, which anything that
-            // builds a representation of a partially applied type asks for
-            // (`gcast1` needs it for the `W` in `c (W a)`). GHC keeps the
-            // latter in the solver rather than in an instance; here instances
-            // are what a data declaration generates, so both are generated.
             if ($item->params === []) {
                 $instances[] = synthesizedTypeableInstance($item, $moduleName, $package, false);
             } else {
@@ -1430,14 +1412,13 @@ function manualTypeableTypeNames(array $units): array
         $candidates = $declaredIn[$name] ?? [];
         $reachable = $candidates === [] ? [] : typeableReachedModules($units, $moduleName);
         $selected = [];
+
         foreach ($candidates as $candidate) {
             if ($candidate === $moduleName || isset($reachable[$candidate])) {
                 $selected[] = $candidate;
             }
         }
-        // Nothing in the writer's own imports declares the name: the instance can
-        // only be about the declaration the checker will resolve it to, but that is
-        // not known here, so every declaration of the name keeps its suppression.
+
         if ($selected === []) {
             $selected = $candidates;
         }

@@ -1619,8 +1619,6 @@ function parseClassDecl(ParserState $state): Ast\ClassDecl
     $headCon = $headType instanceof Ast\TypeApp ? $headType->con : $headType;
     $headLoc = $headCon->line ? $headCon : $classToken;
 
-    // A class may have no body at all — `class Coercible (a :: k) (b :: k)` —
-    // which is how base declares the primitive classes.
     $hasBody = isAt($state, TokenKind::KwWhere);
     if ($hasBody) {
         advance($state);

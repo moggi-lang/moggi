@@ -500,10 +500,6 @@ function settleCheckedBody(
     );
 
     resolveDeferredInfixPrimops($state, $fn->body);
-    // A `Coercible` obligation parked while its types were open fixes the types
-    // of the terms it was parked over (`(coerce inc) 41`: the argument's number
-    // type is the function's domain). Literals and evidence below can only be
-    // settled at the types this pass leaves behind, so it runs first.
     solveDeferredCoercionsInExpr($state, $fn->body);
     $fn->body = resolvePendingEvidenceInExpr($state, $fn->body);
     $fn->body = tryResolveValueEvidence($state, $fn->body);

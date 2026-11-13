@@ -473,6 +473,7 @@ function boxForeignReturn(EmitEnv $env, string $retOrFieldDesc): void
         })($env, $retOrFieldDesc),
     };
 }
+
 // --- Intrinsics (full allowlist for platform_* and scalar ops) ----------------
 
 /**

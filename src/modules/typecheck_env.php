@@ -538,11 +538,6 @@ function classModuleValueOrigins(array $units, string $moduleName, array $names)
         }
     }
 
-    // A record field's selector is a value the module defines under the field's
-    // own name, but no item spells it: the check generates it from the
-    // declaration. A class default body written in the module can name one
-    // (`Data`'s `gmapQr` names the `Qr` selector `unQr`), so the declaration's
-    // field names answer for it too.
     foreach ($unit['program']->items as $item) {
         if (! $item instanceof Ast\DataDecl) {
             continue;

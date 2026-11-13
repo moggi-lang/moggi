@@ -1145,12 +1145,6 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
     $left = prune($state, $left);
     $right = prune($state, $right);
 
-    // A dictionary arrow is not a value argument. `forall b. C b => b -> b` is a
-    // function of `b` whose dictionary the caller supplies, so when only one side
-    // of a comparison carries leading dictionary arrows -- an argument written as
-    // a plain lambda against a constrained rank-2 expectation, or a constrained
-    // function handed a plain one -- the arrows are peeled and their constraints
-    // taken as givens while the rest of the types are compared.
     $leftDicts = $left instanceof TArrow && $left->from instanceof TCon
         && \str_starts_with($left->from->name, '__Dict_');
     $rightDicts = $right instanceof TArrow && $right->from instanceof TCon

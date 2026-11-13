@@ -100,13 +100,8 @@ function compileProjectCached(array $paths, string $rootDir, CompilationContext 
         resume();
     }
 
-    // Lowering reads each module's checked program from the module cache, so the parsed programs
-    // have done their work once prepare recorded the facts their product keys use. The jvm's
-    // foreign-interface pass still reads them, so it keeps them.
     if ($context->backendId !== 'jvm') {
         $prepared = $prepared->withoutParsedPrograms();
-        // The ASTs went back to the allocator's free lists; handing the chunks themselves back to
-        // the system is what lets the IR lower into a heap this module no longer pays for.
         \gc_mem_caches();
     }
     $compiled = compilePreparedProjectImpl($prepared, $context, $optimize, $strip, $withDumps);

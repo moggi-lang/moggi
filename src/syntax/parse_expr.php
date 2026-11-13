@@ -771,9 +771,6 @@ function parseInfix(ParserState $state, int $minPrec): Ast\AstNode
             $nextMin = $assoc === 'infixr' ? $prec : $prec + 1;
             $right = parseInfix($state, $nextMin);
 
-            // A qualified operator (`a `Mod.f` b`) is an application of the
-            // qualified name: the surface form is ``Mod.f``, the meaning is
-            // `Mod.f a b`, and the qualified reference already names it.
             $left = $backticked['module'] === null
                 ? spannedRange(new Ast\Infix($op, $left, $right), $left, $right)
                 : spannedRange(

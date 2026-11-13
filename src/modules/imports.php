@@ -1408,13 +1408,11 @@ function recordOriginOutputPath(
     string $outputExtension,
 ): void {
     $originModule = $origin['module'];
-    if ($originModule === $currentModule || ! isset($units[$originModule])) {
-        return;
-    }
 
-    // One path per origin module: the root prefix and extension are the same for every symbol the
-    // module publishes, and a widely imported module is reached once per imported name.
-    if (isset($moduleOutputPaths[$originModule])) {
+    if ($originModule === $currentModule
+        || ! isset($units[$originModule])
+        || isset($moduleOutputPaths[$originModule])
+    ) {
         return;
     }
 

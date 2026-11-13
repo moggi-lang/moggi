@@ -165,10 +165,6 @@ function shadowImportedType(TypeCheckState $state, string $name): void
         );
     }
 
-    // The kinds stay: they are cut by arity, so the imported `TypeRep` (one
-    // parameter) and the local `type TypeRep = …` (none) remain distinguishable,
-    // and a qualified `I.TypeRep a` still finds the former. `kindEnvByModule`
-    // keeps them per declaring module for the same reason.
     unset($state->data[$name]);
 }
 
@@ -273,8 +269,6 @@ function projectInstancesFromProgram(
                 'constraints' => $item->constraints,
                 'intrinsicMethods' => instanceIntrinsicMethods($item),
                 'associatedEquations' => associatedEquationsMapFromDecl($item),
-                // Where the declaration is written, so a diagnostic that has to
-                // name one instance can cite it (ambiguous overlap, for one).
                 'line' => $item->line,
                 'col' => $item->col,
                 'sourceFile' => $item->sourceFile,
