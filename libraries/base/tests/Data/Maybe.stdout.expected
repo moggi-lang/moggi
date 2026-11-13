@@ -1,0 +1,14 @@
+True
+False
+True
+True
+False
+EQ
+LT
+LT
+Just (Tag "A")
+Just (Tag "C")
+True
+False
+LT
+GT

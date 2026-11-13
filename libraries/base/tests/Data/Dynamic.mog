@@ -1,0 +1,22 @@
+module Main where
+
+import Data.Dynamic
+import Moggi.Internal.Base
+import Text.Show
+
+d :: Dynamic
+d = toDyn (42 :: Int)
+
+inc :: Dynamic
+inc = toDyn (\x -> x + 1 :: Int)
+
+main :: IO ()
+main = do
+  print (fromDynamic d :: Maybe Int)
+  print (fromDynamic d :: Maybe Bool)
+  print (fromDyn d 7 :: Int)
+  print (fromDyn d "def" :: String)
+  print (fromDynamic (toDyn "hi") :: Maybe String)
+  print (fromDynamic (dynApp inc (toDyn (41 :: Int))) :: Maybe Int)
+  print (dynTypeRep d == dynTypeRep (toDyn (1 :: Int)))
+  print (dynTypeRep d)
