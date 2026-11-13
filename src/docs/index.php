@@ -78,6 +78,10 @@ final class DocIndex
 }
 
 /**
+ * The index is the last reader of the programs it documents: each one is emptied
+ * before this returns (see {@see releaseIndexedPrograms()}), so a caller renders
+ * pages from the index and must not go back to `ParsedModule::$program`.
+ *
  * @param array<string, ParsedModule> $modules
  * @param array<string, Ast\Program> $checkedPrograms
  */
@@ -395,7 +399,48 @@ function buildIndex(
 
     [$facadeBackends, $implFacades] = facadeBackendMaps($modules);
 
+    releaseIndexedPrograms($modules, $checkedPrograms);
+
     return new DocIndex($byModule, $all, $search, $facadeBackends, $implFacades, $rootPrefix);
+}
+
+/**
+ * Empty the programs an index was just built from.
+ *
+ * The index keeps strings, and pages render from it, so the tree each module was
+ * documented from is dead the moment the index exists -- and it is by far the
+ * largest thing a documentation pass holds: a library's typed AST runs to
+ * hundreds of megabytes, because one derived instance body (a 15-tuple `compare`)
+ * is tens of thousands of nodes. Keeping them resident made documenting base and
+ * then a library that depends on it need more memory than the compiler does.
+ *
+ * @param array<string, ParsedModule> $modules
+ * @param array<string, Ast\Program>  $checkedPrograms
+ */
+function releaseIndexedPrograms(array $modules, array $checkedPrograms = []): void
+{
+    $seen = [];
+    $programs = [];
+    foreach ($modules as $parsed) {
+        $programs[] = $parsed->program;
+    }
+    foreach ($checkedPrograms as $checked) {
+        if ($checked instanceof Ast\Program) {
+            $programs[] = $checked;
+        }
+    }
+
+    foreach ($programs as $program) {
+        if (isset($seen[\spl_object_id($program)])) {
+            continue;
+        }
+        $seen[\spl_object_id($program)] = true;
+        $program->items = [];
+        $program->core = null;
+        $program->interface = null;
+        $program->instanceEvidence = [];
+        $program->exportedInferredSchemes = [];
+    }
 }
 
 /**

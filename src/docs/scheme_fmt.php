@@ -58,24 +58,34 @@ function declarationTypeSignature(Ast\FunctionDecl $decl): ?string
 }
 
 /**
- * @return array{0: Type, 1: list<string>}
+ * Peel the leading dictionary arrows off a typechecker type.
+ *
+ * A dictionary is either `__Dict_C`, the bare head a rewritten arrow may still
+ * carry, or `__Dict_C a`, the head a written `C a =>` constraint lowers to. Both
+ * spell the constraint a reader writes, so each arrow peels to its class and the
+ * arguments the constraint applies it to.
+ *
+ * @return array{0: Type, 1: list<array{class: string, args: list<Type>}>}
  */
-function peelLeadingDictClasses(Type $type): array
+function peelLeadingDictConstraints(Type $type): array
 {
-    $classes = [];
+    $constraints = [];
     while ($type instanceof TArrow
         && $type->from instanceof TCon
         && \str_starts_with($type->from->name, '__Dict_')) {
-        $classes[] = \substr($type->from->name, \strlen('__Dict_'));
+        $constraints[] = [
+            'class' => \substr($type->from->name, \strlen('__Dict_')),
+            'args' => $type->from->args,
+        ];
         $type = $type->to;
     }
 
-    return [$type, $classes];
+    return [$type, $constraints];
 }
 
 function schemeToString(Scheme $scheme): string
 {
-    [$type, $dictClasses] = peelLeadingDictClasses($scheme->type);
+    [$type, $dictConstraints] = peelLeadingDictConstraints($scheme->type);
     $rename = friendlyTypeVarNames([$type]);
     $body = internalTypeForDocs($type, $rename);
 
@@ -88,8 +98,12 @@ function schemeToString(Scheme $scheme): string
         $parts[] = $constraint->class . ($argStr !== '' ? ' ' . $argStr : '');
     }
 
-    foreach ($dictClasses as $class) {
-        $label = $class;
+    foreach ($dictConstraints as $dict) {
+        $argStr = \implode(' ', \array_map(
+            static fn ($arg) => internalTypeForDocs($arg, $rename),
+            $dict['args'],
+        ));
+        $label = $dict['class'] . ($argStr !== '' ? ' ' . $argStr : '');
         if (! \in_array($label, $parts, true)) {
             $parts[] = $label;
         }
@@ -126,11 +140,19 @@ function surfaceTypeSignature(?Ast\TypeNode $type): ?string
         return dumpAstTypeForDocs($type, $rename);
     }
 
-    [$body, $dictClasses] = peelLeadingDictClassesFromAst($type);
-    if ($dictClasses !== []) {
+    [$body, $dictConstraints] = peelLeadingDictConstraintsFromAst($type);
+    if ($dictConstraints !== []) {
         $rename = friendlyAstTypeVarNames([$body]);
+        $parts = \array_map(static function (array $dict) use ($rename): string {
+            $argStr = \implode(' ', \array_map(
+                static fn (Ast\TypeNode $arg): string => dumpAstTypeAtom($arg, $rename),
+                $dict['args'],
+            ));
 
-        return \implode(', ', $dictClasses) . ' => ' . dumpAstTypeForDocs($body, $rename);
+            return $dict['class'] . ($argStr !== '' ? ' ' . $argStr : '');
+        }, $dictConstraints);
+
+        return \implode(', ', $parts) . ' => ' . dumpAstTypeForDocs($body, $rename);
     }
 
     $rename = friendlyAstTypeVarNames([$type]);
@@ -276,19 +298,27 @@ function dumpAstTypeAtom(Ast\TypeNode $node, array $rename = []): string
 }
 
 /**
- * @return array{0: Ast\TypeNode, 1: list<string>}
+ * Peel the leading dictionary arrows off a written type, in either spelling
+ * (`__Dict_C` or `__Dict_C a`); see {@see peelLeadingDictConstraints}.
+ *
+ * @return array{0: Ast\TypeNode, 1: list<array{class: string, args: list<Ast\TypeNode>}>}
  */
-function peelLeadingDictClassesFromAst(Ast\TypeNode $type): array
+function peelLeadingDictConstraintsFromAst(Ast\TypeNode $type): array
 {
-    $classes = [];
-    while ($type instanceof Ast\TypeArrow
-        && $type->from instanceof Ast\TypeCon
-        && \str_starts_with($type->from->name, '__Dict_')) {
-        $classes[] = \substr($type->from->name, \strlen('__Dict_'));
+    $constraints = [];
+    while ($type instanceof Ast\TypeArrow) {
+        $domain = $type->from instanceof Ast\TypeApp ? $type->from->con : $type->from;
+        if (! $domain instanceof Ast\TypeCon || ! \str_starts_with($domain->name, '__Dict_')) {
+            break;
+        }
+        $constraints[] = [
+            'class' => \substr($domain->name, \strlen('__Dict_')),
+            'args' => $type->from instanceof Ast\TypeApp ? $type->from->args : [],
+        ];
         $type = $type->to;
     }
 
-    return [$type, $classes];
+    return [$type, $constraints];
 }
 
 function astTypeUsesDictEncoding(?Ast\TypeNode $type): bool
@@ -297,9 +327,9 @@ function astTypeUsesDictEncoding(?Ast\TypeNode $type): bool
         return false;
     }
 
-    [$_, $dictClasses] = peelLeadingDictClassesFromAst($type);
+    [$_, $dictConstraints] = peelLeadingDictConstraintsFromAst($type);
 
-    return $dictClasses !== [];
+    return $dictConstraints !== [];
 }
 
 function dataTypeParamNames(Ast\DataDecl $decl): array
