@@ -1,0 +1,17 @@
+-- Data.Kind: the exported kind names, including the Type/Constraint synonyms
+-- over TYPE/CONSTRAINT and the kind-level FUN.
+
+import Data.Kind (Type, Constraint, FUN)
+import Data.Proxy (Proxy(..))
+
+data Tagged (a :: k) = Tagged
+
+type TaggedType = Tagged Type
+type TaggedFun = Tagged FUN
+type Constrained = Proxy Constraint
+
+main :: IO ()
+main = putStrLn "Data.Kind ok"
+
+constraintProxy :: Proxy (a :: Constraint)
+constraintProxy = Proxy

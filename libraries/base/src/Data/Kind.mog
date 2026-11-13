@@ -1,12 +1,27 @@
 -- | Kinds that describe other types.
---
--- @Type@ is the kind of ordinary types -- the ones that can have values. The
--- compiler parses it as a keyword wherever a kind is written; the name lives
--- with the other builtin type names in 'Moggi.Internal.Base', and this module
--- re-exports it the way @Data.Int@ re-exports @Int@, so a program can say
--- @import Data.Kind (Type)@ instead of relying on the keyword implicitly.
 module Data.Kind
   ( Type
+  , Constraint
+  , FUN
   ) where
 
-import Moggi.Internal.Base (Type)
+-- | A run-time representation: how a value of a type is stored.
+data RuntimeRep
+
+-- | The representation of lifted types, the ordinary types with values.
+data LiftedRep
+
+-- | The kind of types stored at a given run-time representation.
+data TYPE (r :: k)
+
+-- | The kind of constraints over types stored at a given representation.
+data CONSTRAINT (r :: k)
+
+-- | The kind of ordinary types with values.
+type Type = TYPE LiftedRep
+
+-- | The kind of constraints.
+type Constraint = CONSTRAINT LiftedRep
+
+-- | The kind of function types.
+data FUN
