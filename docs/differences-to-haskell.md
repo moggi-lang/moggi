@@ -124,9 +124,13 @@ Only synchronous exceptions exist: `throw`, `throwIO`, `catch`, `bracket`,
 `ExceptionContext`.
 
 - The `Exception` superclass is `Show` only. `Type.Reflection` provides a
-  `Typeable` class and type representations, but the compiler does not yet
-  answer a `Typeable` obligation from the type it is instantiated at, so
-  `Exception` carries no `Typeable` and there is no `Data.Dynamic` or `cast`.
+  `Typeable` class and type representations, and every data type a project
+  declares gets a synthesized `Typeable` instance; the standard library's
+  built-in types have written instances. One generic `Typeable (f a)` instance
+  covers type applications, so a partially applied type such as `Sum f` is
+  `Typeable` from the representations of its parts, the way GHC's solver builds
+  it, without an instance for each such type. `Data.Dynamic` provides `Dynamic`
+  and the `toDyn`/`fromDynamic` conversions on top of those representations.
   Exceptions are matched by a stable string tag naming the type. Writing an
   instance still requires `toException` and `fromException` bodies where `base`
   needs none (the compiler cannot synthesize the tag yet); take care to keep the
@@ -139,11 +143,16 @@ Only synchronous exceptions exist: `throw`, `throwIO`, `catch`, `bracket`,
   exception. `System.IO` translates file-operation failures into the
   `IOException` its callers expect.
 
-Two diagnostics choices differ from GHC on purpose: an instance that satisfies
+Three diagnostics choices differ from GHC on purpose: an instance that satisfies
 none of its class's `{-# MINIMAL … #-}` alternatives is a compile error (GHC
 warns), because Moggi has no warning channel and a silent default here would
-diverge at run time; and `ArithException`, shift clamping, and `bitSize` on
-`Integer` behave exactly as documented under `Data.Bits`.
+diverge at run time; two instances that are equally specific at one use site are
+a compile error naming every colliding declaration and where each is written,
+however many instances reach that use site, because there are no overlap pragmas
+to break the tie and picking one silently would make the result depend on
+declaration order; and `ArithException`, shift
+clamping, and `bitSize` on `Integer` behave exactly as documented under
+`Data.Bits`.
 
 ## Calling the host
 
