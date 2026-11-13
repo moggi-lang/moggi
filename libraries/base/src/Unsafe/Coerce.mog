@@ -1,0 +1,49 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- The one cast that asks the type system nothing.
+--
+-- A value keeps its representation, so the cast costs nothing at run time. It
+-- is also unchecked: the program decides that the two types have the same
+-- representation, and a wrong decision is a wrong answer rather than a type
+-- error. Everything else in the library that needs this capability — notably
+-- 'Type.Reflection''s equality proofs — is built on it.
+--
+-- @base@ also exports an unlifted and an address cast here. Moggi has neither
+-- unboxed types nor an address representation, so there is nothing for those
+-- names to mean.
+module Unsafe.Coerce
+  ( unsafeCoerce
+  , unsafeEqualityProof
+  , UnsafeEquality(..)
+  ) where
+
+import Moggi.Internal.Prim
+
+-- | Highly, terribly dangerous coercion from one type to another.
+--
+-- The cast asks for no proof and performs no check: it changes only what the
+-- compiler believes the value's type is. Casting between two types with the
+-- same representation is the intended use, as 'Type.Reflection' does once two
+-- representations compare equal; casting between types that disagree can make
+-- a value unreadable. You do not want this function unless you have already
+-- established, outside the type system, that the cast is safe.
+unsafeCoerce :: forall (a :: Type) (b :: Type). a -> b
+unsafeCoerce = unsafeCoerce#
+
+-- | A proof that two types are the same, with no evidence behind it.
+--
+-- This is an ordinary GADT: pattern matching on 'UnsafeRefl' does refine the
+-- two parameters to one type. The value that reaches the match, however, was
+-- not built from such a match; 'unsafeEqualityProof' produced it by coercion,
+-- so the refinement is only as true as the caller made it.
+data UnsafeEquality a b where
+  UnsafeRefl :: UnsafeEquality a a
+
+-- | A proof that any two types are the same.
+--
+-- The proof is fabricated: the two types need not be the same, and the
+-- compiler accepts the equality the 'UnsafeRefl' pattern introduces. Use it
+-- only where a run-time check has already established the equality, which is
+-- what 'Type.Reflection' does after comparing two representations.
+unsafeEqualityProof :: UnsafeEquality a b
+unsafeEqualityProof = unsafeCoerce UnsafeRefl

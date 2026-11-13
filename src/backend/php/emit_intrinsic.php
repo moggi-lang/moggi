@@ -39,7 +39,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): string
     $locExpr = ($name === 'error#' || $name === 'exceptionThrow#') ? emitSrcLocValue($inner, $op->srcLoc) : 'null';
 
     return match ($name) {
-        'coerce#' => '(' . $argExprs[0] . ')',
+        'coerce#', 'unsafeCoerce#' => '(' . $argExprs[0] . ')',
         'error#' => '\\Moggi\\throwErrorCall(' . $argExprs[0] . ', ' . $locExpr . ')',
         'exceptionWrap#' => '\\Moggi\\exceptionWrap(' . $argExprs[0] . ', ' . $argExprs[1] . ', ' . $argExprs[2] . ')',
         'exceptionUnwrap#' => '\\Moggi\\exceptionUnwrap(' . $argExprs[0] . ', ' . $argExprs[1] . ')',

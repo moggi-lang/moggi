@@ -14,6 +14,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
     $args = $op->args;
     switch ($op->name) {
         case 'coerce#':
+        case 'unsafeCoerce#':
             emitOperand($env, $args[0]);
 
             return;

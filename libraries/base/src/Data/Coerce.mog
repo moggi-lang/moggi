@@ -1,52 +1,101 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+-- |
 --
 -- Module      :  Data.Coerce
 -- Copyright   :  (c) The University of Glasgow 2001
--- License     :  BSD-style (see the LICENSE file in the distribution)
+-- License     :  BSD-style (see the file libraries/base/LICENSE)
 --
+-- Maintainer  :  libraries@haskell.org
 -- Stability   :  provisional
 -- Portability :  portable
 --
 -- Safe coercions between data types.
+--
+-- More in-depth information can be found on the
+-- <https://gitlab.haskell.org/ghc/ghc/wikis/roles Roles wiki page>
+--
+-- @since 4.7.0.0
 module Data.Coerce
-  ( -- * Safe coercions
-    coerce
-  , Coercible
-  ) where
+    (-- *  Safe coercions
+     coerce,
+     Coercible
+     ) where
 
-import Moggi.Internal.Prim
+import Moggi.Internal.Prim (coerce#)
 
--- | Class of types which can be coerced.
+-- | @Coercible@ is a two-parameter class that has instances for types @a@ and @b@ if
+--      the compiler can infer that they have the same representation. This class
+--      does not have regular instances; instead they are created on-the-fly during
+--      type-checking. Trying to manually declare an instance of @Coercible@
+--      is an error.
 --
--- @'Coercible' a b@ holds when the compiler can infer that @a@ and @b@ have the
--- same representation. The class has no instances a module writes: they are
--- created while type checking, and declaring one is an error.
+--      Nevertheless one can pretend that the following three kinds of instances
+--      exist. First, as a trivial base-case:
 --
--- Three kinds of instance are as if declared. First, as a trivial base case,
--- @Coercible a a@. Second, for every type constructor there is an instance that
--- allows coercion under it: for a constructor @D@ with parameters of nominal,
--- representational and phantom role, @Coercible b b' => Coercible (D a b c) (D a b' c')@
--- — the nominal arguments are equal, the representational ones need to be
--- coercible themselves, and the phantom ones may change arbitrarily. Third, for
--- every newtype @NT = MkNT T@ there are @Coercible a T => Coercible a NT@ and
--- @Coercible T b => Coercible NT b@.
+--      @instance Coercible a a@
 --
--- @since base-4.7.0.0
-class Coercible a b where
+--      Furthermore, for every type constructor there is
+--      an instance that allows to coerce under the type constructor. For
+--      example, let @D@ be a prototypical type constructor (@data@ or
+--      @newtype@) with three type arguments, which have roles @nominal@,
+--      @representational@ resp. @phantom@. Then there is an instance of
+--      the form
+--
+--      @instance Coercible b b\' => Coercible (D a b c) (D a b\' c\')@
+--
+--      Note that the @nominal@ type arguments are equal, the
+--      @representational@ type arguments can differ, but need to have a
+--      @Coercible@ instance themself, and the @phantom@ type arguments can be
+--      changed arbitrarily.
+--
+--      The third kind of instance exists for every @newtype NT = MkNT T@ and
+--      comes in two variants, namely
+--
+--      @instance Coercible a T => Coercible a NT@
+--
+--      @instance Coercible T b => Coercible NT b@
+--
+--      This instance is only usable if the constructor @MkNT@ is in scope.
+--
+--      If, as a library author of a type constructor like @Set a@, you
+--      want to prevent a user of your module to write
+--      @coerce :: Set T -> Set NT@,
+--      you need to set the role of @Set@\'s type parameter to @nominal@,
+--      by writing
+--
+--      @type role Set nominal@
+--
+--      For more details about this feature, please refer to
+--      <http://research.microsoft.com/en-us/um/people/simonpj/papers/ext-f/coercible.pdf Safe Coercions>
+--      by Joachim Breitner, Richard A. Eisenberg, Simon Peyton Jones and Stephanie Weirich.
+--
+-- @since 0.4.0
+class Coercible (a :: k) (b :: k)
 
 -- | The function 'coerce' allows you to safely convert between values of
--- types that have the same representation with no run-time overhead.
---
--- In the simplest case you can use it instead of a newtype constructor, to go
--- from the newtype's concrete type to the abstract type. But it also works in
+-- types that have the same representation with no run-time overhead. In the
+-- simplest case you can use it instead of a newtype constructor, to go from
+-- the newtype's concrete type to the abstract type. But it also works in
 -- more complicated settings, e.g. converting a list of newtypes to a list of
 -- concrete types.
 --
--- > newtype TTL = TTL Int
--- > newtype Age = Age Int
--- >
--- > coerce (Age 42) :: TTL
--- > coerce (\x -> x + 1 :: Int) (Age 42) :: TTL
--- > coerce (map (\x -> x + 1 :: Int)) [Age 42, Age 24] :: [TTL]
+-- When used in conversions involving a newtype wrapper,
+-- make sure the newtype constructor is in scope.
+--
+-- This function is representation-polymorphic, but the
+-- 'RuntimeRep' type argument is marked as 'Inferred', meaning
+-- that it is not available for visible type application. This means
+-- the typechecker will accept @'coerce' \@'Int' \@Age 42@.
+--
+-- === __Examples__
+--
+-- >>> newtype TTL = TTL Int deriving (Eq, Ord, Show)
+-- >>> newtype Age = Age Int deriving (Eq, Ord, Show)
+-- >>> coerce (Age 42) :: TTL
+-- TTL 42
+-- >>> coerce (+ (1 :: Int)) (Age 42) :: TTL
+-- TTL 43
+-- >>> coerce (map (+ (1 :: Int)) :: [Int] -> [Int]) [Age 42, Age 24] :: [TTL]
+-- [TTL 43,TTL 25]
 coerce :: Coercible a b => a -> b
 coerce = coerce#

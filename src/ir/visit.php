@@ -326,6 +326,7 @@ function moduleUsesMoggiRuntime(IR\Module $module): bool
         'error#' => true,
         'fix#' => true,
         'coerce#' => true,
+        'unsafeCoerce#' => true,
         'mfixPure#' => true,
         'mfixIO#' => true,
         'exceptionWrap#' => true,

@@ -247,6 +247,7 @@ function typeSchemes(): array
                 [new TVar('a'), new TVar('b')],
             )],
         ),
+        'unsafeCoerce#' => scheme(new TArrow(new TVar('a'), new TVar('b')), ['a', 'b']),
         'mfixPure#' => scheme(
             new TArrow(
                 new TArrow($a, $b),
