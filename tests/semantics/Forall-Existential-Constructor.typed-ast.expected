@@ -1,0 +1,19 @@
+program
+  data Box
+    constructor Box :: forall a. a -> Box
+      field  :: a
+  function label :: Box -> String
+    pat_con Box
+      pat_wild _
+    string "box"
+  function main :: IO ()
+    io_action
+      apply
+        apply
+          variable print
+          evidence_ref Show String
+        apply
+          variable label
+          apply
+            constructor_ref Box
+            integer 0

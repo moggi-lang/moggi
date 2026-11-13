@@ -1,0 +1,14 @@
+-- A constructor may quantify its own variable in the ordinary alternative
+-- syntax, as Haskell's `data Box = forall a. Box a` does. The variable is
+-- existential: rigid inside a match, and unable to escape it.
+module Main where
+
+import Moggi.Internal.Base
+
+data Box = forall a. Box a
+
+label :: Box -> String
+label (Box _) = "box"
+
+main :: IO ()
+main = print (label (Box 0))
