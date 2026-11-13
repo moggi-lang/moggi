@@ -1,0 +1,44 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Builders and writes for characters serialized as UTF-8.
+module Blaze.ByteString.Builder.Char.Utf8
+  ( writeChar
+  , fromChar
+  , fromString
+  , fromShow
+  , fromText
+  , fromLazyText
+  ) where
+
+import Blaze.ByteString.Builder.Internal
+  ( Builder
+  , Write
+  , fromCharUtf8
+  , fromStringUtf8
+  , writeUtf8Char
+  )
+import Data.Char (Char)
+import Data.String (String)
+import Text.Show (Show, show)
+
+-- | Write a UTF-8 encoded character.
+writeChar :: Char -> Write
+writeChar = writeUtf8Char
+
+-- | Serialize a character as UTF-8.
+fromChar :: Char -> Builder
+fromChar = fromCharUtf8
+
+-- | Serialize a string as UTF-8.
+fromString :: String -> Builder
+fromString = fromStringUtf8
+
+-- | Serialize a value by showing it and encoding the result as UTF-8.
+fromShow :: Show a => a -> Builder
+fromShow a = fromStringUtf8 (show a)
+
+-- | Serialize a text value as UTF-8. Moggi has one text type, 'String'.
+fromText :: String -> Builder
+fromText = fromStringUtf8
+
+fromLazyText :: String -> Builder
+fromLazyText = fromStringUtf8

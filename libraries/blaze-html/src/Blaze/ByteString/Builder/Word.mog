@@ -1,0 +1,193 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | 'Write's and 'Builder's for serialising words.
+--
+-- The structure mirrors "Blaze.ByteString.Builder.Int": each write is
+-- 'writePrimFixed' of the matching 'FixedPrim' in
+-- "Data.ByteString.Builder.Prim.Binary", and each builder is 'fromWrite' or
+-- 'fromWriteList' of that write, so the bytes are the primitive's bytes.
+--
+-- Note that for serialising a three tuple @(x,y,z)@ of bytes you should write
+-- them as one chunk rather than concatenating three builders; with a strict
+-- builder the difference is allocation, not buffer checks, but the coalescing
+-- advice still holds.
+module Blaze.ByteString.Builder.Word
+  ( writeWord8
+
+  , writeWord16be
+  , writeWord32be
+  , writeWord64be
+
+  , writeWord16le
+  , writeWord32le
+  , writeWord64le
+
+  , writeWordhost
+  , writeWord16host
+  , writeWord32host
+  , writeWord64host
+
+  , fromWord8
+  , fromWord8s
+
+  , fromWord16be
+  , fromWord32be
+  , fromWord64be
+  , fromWord32sbe
+  , fromWord16sbe
+  , fromWord64sbe
+
+  , fromWord16le
+  , fromWord32le
+  , fromWord64le
+  , fromWord16sle
+  , fromWord32sle
+  , fromWord64sle
+
+  , fromWordhost
+  , fromWord16host
+  , fromWord32host
+  , fromWord64host
+  , fromWordshost
+  , fromWord16shost
+  , fromWord32shost
+  , fromWord64shost
+  ) where
+
+import Blaze.ByteString.Builder.Compat.Write (Write, writePrimFixed)
+import Blaze.ByteString.Builder.Internal (Builder, fromWrite, fromWriteList)
+import Data.ByteString.Builder.Prim qualified as P
+import Data.Word (Word, Word16, Word32, Word64, Word8)
+
+-- | Write a single byte.
+writeWord8 :: Word8 -> Write
+writeWord8 x = writePrimFixed P.word8 x
+
+-- | Write a 'Word16' in big endian format.
+writeWord16be :: Word16 -> Write
+writeWord16be x = writePrimFixed P.word16BE x
+
+-- | Write a 'Word32' in big endian format.
+writeWord32be :: Word32 -> Write
+writeWord32be x = writePrimFixed P.word32BE x
+
+-- | Write a 'Word64' in big endian format.
+writeWord64be :: Word64 -> Write
+writeWord64be x = writePrimFixed P.word64BE x
+
+-- | Write a 'Word16' in little endian format.
+writeWord16le :: Word16 -> Write
+writeWord16le x = writePrimFixed P.word16LE x
+
+-- | Write a 'Word32' in little endian format.
+writeWord32le :: Word32 -> Write
+writeWord32le x = writePrimFixed P.word32LE x
+
+-- | Write a 'Word64' in little endian format.
+writeWord64le :: Word64 -> Write
+writeWord64le x = writePrimFixed P.word64LE x
+
+-- | Write a 'Word' in host order and host endianness. On a 64-bit machine the
+-- 'Word' is an 8-byte value, so values written this way are not portable to a
+-- machine with a different word size.
+writeWordhost :: Word -> Write
+writeWordhost x = writePrimFixed P.wordHost x
+
+-- | Write a 'Word16' in native host order and host endianness.
+writeWord16host :: Word16 -> Write
+writeWord16host x = writePrimFixed P.word16Host x
+
+-- | Write a 'Word32' in native host order and host endianness.
+writeWord32host :: Word32 -> Write
+writeWord32host x = writePrimFixed P.word32Host x
+
+-- | Write a 'Word64' in native host order and host endianness.
+writeWord64host :: Word64 -> Write
+writeWord64host x = writePrimFixed P.word64Host x
+
+-- | Serialize a single byte.
+fromWord8 :: Word8 -> Builder
+fromWord8 w = fromWrite (writeWord8 w)
+
+-- | Serialize a list of bytes.
+fromWord8s :: [Word8] -> Builder
+fromWord8s xs = fromWriteList writeWord8 xs
+
+-- | Serialize a 'Word16' in big endian format.
+fromWord16be :: Word16 -> Builder
+fromWord16be w = fromWrite (writeWord16be w)
+
+-- | Serialize a 'Word32' in big endian format.
+fromWord32be :: Word32 -> Builder
+fromWord32be w = fromWrite (writeWord32be w)
+
+-- | Serialize a 'Word64' in big endian format.
+fromWord64be :: Word64 -> Builder
+fromWord64be w = fromWrite (writeWord64be w)
+
+-- | Serialize a list of 'Word32's in big endian format.
+fromWord32sbe :: [Word32] -> Builder
+fromWord32sbe xs = fromWriteList writeWord32be xs
+
+-- | Serialize a list of 'Word16's in big endian format.
+fromWord16sbe :: [Word16] -> Builder
+fromWord16sbe xs = fromWriteList writeWord16be xs
+
+-- | Serialize a list of 'Word64's in big endian format.
+fromWord64sbe :: [Word64] -> Builder
+fromWord64sbe xs = fromWriteList writeWord64be xs
+
+-- | Serialize a 'Word16' in little endian format.
+fromWord16le :: Word16 -> Builder
+fromWord16le w = fromWrite (writeWord16le w)
+
+-- | Serialize a 'Word32' in little endian format.
+fromWord32le :: Word32 -> Builder
+fromWord32le w = fromWrite (writeWord32le w)
+
+-- | Serialize a 'Word64' in little endian format.
+fromWord64le :: Word64 -> Builder
+fromWord64le w = fromWrite (writeWord64le w)
+
+-- | Serialize a list of 'Word16's in little endian format.
+fromWord16sle :: [Word16] -> Builder
+fromWord16sle xs = fromWriteList writeWord16le xs
+
+-- | Serialize a list of 'Word32's in little endian format.
+fromWord32sle :: [Word32] -> Builder
+fromWord32sle xs = fromWriteList writeWord32le xs
+
+-- | Serialize a list of 'Word64's in little endian format.
+fromWord64sle :: [Word64] -> Builder
+fromWord64sle xs = fromWriteList writeWord64le xs
+
+-- | Serialize a 'Word' in host order and host endianness.
+fromWordhost :: Word -> Builder
+fromWordhost w = fromWrite (writeWordhost w)
+
+-- | Serialize a 'Word16' in native host order and host endianness.
+fromWord16host :: Word16 -> Builder
+fromWord16host w = fromWrite (writeWord16host w)
+
+-- | Serialize a 'Word32' in native host order and host endianness.
+fromWord32host :: Word32 -> Builder
+fromWord32host w = fromWrite (writeWord32host w)
+
+-- | Serialize a 'Word64' in native host order and host endianness.
+fromWord64host :: Word64 -> Builder
+fromWord64host w = fromWrite (writeWord64host w)
+
+-- | Serialize a list of 'Word's.
+fromWordshost :: [Word] -> Builder
+fromWordshost xs = fromWriteList writeWordhost xs
+
+-- | Serialize a list of 'Word16's in native host order and host endianness.
+fromWord16shost :: [Word16] -> Builder
+fromWord16shost xs = fromWriteList writeWord16host xs
+
+-- | Serialize a list of 'Word32's in native host order and host endianness.
+fromWord32shost :: [Word32] -> Builder
+fromWord32shost xs = fromWriteList writeWord32host xs
+
+-- | Serialize a list of 'Word64's in native host order and host endianness.
+fromWord64shost :: [Word64] -> Builder
+fromWord64shost xs = fromWriteList writeWord64host xs

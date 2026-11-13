@@ -1,0 +1,52 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The main module to import as a user of the builder half: a 'Builder' that
+-- denotes a sequence of bytes, the functions that execute it, and the
+-- predefined encoders.
+--
+-- Upstream this module re-exports @"Blaze.ByteString.Builder.Int"@,
+-- @"Blaze.ByteString.Builder.Word"@ and @"Blaze.ByteString.Builder.ByteString"@
+-- wholesale, which is what happens here. The lazy bytestring functions of the
+-- last module keep their names and take the strict type.
+--
+-- Absent, for a type the language lacks: @writeStorable@, @fromStorable@ and
+-- @fromStorables@, because there is no @Storable@ class and no @Ptr@ to poke.
+module Blaze.ByteString.Builder
+  ( Builder
+  , flush
+  , toByteString
+  , toLazyByteString
+  , toLazyByteStringWith
+  , toByteStringIO
+  , toByteStringIOWith
+  , Write
+  , fromWrite
+  , fromWriteSingleton
+  , fromWriteList
+  , writeToByteString
+  , module Blaze.ByteString.Builder.ByteString
+  , module Blaze.ByteString.Builder.Int
+  , module Blaze.ByteString.Builder.Word
+  ) where
+
+import Blaze.ByteString.Builder.ByteString
+import Blaze.ByteString.Builder.Int
+import Blaze.ByteString.Builder.Internal
+  ( Builder
+  , Write
+  , flush
+  , fromWrite
+  , fromWriteList
+  , fromWriteSingleton
+  , payload
+  , toByteString
+  , toByteStringIO
+  , toByteStringIOWith
+  , toLazyByteString
+  , toLazyByteStringWith
+  )
+import Blaze.ByteString.Builder.Word
+import Data.ByteString (ByteString)
+
+-- | The bytes a 'Write' produces.
+writeToByteString :: Write -> ByteString
+writeToByteString w = payload w

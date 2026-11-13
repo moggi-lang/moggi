@@ -1,0 +1,193 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | 'Write's and 'Builder's for serialising integers.
+--
+-- Upstream this module is one line per encoder over @Data.ByteString.Builder@
+-- and its primitives. Here a builder is a difference list of strict chunks, so
+-- a single value is 'fromWrite' of its write and a list is 'fromWriteList';
+-- the bytes and the declared bound are those of the matching 'FixedPrim' in
+-- "Data.ByteString.Builder.Prim.Binary", which are tested byte for byte.
+--
+-- Every backend moggi targets has 64-bit words and is little-endian, so the
+-- host-endian encoders agree with the little-endian ones there, as upstream
+-- documents for @x86-64@.
+module Blaze.ByteString.Builder.Int
+  ( writeInt8
+
+  , writeInt16be
+  , writeInt32be
+  , writeInt64be
+
+  , writeInt16le
+  , writeInt32le
+  , writeInt64le
+
+  , writeInthost
+  , writeInt16host
+  , writeInt32host
+  , writeInt64host
+
+  , fromInt8
+  , fromInt8s
+
+  , fromInt16be
+  , fromInt32be
+  , fromInt64be
+  , fromInt32sbe
+  , fromInt16sbe
+  , fromInt64sbe
+
+  , fromInt16le
+  , fromInt32le
+  , fromInt64le
+  , fromInt16sle
+  , fromInt32sle
+  , fromInt64sle
+
+  , fromInthost
+  , fromInt16host
+  , fromInt32host
+  , fromInt64host
+  , fromIntshost
+  , fromInt16shost
+  , fromInt32shost
+  , fromInt64shost
+  ) where
+
+import Blaze.ByteString.Builder.Compat.Write (Write, writePrimFixed)
+import Blaze.ByteString.Builder.Internal (Builder, fromWrite, fromWriteList)
+import Data.ByteString.Builder.Prim qualified as P
+import Data.Int (Int, Int16, Int32, Int64, Int8)
+
+-- | Write a single signed byte.
+writeInt8 :: Int8 -> Write
+writeInt8 x = writePrimFixed P.int8 x
+
+-- | Write an 'Int16' in big endian format.
+writeInt16be :: Int16 -> Write
+writeInt16be x = writePrimFixed P.int16BE x
+
+-- | Write an 'Int32' in big endian format.
+writeInt32be :: Int32 -> Write
+writeInt32be x = writePrimFixed P.int32BE x
+
+-- | Write an 'Int64' in big endian format.
+writeInt64be :: Int64 -> Write
+writeInt64be x = writePrimFixed P.int64BE x
+
+-- | Write an 'Int16' in little endian format.
+writeInt16le :: Int16 -> Write
+writeInt16le x = writePrimFixed P.int16LE x
+
+-- | Write an 'Int32' in little endian format.
+writeInt32le :: Int32 -> Write
+writeInt32le x = writePrimFixed P.int32LE x
+
+-- | Write an 'Int64' in little endian format.
+writeInt64le :: Int64 -> Write
+writeInt64le x = writePrimFixed P.int64LE x
+
+-- | Write an 'Int' in host order and host endianness. On a 64-bit machine the
+-- 'Int' is an 8-byte value, so values written this way are not portable to a
+-- machine with a different word size.
+writeInthost :: Int -> Write
+writeInthost x = writePrimFixed P.intHost x
+
+-- | Write an 'Int16' in native host order and host endianness.
+writeInt16host :: Int16 -> Write
+writeInt16host x = writePrimFixed P.int16Host x
+
+-- | Write an 'Int32' in native host order and host endianness.
+writeInt32host :: Int32 -> Write
+writeInt32host x = writePrimFixed P.int32Host x
+
+-- | Write an 'Int64' in native host order and host endianness.
+writeInt64host :: Int64 -> Write
+writeInt64host x = writePrimFixed P.int64Host x
+
+-- | Serialize a single byte.
+fromInt8 :: Int8 -> Builder
+fromInt8 i = fromWrite (writeInt8 i)
+
+-- | Serialize a list of bytes.
+fromInt8s :: [Int8] -> Builder
+fromInt8s xs = fromWriteList writeInt8 xs
+
+-- | Serialize an 'Int16' in big endian format.
+fromInt16be :: Int16 -> Builder
+fromInt16be i = fromWrite (writeInt16be i)
+
+-- | Serialize an 'Int32' in big endian format.
+fromInt32be :: Int32 -> Builder
+fromInt32be i = fromWrite (writeInt32be i)
+
+-- | Serialize an 'Int64' in big endian format.
+fromInt64be :: Int64 -> Builder
+fromInt64be i = fromWrite (writeInt64be i)
+
+-- | Serialize a list of 'Int32's in big endian format.
+fromInt32sbe :: [Int32] -> Builder
+fromInt32sbe xs = fromWriteList writeInt32be xs
+
+-- | Serialize a list of 'Int16's in big endian format.
+fromInt16sbe :: [Int16] -> Builder
+fromInt16sbe xs = fromWriteList writeInt16be xs
+
+-- | Serialize a list of 'Int64's in big endian format.
+fromInt64sbe :: [Int64] -> Builder
+fromInt64sbe xs = fromWriteList writeInt64be xs
+
+-- | Serialize an 'Int16' in little endian format.
+fromInt16le :: Int16 -> Builder
+fromInt16le i = fromWrite (writeInt16le i)
+
+-- | Serialize an 'Int32' in little endian format.
+fromInt32le :: Int32 -> Builder
+fromInt32le i = fromWrite (writeInt32le i)
+
+-- | Serialize an 'Int64' in little endian format.
+fromInt64le :: Int64 -> Builder
+fromInt64le i = fromWrite (writeInt64le i)
+
+-- | Serialize a list of 'Int16's in little endian format.
+fromInt16sle :: [Int16] -> Builder
+fromInt16sle xs = fromWriteList writeInt16le xs
+
+-- | Serialize a list of 'Int32's in little endian format.
+fromInt32sle :: [Int32] -> Builder
+fromInt32sle xs = fromWriteList writeInt32le xs
+
+-- | Serialize a list of 'Int64's in little endian format.
+fromInt64sle :: [Int64] -> Builder
+fromInt64sle xs = fromWriteList writeInt64le xs
+
+-- | Serialize an 'Int' in host order and host endianness.
+fromInthost :: Int -> Builder
+fromInthost i = fromWrite (writeInthost i)
+
+-- | Serialize an 'Int16' in native host order and host endianness.
+fromInt16host :: Int16 -> Builder
+fromInt16host i = fromWrite (writeInt16host i)
+
+-- | Serialize an 'Int32' in native host order and host endianness.
+fromInt32host :: Int32 -> Builder
+fromInt32host i = fromWrite (writeInt32host i)
+
+-- | Serialize an 'Int64' in native host order and host endianness.
+fromInt64host :: Int64 -> Builder
+fromInt64host i = fromWrite (writeInt64host i)
+
+-- | Serialize a list of 'Int's.
+fromIntshost :: [Int] -> Builder
+fromIntshost xs = fromWriteList writeInthost xs
+
+-- | Serialize a list of 'Int16's in native host order and host endianness.
+fromInt16shost :: [Int16] -> Builder
+fromInt16shost xs = fromWriteList writeInt16host xs
+
+-- | Serialize a list of 'Int32's in native host order and host endianness.
+fromInt32shost :: [Int32] -> Builder
+fromInt32shost xs = fromWriteList writeInt32host xs
+
+-- | Serialize a list of 'Int64's in native host order and host endianness.
+fromInt64shost :: [Int64] -> Builder
+fromInt64shost xs = fromWriteList writeInt64host xs

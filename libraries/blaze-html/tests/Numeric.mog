@@ -1,0 +1,121 @@
+-- Byte-level cases for the vendored blaze-builder encoders.
+--
+-- The Haskell package tests these through @Data.ByteString.Builder@'s own
+-- tests; here the expectations are the concrete byte sequences, written out so
+-- a wrong endianness, width or bound fails on the value rather than inside a
+-- helper. Expected bytes are shown as decimal because that is what
+-- 'unpack' returns.
+
+module Numeric (builderSuite) where
+
+import Blaze.ByteString.Builder (fromByteString, toByteString)
+import Blaze.ByteString.Builder qualified as BB
+import Blaze.ByteString.Builder.HTTP (chunkedTransferEncoding, chunkedTransferTerminator)
+import Blaze.ByteString.Builder.Html.Word qualified as HW
+import Blaze.ByteString.Builder.Int qualified as I
+import Blaze.ByteString.Builder.Internal (bound, payload)
+import Blaze.ByteString.Builder.Word qualified as W
+import Control.Monad ((>>))
+import Data.ByteString (ByteString, pack, unpack)
+import Data.Enum (fromEnum)
+import Data.Int (Int)
+import Data.List ((:), replicate, take)
+import Data.Monoid (mempty)
+import Data.Semigroup ((<>))
+import Data.String (String)
+import Data.Word (Word8)
+import Support (expect)
+import System.IO (IO)
+import Text.Show (show)
+
+ints :: [Word8] -> [Int]
+ints ws = case ws of
+  [] -> []
+  w : rest -> fromEnum w : ints rest
+
+byteInts :: ByteString -> [Int]
+byteInts bs = ints (unpack bs)
+
+bytes :: ByteString -> String
+bytes bs = show (byteInts bs)
+
+prefix :: Int -> ByteString -> String
+prefix n bs = show (byteInts (pack (take n (unpack bs))))
+
+builderSuite :: IO ()
+builderSuite = do
+  -- Integers: one value each way, then lists, then the host-endian forms.
+  expect "fromInt8 -1" (bytes (toByteString (I.fromInt8 (-1)))) "[255]"
+  expect "fromInt16be 258" (bytes (toByteString (I.fromInt16be 258))) "[1,2]"
+  expect "fromInt16le 258" (bytes (toByteString (I.fromInt16le 258))) "[2,1]"
+  expect "fromInt32be 16909060" (bytes (toByteString (I.fromInt32be 16909060))) "[1,2,3,4]"
+  expect "fromInt32le 16909060" (bytes (toByteString (I.fromInt32le 16909060))) "[4,3,2,1]"
+  expect "fromInt64be" (bytes (toByteString (I.fromInt64be 72623859790382856))) "[1,2,3,4,5,6,7,8]"
+  expect "fromInt64le" (bytes (toByteString (I.fromInt64le 72623859790382856))) "[8,7,6,5,4,3,2,1]"
+  expect "fromInt8s" (bytes (toByteString (I.fromInt8s [(-1), 0]))) "[255,0]"
+  expect "fromInt16sbe" (bytes (toByteString (I.fromInt16sbe [258, 515]))) "[1,2,2,3]"
+  expect "fromInt32sle" (bytes (toByteString (I.fromInt32sle [16909060]))) "[4,3,2,1]"
+  expect "fromInt64sbe" (bytes (toByteString (I.fromInt64sbe [1]))) "[0,0,0,0,0,0,0,1]"
+  expect "fromInthost 1" (bytes (toByteString (I.fromInthost 1))) "[1,0,0,0,0,0,0,0]"
+  expect "fromInt16host 258" (bytes (toByteString (I.fromInt16host 258))) "[2,1]"
+  expect "fromInt64shost" (bytes (toByteString (I.fromInt64shost [1, 2]))) "[1,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0]"
+
+  -- Words: the unsigned side of the same encodings.
+  expect "fromWord8 255" (bytes (toByteString (W.fromWord8 255))) "[255]"
+  expect "fromWord16be 258" (bytes (toByteString (W.fromWord16be 258))) "[1,2]"
+  expect "fromWord16le 258" (bytes (toByteString (W.fromWord16le 258))) "[2,1]"
+  expect "fromWord32be 16909060" (bytes (toByteString (W.fromWord32be 16909060))) "[1,2,3,4]"
+  expect "fromWord32le 16909060" (bytes (toByteString (W.fromWord32le 16909060))) "[4,3,2,1]"
+  expect "fromWord64be" (bytes (toByteString (W.fromWord64be 72623859790382856))) "[1,2,3,4,5,6,7,8]"
+  expect "fromWord64le" (bytes (toByteString (W.fromWord64le 72623859790382856))) "[8,7,6,5,4,3,2,1]"
+  expect "fromWord8s" (bytes (toByteString (W.fromWord8s [0, 255]))) "[0,255]"
+  expect "fromWord16sbe" (bytes (toByteString (W.fromWord16sbe [258, 515]))) "[1,2,2,3]"
+  expect "fromWord32sle" (bytes (toByteString (W.fromWord32sle [16909060]))) "[4,3,2,1]"
+  expect "fromWord64sbe" (bytes (toByteString (W.fromWord64sbe [1]))) "[0,0,0,0,0,0,0,1]"
+  expect "fromWordhost 1" (bytes (toByteString (W.fromWordhost 1))) "[1,0,0,0,0,0,0,0]"
+  expect "fromWord32host 258" (bytes (toByteString (W.fromWord32host 258))) "[2,1,0,0]"
+  expect "fromWord64shost" (bytes (toByteString (W.fromWord64shost [2]))) "[2,0,0,0,0,0,0,0]"
+
+  -- A write states the size of what it produces before producing it.
+  expect "writeInt8 bound" (show (bound (I.writeInt8 0))) "1"
+  expect "writeInt16le bound" (show (bound (I.writeInt16le 0))) "2"
+  expect "writeInt32be bound" (show (bound (I.writeInt32be 0))) "4"
+  expect "writeInt64be bound" (show (bound (I.writeInt64be 0))) "8"
+  expect "writeInthost bound" (show (bound (I.writeInthost 0))) "8"
+  expect "writeInt32be bytes" (bytes (payload (I.writeInt32be 16909060))) "[1,2,3,4]"
+  expect "writeWord8 bound" (show (bound (W.writeWord8 0))) "1"
+  expect "writeWord64host bound" (show (bound (W.writeWord64host 0))) "8"
+  expect "writeWord16le bytes" (bytes (payload (W.writeWord16le 258))) "[2,1]"
+
+  -- Chunked transfer encoding: header, payload, trailing CRLF, and the
+  -- terminator; lowercase hex digits, empty payloads contributing no chunk.
+  expect "chunked terminator" (bytes (toByteString chunkedTransferTerminator)) "[48,13,10,13,10]"
+  expect "chunked 3 bytes" (bytes (toByteString (chunkedTransferEncoding (fromByteString "abc")))) "[51,13,10,97,98,99,13,10]"
+  expect "chunked empty" (bytes (toByteString (chunkedTransferEncoding mempty))) "[]"
+  expect "chunked two pieces"
+    (bytes (toByteString (chunkedTransferEncoding (fromByteString "ab" <> fromByteString "cd"))))
+    "[52,13,10,97,98,99,100,13,10]"
+  expect "chunked 12 bytes header" (prefix 3 (toByteString (chunkedTransferEncoding (fromByteString (pack (replicate 12 65)))))) "[99,13,10]"
+  expect "chunked 26 bytes header" (prefix 4 (toByteString (chunkedTransferEncoding (fromByteString (pack (replicate 26 65)))))) "[49,97,13,10]"
+
+  -- HTML escaping of bytes: the five entities, the bytes that pass through,
+  -- and the control bytes upstream drops.
+  expect "escaped word <" (bytes (toByteString (HW.fromHtmlEscapedWord 60))) "[38,108,116,59]"
+  expect "escaped word >" (bytes (toByteString (HW.fromHtmlEscapedWord 62))) "[38,103,116,59]"
+  expect "escaped word &" (bytes (toByteString (HW.fromHtmlEscapedWord 38))) "[38,97,109,112,59]"
+  expect "escaped word quote" (bytes (toByteString (HW.fromHtmlEscapedWord 34))) "[38,113,117,111,116,59]"
+  expect "escaped word apostrophe" (bytes (toByteString (HW.fromHtmlEscapedWord 39))) "[38,35,51,57,59]"
+  expect "escaped word plain" (bytes (toByteString (HW.fromHtmlEscapedWord 65))) "[65]"
+  expect "escaped word DEL is dropped" (bytes (toByteString (HW.fromHtmlEscapedWord 127))) "[]"
+  expect "escaped word NUL is dropped" (bytes (toByteString (HW.fromHtmlEscapedWord 0))) "[]"
+  expect "escaped word tab is kept" (bytes (toByteString (HW.fromHtmlEscapedWord 9))) "[9]"
+  expect "escaped word list" (bytes (toByteString (HW.fromHtmlEscapedWordList [60, 65]))) "[38,108,116,59,65]"
+  expect "escaped bytestring" (bytes (toByteString (HW.fromHtmlEscapedByteString (pack [38, 66])))) "[38,97,109,112,59,66]"
+  expect "escaped lazy bytestring" (bytes (toByteString (HW.fromHtmlEscapedLazyByteString (pack [60])))) "[38,108,116,59]"
+  expect "escaped word bound" (show (bound (HW.writeHtmlEscapedWord 60))) "6"
+  expect "escaped word write bytes" (bytes (payload (HW.writeHtmlEscapedWord 60))) "[38,108,116,59]"
+
+  -- The umbrella module re-exports the numeric and bytestring encoders.
+  expect "umbrella fromInt16be" (bytes (toByteString (BB.fromInt16be 258))) "[1,2]"
+  expect "umbrella fromWord32le" (bytes (toByteString (BB.fromWord32le 16909060))) "[4,3,2,1]"
+  expect "umbrella fromByteString" (bytes (toByteString (BB.fromByteString (pack [120, 121])))) "[120,121]"

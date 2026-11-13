@@ -1,0 +1,55 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Builders and writes for HTML escaped, UTF-8 encoded characters.
+module Blaze.ByteString.Builder.Html.Utf8
+  ( module Blaze.ByteString.Builder.Char.Utf8
+
+  , writeHtmlEscapedChar
+  , fromHtmlEscapedChar
+  , fromHtmlEscapedString
+  , fromHtmlEscapedShow
+  , fromHtmlEscapedText
+  , fromHtmlEscapedLazyText
+  ) where
+
+import Blaze.ByteString.Builder.Char.Utf8
+import Blaze.ByteString.Builder.Internal (Builder, Write, toByteString, writeByteString)
+import Data.Bool (Bool (..))
+import Data.Char (Char)
+import Data.Eq
+import Data.List (map)
+import Data.Monoid (mconcat)
+import Data.String (String)
+import Data.String qualified as S
+import Text.Show (Show, show)
+
+-- | The escape of one character, or the character itself.
+escapedChar :: Char -> Builder
+escapedChar c =
+  if c == '<' then fromString "&lt;"
+  else if c == '>' then fromString "&gt;"
+  else if c == '&' then fromString "&amp;"
+  else if c == '"' then fromString "&quot;"
+  else if c == '\'' then fromString "&#39;"
+  else fromChar c
+
+-- | Write an HTML escaped, UTF-8 encoded character.
+writeHtmlEscapedChar :: Char -> Write
+writeHtmlEscapedChar c = writeByteString (toByteString (escapedChar c))
+
+-- | Serialize an HTML escaped, UTF-8 encoded character.
+fromHtmlEscapedChar :: Char -> Builder
+fromHtmlEscapedChar = escapedChar
+
+-- | Serialize a string, escaping the five HTML entities.
+fromHtmlEscapedString :: String -> Builder
+fromHtmlEscapedString s = mconcat (map escapedChar (S.unpack s))
+
+-- | Serialize a value by showing it and escaping the result.
+fromHtmlEscapedShow :: Show a => a -> Builder
+fromHtmlEscapedShow a = fromHtmlEscapedString (show a)
+
+fromHtmlEscapedText :: String -> Builder
+fromHtmlEscapedText = fromHtmlEscapedString
+
+fromHtmlEscapedLazyText :: String -> Builder
+fromHtmlEscapedLazyText = fromHtmlEscapedString

@@ -1,0 +1,67 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | A renderer that produces indented HTML, meant for reading rather than for
+-- sending.
+module Text.Blaze.Renderer.Pretty
+  ( renderMarkup
+  , renderHtml
+  ) where
+
+import Data.Bool (Bool (..))
+import Data.Char (Char)
+import Data.Int (Int)
+import Data.List ((:), replicate)
+import Data.Num
+import Data.Semigroup ((<>))
+import Data.String (String)
+import Data.String qualified as S
+import Text.Blaze.Internal (Markup, MarkupM (..), getString)
+import Text.Blaze.Renderer.String (fromChoiceString)
+
+-- | One indentation step.
+step :: Int
+step = 4
+
+inc :: Int -> Int
+inc i = i + step
+
+-- | The indentation of a depth.
+ind :: Int -> String -> String
+ind i k = S.pack (replicate i ' ') <> k
+
+consChar :: Char -> String -> String
+consChar c k = S.pack (c : S.unpack k)
+
+-- | Render markup at a depth, then append the given string.
+renderString :: Markup -> String -> String
+renderString markup k = go 0 (\x -> x) markup k
+
+go :: Int -> (String -> String) -> MarkupM a -> String -> String
+go i attrs m k = case m of
+  Parent _ open close content ->
+    ind i (getString open (attrs (">\n" <> go (inc i) (\x -> x) content
+      (ind i (getString close (consChar '\n' k))))))
+  CustomParent tag content ->
+    ind i (consChar '<' (fromChoiceString tag
+      (attrs (">\n" <> go (inc i) (\x -> x) content
+        (ind i ("</" <> fromChoiceString tag (">\n" <> k)))))))
+  Leaf _ begin end _ ->
+    ind i (getString begin (attrs (getString end (consChar '\n' k))))
+  CustomLeaf tag close _ ->
+    ind i (consChar '<' (fromChoiceString tag
+      (attrs (if close then " />\n" <> k else ">\n" <> k))))
+  AddAttribute _ key value h ->
+    go i (\inner -> getString key (fromChoiceString value (consChar '"' (attrs inner)))) h k
+  AddCustomAttribute key value h ->
+    go i (\inner -> consChar ' ' (fromChoiceString key
+      ("=\"" <> fromChoiceString value (consChar '"' (attrs inner))))) h k
+  Content content _ -> ind i (fromChoiceString content (consChar '\n' k))
+  Comment comment _ -> ind i ("<!-- " <> fromChoiceString comment (" -->\n" <> k))
+  Append h1 h2 -> go i attrs h1 (go i attrs h2 k)
+  Empty _ -> k
+
+-- | Render markup to an indented 'String'.
+renderMarkup :: Markup -> String
+renderMarkup markup = renderString markup ""
+
+renderHtml :: Markup -> String
+renderHtml = renderMarkup

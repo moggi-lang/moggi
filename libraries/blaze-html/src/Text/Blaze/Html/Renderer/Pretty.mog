@@ -1,0 +1,12 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Render HTML with indentation.
+module Text.Blaze.Html.Renderer.Pretty
+  ( renderHtml
+  ) where
+
+import Data.String (String)
+import Text.Blaze.Html (Html)
+import Text.Blaze.Renderer.Pretty qualified as R
+
+renderHtml :: Html -> String
+renderHtml h = R.renderMarkup h

@@ -1,0 +1,74 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Support for HTTP response encoding: the chunked transfer encoding of
+-- RFC 7230.
+--
+-- Upstream this is written against the buffer-filling builder: it reserves the
+-- room for a chunk header, runs the wrapped builder into the remaining buffer,
+-- and patches the header with the size of what was written, flushing whenever
+-- the buffer fills. That machinery does not exist here, because a builder is a
+-- difference list of strict chunks and is rendered once.
+--
+-- The encoding is therefore produced from the inner builder's bytes: one chunk
+-- carrying the whole of them, framed as @\<hex-length\> CRLF \<bytes\> CRLF@.
+-- Chunk boundaries are an encoding detail, not part of the payload, so a reader
+-- decodes the same octets; only the number of chunks differs, and only for
+-- payloads that would have spanned several upstream buffers. An empty builder
+-- emits no chunk at all, as upstream. The terminator is byte-identical.
+module Blaze.ByteString.Builder.HTTP
+  ( chunkedTransferEncoding
+  , chunkedTransferTerminator
+  ) where
+
+import Blaze.ByteString.Builder (Builder)
+import Blaze.ByteString.Builder.ByteString (copyByteString)
+import Blaze.ByteString.Builder.Char8 (fromString)
+import Blaze.ByteString.Builder.Internal (fromByteString, toByteString)
+import Data.Bool (Bool (..))
+import Data.ByteString (ByteString, length, null)
+import Data.Char (Char, chr)
+import Data.Int (Int)
+import Data.List ((:), (++))
+import Data.Monoid (mempty)
+import Data.Num ((+))
+import Data.Ord ((<))
+import Data.Real (Integral (div, mod))
+import Data.Semigroup ((<>))
+import Data.String (String)
+import Data.String qualified as S
+
+-- | A lowercase hexadecimal digit.
+hexDigit :: Int -> Char
+hexDigit n = case n < 10 of
+  True -> chr (48 + n)
+  False -> chr (87 + n)
+
+-- | The lowercase hexadecimal digits of a number, most significant first.
+hexDigits :: Int -> [Char]
+hexDigits n = case n < 16 of
+  True -> hexDigit n : []
+  False -> hexDigits (div n 16) ++ (hexDigit (mod n 16) : [])
+
+-- | The lowercase hexadecimal length of a chunk, at least one digit.
+hexLength :: Int -> String
+hexLength n = S.pack (hexDigits n)
+
+-- | Transform a builder such that it uses chunked HTTP transfer encoding.
+--
+-- The data is emitted as a single chunk, for the reason in the module
+-- documentation; append 'chunkedTransferTerminator' to finish the body.
+chunkedTransferEncoding :: Builder -> Builder
+chunkedTransferEncoding inner = encode (toByteString inner)
+
+encode :: ByteString -> Builder
+encode bytes = case null bytes of
+  True -> mempty
+  False ->
+    fromString (hexLength (length bytes))
+      <> fromByteString "\r\n"
+      <> fromByteString bytes
+      <> fromByteString "\r\n"
+
+-- | The zero-length chunk @0\\r\\n\\r\\n@ signalling the termination of the
+-- data transfer.
+chunkedTransferTerminator :: Builder
+chunkedTransferTerminator = copyByteString "0\r\n\r\n"

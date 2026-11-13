@@ -1,0 +1,54 @@
+-- The @StaticString@ selectors of "Text.Blaze.Internal".
+--
+-- Upstream declares @StaticString@ as a record, so the three selectors leave
+-- the library inside the @StaticString(..)@ export. The port's constructor is
+-- positional and the selectors are ordinary functions exported by name, which
+-- makes them reachable but easy to leave untested; this module holds them to
+-- the behaviour the record fields give.
+
+module Internals (internalsSuite) where
+
+import Data.ByteString (ByteString, pack)
+import Data.Eq ((==))
+import Data.Int (Int)
+import Data.Semigroup ((<>))
+import Data.String (String)
+import Data.String qualified as S
+import System.IO (IO)
+import Support (assertTrue, expect)
+import Text.Blaze.Internal
+  ( ChoiceString (..)
+  , Markup
+  , MarkupM (..)
+  , StaticString (..)
+  , getString
+  , getUtf8ByteString
+  , getText
+  )
+import Text.Blaze.Renderer.String qualified as R
+
+-- The appender marks where the string is spliced in, so a selector that
+-- returned the wrong field would show up in the first assertion.
+marker :: String -> String
+marker s = S.singleton '!' <> s
+
+static :: StaticString
+static = StaticString marker (pack [65, 66]) "ab"
+
+-- A concatenation whose halves carry different payloads. Upstream's 'Append'
+-- existentially quantifies its left child, so this only typechecks when the
+-- existential is understood: the left half is a 'MarkupM Int', the tree is a
+-- 'Markup', and the right half still renders.
+answer :: Int
+answer = 42
+
+mixed :: Markup
+mixed = Append (Empty answer) (Content (String "x") ())
+
+internalsSuite :: IO ()
+internalsSuite = do
+  expect "getString applies the stored appender" (getString static "x") "!x"
+  assertTrue "getUtf8ByteString is the UTF-8 text" (getUtf8ByteString static == pack [65, 66])
+  expect "getText is the text" (getText static) "ab"
+  expect "getText of an empty static string" (getText (StaticString marker (pack []) "")) ""
+  expect "existential Append keeps the right half" (R.renderMarkup mixed) "x"

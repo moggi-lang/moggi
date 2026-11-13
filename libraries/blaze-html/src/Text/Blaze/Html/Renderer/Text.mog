@@ -1,0 +1,25 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Render HTML as text. Moggi's text type is 'String'.
+module Text.Blaze.Html.Renderer.Text
+  ( renderHtmlBuilder
+  , renderHtmlBuilderWith
+  , renderHtml
+  , renderHtmlWith
+  ) where
+
+import Data.ByteString (ByteString)
+import Data.String (String)
+import Text.Blaze.Html (Html)
+import Text.Blaze.Renderer.Text qualified as R
+
+renderHtmlBuilder :: Html -> String
+renderHtmlBuilder h = R.renderMarkupBuilder h
+
+renderHtmlBuilderWith :: (ByteString -> String) -> Html -> String
+renderHtmlBuilderWith d h = R.renderMarkupBuilderWith d h
+
+renderHtml :: Html -> String
+renderHtml h = R.renderMarkup h
+
+renderHtmlWith :: (ByteString -> String) -> Html -> String
+renderHtmlWith d h = R.renderMarkupWith d h

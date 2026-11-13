@@ -1,0 +1,118 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | A renderer that produces a 'String', mostly for debugging.
+--
+-- A byte string in the markup is decoded as UTF-8, so what it denotes is what
+-- comes out.
+module Text.Blaze.Renderer.String
+  ( fromChoiceString
+  , renderMarkup
+  , renderHtml
+  ) where
+
+import Data.Bool (Bool (..), (&&))
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as BS
+import Data.Char (Char)
+import Data.Eq
+import Data.List ((:))
+import Data.Semigroup ((<>))
+import Data.String (String)
+import Data.String qualified as S
+import Data.String.Encoding (decodeUtf8)
+import Data.Word (Word8)
+import Text.Blaze.Internal (ChoiceString (..), Markup, MarkupM (..), getString)
+
+-- | Escape the five XML entities of a string, then append the second string.
+escapeMarkupEntities :: String -> String -> String
+escapeMarkupEntities s k = escapeChars (S.unpack s) k
+
+escapeChars :: [Char] -> String -> String
+escapeChars cs k = case cs of
+  [] -> k
+  c : rest -> escapeChar c (escapeChars rest k)
+
+-- | One character as the text it contributes, followed by the rest.
+escapeChar :: Char -> String -> String
+escapeChar c k = case c of
+  '<' -> "&lt;" <> k
+  '>' -> "&gt;" <> k
+  '&' -> "&amp;" <> k
+  '"' -> "&quot;" <> k
+  '\'' -> "&#39;" <> k
+  other -> consChar other k
+
+consChar :: Char -> String -> String
+consChar c k = S.pack (c : S.unpack k)
+
+-- | Whether the bytes hold the sequence @</@ that would end a script or style
+-- element early.
+containsClose :: ByteString -> Bool
+containsClose bs = scanClose (BS.unpack bs)
+
+scanClose :: [Word8] -> Bool
+scanClose ws = case ws of
+  [] -> False
+  a : rest -> case rest of
+    b : more -> if a == 60 && b == 47 then True else scanClose rest
+    [] -> False
+
+-- | Whether the text holds the sequence @</@.
+containsCloseString :: String -> Bool
+containsCloseString s = scanChars (S.unpack s)
+
+scanChars :: [Char] -> Bool
+scanChars cs = case cs of
+  [] -> False
+  a : rest -> case rest of
+    b : more -> if a == '<' && b == '/' then True else scanChars rest
+    [] -> False
+
+-- | Render a 'ChoiceString', then append the given string.
+fromChoiceString :: ChoiceString -> String -> String
+fromChoiceString cs k = case cs of
+  Static s -> getString s k
+  String s -> escapeMarkupEntities s k
+  Text s -> escapeMarkupEntities s k
+  ByteString bs -> decodeUtf8 bs <> k
+  PreEscaped x -> case x of
+    String s -> s <> k
+    Text s -> s <> k
+    other -> fromChoiceString other k
+  External x -> case x of
+    String s -> if containsCloseString s then k else s <> k
+    Text s -> if containsCloseString s then k else s <> k
+    ByteString bs -> if containsClose bs then k else decodeUtf8 bs <> k
+    other -> fromChoiceString other k
+  AppendChoiceString x y -> fromChoiceString x (fromChoiceString y k)
+  EmptyChoiceString -> k
+
+-- | Render markup, with the attributes collected so far applied to each
+-- element as it opens.
+go :: (String -> String) -> MarkupM a -> String -> String
+go attrs m k = case m of
+  Parent _ open close content ->
+    getString open (attrs (consChar '>' (go (\x -> x) content (getString close k))))
+  CustomParent tag content ->
+    consChar '<' (fromChoiceString tag
+      (attrs (consChar '>' (go (\x -> x) content
+        ("</" <> fromChoiceString tag (consChar '>' k))))))
+  Leaf _ begin end _ -> getString begin (attrs (getString end k))
+  CustomLeaf tag close _ ->
+    consChar '<' (fromChoiceString tag
+      (attrs (if close then " />" <> k else consChar '>' k)))
+  AddAttribute _ key value h ->
+    go (\inner -> getString key (fromChoiceString value (consChar '"' (attrs inner)))) h k
+  AddCustomAttribute key value h ->
+    go (\inner -> consChar ' ' (fromChoiceString key
+      ("=\"" <> fromChoiceString value (consChar '"' (attrs inner))))) h k
+  Content content _ -> fromChoiceString content k
+  Comment comment _ -> "<!-- " <> fromChoiceString comment (" -->" <> k)
+  Append h1 h2 -> go attrs h1 (go attrs h2 k)
+  Empty _ -> k
+
+-- | Render markup to a 'String'.
+renderMarkup :: Markup -> String
+renderMarkup markup = go (\x -> x) markup ""
+
+renderHtml :: Markup -> String
+renderHtml = renderMarkup
