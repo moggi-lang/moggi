@@ -1,0 +1,394 @@
+-- The http-types package's test entry point.
+--
+-- One module covers the package's behaviour, porting the upstream Haskell specs
+-- (`HeaderSpec`, `MethodSpec`, `StatusSpec`, `URISpec`, `VersionSpec`) case for
+-- case where they are deterministic. QuickCheck properties become fixed
+-- samples, and the `Settings`/pattern-synonym matches become constructor
+-- matches, since Moggi has no pattern synonyms.
+--
+-- The module is named `Suite`, not `Main`: the descriptor's `[test-suite]`
+-- declares `main = Suite`, and a package may carry more than one executable,
+-- so an entry point cannot be identified by being called `Main`.
+
+module Suite (main) where
+
+import Data.Bool (Bool(..), (&&), not)
+import Data.Bounded (Bounded(..))
+import Data.ByteString (ByteString)
+import Data.ByteString.Builder.Internal (toByteString)
+import Data.CaseInsensitive qualified as CI
+import Data.Either (Either(..))
+import Data.Enum (Enum(..))
+import Data.Eq ((==))
+import Data.Foldable (mapM_)
+import Data.List (any, filter, map)
+import Data.Maybe (Maybe(..))
+import Data.Ord (Ordering(..), compare, (<), (>))
+import Data.String (String)
+import Data.String.Encoding (encodeUtf8)
+import Network.HTTP.Types
+import System.Exit (die)
+
+-- The package works on 'ByteString', while a literal in Moggi is a 'String'.
+bs :: String -> ByteString
+bs = encodeUtf8
+
+assertTrue :: String -> Bool -> IO ()
+assertTrue name ok = case ok of
+  True -> pure ()
+  False -> die ("FAIL: " <> name)
+
+-- ---------------------------------------------------------------------------
+-- Helpers mirroring the upstream spec shapes.
+
+checkHeader :: (HeaderName, String) -> IO ()
+checkHeader entry = case entry of
+  (hdr, name) -> assertTrue ("header " <> name) (hdr == CI.mk (bs name))
+
+allMethods :: [Method]
+allMethods = map renderStdMethod (enumFromTo minBound maxBound)
+
+checkStatus :: (Status, Status, Int, String) -> IO ()
+checkStatus entry = case entry of
+  (st, alias, code, msg) -> do
+    assertTrue ("status alias " <> show code) (st == alias)
+    assertTrue ("status code " <> show code) (statusCode st == code)
+    assertTrue ("status message " <> show code) (statusMessage st == bs msg)
+
+statusOf :: (Status, Status, Int, String) -> Status
+statusOf (st, _, _, _) = st
+
+allStatuses :: [Status]
+allStatuses = map statusOf statusTable
+
+statusesIn :: Int -> [Status]
+statusesIn hundred = filter (\s -> div (statusCode s) 100 == hundred) allStatuses
+
+notInCodes :: [Status] -> Status -> Bool
+notInCodes yes s = not (any (\y -> statusCode y == statusCode s) yes)
+
+checkCategory :: String -> (Status -> Bool) -> [Status] -> IO ()
+checkCategory name p yes = do
+  mapM_ (\s -> assertTrue (name <> " accepts " <> show (statusCode s)) (p s)) yes
+  mapM_
+    (\s -> assertTrue (name <> " rejects " <> show (statusCode s)) (not (p s)))
+    (filter (notInCodes yes) allStatuses)
+
+checkVersion :: (String, HttpVersion, HttpVersion) -> IO ()
+checkVersion entry = case entry of
+  (rendered, v1, v2) -> do
+    assertTrue ("version literal " <> rendered) (v1 == v2)
+    assertTrue ("version show " <> rendered) (show v1 == rendered)
+
+-- ---------------------------------------------------------------------------
+-- Upstream `HeaderSpec`: every header constant names its header.
+
+headerConstants :: [(HeaderName, String)]
+headerConstants =
+  [ (hAccept, "Accept")
+  , (hAcceptCharset, "Accept-Charset")
+  , (hAcceptEncoding, "Accept-Encoding")
+  , (hAcceptLanguage, "Accept-Language")
+  , (hAcceptPatch, "Accept-Patch")
+  , (hAcceptQuery, "Accept-Query")
+  , (hAcceptRanges, "Accept-Ranges")
+  , (hAccessControlAllowCredentials, "Access-Control-Allow-Credentials")
+  , (hAccessControlAllowHeaders, "Access-Control-Allow-Headers")
+  , (hAccessControlAllowMethods, "Access-Control-Allow-Methods")
+  , (hAccessControlAllowOrigin, "Access-Control-Allow-Origin")
+  , (hAccessControlExposeHeaders, "Access-Control-Expose-Headers")
+  , (hAccessControlMaxAge, "Access-Control-Max-Age")
+  , (hAccessControlRequestMethod, "Access-Control-Request-Method")
+  , (hAge, "Age")
+  , (hAllow, "Allow")
+  , (hAltSvc, "Alt-Svc")
+  , (hAuthorization, "Authorization")
+  , (hCacheControl, "Cache-Control")
+  , (hConnection, "Connection")
+  , (hContentDigest, "Content-Digest")
+  , (hContentDisposition, "Content-Disposition")
+  , (hContentEncoding, "Content-Encoding")
+  , (hContentLanguage, "Content-Language")
+  , (hContentLength, "Content-Length")
+  , (hContentLocation, "Content-Location")
+  , (hContentMD5, "Content-MD5")
+  , (hContentRange, "Content-Range")
+  , (hContentSecurityPolicy, "Content-Security-Policy")
+  , (hContentSecurityPolicyReportOnly, "Content-Security-Policy-Report-Only")
+  , (hContentType, "Content-Type")
+  , (hCookie, "Cookie")
+  , (hDate, "Date")
+  , (hETag, "ETag")
+  , (hExpect, "Expect")
+  , (hExpires, "Expires")
+  , (hForwarded, "Forwarded")
+  , (hFrom, "From")
+  , (hHost, "Host")
+  , (hIfMatch, "If-Match")
+  , (hIfModifiedSince, "If-Modified-Since")
+  , (hIfNoneMatch, "If-None-Match")
+  , (hIfRange, "If-Range")
+  , (hIfUnmodifiedSince, "If-Unmodified-Since")
+  , (hLastModified, "Last-Modified")
+  , (hLink, "Link")
+  , (hLocation, "Location")
+  , (hMaxForwards, "Max-Forwards")
+  , (hMIMEVersion, "MIME-Version")
+  , (hOrigin, "Origin")
+  , (hPragma, "Pragma")
+  , (hPrefer, "Prefer")
+  , (hPreferenceApplied, "Preference-Applied")
+  , (hProxyAuthenticate, "Proxy-Authenticate")
+  , (hProxyAuthorization, "Proxy-Authorization")
+  , (hRange, "Range")
+  , (hReferer, "Referer")
+  , (hRetryAfter, "Retry-After")
+  , (hServer, "Server")
+  , (hSetCookie, "Set-Cookie")
+  , (hStrictTransportSecurity, "Strict-Transport-Security")
+  , (hTE, "TE")
+  , (hTrailer, "Trailer")
+  , (hTransferEncoding, "Transfer-Encoding")
+  , (hUpgrade, "Upgrade")
+  , (hUserAgent, "User-Agent")
+  , (hVary, "Vary")
+  , (hVia, "Via")
+  , (hWWWAuthenticate, "WWW-Authenticate")
+  , (hWarning, "Warning")
+  ]
+
+-- ---------------------------------------------------------------------------
+-- Upstream `StatusSpec`: statuses and their aliases.
+
+statusTable :: [(Status, Status, Int, String)]
+statusTable =
+  [ (status100, continue100, 100, "Continue")
+  , (status101, switchingProtocols101, 101, "Switching Protocols")
+  , (status200, ok200, 200, "OK")
+  , (status201, created201, 201, "Created")
+  , (status202, accepted202, 202, "Accepted")
+  , (status203, nonAuthoritative203, 203, "Non-Authoritative Information")
+  , (status204, noContent204, 204, "No Content")
+  , (status205, resetContent205, 205, "Reset Content")
+  , (status206, partialContent206, 206, "Partial Content")
+  , (status300, multipleChoices300, 300, "Multiple Choices")
+  , (status301, movedPermanently301, 301, "Moved Permanently")
+  , (status302, found302, 302, "Found")
+  , (status303, seeOther303, 303, "See Other")
+  , (status304, notModified304, 304, "Not Modified")
+  , (status305, useProxy305, 305, "Use Proxy")
+  , (status307, temporaryRedirect307, 307, "Temporary Redirect")
+  , (status308, permanentRedirect308, 308, "Permanent Redirect")
+  , (status400, badRequest400, 400, "Bad Request")
+  , (status401, unauthorized401, 401, "Unauthorized")
+  , (status402, paymentRequired402, 402, "Payment Required")
+  , (status403, forbidden403, 403, "Forbidden")
+  , (status404, notFound404, 404, "Not Found")
+  , (status405, methodNotAllowed405, 405, "Method Not Allowed")
+  , (status406, notAcceptable406, 406, "Not Acceptable")
+  , (status407, proxyAuthenticationRequired407, 407, "Proxy Authentication Required")
+  , (status408, requestTimeout408, 408, "Request Timeout")
+  , (status409, conflict409, 409, "Conflict")
+  , (status410, gone410, 410, "Gone")
+  , (status411, lengthRequired411, 411, "Length Required")
+  , (status412, preconditionFailed412, 412, "Precondition Failed")
+  , (status413, requestEntityTooLarge413, 413, "Request Entity Too Large")
+  , (status414, requestURITooLong414, 414, "Request-URI Too Long")
+  , (status415, unsupportedMediaType415, 415, "Unsupported Media Type")
+  , (status416, requestedRangeNotSatisfiable416, 416, "Requested Range Not Satisfiable")
+  , (status417, expectationFailed417, 417, "Expectation Failed")
+  , (status418, imATeapot418, 418, "I'm a teapot")
+  , (status422, unprocessableEntity422, 422, "Unprocessable Entity")
+  , (status426, upgradeRequired426, 426, "Upgrade Required")
+  , (status428, preconditionRequired428, 428, "Precondition Required")
+  , (status429, tooManyRequests429, 429, "Too Many Requests")
+  , (status431, requestHeaderFieldsTooLarge431, 431, "Request Header Fields Too Large")
+  , (status451, unavailableForLegalReasons451, 451, "Unavailable For Legal Reasons")
+  , (status500, internalServerError500, 500, "Internal Server Error")
+  , (status501, notImplemented501, 501, "Not Implemented")
+  , (status502, badGateway502, 502, "Bad Gateway")
+  , (status503, serviceUnavailable503, 503, "Service Unavailable")
+  , (status504, gatewayTimeout504, 504, "Gateway Timeout")
+  , (status505, httpVersionNotSupported505, 505, "HTTP Version Not Supported")
+  , (status511, networkAuthenticationRequired511, 511, "Network Authentication Required")
+  ]
+
+-- ---------------------------------------------------------------------------
+-- Upstream `URISpec` golden encodings of the 256 single-byte strings.
+
+urlEncodePathGolden :: String
+urlEncodePathGolden = "%00%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F%20%21%22%23$%25&%27%28%29%2A+,-.%2F0123456789:%3B%3C=%3E%3F@ABCDEFGHIJKLMNOPQRSTUVWXYZ%5B%5C%5D%5E_%60abcdefghijklmnopqrstuvwxyz%7B%7C%7D~%7F%80%81%82%83%84%85%86%87%88%89%8A%8B%8C%8D%8E%8F%90%91%92%93%94%95%96%97%98%99%9A%9B%9C%9D%9E%9F%A0%A1%A2%A3%A4%A5%A6%A7%A8%A9%AA%AB%AC%AD%AE%AF%B0%B1%B2%B3%B4%B5%B6%B7%B8%B9%BA%BB%BC%BD%BE%BF%C0%C1%C2%C3%C4%C5%C6%C7%C8%C9%CA%CB%CC%CD%CE%CF%D0%D1%D2%D3%D4%D5%D6%D7%D8%D9%DA%DB%DC%DD%DE%DF%E0%E1%E2%E3%E4%E5%E6%E7%E8%E9%EA%EB%EC%ED%EE%EF%F0%F1%F2%F3%F4%F5%F6%F7%F8%F9%FA%FB%FC%FD%FE%FF"
+
+urlEncodeQueryGolden :: String
+urlEncodeQueryGolden = "%00%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F%20%21%22%23%24%25%26%27%28%29%2A%2B%2C-.%2F0123456789%3A%3B%3C%3D%3E%3F%40ABCDEFGHIJKLMNOPQRSTUVWXYZ%5B%5C%5D%5E_%60abcdefghijklmnopqrstuvwxyz%7B%7C%7D~%7F%80%81%82%83%84%85%86%87%88%89%8A%8B%8C%8D%8E%8F%90%91%92%93%94%95%96%97%98%99%9A%9B%9C%9D%9E%9F%A0%A1%A2%A3%A4%A5%A6%A7%A8%A9%AA%AB%AC%AD%AE%AF%B0%B1%B2%B3%B4%B5%B6%B7%B8%B9%BA%BB%BC%BD%BE%BF%C0%C1%C2%C3%C4%C5%C6%C7%C8%C9%CA%CB%CC%CD%CE%CF%D0%D1%D2%D3%D4%D5%D6%D7%D8%D9%DA%DB%DC%DD%DE%DF%E0%E1%E2%E3%E4%E5%E6%E7%E8%E9%EA%EB%EC%ED%EE%EF%F0%F1%F2%F3%F4%F5%F6%F7%F8%F9%FA%FB%FC%FD%FE%FF"
+
+allBytes :: ByteString
+allBytes = urlDecode True (bs urlEncodeQueryGolden)
+
+sampleQuery :: Query
+sampleQuery = [(bs "a", Just (bs "b c d")), (bs "x", Just (bs "")), (bs "y", Nothing)]
+
+main :: IO ()
+main = do
+  -- Methods
+  assertTrue "methodGet" (methodGet == bs "GET")
+  assertTrue "methodPost" (methodPost == bs "POST")
+  assertTrue "methodHead" (methodHead == bs "HEAD")
+  assertTrue "methodPut" (methodPut == bs "PUT")
+  assertTrue "methodDelete" (methodDelete == bs "DELETE")
+  assertTrue "methodTrace" (methodTrace == bs "TRACE")
+  assertTrue "methodConnect" (methodConnect == bs "CONNECT")
+  assertTrue "methodOptions" (methodOptions == bs "OPTIONS")
+  assertTrue "methodPatch" (methodPatch == bs "PATCH")
+  assertTrue
+    "StdMethod has all constants"
+    (allMethods == [methodGet, methodPost, methodHead, methodPut, methodDelete, methodTrace, methodConnect, methodOptions, methodPatch])
+  mapM_ (\m -> assertTrue "parse/render round trip" (renderMethod (parseMethod m) == m)) allMethods
+  assertTrue "parseMethod" (parseMethod (bs "GET") == Right GET)
+  assertTrue "parseMethod is case sensitive" (parseMethod (bs "get") == Left (bs "get"))
+  assertTrue "renderMethod of a standard method" (renderMethod (Right POST) == methodPost)
+  assertTrue "renderMethod of an extension method" (renderMethod (Left (bs "FROB")) == bs "FROB")
+  -- Versions
+  mapM_
+    checkVersion
+    [ ("HTTP/0.9", http09, HttpVersion 0 9)
+    , ("HTTP/1.0", http10, HttpVersion 1 0)
+    , ("HTTP/1.1", http11, HttpVersion 1 1)
+    , ("HTTP/2.0", http20, HttpVersion 2 0)
+    , ("HTTP/3.0", http30, HttpVersion 3 0)
+    ]
+  -- Status constants and aliases
+  mapM_ checkStatus statusTable
+  checkCategory "statusIsInformational" statusIsInformational (statusesIn 1)
+  checkCategory "statusIsSuccessful" statusIsSuccessful (statusesIn 2)
+  checkCategory "statusIsRedirection" statusIsRedirection (statusesIn 3)
+  checkCategory "statusIsClientError" statusIsClientError (statusesIn 4)
+  checkCategory "statusIsServerError" statusIsServerError (statusesIn 5)
+  assertTrue "Eq Status only matches on statusCode" (mkStatus 200 (bs "OK") == mkStatus 200 (bs "Different"))
+  assertTrue "Eq Status separates codes" ((mkStatus 200 (bs "OK") == mkStatus 201 (bs "OK")) == False)
+  assertTrue "Ord Status only orders on statusCode" (compare (mkStatus 200 (bs "OK")) (mkStatus 200 (bs "Different")) == EQ)
+  assertTrue "Ord Status by code" (mkStatus 200 (bs "Z") < mkStatus 201 (bs "A"))
+  assertTrue "Ord Status by code descending" (mkStatus 404 (bs "A") > mkStatus 403 (bs "Z"))
+  -- Status rendering
+  assertTrue "renderStatusCode" (renderStatusCode status404 == bs "404")
+  assertTrue "renderStatusCode 100" (renderStatusCode continue100 == bs "100")
+  assertTrue "renderStatusCode pads to three digits" (renderStatusCode (mkStatus 12 (bs "")) == bs "012")
+  assertTrue "renderStatusCode of 987" (renderStatusCode (mkStatus 987 (bs "")) == bs "987")
+  assertTrue "renderFullStatus 404" (renderFullStatus status404 == bs "404 Not Found")
+  assertTrue "renderFullStatus 100" (renderFullStatus continue100 == bs "100 Continue")
+  assertTrue "renderFullStatus pads to three digits" (renderFullStatus (mkStatus 12 (bs "Short")) == bs "012 Short")
+  assertTrue
+    "renderFullStatus keeps a long message"
+    (renderFullStatus (mkStatus 987 (bs "Pretty Long If I May Say So Myself")) == bs "987 Pretty Long If I May Say So Myself")
+  assertTrue "renderFullStatus of a wide code" (renderFullStatus (mkStatus 1337 (bs "Works Still")) == bs "1337 Works Still")
+  -- Status parsing
+  assertTrue "parseStatusCode 307" (parseStatusCode (bs "307") == Just (307, bs ""))
+  assertTrue "parseStatusCode leaves the rest" (parseStatusCode (bs "404 Not Found") == Just (404, bs " Not Found"))
+  assertTrue "parseStatusCode stops after three digits" (parseStatusCode (bs "1337 Works Still") == Just (133, bs "7 Works Still"))
+  assertTrue "parseStatusCode rejects no digits" (parseStatusCode (bs "No Digits") == Nothing)
+  assertTrue "parseStatusCode rejects a short code" ((parseStatusCode (bs "12 Is Not Enough")) == Nothing)
+  assertTrue "parseFullStatus 307" (parseFullStatus (bs "307") == Just (mkStatus 307 (bs "")))
+  assertTrue "parseFullStatus 404" (parseFullStatus (bs "404 Not Found") == Just (mkStatus 404 (bs "Not Found")))
+  assertTrue
+    "parseFullStatus keeps a message with a newline"
+    (parseFullStatus (bs "500 Someone Forgot To\r\nBreak At The Newline") == Just (mkStatus 500 (bs "Someone Forgot To\r\nBreak At The Newline")))
+  assertTrue "parseFullStatus rejects a wide code" ((parseFullStatus (bs "1337 Works Still")) == Nothing)
+  assertTrue "parseFullStatus rejects no digits" ((parseFullStatus (bs "No Digits")) == Nothing)
+  assertTrue "parseFullStatus rejects a missing space" ((parseFullStatus (bs "101Still Needs A Space")) == Nothing)
+  assertTrue "full status round trip" (parseFullStatus (renderFullStatus notFound404) == Just notFound404)
+  assertTrue "status code round trip" (parseStatusCode (renderStatusCode notFound404) == Just (404, bs ""))
+  -- Byte ranges
+  assertTrue "renderByteRange" (renderByteRange (ByteRangeFrom 2048) == bs "2048-")
+  assertTrue "renderByteRanges" (renderByteRanges [ByteRangeFrom 0, ByteRangeFromTo 1 2] == bs "bytes=0-,1-2")
+  assertTrue "parseByteRanges" (parseByteRanges (bs "bytes=0-499") == Just [ByteRangeFromTo 0 499])
+  assertTrue "parseByteRanges suffix" (parseByteRanges (bs "bytes=-500") == Just [ByteRangeSuffix 500])
+  assertTrue "parseByteRanges open" (parseByteRanges (bs "bytes=9500-") == Just [ByteRangeFrom 9500])
+  assertTrue "parseByteRanges list" (parseByteRanges (bs "bytes=0-499,500-") == Just [ByteRangeFromTo 0 499, ByteRangeFrom 500])
+  assertTrue "parseByteRanges rejects other units" (parseByteRanges (bs "items=0-1") == Nothing)
+  assertTrue "parseByteRanges accepts from-to of zero" (parseByteRanges (bs "bytes=0-0") == Just [ByteRangeFromTo 0 0])
+  assertTrue "parseByteRanges rejects a suffix of zero" ((parseByteRanges (bs "bytes=-0")) == Nothing)
+  assertTrue "parseByteRanges rejects from lower than to" ((parseByteRanges (bs "bytes=5-4")) == Nothing)
+  mapM_
+    (\ranges -> assertTrue "byte range render/parse round trip" (parseByteRanges (renderByteRanges ranges) == Just ranges))
+    [ [ByteRangeFrom 0]
+    , [ByteRangeFromTo 0 0]
+    , [ByteRangeSuffix 1]
+    , [ByteRangeFrom 2048, ByteRangeSuffix 20]
+    , [ByteRangeFromTo 1 2, ByteRangeFrom 500, ByteRangeSuffix 3]
+    ]
+  -- Query
+  assertTrue "renderQuery" (renderQuery True [(bs "key1", Just (bs "value1")), (bs "key2", Just (bs "value2"))] == bs "?key1=value1&key2=value2")
+  assertTrue "renderQuery without a key" (renderQuery False [(bs "key1", Nothing)] == bs "key1")
+  assertTrue
+    "renderQuery with empty and missing values"
+    (renderQuery True [(bs "a", Just (bs "x")), (bs "b", Nothing), (bs "c", Just (bs ""))] == bs "?a=x&b&c=")
+  assertTrue
+    "renderQuery with empty and missing values without ?"
+    (renderQuery False [(bs "a", Just (bs "x")), (bs "b", Nothing), (bs "c", Just (bs ""))] == bs "a=x&b&c=")
+  assertTrue "parseQuery" (parseQuery (bs "key1=value1&key2") == [(bs "key1", Just (bs "value1")), (bs "key2", Nothing)])
+  assertTrue "parseQuery with a question mark" (parseQuery (bs "?a=b+c+d&x=&y") == sampleQuery)
+  assertTrue "parseQuery without a question mark" (parseQuery (bs "a=b+c+d&x=&y") == sampleQuery)
+  assertTrue "parseQuery ignores a leading question mark" (parseQuery (bs "?a=b+c+d&x=&y") == parseQuery (bs "a=b+c+d&x=&y"))
+  assertTrue "parseQuery keeps plus" (parseQueryReplacePlus False (bs "a+b=c+d") == [(bs "a+b", Just (bs "c+d"))])
+  assertTrue "parseQueryReplacePlus True" (parseQueryReplacePlus True (bs "?a=b+c+d&x=&y") == sampleQuery)
+  assertTrue "parseQueryReplacePlus False" (parseQueryReplacePlus False (bs "?a=b+c+d&x=&y") == [(bs "a", Just (bs "b+c+d")), (bs "x", Just (bs "")), (bs "y", Nothing)])
+  assertTrue "parseQuery decodes plus and percent" (parseQuery (bs "a+b=c%20d") == [(bs "a b", Just (bs "c d"))])
+  assertTrue "parseSimpleQuery" (parseSimpleQuery (bs "a=b&c") == [(bs "a", bs "b"), (bs "c", bs "")])
+  assertTrue "renderSimpleQuery" (renderSimpleQuery True [(bs "a", bs "b")] == bs "?a=b")
+  assertTrue "simpleQueryToQuery" (simpleQueryToQuery [(bs "a", bs "b"), (bs "c", bs "")] == [(bs "a", Just (bs "b")), (bs "c", Just (bs ""))])
+  assertTrue "parseSimpleQuery agrees with parseQuery" (parseSimpleQuery (renderQuery True sampleQuery) == [(bs "a", bs "b c d"), (bs "x", bs ""), (bs "y", bs "")])
+  assertTrue "parseQueryText" (parseQueryText (bs "a=b") == [("a", Just "b")])
+  assertTrue "queryToQueryText" (queryToQueryText [(bs "a", Nothing)] == [("a", Nothing)])
+  assertTrue "renderQueryText" (toByteString (renderQueryText False [("a", Just "b")]) == bs "a=b")
+  assertTrue
+    "QueryText round trip"
+    (queryToQueryText (queryTextToQuery [("a", Just "b c"), ("x", Just ""), ("y", Nothing)]) == [("a", Just "b c"), ("x", Just ""), ("y", Nothing)])
+  assertTrue
+    "renderQueryText agrees with renderQuery"
+    (toByteString (renderQueryText True [("a", Just "b c"), ("x", Just "")]) == renderQuery True [(bs "a", Just (bs "b c")), (bs "x", Just (bs ""))])
+  assertTrue
+    "parseQueryText agrees with parseQuery"
+    (parseQueryText (bs "a=b+c&x=") == queryToQueryText (parseQuery (bs "a=b+c&x=")))
+  assertTrue "renderQueryPartialEscape encodes QE" (renderQueryPartialEscape False [(bs "a", [QE (bs "b:c")])] == bs "a=b%3Ac")
+  assertTrue "renderQueryPartialEscape keeps QN" (renderQueryPartialEscape False [(bs "a", [QN (bs "b:c")])] == bs "a=b:c")
+  -- URL encoding and decoding
+  assertTrue "urlDecode" (urlDecode True (bs "a+b%20c") == bs "a b c")
+  assertTrue "urlDecode keeps bad escapes" (urlDecode True (bs "a%Qb%2") == bs "a%Qb%2")
+  assertTrue "urlDecode decodes lower case hex" (urlDecode True (bs "%2f%3a") == bs "/:")
+  assertTrue "urlEncode query" (urlEncode True (bs "a b") == bs "a%20b")
+  assertTrue "urlEncode path keeps sub-delims" (urlEncode False (bs "a:b") == bs "a:b")
+  assertTrue "urlEncode query matches the upstream golden" (urlEncode True allBytes == bs urlEncodeQueryGolden)
+  assertTrue "urlEncode path matches the upstream golden" (urlEncode False allBytes == bs urlEncodePathGolden)
+  assertTrue "urlEncode query round trip" (urlDecode True (urlEncode True allBytes) == allBytes)
+  assertTrue "urlEncode query then path decode" (urlDecode False (urlEncode True allBytes) == allBytes)
+  assertTrue "urlEncode path round trip" (urlDecode False (urlEncode False allBytes) == allBytes)
+  -- Paths
+  assertTrue "encodePathSegments" (toByteString (encodePathSegments ["foo bar", "baz/bin"]) == bs "/foo%20bar/baz%2Fbin")
+  assertTrue "encodePathSegmentsRelative" (toByteString (encodePathSegmentsRelative ["a", "b"]) == bs "a/b")
+  assertTrue "decodePathSegments" (decodePathSegments (bs "/foo%20bar/baz%2Fbin") == ["foo bar", "baz/bin"])
+  assertTrue "decodePathSegments of the root" (decodePathSegments (bs "/") == [])
+  assertTrue "decodePathSegments inverts encodePathSegments" (decodePathSegments (toByteString (encodePathSegments ["a b", "c/d"])) == ["a b", "c/d"])
+  assertTrue "encodePath does not escape period and dash" (toByteString (encodePath ["foo-bar.baz"] []) == bs "/foo-bar.baz")
+  assertTrue "encodePath" (toByteString (encodePath ["a"] [(bs "k", Just (bs "v"))]) == bs "/a?k=v")
+  assertTrue "decodePath" (decodePath (bs "/a?k=v") == (["a"], [(bs "k", Just (bs "v"))]))
+  assertTrue "extractPath" (extractPath (bs "http://example.com:8080/path") == bs "/path")
+  assertTrue "extractPath of https" (extractPath (bs "https://example.com/path") == bs "/path")
+  assertTrue "extractPath of the empty path" (extractPath (bs "http://example.com") == bs "/")
+  assertTrue "extractPath of an empty URL" (extractPath (bs "") == bs "/")
+  assertTrue "extractPath of a relative URL" (extractPath (bs "www.example.com/foo") == bs "www.example.com/foo")
+  assertTrue "extractPath of a relative URL without a path" (extractPath (bs "www.example.com") == bs "www.example.com")
+  -- Generalized query types
+  assertTrue "toQuery from ByteString pairs" (toQuery [(bs "a", Just (bs "b"))] == [(bs "a", Just (bs "b"))])
+  assertTrue "toQuery lifts a bare value" (toQuery [(bs "a", bs "b")] == [(bs "a", Just (bs "b"))])
+  assertTrue "toQuery from String pairs" (toQuery ([("a", "b")] :: [(String, String)]) == [(bs "a", Just (bs "b"))])
+  assertTrue "toQuery drops absent pairs" (toQuery ([Just (bs "a", Nothing), Nothing] :: [Maybe (ByteString, Maybe ByteString)]) == [(bs "a", Nothing)])
+  -- Builders
+  assertTrue "renderQueryBuilder" (toByteString (renderQueryBuilder True [(bs "a", Just (bs "b"))]) == bs "?a=b")
+  assertTrue "urlEncodeBuilder" (toByteString (urlEncodeBuilder True (bs "a b")) == bs "a%20b")
+  assertTrue "renderQueryBuilderPartialEscape" (toByteString (renderQueryBuilderPartialEscape False [(bs "a", [QN (bs "b"), QE (bs "c d")])]) == bs "a=bc%20d")
+  assertTrue "renderByteRangeBuilder" (toByteString (renderByteRangeBuilder (ByteRangeSuffix 20)) == bs "-20")
+  assertTrue "renderByteRangesBuilder" (toByteString (renderByteRangesBuilder [ByteRangeSuffix 20]) == bs "bytes=-20")
+  -- Headers
+  mapM_ checkHeader headerConstants
+  assertTrue "header constants" (hContentType == CI.mk (bs "Content-Type") && hContentLength == CI.mk (bs "Content-Length"))
+  putStrLn "all http-types checks passed"

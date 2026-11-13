@@ -1,0 +1,80 @@
+-- The case-insensitive package's test entry point.
+--
+-- `CI` is small enough to hold in one module: folding, the `Eq`/`Ord`
+-- instances that ignore case, the `IsString`, `Semigroup` and `Monoid`
+-- instances, `Show`/`Read`, and the `ByteString` instance, whose folding is the
+-- Latin-1 upper-case range.
+--
+-- The module is named `Suite`, not `Main`: the descriptor's `[test-suite]`
+-- declares `main = Suite`, and a package may carry more than one executable,
+-- so an entry point cannot be identified by being called `Main`.
+
+module Suite (main) where
+
+import Data.Bool (Bool(..), (&&))
+import Data.ByteString (ByteString)
+import Data.ByteString.Char8 qualified as B8
+import Data.CaseInsensitive (CI, FoldCase(foldCase))
+import Data.CaseInsensitive qualified as CI
+import Data.CaseInsensitive.Unsafe (unsafeMk)
+import Data.Char (chr)
+import Data.Eq ((==), (/=))
+import Data.List qualified as L
+import Data.Maybe (Maybe(..))
+import Data.Monoid (mempty)
+import Data.Ord (Ordering(..), compare)
+import Data.Semigroup ((<>))
+import Data.String (IsString(..), String)
+import Data.String qualified as S
+import System.Exit (die)
+import Text.Read (read, readMaybe, reads)
+import Text.Show (show)
+
+assertTrue :: String -> Bool -> IO ()
+assertTrue name ok = case ok of
+  True -> pure ()
+  False -> die ("FAIL: " <> name)
+
+readCIs :: [CI String]
+readCIs = read "[\"A\",\"b\"]"
+
+main :: IO ()
+main = do
+  assertTrue "mk ignores case on String" (CI.mk ("Content-Type" :: String) == CI.mk ("CONTENT-TYPE" :: String))
+  assertTrue "mk keeps the original" (CI.original (CI.mk "Content-Type") == "Content-Type")
+  assertTrue "mk folds the folded case" (CI.foldedCase (CI.mk "Content-Type") == "content-type")
+  assertTrue "Eq distinguishes different strings" (CI.mk ("a" :: String) /= CI.mk "b")
+  assertTrue "Ord compares the folded case" (compare (CI.mk "APPLE" :: CI String) (CI.mk "banana") == LT)
+  assertTrue "Semigroup keeps originals" (CI.original (CI.mk "Foo" <> CI.mk "BAR") == "FooBAR")
+  assertTrue "Semigroup folds the concatenation" (CI.mk "Foo" <> CI.mk "BAR" == CI.mk "FooBAR")
+  assertTrue "Monoid identity" (CI.mk "Foo" <> mempty == CI.mk "Foo")
+  assertTrue "IsString goes through mk" (fromString "Content-Type" == CI.mk ("Content-Type" :: String))
+  assertTrue "Show renders the original" (show (CI.mk "Content-Type") == "\"Content-Type\"")
+  assertTrue "Read parses a string literal" (CI.mk "Content-Type" == read "\"Content-Type\"")
+  assertTrue "Read parses an empty literal" (CI.mk "" == read "\"\"")
+  assertTrue "Read parses escapes" (CI.mk "a\"b" == read "\"a\\\"b\"")
+  assertTrue "Read builds a list" (L.map CI.foldedCase readCIs == ["a", "b"])
+  assertTrue "Read keeps the list originals" (L.map CI.original readCIs == ["A", "b"])
+  assertTrue "reads leaves the remainder" (case reads "\"abc\"rest" of
+    (ci, rest) : [] -> ci == CI.mk "abc" && rest == "rest"
+    _ -> False)
+  assertTrue "read of show round-trips" (read (show (CI.mk "AbC")) == CI.mk "abc")
+  assertTrue "readMaybe" (case readMaybe "\"abc\"" of
+    Just ci -> ci == CI.mk "abc"
+    Nothing -> False)
+  assertTrue "Eq sees through a list" ([CI.mk "a", CI.mk "b"] == readCIs)
+  assertTrue "Eq sees through Maybe" (Just (CI.mk "a") == Just (CI.mk "A"))
+  assertTrue "Eq sees through nested containers" ([[CI.mk "a"], []] == [[CI.mk "A"], []])
+  assertTrue "unsafeMk uses its argument for both cases" (CI.original (unsafeMk "ABC") == "ABC" && CI.foldedCase (unsafeMk "ABC") == "ABC")
+  assertTrue "map transforms the original" (CI.original (CI.map (\s -> s <> "!") (CI.mk "A")) == "A!")
+  assertTrue "map folds the transformed value" (CI.map (\s -> s <> "!") (CI.mk "A") == CI.mk "a!")
+  assertTrue "foldCase on Char" (foldCase 'A' == 'a')
+  assertTrue "foldCase on String" (foldCase "AbC" == "abc")
+  assertTrue "foldCase on a list" (foldCase (["AbC", "DeF"] :: [String]) == ["abc", "def"])
+  assertTrue "foldCase on CI refolds the folded case" (CI.foldedCase (foldCase (CI.mk "AbC")) == "abc")
+  assertTrue "ByteString folds ASCII" (CI.mk (B8.pack "Content-Type") == CI.mk (B8.pack "CONTENT-TYPE"))
+  assertTrue "ByteString folds Latin-1 upper-case" (CI.mk (B8.pack (S.pack [chr 196])) == CI.mk (B8.pack (S.pack [chr 228])))
+  assertTrue "ByteString keeps non-letters" (CI.mk (B8.pack "{A}") == CI.mk (B8.pack "{a}"))
+  traverseResult <- CI.traverse (\s -> pure (s <> "!")) (CI.mk "A")
+  assertTrue "traverse transforms the original" (CI.original traverseResult == "A!")
+  putStrLn "all case-insensitive checks passed"
