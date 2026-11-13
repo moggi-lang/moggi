@@ -1,0 +1,33 @@
+Just 1
+Nothing
+Just Refl
+Nothing
+Just HRefl
+Nothing
+True
+False
+True
+False
+Int
+Int
+Maybe
+Maybe Int
+Either Int Bool
+Int
+0
+Int -> Bool
+Bool
+True
+True
+Just (Just 1)
+Nothing
+Just (Just (Just 1))
+Just (Just (Right True))
+Int -> Bool
+[] Int
+(Int, Bool)
+(,)
+2
+IO ()
+IO
+1

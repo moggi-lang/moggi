@@ -1,0 +1,49 @@
+module Main where
+
+import Data.Bool
+import Data.Either
+import Data.Maybe
+import Data.Proxy
+import Data.Type.Equality
+import Data.Typeable
+import Data.Void
+
+funResultString :: Maybe TypeRep -> String
+funResultString (Just t) = showsTypeRep t ""
+funResultString Nothing = "none"
+
+main :: IO ()
+main = do
+  putStrLn (show (cast (1 :: Int) :: Maybe Int))
+  putStrLn (show (cast (1 :: Int) :: Maybe Bool))
+  putStrLn (show (eqT :: Maybe (Int :~: Int)))
+  putStrLn (show (eqT :: Maybe (Int :~: Bool)))
+  putStrLn (show (heqT :: Maybe (Int :~~: Int)))
+  putStrLn (show (heqT :: Maybe (Int :~~: Bool)))
+  putStrLn (show (isRight (decT :: Either (Int :~: Int -> Void) (Int :~: Int))))
+  putStrLn (show (isRight (decT :: Either (Int :~: Bool -> Void) (Int :~: Bool))))
+  putStrLn (show (isRight (hdecT :: Either (Int :~~: Int -> Void) (Int :~~: Int))))
+  putStrLn (show (isRight (hdecT :: Either (Int :~~: Bool -> Void) (Int :~~: Bool))))
+  putStrLn (showsTypeRep (typeOf (1 :: Int)) "")
+  putStrLn (showsTypeRep (typeRep (Proxy :: Proxy Int)) "")
+  putStrLn (showsTypeRep (typeOf1 (Just (1 :: Int))) "")
+  putStrLn (showsTypeRep (typeOf (Just (1 :: Int))) "")
+  putStrLn (showsTypeRep (typeOf (Right True :: Either Int Bool)) "")
+  putStrLn (tyConName (typeRepTyCon (typeOf (1 :: Int))))
+  putStrLn (show (length (typeRepArgs (typeOf (1 :: Int)))))
+  putStrLn (showsTypeRep (mkFunTy (typeOf (1 :: Int)) (typeOf True)) "")
+  putStrLn (funResultString (funResultTy (mkFunTy (typeOf (1 :: Int)) (typeOf True)) (typeOf (1 :: Int))))
+  putStrLn (show (typeRepFingerprint (typeOf (1 :: Int)) == typeRepFingerprint (typeOf (2 :: Int))))
+  putStrLn (show (tyConFingerprint (typeRepTyCon (typeOf (1 :: Int))) == tyConFingerprint (typeRepTyCon (typeOf (2 :: Int)))))
+  putStrLn (show (gcast (Just (1 :: Int)) :: Maybe (Maybe Int)))
+  putStrLn (show (gcast (Just (1 :: Int)) :: Maybe (Maybe Bool)))
+  putStrLn (show (gcast1 (Just (Just (1 :: Int))) :: Maybe (Maybe (Maybe Int))))
+  putStrLn (show (gcast2 (Just (Right True :: Either Int Bool)) :: Maybe (Maybe (Either Int Bool))))
+  putStrLn (showsTypeRep (typeRep (Proxy :: Proxy (Int -> Bool))) "")
+  putStrLn (showsTypeRep (typeRep (Proxy :: Proxy [Int])) "")
+  putStrLn (showsTypeRep (typeRep (Proxy :: Proxy (Int, Bool))) "")
+  putStrLn (tyConName (typeRepTyCon (typeRep (Proxy :: Proxy (Int, Bool)))))
+  putStrLn (show (length (typeRepArgs (typeRep (Proxy :: Proxy (Int, Bool))))))
+  putStrLn (showsTypeRep (typeRep (Proxy :: Proxy (IO ()))) "")
+  putStrLn (tyConName (typeRepTyCon (typeRep (Proxy :: Proxy (IO ())))))
+  putStrLn (show (length (typeRepArgs (typeRep (Proxy :: Proxy (IO ()))))))

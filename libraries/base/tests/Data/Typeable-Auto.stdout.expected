@@ -1,0 +1,15 @@
+Colour
+Box Colour
+Box (Box Colour)
+[] (Box Int)
+Colour -> Bool
+Proxy Colour
+(Int, Bool)
+IO ()
+Ordering
+Int8
+Word64
+Integer
+Maybe Int
+Either Int Bool
+(Int, Bool, Char, Int, Bool, Char, Int)
