@@ -1,0 +1,53 @@
+import Data.String
+import System.IO
+
+-- Coverage for the optimizer's nested IO bodies.
+--
+-- `main` is a 40-link `>>` chain: each link is an `io_assign_action` whose body
+-- holds the rest of the chain. The local optimizer used to map a body and then
+-- run the whole block rules over it again at every enclosing level, so the work
+-- grew exponentially with nesting depth and a chain this long took minutes to
+-- compile. Every line still has to print, in order.
+
+main :: IO ()
+main =
+  putStrLn "0"
+    >> putStrLn "1"
+    >> putStrLn "2"
+    >> putStrLn "3"
+    >> putStrLn "4"
+    >> putStrLn "5"
+    >> putStrLn "6"
+    >> putStrLn "7"
+    >> putStrLn "8"
+    >> putStrLn "9"
+    >> putStrLn "10"
+    >> putStrLn "11"
+    >> putStrLn "12"
+    >> putStrLn "13"
+    >> putStrLn "14"
+    >> putStrLn "15"
+    >> putStrLn "16"
+    >> putStrLn "17"
+    >> putStrLn "18"
+    >> putStrLn "19"
+    >> putStrLn "20"
+    >> putStrLn "21"
+    >> putStrLn "22"
+    >> putStrLn "23"
+    >> putStrLn "24"
+    >> putStrLn "25"
+    >> putStrLn "26"
+    >> putStrLn "27"
+    >> putStrLn "28"
+    >> putStrLn "29"
+    >> putStrLn "30"
+    >> putStrLn "31"
+    >> putStrLn "32"
+    >> putStrLn "33"
+    >> putStrLn "34"
+    >> putStrLn "35"
+    >> putStrLn "36"
+    >> putStrLn "37"
+    >> putStrLn "38"
+    >> putStrLn "39"

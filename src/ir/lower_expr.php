@@ -59,6 +59,22 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
                 return lowerIntrinsicValue($primop, [], $expr, $ctx);
             }
 
+            // A backticked operator can name a local binder (`z \`k\` x`), and
+            // then the value is that parameter, not a function of that name.
+            $term = siteTerm($expr, $ctx);
+            if ($term instanceof CheckedVariable && $term->binder !== null) {
+                return $ctx->binders[$term->binder]
+                    ?? throw new \RuntimeException(
+                        "lowering `{$ctx->moduleName}::{$ctx->functionName}` met a use of `{$expr->name}`"
+                        . " at line {$expr->line} whose binder this scope does not hold",
+                    );
+            }
+
+            $binding = $ctx->env[$expr->name] ?? null;
+            if ($binding !== null) {
+                return $binding;
+            }
+
             $origin = crossModuleOrigin($expr, $ctx);
             if ($origin !== null) {
                 return new FnRef($origin);
@@ -286,7 +302,12 @@ function variableOperand(Ast\Variable $expr, LowerCtx $ctx): Operand
     }
 
     return $ctx->env[$expr->name]
-        ?? throw new \RuntimeException(\sprintf('undefined variable `%s` in IR lowering', $expr->name));
+        ?? throw new \RuntimeException(\sprintf(
+            'undefined variable `%s` in IR lowering (`%s::%s`)',
+            $expr->name,
+            $ctx->moduleName,
+            $ctx->functionName,
+        ));
 }
 
 /**
@@ -678,6 +699,13 @@ function applySpine(Ast\Apply $expr, LowerCtx $ctx): array
 
 function lowerApplyFromExpr(Ast\Apply $expr, LowerCtx $ctx): Operand
 {
+    // `(coerce# x) y`: the intrinsic already produced a value, so `y` applies to
+    // that value. It must not be taken as another argument of the primop, which
+    // would drop `x` (the intrinsic keeps only its own arity).
+    if (applySpine($expr, $ctx)['callee'] instanceof Ast\IntrinsicCall) {
+        return lowerApply($expr, $ctx);
+    }
+
     $intrinsic = plannedIntrinsic($expr, $ctx);
     if ($intrinsic !== null) {
         return lowerIntrinsicValue($intrinsic, applySpine($expr, $ctx)['args'], $expr, $ctx);
@@ -1041,6 +1069,14 @@ function applyToValue(Operand $value, array $args, LowerCtx $ctx, ?SrcLoc $srcLo
             continue;
         }
 
+        // A primop used as a value (`coerce# x`) produces one; applying an
+        // argument to it calls that value, not the primop again.
+        if ($result instanceof Intrinsic) {
+            $result = lowerCallValue($result, [$arg], $ctx, $srcLoc);
+
+            continue;
+        }
+
         throw new \RuntimeException('unsupported apply target in IR lowering');
     }
 
@@ -1050,8 +1086,19 @@ function applyToValue(Operand $value, array $args, LowerCtx $ctx, ?SrcLoc $srcLo
 function applyCalleeName(Ast\AstNode $expr, LowerCtx $ctx): ?string
 {
     return match ($expr::class) {
-        Ast\ConstructorRef::class,
-        Ast\OperatorRef::class => $expr->name,
+        Ast\ConstructorRef::class => $expr->name,
+        Ast\OperatorRef::class => (static function () use ($expr, $ctx): ?string {
+            // A backticked operator that names a local binder is a value, not a
+            // callable this module exports.
+            $term = siteTerm($expr, $ctx);
+            if (($term instanceof CheckedVariable && $term->binder !== null)
+                || isset($ctx->env[$expr->name])
+            ) {
+                return null;
+            }
+
+            return $expr->name;
+        })(),
         Ast\QualifiedRef::class => $expr->backendResolved ?? $expr->name,
         Ast\Variable::class => (static function () use ($expr, $ctx): ?string {
             $origin = crossModuleOrigin($expr, $ctx);
@@ -1382,11 +1429,7 @@ function lowerBindingGroups(CheckedLetGroup $term, LowerCtx $ctx): void
                 throw new \RuntimeException("checked structure #{$bindingId} does not name a binding");
             }
             [$rhs] = peelBindingAnnotation($binding->value);
-            bindPattern(
-                lowerPattern($binding->pattern, $ctx),
-                lowerExpr($rhs, $ctx),
-                $ctx,
-            );
+            bindPatternWithViews($binding->pattern, lowerExpr($rhs, $ctx), $ctx);
         }
     }
 }
@@ -1460,11 +1503,7 @@ function lowerRecursiveBindings(array $bindingIds, LowerCtx $ctx): void
             continue;
         }
         [$rhs] = peelBindingAnnotation($binding->value);
-        bindPattern(
-            lowerPatternTerm($site, $ctx),
-            lowerExpr($rhs, $ctx),
-            $ctx,
-        );
+        bindPatternWithViews($binding->pattern, lowerExpr($rhs, $ctx), $ctx);
     }
 }
 
@@ -1487,6 +1526,7 @@ function lowerCase(Ast\CaseExpr $expr, LowerCtx $ctx): Operand
     $scrutineeOp = lowerExpr(materializeTermId($term->scrutinee, $ctx), $ctx);
     $dest = freshTemp($ctx);
     $arms = [];
+    $clauses = [];
     $guardsAlwaysHold = true;
 
     foreach ($term->arms as $arm) {
@@ -1495,30 +1535,44 @@ function lowerCase(Ast\CaseExpr $expr, LowerCtx $ctx): Operand
             $guardsAlwaysHold = $guardsAlwaysHold && guardIsConstantTrue(materializeTermId($lastGuard, $ctx), $ctx->trueBindings);
         }
 
+        $patternSite = materializeTermId($arm->pattern, $ctx);
         foreach ($arm->clauses as $clause) {
-            $clauseBody = materializeTermId($clause['body'], $ctx);
-            $guardSite = $clause['guard'] === null
-                ? null
-                : materializeTermId($clause['guard'], $ctx);
-            $armCtx = newArmCtx($ctx, $clauseBody);
-            $pattern = lowerPattern(materializeTermId($arm->pattern, $ctx), $ctx);
-            bindPattern($pattern, $scrutineeOp, $armCtx);
-            if ($clause['guard'] === null) {
-                $guards = [];
-            } else {
-                $bindings = $armCtx->items;
-                $isVarPattern = $pattern instanceof PatVar;
-                $armCtx->items = [];
-                $guards = [lowerArmGuard($guardSite, $armCtx, $isVarPattern ? $bindings : [])];
-                $armCtx->items = $isVarPattern ? [] : $bindings;
-            }
-            $value = lowerExpr($clauseBody, $armCtx);
-            $arms[] = new MatchArm(
-                eraseNewtypesInPattern($pattern, $armCtx->newtypes),
-                new Block([...$armCtx->items, new Assign($dest, $value)]),
-                $guards,
-            );
+            $clauses[] = [
+                'site' => $patternSite,
+                'body' => materializeTermId($clause['body'], $ctx),
+                'guard' => $clause['guard'] === null ? null : materializeTermId($clause['guard'], $ctx),
+            ];
         }
+    }
+
+    foreach ($clauses as $clause) {
+        if (patternHasView(plannedPattern($clause['site'], $ctx), $ctx)) {
+            \array_push($ctx->items, ...clauseChain($clauses, 0, $scrutineeOp, $ctx, $dest)->items);
+
+            return new Temp($dest);
+        }
+    }
+
+    foreach ($clauses as $clause) {
+        $clauseBody = $clause['body'];
+        $armCtx = newArmCtx($ctx, $clauseBody);
+        $pattern = lowerPattern($clause['site'], $ctx);
+        bindPattern($pattern, $scrutineeOp, $armCtx);
+        if ($clause['guard'] === null) {
+            $guards = [];
+        } else {
+            $bindings = $armCtx->items;
+            $isVarPattern = $pattern instanceof PatVar;
+            $armCtx->items = [];
+            $guards = [lowerArmGuard($clause['guard'], $armCtx, $isVarPattern ? $bindings : [])];
+            $armCtx->items = $isVarPattern ? [] : $bindings;
+        }
+        $value = lowerExpr($clauseBody, $armCtx);
+        $arms[] = new MatchArm(
+            eraseNewtypesInPattern($pattern, $armCtx->newtypes),
+            new Block([...$armCtx->items, new Assign($dest, $value)]),
+            $guards,
+        );
     }
 
     $ctx->items[] = new MatchStmt($scrutineeOp, $arms, $dest, $term->exhaustive && $guardsAlwaysHold);

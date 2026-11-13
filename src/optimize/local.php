@@ -29,24 +29,41 @@ use Moggi\Optimize\Support;
  */
 function optimizeBlock(IR\Block $block, ?Facts $facts = null, ?int $armValueDest = null): IR\Block
 {
-    $temps = [];
-    $locals = [];
-    $items = [];
+    return new IR\Block(optimizeItems($block->items, $facts, $armValueDest));
+}
+
+/**
+ * The block rules over `$items`, in order.
+ *
+ * Each item is mapped exactly once, with the temps and locals seen so far, and
+ * its nested bodies are optimized during that mapping. `$temps`/`$locals` seed
+ * the substitutions with the enclosing scope's so a nested body still sees
+ * them. Running the rules again over a body that was already mapped repeated
+ * every descendant body's work at each enclosing level -- exponential in
+ * nesting depth, which made a long `>>` chain take minutes to compile.
+ *
+ * @param list<IR\Stmt> $items
+ * @param array<int, IR\Operand> $temps @param array<string, IR\Operand> $locals
+ * @return list<IR\Stmt>
+ */
+function optimizeItems(array $items, ?Facts $facts = null, ?int $armValueDest = null, array $temps = [], array $locals = []): array
+{
+    $out = [];
     $captureIndex = null;
 
-    foreach ($block->items as $itemIndex => $item) {
+    foreach ($items as $itemIndex => $item) {
         $item = mapStmt($item, $temps, $locals, $facts);
 
         if ($item instanceof IR\Assign) {
             if ($armValueDest !== null && $item->dest === $armValueDest) {
-                $items[] = $item;
+                $out[] = $item;
 
                 continue;
             }
 
             if (Support\isPropagatableExpr($item->value)) {
                 if (operandIsNonDuplicable($item->value, $facts)) {
-                    $items[] = $item;
+                    $out[] = $item;
 
                     continue;
                 }
@@ -55,7 +72,7 @@ function optimizeBlock(IR\Block $block, ?Facts $facts = null, ?int $armValueDest
                 continue;
             }
 
-            $items[] = $item;
+            $out[] = $item;
 
             continue;
         }
@@ -66,18 +83,18 @@ function optimizeBlock(IR\Block $block, ?Facts $facts = null, ?int $armValueDest
                     $item->value instanceof IR\Local
                     && $item->value->name === $item->name
                 ) {
-                    $items[] = $item;
+                    $out[] = $item;
 
                     continue;
                 }
                 if (operandIsNonDuplicable($item->value, $facts)) {
-                    $items[] = $item;
+                    $out[] = $item;
 
                     continue;
                 }
-                $captureIndex ??= lambdaCaptureIndex($block->items, $facts);
+                $captureIndex ??= lambdaCaptureIndex($items, $facts);
                 if (($captureIndex[$item->name] ?? -1) > $itemIndex) {
-                    $items[] = $item;
+                    $out[] = $item;
 
                     continue;
                 }
@@ -87,14 +104,14 @@ function optimizeBlock(IR\Block $block, ?Facts $facts = null, ?int $armValueDest
                 continue;
             }
 
-            $items[] = $item;
+            $out[] = $item;
 
             continue;
         }
 
         if ($item instanceof IR\Call || $item instanceof IR\CallValue) {
             unset($temps[$item->dest]);
-            $items[] = $item;
+            $out[] = $item;
 
             continue;
         }
@@ -102,7 +119,7 @@ function optimizeBlock(IR\Block $block, ?Facts $facts = null, ?int $armValueDest
         if ($item instanceof IR\MatchStmt) {
             unset($temps[$item->dest]);
             $scrutinee = mapOperand($item->scrutinee, $temps, $locals);
-            $items[] = new IR\MatchStmt(
+            $out[] = new IR\MatchStmt(
                 $scrutinee,
                 \array_map(
                     static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArm($arm, $temps, $locals, $scrutinee, $item->dest, $facts),
@@ -117,7 +134,7 @@ function optimizeBlock(IR\Block $block, ?Facts $facts = null, ?int $armValueDest
 
         if ($item instanceof IR\MatchReturn) {
             $scrutinee = mapOperand($item->scrutinee, $temps, $locals);
-            $items[] = new IR\MatchReturn(
+            $out[] = new IR\MatchReturn(
                 $scrutinee,
                 \array_map(
                     static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArm($arm, $temps, $locals, $scrutinee, null, $facts),
@@ -129,26 +146,21 @@ function optimizeBlock(IR\Block $block, ?Facts $facts = null, ?int $armValueDest
             continue;
         }
 
-        $items[] = $item;
+        $out[] = $item;
     }
 
-    $items = foldTailReturn($items);
-
-    return new IR\Block($items);
+    return foldTailReturn($out);
 }
 
 /** @param array<int, IR\Operand> $temps @param array<string, IR\Operand> $locals */
 function mapMatchArm(IR\MatchArm $arm, array $temps, array $locals, IR\Operand $scrutinee, ?int $armValueDest = null, ?Facts $facts = null): IR\MatchArm
 {
-    $armTemps = $temps;
-    $armLocals = $locals;
-    $mappedItems = [];
-    foreach ($arm->body->items as $item) {
-        $mappedItems[] = mapStmt($item, $armTemps, $armLocals, $facts);
-    }
-
     $optimized = cleanupConstructorArm(
-        new IR\MatchArm($arm->pattern, optimizeBlock(new IR\Block($mappedItems), $facts, $armValueDest), $arm->guards),
+        new IR\MatchArm(
+            $arm->pattern,
+            new IR\Block(optimizeItems($arm->body->items, $facts, $armValueDest, $temps, $locals)),
+            $arm->guards,
+        ),
         $scrutinee,
     );
 
@@ -415,16 +427,7 @@ function mapOperand(IR\Operand $operand, array $temps, array $locals): IR\Operan
 /** @param array<int, IR\Operand> $temps @param array<string, IR\Operand> $locals @return array{0: IR\Block, 1: IR\Operand} */
 function optimizeIoAssignAction(IR\Block $body, IR\Operand $result, array $temps, array $locals, ?Facts $facts = null): array
 {
-    $bodyTemps = $temps;
-    $bodyLocals = $locals;
-    $mappedItems = [];
-    foreach ($body->items as $item) {
-        $mappedItems[] = mapStmt($item, $bodyTemps, $bodyLocals, $facts);
-    }
-
-    $mappedResult = mapOperand($result, $bodyTemps, $bodyLocals);
-    $optimized = optimizeBlock(new IR\Block([...$mappedItems, new IR\Ret($mappedResult)]), $facts);
-    $items = $optimized->items;
+    $items = optimizeItems([...$body->items, new IR\Ret($result)], $facts, null, $temps, $locals);
     $tail = \array_pop($items);
     if (! $tail instanceof IR\Ret) {
         throw new \RuntimeException('local optimize: io_assign_action lost result tail');
