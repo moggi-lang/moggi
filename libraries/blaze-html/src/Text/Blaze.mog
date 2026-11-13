@@ -1,0 +1,183 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | BlazeMarkup: markup combinators embedded in the language, with the value
+-- classes that let one function convert many types.
+--
+-- The Haskell library carries @Text@, lazy @Text@ and a lazy text builder
+-- alongside 'String'; moggi has one text type, so the @Text@ functions take
+-- 'String' here. The lazy-@Text@, lazy-'ByteString' and text-builder variants
+-- have no counterpart type and are omitted rather than aliased.
+module Text.Blaze
+  ( Markup
+  , Tag
+  , Attribute
+  , AttributeValue
+
+  , dataAttribute
+  , customAttribute
+
+  , ToMarkup (..)
+  , text
+  , preEscapedText
+  , string
+  , preEscapedString
+  , unsafeByteString
+
+  , textComment
+  , stringComment
+  , unsafeByteStringComment
+
+  , textTag
+  , stringTag
+
+  , ToValue (..)
+  , textValue
+  , preEscapedTextValue
+  , stringValue
+  , preEscapedStringValue
+  , unsafeByteStringValue
+
+  , (!)
+  , (!?)
+  , contents
+  ) where
+
+import Data.Bool (Bool)
+import Data.ByteString (ByteString)
+import Data.Char (Char)
+import Data.Double (Double)
+import Data.Int (Int, Int32, Int64)
+import Data.Integer (Integer)
+import Data.List ((:), foldr, map)
+import Data.List.NonEmpty (NonEmpty ((:|)))
+import Data.Monoid (mconcat)
+import Data.String (String, singleton)
+import Data.String qualified as S
+import Data.Word (Word, Word32, Word64)
+import Text.Blaze.Internal
+  ( Attribute
+  , AttributeValue
+  , Markup
+  , MarkupM (..)
+  , Tag
+  , contents
+  , customAttribute
+  , dataAttribute
+  , preEscapedString
+  , preEscapedStringValue
+  , preEscapedText
+  , preEscapedTextValue
+  , string
+  , stringComment
+  , stringTag
+  , stringValue
+  , text
+  , textComment
+  , textTag
+  , textValue
+  , unsafeByteString
+  , unsafeByteStringComment
+  , unsafeByteStringValue
+  , (!)
+  , (!?)
+  )
+import Text.Show (show)
+
+-- | The types that convert to markup.
+class ToMarkup a where
+  toMarkup :: a -> Markup
+  preEscapedToMarkup :: a -> Markup
+  preEscapedToMarkup a = toMarkup a
+
+-- | Upstream's instance is for @Markup@, which is @MarkupM ()@.
+instance ToMarkup (MarkupM ()) where
+  toMarkup m = m
+
+instance ToMarkup [MarkupM ()] where
+  toMarkup ms = foldr (\x acc -> Append x acc) (Empty ()) ms
+
+instance ToMarkup String where
+  toMarkup = string
+  preEscapedToMarkup = preEscapedString
+
+instance ToMarkup Int where
+  toMarkup n = string (show n)
+
+instance ToMarkup Int32 where
+  toMarkup n = string (show n)
+
+instance ToMarkup Int64 where
+  toMarkup n = string (show n)
+
+instance ToMarkup Integer where
+  toMarkup n = string (show n)
+
+instance ToMarkup Char where
+  toMarkup c = string (singleton c)
+
+instance ToMarkup Bool where
+  toMarkup b = string (show b)
+
+instance ToMarkup Double where
+  toMarkup n = string (show n)
+
+instance ToMarkup Word where
+  toMarkup n = string (show n)
+
+instance ToMarkup Word32 where
+  toMarkup n = string (show n)
+
+instance ToMarkup Word64 where
+  toMarkup n = string (show n)
+
+-- | A non-empty string is a string: upstream has the same instance for
+-- @NonEmpty Char@, and it is the only container instance the classes carry.
+instance ToMarkup (NonEmpty Char) where
+  toMarkup (x :| xs) = string (S.pack (x : xs))
+  preEscapedToMarkup (x :| xs) = preEscapedString (S.pack (x : xs))
+
+-- | The types that convert to an attribute value.
+class ToValue a where
+  toValue :: a -> AttributeValue
+  preEscapedToValue :: a -> AttributeValue
+  preEscapedToValue a = toValue a
+
+instance ToValue AttributeValue where
+  toValue v = v
+
+instance ToValue String where
+  toValue = stringValue
+  preEscapedToValue = preEscapedStringValue
+
+instance ToValue Int where
+  toValue n = stringValue (show n)
+
+instance ToValue Int32 where
+  toValue n = stringValue (show n)
+
+instance ToValue Int64 where
+  toValue n = stringValue (show n)
+
+instance ToValue Integer where
+  toValue n = stringValue (show n)
+
+instance ToValue Char where
+  toValue c = stringValue (singleton c)
+
+instance ToValue Bool where
+  toValue b = stringValue (show b)
+
+instance ToValue Double where
+  toValue n = stringValue (show n)
+
+instance ToValue Word where
+  toValue n = stringValue (show n)
+
+instance ToValue Word32 where
+  toValue n = stringValue (show n)
+
+instance ToValue Word64 where
+  toValue n = stringValue (show n)
+
+-- | A non-empty string is an attribute value, as upstream.
+instance ToValue (NonEmpty Char) where
+  toValue (x :| xs) = stringValue (S.pack (x : xs))

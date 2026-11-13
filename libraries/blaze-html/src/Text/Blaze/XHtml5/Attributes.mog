@@ -1,0 +1,2818 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The combinators for this flavour of HTML, generated from the same
+-- specification the Haskell library generates them from.
+-- Note: upstream's @pattern@ attribute is spelled @pattern_@ here, because
+-- @pattern@ is a keyword in moggi and cannot name a function.
+module Text.Blaze.XHtml5.Attributes
+  ( accept
+  , acceptCharset
+  , accesskey
+  , action
+  , alt
+  , async
+  , autocomplete
+  , autofocus
+  , autoplay
+  , challenge
+  , charset
+  , checked
+  , cite
+  , class_
+  , cols
+  , colspan
+  , content
+  , contenteditable
+  , contextmenu
+  , controls
+  , coords
+  , data_
+  , datetime
+  , defer
+  , dir
+  , disabled
+  , download
+  , draggable
+  , enctype
+  , for
+  , form
+  , formaction
+  , formenctype
+  , formmethod
+  , formnovalidate
+  , formtarget
+  , headers
+  , height
+  , hidden
+  , high
+  , href
+  , hreflang
+  , httpEquiv
+  , icon
+  , id
+  , ismap
+  , item
+  , itemprop
+  , itemscope
+  , itemtype
+  , keytype
+  , label
+  , lang
+  , list
+  , loop
+  , low
+  , manifest
+  , max
+  , maxlength
+  , media
+  , method
+  , min
+  , minlength
+  , multiple
+  , muted
+  , name
+  , novalidate
+  , onbeforeonload
+  , onbeforeprint
+  , onblur
+  , oncanplay
+  , oncanplaythrough
+  , onchange
+  , onclick
+  , oncontextmenu
+  , ondblclick
+  , ondrag
+  , ondragend
+  , ondragenter
+  , ondragleave
+  , ondragover
+  , ondragstart
+  , ondrop
+  , ondurationchange
+  , onemptied
+  , onended
+  , onerror
+  , onfocus
+  , onformchange
+  , onforminput
+  , onhaschange
+  , oninput
+  , oninvalid
+  , onkeydown
+  , onkeypress
+  , onkeyup
+  , onload
+  , onloadeddata
+  , onloadedmetadata
+  , onloadstart
+  , onmessage
+  , onmousedown
+  , onmousemove
+  , onmouseout
+  , onmouseover
+  , onmouseup
+  , onmousewheel
+  , ononline
+  , onpagehide
+  , onpageshow
+  , onpause
+  , onplay
+  , onplaying
+  , onprogress
+  , onpropstate
+  , onratechange
+  , onreadystatechange
+  , onredo
+  , onresize
+  , onscroll
+  , onseeked
+  , onseeking
+  , onselect
+  , onstalled
+  , onstorage
+  , onsubmit
+  , onsuspend
+  , ontimeupdate
+  , onundo
+  , onunload
+  , onvolumechange
+  , onwaiting
+  , open
+  , optimum
+  , pattern_
+  , ping
+  , placeholder
+  , poster
+  , preload
+  , property
+  , pubdate
+  , radiogroup
+  , readonly
+  , rel
+  , required
+  , reversed
+  , role
+  , rows
+  , rowspan
+  , sandbox
+  , scope
+  , scoped
+  , seamless
+  , selected
+  , shape
+  , size
+  , sizes
+  , span
+  , spellcheck
+  , src
+  , srcdoc
+  , start
+  , step
+  , style
+  , subject
+  , summary
+  , tabindex
+  , target
+  , title
+  , type_
+  , usemap
+  , value
+  , width
+  , wrap
+  , xmlns
+  ) where
+
+import Control.Monad ((>>))
+import Data.Bool (Bool (..))
+import Data.Monoid (mempty)
+import Data.Semigroup ((<>))
+import Text.Blaze.Html
+import Text.Blaze.Internal (MarkupM (..), attribute, external)
+
+-- src/Util/GenerateHtmlCombinators.hs:100
+--
+
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @accept@ attribute.
+--
+-- Example:
+--
+-- > div ! accept "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div accept="bar">Hello.</div>
+--
+accept :: AttributeValue -> Attribute
+accept = attribute "accept" " accept=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @accept-charset@ attribute.
+--
+-- Example:
+--
+-- > div ! acceptCharset "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div accept-charset="bar">Hello.</div>
+--
+acceptCharset :: AttributeValue -> Attribute
+acceptCharset = attribute "accept-charset" " accept-charset=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @accesskey@ attribute.
+--
+-- Example:
+--
+-- > div ! accesskey "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div accesskey="bar">Hello.</div>
+--
+accesskey :: AttributeValue -> Attribute
+accesskey = attribute "accesskey" " accesskey=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @action@ attribute.
+--
+-- Example:
+--
+-- > div ! action "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div action="bar">Hello.</div>
+--
+action :: AttributeValue -> Attribute
+action = attribute "action" " action=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @alt@ attribute.
+--
+-- Example:
+--
+-- > div ! alt "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div alt="bar">Hello.</div>
+--
+alt :: AttributeValue -> Attribute
+alt = attribute "alt" " alt=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @async@ attribute.
+--
+-- Example:
+--
+-- > div ! async "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div async="bar">Hello.</div>
+--
+async :: AttributeValue -> Attribute
+async = attribute "async" " async=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @autocomplete@ attribute.
+--
+-- Example:
+--
+-- > div ! autocomplete "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div autocomplete="bar">Hello.</div>
+--
+autocomplete :: AttributeValue -> Attribute
+autocomplete = attribute "autocomplete" " autocomplete=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @autofocus@ attribute.
+--
+-- Example:
+--
+-- > div ! autofocus "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div autofocus="bar">Hello.</div>
+--
+autofocus :: AttributeValue -> Attribute
+autofocus = attribute "autofocus" " autofocus=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @autoplay@ attribute.
+--
+-- Example:
+--
+-- > div ! autoplay "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div autoplay="bar">Hello.</div>
+--
+autoplay :: AttributeValue -> Attribute
+autoplay = attribute "autoplay" " autoplay=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @challenge@ attribute.
+--
+-- Example:
+--
+-- > div ! challenge "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div challenge="bar">Hello.</div>
+--
+challenge :: AttributeValue -> Attribute
+challenge = attribute "challenge" " challenge=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @charset@ attribute.
+--
+-- Example:
+--
+-- > div ! charset "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div charset="bar">Hello.</div>
+--
+charset :: AttributeValue -> Attribute
+charset = attribute "charset" " charset=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @checked@ attribute.
+--
+-- Example:
+--
+-- > div ! checked "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div checked="bar">Hello.</div>
+--
+checked :: AttributeValue -> Attribute
+checked = attribute "checked" " checked=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @cite@ attribute.
+--
+-- Example:
+--
+-- > div ! cite "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div cite="bar">Hello.</div>
+--
+cite :: AttributeValue -> Attribute
+cite = attribute "cite" " cite=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @class@ attribute.
+--
+-- Example:
+--
+-- > div ! class_ "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div class="bar">Hello.</div>
+--
+class_ :: AttributeValue -> Attribute
+class_ = attribute "class" " class=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @cols@ attribute.
+--
+-- Example:
+--
+-- > div ! cols "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div cols="bar">Hello.</div>
+--
+cols :: AttributeValue -> Attribute
+cols = attribute "cols" " cols=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @colspan@ attribute.
+--
+-- Example:
+--
+-- > div ! colspan "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div colspan="bar">Hello.</div>
+--
+colspan :: AttributeValue -> Attribute
+colspan = attribute "colspan" " colspan=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @content@ attribute.
+--
+-- Example:
+--
+-- > div ! content "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div content="bar">Hello.</div>
+--
+content :: AttributeValue -> Attribute
+content = attribute "content" " content=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @contenteditable@ attribute.
+--
+-- Example:
+--
+-- > div ! contenteditable "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div contenteditable="bar">Hello.</div>
+--
+contenteditable :: AttributeValue -> Attribute
+contenteditable = attribute "contenteditable" " contenteditable=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @contextmenu@ attribute.
+--
+-- Example:
+--
+-- > div ! contextmenu "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div contextmenu="bar">Hello.</div>
+--
+contextmenu :: AttributeValue -> Attribute
+contextmenu = attribute "contextmenu" " contextmenu=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @controls@ attribute.
+--
+-- Example:
+--
+-- > div ! controls "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div controls="bar">Hello.</div>
+--
+controls :: AttributeValue -> Attribute
+controls = attribute "controls" " controls=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @coords@ attribute.
+--
+-- Example:
+--
+-- > div ! coords "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div coords="bar">Hello.</div>
+--
+coords :: AttributeValue -> Attribute
+coords = attribute "coords" " coords=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @data@ attribute.
+--
+-- Example:
+--
+-- > div ! data_ "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div data="bar">Hello.</div>
+--
+data_ :: AttributeValue -> Attribute
+data_ = attribute "data" " data=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @datetime@ attribute.
+--
+-- Example:
+--
+-- > div ! datetime "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div datetime="bar">Hello.</div>
+--
+datetime :: AttributeValue -> Attribute
+datetime = attribute "datetime" " datetime=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @defer@ attribute.
+--
+-- Example:
+--
+-- > div ! defer "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div defer="bar">Hello.</div>
+--
+defer :: AttributeValue -> Attribute
+defer = attribute "defer" " defer=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @dir@ attribute.
+--
+-- Example:
+--
+-- > div ! dir "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div dir="bar">Hello.</div>
+--
+dir :: AttributeValue -> Attribute
+dir = attribute "dir" " dir=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @disabled@ attribute.
+--
+-- Example:
+--
+-- > div ! disabled "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div disabled="bar">Hello.</div>
+--
+disabled :: AttributeValue -> Attribute
+disabled = attribute "disabled" " disabled=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @download@ attribute.
+--
+-- Example:
+--
+-- > div ! download "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div download="bar">Hello.</div>
+--
+download :: AttributeValue -> Attribute
+download = attribute "download" " download=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @draggable@ attribute.
+--
+-- Example:
+--
+-- > div ! draggable "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div draggable="bar">Hello.</div>
+--
+draggable :: AttributeValue -> Attribute
+draggable = attribute "draggable" " draggable=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @enctype@ attribute.
+--
+-- Example:
+--
+-- > div ! enctype "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div enctype="bar">Hello.</div>
+--
+enctype :: AttributeValue -> Attribute
+enctype = attribute "enctype" " enctype=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @for@ attribute.
+--
+-- Example:
+--
+-- > div ! for "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div for="bar">Hello.</div>
+--
+for :: AttributeValue -> Attribute
+for = attribute "for" " for=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @form@ attribute.
+--
+-- Example:
+--
+-- > div ! form "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div form="bar">Hello.</div>
+--
+form :: AttributeValue -> Attribute
+form = attribute "form" " form=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @formaction@ attribute.
+--
+-- Example:
+--
+-- > div ! formaction "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div formaction="bar">Hello.</div>
+--
+formaction :: AttributeValue -> Attribute
+formaction = attribute "formaction" " formaction=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @formenctype@ attribute.
+--
+-- Example:
+--
+-- > div ! formenctype "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div formenctype="bar">Hello.</div>
+--
+formenctype :: AttributeValue -> Attribute
+formenctype = attribute "formenctype" " formenctype=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @formmethod@ attribute.
+--
+-- Example:
+--
+-- > div ! formmethod "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div formmethod="bar">Hello.</div>
+--
+formmethod :: AttributeValue -> Attribute
+formmethod = attribute "formmethod" " formmethod=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @formnovalidate@ attribute.
+--
+-- Example:
+--
+-- > div ! formnovalidate "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div formnovalidate="bar">Hello.</div>
+--
+formnovalidate :: AttributeValue -> Attribute
+formnovalidate = attribute "formnovalidate" " formnovalidate=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @formtarget@ attribute.
+--
+-- Example:
+--
+-- > div ! formtarget "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div formtarget="bar">Hello.</div>
+--
+formtarget :: AttributeValue -> Attribute
+formtarget = attribute "formtarget" " formtarget=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @headers@ attribute.
+--
+-- Example:
+--
+-- > div ! headers "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div headers="bar">Hello.</div>
+--
+headers :: AttributeValue -> Attribute
+headers = attribute "headers" " headers=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @height@ attribute.
+--
+-- Example:
+--
+-- > div ! height "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div height="bar">Hello.</div>
+--
+height :: AttributeValue -> Attribute
+height = attribute "height" " height=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @hidden@ attribute.
+--
+-- Example:
+--
+-- > div ! hidden "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div hidden="bar">Hello.</div>
+--
+hidden :: AttributeValue -> Attribute
+hidden = attribute "hidden" " hidden=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @high@ attribute.
+--
+-- Example:
+--
+-- > div ! high "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div high="bar">Hello.</div>
+--
+high :: AttributeValue -> Attribute
+high = attribute "high" " high=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @href@ attribute.
+--
+-- Example:
+--
+-- > div ! href "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div href="bar">Hello.</div>
+--
+href :: AttributeValue -> Attribute
+href = attribute "href" " href=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @hreflang@ attribute.
+--
+-- Example:
+--
+-- > div ! hreflang "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div hreflang="bar">Hello.</div>
+--
+hreflang :: AttributeValue -> Attribute
+hreflang = attribute "hreflang" " hreflang=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @http-equiv@ attribute.
+--
+-- Example:
+--
+-- > div ! httpEquiv "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div http-equiv="bar">Hello.</div>
+--
+httpEquiv :: AttributeValue -> Attribute
+httpEquiv = attribute "http-equiv" " http-equiv=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @icon@ attribute.
+--
+-- Example:
+--
+-- > div ! icon "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div icon="bar">Hello.</div>
+--
+icon :: AttributeValue -> Attribute
+icon = attribute "icon" " icon=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @id@ attribute.
+--
+-- Example:
+--
+-- > div ! id "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div id="bar">Hello.</div>
+--
+id :: AttributeValue -> Attribute
+id = attribute "id" " id=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @ismap@ attribute.
+--
+-- Example:
+--
+-- > div ! ismap "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div ismap="bar">Hello.</div>
+--
+ismap :: AttributeValue -> Attribute
+ismap = attribute "ismap" " ismap=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @item@ attribute.
+--
+-- Example:
+--
+-- > div ! item "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div item="bar">Hello.</div>
+--
+item :: AttributeValue -> Attribute
+item = attribute "item" " item=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @itemprop@ attribute.
+--
+-- Example:
+--
+-- > div ! itemprop "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div itemprop="bar">Hello.</div>
+--
+itemprop :: AttributeValue -> Attribute
+itemprop = attribute "itemprop" " itemprop=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @itemscope@ attribute.
+--
+-- Example:
+--
+-- > div ! itemscope "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div itemscope="bar">Hello.</div>
+--
+itemscope :: AttributeValue -> Attribute
+itemscope = attribute "itemscope" " itemscope=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @itemtype@ attribute.
+--
+-- Example:
+--
+-- > div ! itemtype "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div itemtype="bar">Hello.</div>
+--
+itemtype :: AttributeValue -> Attribute
+itemtype = attribute "itemtype" " itemtype=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @keytype@ attribute.
+--
+-- Example:
+--
+-- > div ! keytype "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div keytype="bar">Hello.</div>
+--
+keytype :: AttributeValue -> Attribute
+keytype = attribute "keytype" " keytype=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @label@ attribute.
+--
+-- Example:
+--
+-- > div ! label "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div label="bar">Hello.</div>
+--
+label :: AttributeValue -> Attribute
+label = attribute "label" " label=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @lang@ attribute.
+--
+-- Example:
+--
+-- > div ! lang "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div lang="bar">Hello.</div>
+--
+lang :: AttributeValue -> Attribute
+lang = attribute "lang" " lang=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @list@ attribute.
+--
+-- Example:
+--
+-- > div ! list "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div list="bar">Hello.</div>
+--
+list :: AttributeValue -> Attribute
+list = attribute "list" " list=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @loop@ attribute.
+--
+-- Example:
+--
+-- > div ! loop "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div loop="bar">Hello.</div>
+--
+loop :: AttributeValue -> Attribute
+loop = attribute "loop" " loop=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @low@ attribute.
+--
+-- Example:
+--
+-- > div ! low "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div low="bar">Hello.</div>
+--
+low :: AttributeValue -> Attribute
+low = attribute "low" " low=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @manifest@ attribute.
+--
+-- Example:
+--
+-- > div ! manifest "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div manifest="bar">Hello.</div>
+--
+manifest :: AttributeValue -> Attribute
+manifest = attribute "manifest" " manifest=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @max@ attribute.
+--
+-- Example:
+--
+-- > div ! max "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div max="bar">Hello.</div>
+--
+max :: AttributeValue -> Attribute
+max = attribute "max" " max=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @maxlength@ attribute.
+--
+-- Example:
+--
+-- > div ! maxlength "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div maxlength="bar">Hello.</div>
+--
+maxlength :: AttributeValue -> Attribute
+maxlength = attribute "maxlength" " maxlength=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @media@ attribute.
+--
+-- Example:
+--
+-- > div ! media "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div media="bar">Hello.</div>
+--
+media :: AttributeValue -> Attribute
+media = attribute "media" " media=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @method@ attribute.
+--
+-- Example:
+--
+-- > div ! method "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div method="bar">Hello.</div>
+--
+method :: AttributeValue -> Attribute
+method = attribute "method" " method=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @min@ attribute.
+--
+-- Example:
+--
+-- > div ! min "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div min="bar">Hello.</div>
+--
+min :: AttributeValue -> Attribute
+min = attribute "min" " min=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @minlength@ attribute.
+--
+-- Example:
+--
+-- > div ! minlength "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div minlength="bar">Hello.</div>
+--
+minlength :: AttributeValue -> Attribute
+minlength = attribute "minlength" " minlength=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @multiple@ attribute.
+--
+-- Example:
+--
+-- > div ! multiple "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div multiple="bar">Hello.</div>
+--
+multiple :: AttributeValue -> Attribute
+multiple = attribute "multiple" " multiple=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @muted@ attribute.
+--
+-- Example:
+--
+-- > div ! muted "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div muted="bar">Hello.</div>
+--
+muted :: AttributeValue -> Attribute
+muted = attribute "muted" " muted=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @name@ attribute.
+--
+-- Example:
+--
+-- > div ! name "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div name="bar">Hello.</div>
+--
+name :: AttributeValue -> Attribute
+name = attribute "name" " name=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @novalidate@ attribute.
+--
+-- Example:
+--
+-- > div ! novalidate "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div novalidate="bar">Hello.</div>
+--
+novalidate :: AttributeValue -> Attribute
+novalidate = attribute "novalidate" " novalidate=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onbeforeonload@ attribute.
+--
+-- Example:
+--
+-- > div ! onbeforeonload "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onbeforeonload="bar">Hello.</div>
+--
+onbeforeonload :: AttributeValue -> Attribute
+onbeforeonload = attribute "onbeforeonload" " onbeforeonload=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onbeforeprint@ attribute.
+--
+-- Example:
+--
+-- > div ! onbeforeprint "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onbeforeprint="bar">Hello.</div>
+--
+onbeforeprint :: AttributeValue -> Attribute
+onbeforeprint = attribute "onbeforeprint" " onbeforeprint=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onblur@ attribute.
+--
+-- Example:
+--
+-- > div ! onblur "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onblur="bar">Hello.</div>
+--
+onblur :: AttributeValue -> Attribute
+onblur = attribute "onblur" " onblur=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @oncanplay@ attribute.
+--
+-- Example:
+--
+-- > div ! oncanplay "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div oncanplay="bar">Hello.</div>
+--
+oncanplay :: AttributeValue -> Attribute
+oncanplay = attribute "oncanplay" " oncanplay=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @oncanplaythrough@ attribute.
+--
+-- Example:
+--
+-- > div ! oncanplaythrough "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div oncanplaythrough="bar">Hello.</div>
+--
+oncanplaythrough :: AttributeValue -> Attribute
+oncanplaythrough = attribute "oncanplaythrough" " oncanplaythrough=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onchange@ attribute.
+--
+-- Example:
+--
+-- > div ! onchange "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onchange="bar">Hello.</div>
+--
+onchange :: AttributeValue -> Attribute
+onchange = attribute "onchange" " onchange=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onclick@ attribute.
+--
+-- Example:
+--
+-- > div ! onclick "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onclick="bar">Hello.</div>
+--
+onclick :: AttributeValue -> Attribute
+onclick = attribute "onclick" " onclick=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @oncontextmenu@ attribute.
+--
+-- Example:
+--
+-- > div ! oncontextmenu "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div oncontextmenu="bar">Hello.</div>
+--
+oncontextmenu :: AttributeValue -> Attribute
+oncontextmenu = attribute "oncontextmenu" " oncontextmenu=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @ondblclick@ attribute.
+--
+-- Example:
+--
+-- > div ! ondblclick "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div ondblclick="bar">Hello.</div>
+--
+ondblclick :: AttributeValue -> Attribute
+ondblclick = attribute "ondblclick" " ondblclick=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @ondrag@ attribute.
+--
+-- Example:
+--
+-- > div ! ondrag "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div ondrag="bar">Hello.</div>
+--
+ondrag :: AttributeValue -> Attribute
+ondrag = attribute "ondrag" " ondrag=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @ondragend@ attribute.
+--
+-- Example:
+--
+-- > div ! ondragend "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div ondragend="bar">Hello.</div>
+--
+ondragend :: AttributeValue -> Attribute
+ondragend = attribute "ondragend" " ondragend=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @ondragenter@ attribute.
+--
+-- Example:
+--
+-- > div ! ondragenter "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div ondragenter="bar">Hello.</div>
+--
+ondragenter :: AttributeValue -> Attribute
+ondragenter = attribute "ondragenter" " ondragenter=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @ondragleave@ attribute.
+--
+-- Example:
+--
+-- > div ! ondragleave "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div ondragleave="bar">Hello.</div>
+--
+ondragleave :: AttributeValue -> Attribute
+ondragleave = attribute "ondragleave" " ondragleave=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @ondragover@ attribute.
+--
+-- Example:
+--
+-- > div ! ondragover "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div ondragover="bar">Hello.</div>
+--
+ondragover :: AttributeValue -> Attribute
+ondragover = attribute "ondragover" " ondragover=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @ondragstart@ attribute.
+--
+-- Example:
+--
+-- > div ! ondragstart "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div ondragstart="bar">Hello.</div>
+--
+ondragstart :: AttributeValue -> Attribute
+ondragstart = attribute "ondragstart" " ondragstart=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @ondrop@ attribute.
+--
+-- Example:
+--
+-- > div ! ondrop "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div ondrop="bar">Hello.</div>
+--
+ondrop :: AttributeValue -> Attribute
+ondrop = attribute "ondrop" " ondrop=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @ondurationchange@ attribute.
+--
+-- Example:
+--
+-- > div ! ondurationchange "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div ondurationchange="bar">Hello.</div>
+--
+ondurationchange :: AttributeValue -> Attribute
+ondurationchange = attribute "ondurationchange" " ondurationchange=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onemptied@ attribute.
+--
+-- Example:
+--
+-- > div ! onemptied "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onemptied="bar">Hello.</div>
+--
+onemptied :: AttributeValue -> Attribute
+onemptied = attribute "onemptied" " onemptied=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onended@ attribute.
+--
+-- Example:
+--
+-- > div ! onended "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onended="bar">Hello.</div>
+--
+onended :: AttributeValue -> Attribute
+onended = attribute "onended" " onended=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onerror@ attribute.
+--
+-- Example:
+--
+-- > div ! onerror "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onerror="bar">Hello.</div>
+--
+onerror :: AttributeValue -> Attribute
+onerror = attribute "onerror" " onerror=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onfocus@ attribute.
+--
+-- Example:
+--
+-- > div ! onfocus "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onfocus="bar">Hello.</div>
+--
+onfocus :: AttributeValue -> Attribute
+onfocus = attribute "onfocus" " onfocus=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onformchange@ attribute.
+--
+-- Example:
+--
+-- > div ! onformchange "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onformchange="bar">Hello.</div>
+--
+onformchange :: AttributeValue -> Attribute
+onformchange = attribute "onformchange" " onformchange=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onforminput@ attribute.
+--
+-- Example:
+--
+-- > div ! onforminput "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onforminput="bar">Hello.</div>
+--
+onforminput :: AttributeValue -> Attribute
+onforminput = attribute "onforminput" " onforminput=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onhaschange@ attribute.
+--
+-- Example:
+--
+-- > div ! onhaschange "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onhaschange="bar">Hello.</div>
+--
+onhaschange :: AttributeValue -> Attribute
+onhaschange = attribute "onhaschange" " onhaschange=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @oninput@ attribute.
+--
+-- Example:
+--
+-- > div ! oninput "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div oninput="bar">Hello.</div>
+--
+oninput :: AttributeValue -> Attribute
+oninput = attribute "oninput" " oninput=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @oninvalid@ attribute.
+--
+-- Example:
+--
+-- > div ! oninvalid "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div oninvalid="bar">Hello.</div>
+--
+oninvalid :: AttributeValue -> Attribute
+oninvalid = attribute "oninvalid" " oninvalid=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onkeydown@ attribute.
+--
+-- Example:
+--
+-- > div ! onkeydown "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onkeydown="bar">Hello.</div>
+--
+onkeydown :: AttributeValue -> Attribute
+onkeydown = attribute "onkeydown" " onkeydown=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onkeypress@ attribute.
+--
+-- Example:
+--
+-- > div ! onkeypress "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onkeypress="bar">Hello.</div>
+--
+onkeypress :: AttributeValue -> Attribute
+onkeypress = attribute "onkeypress" " onkeypress=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onkeyup@ attribute.
+--
+-- Example:
+--
+-- > div ! onkeyup "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onkeyup="bar">Hello.</div>
+--
+onkeyup :: AttributeValue -> Attribute
+onkeyup = attribute "onkeyup" " onkeyup=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onload@ attribute.
+--
+-- Example:
+--
+-- > div ! onload "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onload="bar">Hello.</div>
+--
+onload :: AttributeValue -> Attribute
+onload = attribute "onload" " onload=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onloadeddata@ attribute.
+--
+-- Example:
+--
+-- > div ! onloadeddata "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onloadeddata="bar">Hello.</div>
+--
+onloadeddata :: AttributeValue -> Attribute
+onloadeddata = attribute "onloadeddata" " onloadeddata=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onloadedmetadata@ attribute.
+--
+-- Example:
+--
+-- > div ! onloadedmetadata "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onloadedmetadata="bar">Hello.</div>
+--
+onloadedmetadata :: AttributeValue -> Attribute
+onloadedmetadata = attribute "onloadedmetadata" " onloadedmetadata=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onloadstart@ attribute.
+--
+-- Example:
+--
+-- > div ! onloadstart "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onloadstart="bar">Hello.</div>
+--
+onloadstart :: AttributeValue -> Attribute
+onloadstart = attribute "onloadstart" " onloadstart=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onmessage@ attribute.
+--
+-- Example:
+--
+-- > div ! onmessage "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onmessage="bar">Hello.</div>
+--
+onmessage :: AttributeValue -> Attribute
+onmessage = attribute "onmessage" " onmessage=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onmousedown@ attribute.
+--
+-- Example:
+--
+-- > div ! onmousedown "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onmousedown="bar">Hello.</div>
+--
+onmousedown :: AttributeValue -> Attribute
+onmousedown = attribute "onmousedown" " onmousedown=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onmousemove@ attribute.
+--
+-- Example:
+--
+-- > div ! onmousemove "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onmousemove="bar">Hello.</div>
+--
+onmousemove :: AttributeValue -> Attribute
+onmousemove = attribute "onmousemove" " onmousemove=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onmouseout@ attribute.
+--
+-- Example:
+--
+-- > div ! onmouseout "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onmouseout="bar">Hello.</div>
+--
+onmouseout :: AttributeValue -> Attribute
+onmouseout = attribute "onmouseout" " onmouseout=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onmouseover@ attribute.
+--
+-- Example:
+--
+-- > div ! onmouseover "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onmouseover="bar">Hello.</div>
+--
+onmouseover :: AttributeValue -> Attribute
+onmouseover = attribute "onmouseover" " onmouseover=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onmouseup@ attribute.
+--
+-- Example:
+--
+-- > div ! onmouseup "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onmouseup="bar">Hello.</div>
+--
+onmouseup :: AttributeValue -> Attribute
+onmouseup = attribute "onmouseup" " onmouseup=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onmousewheel@ attribute.
+--
+-- Example:
+--
+-- > div ! onmousewheel "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onmousewheel="bar">Hello.</div>
+--
+onmousewheel :: AttributeValue -> Attribute
+onmousewheel = attribute "onmousewheel" " onmousewheel=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @ononline@ attribute.
+--
+-- Example:
+--
+-- > div ! ononline "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div ononline="bar">Hello.</div>
+--
+ononline :: AttributeValue -> Attribute
+ononline = attribute "ononline" " ononline=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onpagehide@ attribute.
+--
+-- Example:
+--
+-- > div ! onpagehide "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onpagehide="bar">Hello.</div>
+--
+onpagehide :: AttributeValue -> Attribute
+onpagehide = attribute "onpagehide" " onpagehide=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onpageshow@ attribute.
+--
+-- Example:
+--
+-- > div ! onpageshow "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onpageshow="bar">Hello.</div>
+--
+onpageshow :: AttributeValue -> Attribute
+onpageshow = attribute "onpageshow" " onpageshow=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onpause@ attribute.
+--
+-- Example:
+--
+-- > div ! onpause "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onpause="bar">Hello.</div>
+--
+onpause :: AttributeValue -> Attribute
+onpause = attribute "onpause" " onpause=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onplay@ attribute.
+--
+-- Example:
+--
+-- > div ! onplay "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onplay="bar">Hello.</div>
+--
+onplay :: AttributeValue -> Attribute
+onplay = attribute "onplay" " onplay=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onplaying@ attribute.
+--
+-- Example:
+--
+-- > div ! onplaying "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onplaying="bar">Hello.</div>
+--
+onplaying :: AttributeValue -> Attribute
+onplaying = attribute "onplaying" " onplaying=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onprogress@ attribute.
+--
+-- Example:
+--
+-- > div ! onprogress "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onprogress="bar">Hello.</div>
+--
+onprogress :: AttributeValue -> Attribute
+onprogress = attribute "onprogress" " onprogress=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onpropstate@ attribute.
+--
+-- Example:
+--
+-- > div ! onpropstate "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onpropstate="bar">Hello.</div>
+--
+onpropstate :: AttributeValue -> Attribute
+onpropstate = attribute "onpropstate" " onpropstate=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onratechange@ attribute.
+--
+-- Example:
+--
+-- > div ! onratechange "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onratechange="bar">Hello.</div>
+--
+onratechange :: AttributeValue -> Attribute
+onratechange = attribute "onratechange" " onratechange=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onreadystatechange@ attribute.
+--
+-- Example:
+--
+-- > div ! onreadystatechange "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onreadystatechange="bar">Hello.</div>
+--
+onreadystatechange :: AttributeValue -> Attribute
+onreadystatechange = attribute "onreadystatechange" " onreadystatechange=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onredo@ attribute.
+--
+-- Example:
+--
+-- > div ! onredo "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onredo="bar">Hello.</div>
+--
+onredo :: AttributeValue -> Attribute
+onredo = attribute "onredo" " onredo=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onresize@ attribute.
+--
+-- Example:
+--
+-- > div ! onresize "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onresize="bar">Hello.</div>
+--
+onresize :: AttributeValue -> Attribute
+onresize = attribute "onresize" " onresize=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onscroll@ attribute.
+--
+-- Example:
+--
+-- > div ! onscroll "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onscroll="bar">Hello.</div>
+--
+onscroll :: AttributeValue -> Attribute
+onscroll = attribute "onscroll" " onscroll=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onseeked@ attribute.
+--
+-- Example:
+--
+-- > div ! onseeked "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onseeked="bar">Hello.</div>
+--
+onseeked :: AttributeValue -> Attribute
+onseeked = attribute "onseeked" " onseeked=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onseeking@ attribute.
+--
+-- Example:
+--
+-- > div ! onseeking "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onseeking="bar">Hello.</div>
+--
+onseeking :: AttributeValue -> Attribute
+onseeking = attribute "onseeking" " onseeking=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onselect@ attribute.
+--
+-- Example:
+--
+-- > div ! onselect "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onselect="bar">Hello.</div>
+--
+onselect :: AttributeValue -> Attribute
+onselect = attribute "onselect" " onselect=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onstalled@ attribute.
+--
+-- Example:
+--
+-- > div ! onstalled "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onstalled="bar">Hello.</div>
+--
+onstalled :: AttributeValue -> Attribute
+onstalled = attribute "onstalled" " onstalled=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onstorage@ attribute.
+--
+-- Example:
+--
+-- > div ! onstorage "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onstorage="bar">Hello.</div>
+--
+onstorage :: AttributeValue -> Attribute
+onstorage = attribute "onstorage" " onstorage=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onsubmit@ attribute.
+--
+-- Example:
+--
+-- > div ! onsubmit "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onsubmit="bar">Hello.</div>
+--
+onsubmit :: AttributeValue -> Attribute
+onsubmit = attribute "onsubmit" " onsubmit=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onsuspend@ attribute.
+--
+-- Example:
+--
+-- > div ! onsuspend "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onsuspend="bar">Hello.</div>
+--
+onsuspend :: AttributeValue -> Attribute
+onsuspend = attribute "onsuspend" " onsuspend=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @ontimeupdate@ attribute.
+--
+-- Example:
+--
+-- > div ! ontimeupdate "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div ontimeupdate="bar">Hello.</div>
+--
+ontimeupdate :: AttributeValue -> Attribute
+ontimeupdate = attribute "ontimeupdate" " ontimeupdate=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onundo@ attribute.
+--
+-- Example:
+--
+-- > div ! onundo "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onundo="bar">Hello.</div>
+--
+onundo :: AttributeValue -> Attribute
+onundo = attribute "onundo" " onundo=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onunload@ attribute.
+--
+-- Example:
+--
+-- > div ! onunload "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onunload="bar">Hello.</div>
+--
+onunload :: AttributeValue -> Attribute
+onunload = attribute "onunload" " onunload=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onvolumechange@ attribute.
+--
+-- Example:
+--
+-- > div ! onvolumechange "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onvolumechange="bar">Hello.</div>
+--
+onvolumechange :: AttributeValue -> Attribute
+onvolumechange = attribute "onvolumechange" " onvolumechange=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @onwaiting@ attribute.
+--
+-- Example:
+--
+-- > div ! onwaiting "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div onwaiting="bar">Hello.</div>
+--
+onwaiting :: AttributeValue -> Attribute
+onwaiting = attribute "onwaiting" " onwaiting=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @open@ attribute.
+--
+-- Example:
+--
+-- > div ! open "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div open="bar">Hello.</div>
+--
+open :: AttributeValue -> Attribute
+open = attribute "open" " open=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @optimum@ attribute.
+--
+-- Example:
+--
+-- > div ! optimum "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div optimum="bar">Hello.</div>
+--
+optimum :: AttributeValue -> Attribute
+optimum = attribute "optimum" " optimum=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @pattern@ attribute.
+--
+-- Example:
+--
+-- > div ! pattern "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div pattern="bar">Hello.</div>
+--
+pattern_ :: AttributeValue -> Attribute
+pattern_ = attribute "pattern" " pattern=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @ping@ attribute.
+--
+-- Example:
+--
+-- > div ! ping "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div ping="bar">Hello.</div>
+--
+ping :: AttributeValue -> Attribute
+ping = attribute "ping" " ping=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @placeholder@ attribute.
+--
+-- Example:
+--
+-- > div ! placeholder "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div placeholder="bar">Hello.</div>
+--
+placeholder :: AttributeValue -> Attribute
+placeholder = attribute "placeholder" " placeholder=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @poster@ attribute.
+--
+-- Example:
+--
+-- > div ! poster "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div poster="bar">Hello.</div>
+--
+poster :: AttributeValue -> Attribute
+poster = attribute "poster" " poster=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @preload@ attribute.
+--
+-- Example:
+--
+-- > div ! preload "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div preload="bar">Hello.</div>
+--
+preload :: AttributeValue -> Attribute
+preload = attribute "preload" " preload=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @property@ attribute.
+--
+-- Example:
+--
+-- > div ! property "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div property="bar">Hello.</div>
+--
+property :: AttributeValue -> Attribute
+property = attribute "property" " property=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @pubdate@ attribute.
+--
+-- Example:
+--
+-- > div ! pubdate "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div pubdate="bar">Hello.</div>
+--
+pubdate :: AttributeValue -> Attribute
+pubdate = attribute "pubdate" " pubdate=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @radiogroup@ attribute.
+--
+-- Example:
+--
+-- > div ! radiogroup "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div radiogroup="bar">Hello.</div>
+--
+radiogroup :: AttributeValue -> Attribute
+radiogroup = attribute "radiogroup" " radiogroup=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @readonly@ attribute.
+--
+-- Example:
+--
+-- > div ! readonly "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div readonly="bar">Hello.</div>
+--
+readonly :: AttributeValue -> Attribute
+readonly = attribute "readonly" " readonly=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @rel@ attribute.
+--
+-- Example:
+--
+-- > div ! rel "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div rel="bar">Hello.</div>
+--
+rel :: AttributeValue -> Attribute
+rel = attribute "rel" " rel=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @required@ attribute.
+--
+-- Example:
+--
+-- > div ! required "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div required="bar">Hello.</div>
+--
+required :: AttributeValue -> Attribute
+required = attribute "required" " required=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @reversed@ attribute.
+--
+-- Example:
+--
+-- > div ! reversed "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div reversed="bar">Hello.</div>
+--
+reversed :: AttributeValue -> Attribute
+reversed = attribute "reversed" " reversed=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @role@ attribute.
+--
+-- Example:
+--
+-- > div ! role "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div role="bar">Hello.</div>
+--
+role :: AttributeValue -> Attribute
+role = attribute "role" " role=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @rows@ attribute.
+--
+-- Example:
+--
+-- > div ! rows "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div rows="bar">Hello.</div>
+--
+rows :: AttributeValue -> Attribute
+rows = attribute "rows" " rows=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @rowspan@ attribute.
+--
+-- Example:
+--
+-- > div ! rowspan "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div rowspan="bar">Hello.</div>
+--
+rowspan :: AttributeValue -> Attribute
+rowspan = attribute "rowspan" " rowspan=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @sandbox@ attribute.
+--
+-- Example:
+--
+-- > div ! sandbox "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div sandbox="bar">Hello.</div>
+--
+sandbox :: AttributeValue -> Attribute
+sandbox = attribute "sandbox" " sandbox=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @scope@ attribute.
+--
+-- Example:
+--
+-- > div ! scope "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div scope="bar">Hello.</div>
+--
+scope :: AttributeValue -> Attribute
+scope = attribute "scope" " scope=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @scoped@ attribute.
+--
+-- Example:
+--
+-- > div ! scoped "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div scoped="bar">Hello.</div>
+--
+scoped :: AttributeValue -> Attribute
+scoped = attribute "scoped" " scoped=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @seamless@ attribute.
+--
+-- Example:
+--
+-- > div ! seamless "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div seamless="bar">Hello.</div>
+--
+seamless :: AttributeValue -> Attribute
+seamless = attribute "seamless" " seamless=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @selected@ attribute.
+--
+-- Example:
+--
+-- > div ! selected "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div selected="bar">Hello.</div>
+--
+selected :: AttributeValue -> Attribute
+selected = attribute "selected" " selected=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @shape@ attribute.
+--
+-- Example:
+--
+-- > div ! shape "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div shape="bar">Hello.</div>
+--
+shape :: AttributeValue -> Attribute
+shape = attribute "shape" " shape=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @size@ attribute.
+--
+-- Example:
+--
+-- > div ! size "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div size="bar">Hello.</div>
+--
+size :: AttributeValue -> Attribute
+size = attribute "size" " size=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @sizes@ attribute.
+--
+-- Example:
+--
+-- > div ! sizes "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div sizes="bar">Hello.</div>
+--
+sizes :: AttributeValue -> Attribute
+sizes = attribute "sizes" " sizes=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @span@ attribute.
+--
+-- Example:
+--
+-- > div ! span "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div span="bar">Hello.</div>
+--
+span :: AttributeValue -> Attribute
+span = attribute "span" " span=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @spellcheck@ attribute.
+--
+-- Example:
+--
+-- > div ! spellcheck "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div spellcheck="bar">Hello.</div>
+--
+spellcheck :: AttributeValue -> Attribute
+spellcheck = attribute "spellcheck" " spellcheck=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @src@ attribute.
+--
+-- Example:
+--
+-- > div ! src "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div src="bar">Hello.</div>
+--
+src :: AttributeValue -> Attribute
+src = attribute "src" " src=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @srcdoc@ attribute.
+--
+-- Example:
+--
+-- > div ! srcdoc "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div srcdoc="bar">Hello.</div>
+--
+srcdoc :: AttributeValue -> Attribute
+srcdoc = attribute "srcdoc" " srcdoc=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @start@ attribute.
+--
+-- Example:
+--
+-- > div ! start "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div start="bar">Hello.</div>
+--
+start :: AttributeValue -> Attribute
+start = attribute "start" " start=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @step@ attribute.
+--
+-- Example:
+--
+-- > div ! step "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div step="bar">Hello.</div>
+--
+step :: AttributeValue -> Attribute
+step = attribute "step" " step=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @style@ attribute.
+--
+-- Example:
+--
+-- > div ! style "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div style="bar">Hello.</div>
+--
+style :: AttributeValue -> Attribute
+style = attribute "style" " style=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @subject@ attribute.
+--
+-- Example:
+--
+-- > div ! subject "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div subject="bar">Hello.</div>
+--
+subject :: AttributeValue -> Attribute
+subject = attribute "subject" " subject=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @summary@ attribute.
+--
+-- Example:
+--
+-- > div ! summary "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div summary="bar">Hello.</div>
+--
+summary :: AttributeValue -> Attribute
+summary = attribute "summary" " summary=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @tabindex@ attribute.
+--
+-- Example:
+--
+-- > div ! tabindex "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div tabindex="bar">Hello.</div>
+--
+tabindex :: AttributeValue -> Attribute
+tabindex = attribute "tabindex" " tabindex=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @target@ attribute.
+--
+-- Example:
+--
+-- > div ! target "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div target="bar">Hello.</div>
+--
+target :: AttributeValue -> Attribute
+target = attribute "target" " target=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @title@ attribute.
+--
+-- Example:
+--
+-- > div ! title "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div title="bar">Hello.</div>
+--
+title :: AttributeValue -> Attribute
+title = attribute "title" " title=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @type@ attribute.
+--
+-- Example:
+--
+-- > div ! type_ "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div type="bar">Hello.</div>
+--
+type_ :: AttributeValue -> Attribute
+type_ = attribute "type" " type=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @usemap@ attribute.
+--
+-- Example:
+--
+-- > div ! usemap "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div usemap="bar">Hello.</div>
+--
+usemap :: AttributeValue -> Attribute
+usemap = attribute "usemap" " usemap=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @value@ attribute.
+--
+-- Example:
+--
+-- > div ! value "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div value="bar">Hello.</div>
+--
+value :: AttributeValue -> Attribute
+value = attribute "value" " value=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @width@ attribute.
+--
+-- Example:
+--
+-- > div ! width "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div width="bar">Hello.</div>
+--
+width :: AttributeValue -> Attribute
+width = attribute "width" " width=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @wrap@ attribute.
+--
+-- Example:
+--
+-- > div ! wrap "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div wrap="bar">Hello.</div>
+--
+wrap :: AttributeValue -> Attribute
+wrap = attribute "wrap" " wrap=\""
+
+-- src/Util/GenerateHtmlCombinators.hs:250
+--
+-- | Combinator for the @xmlns@ attribute.
+--
+-- Example:
+--
+-- > div ! xmlns "bar" $ "Hello."
+--
+-- Result:
+--
+-- > <div xmlns="bar">Hello.</div>
+--
+xmlns :: AttributeValue -> Attribute
+xmlns = attribute "xmlns" " xmlns=\""

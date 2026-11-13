@@ -1,0 +1,142 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The core of "Blaze.ByteString.Builder": what a 'Builder' is, and the few
+-- operations the rest of the package is written with.
+--
+-- A 'Builder' is a difference list of strict chunks. Moggi's 'ByteString' is
+-- strict, so a builder is run once into a single value and the write-buffer
+-- machinery of the Haskell library has nowhere to go.
+module Blaze.ByteString.Builder.Internal
+  ( Builder (..)
+  , Write (..)
+  , runBuilder
+  , toByteString
+  , toLazyByteString
+  , toLazyByteStringWith
+  , toByteStringIO
+  , toByteStringIOWith
+  , fromByteString
+  , fromCharUtf8
+  , fromStringUtf8
+  , writeByteString
+  , writeUtf8Char
+  , writeChar8
+  , bound
+  , payload
+  , fromWrite
+  , fromWriteSingleton
+  , fromWriteList
+  , flush
+  ) where
+
+import Data.Bool
+import Data.ByteString (ByteString, append, concat, length, null, pack, unpack)
+import Data.Char (Char, ord)
+import Data.Int (Int)
+import Data.List ((:), foldr, map)
+import Data.Monoid (Monoid (..))
+import Data.Num
+import Data.Real (Integral (div, mod))
+import Data.Semigroup ((<>))
+import Data.String (String)
+import Data.String qualified as S
+import Data.String.Encoding (encodeUtf8)
+import Data.Word (Word8)
+import Moggi.Internal.Prim (word8FromInt#)
+import System.IO (IO)
+
+-- | A sequence of bytes under construction, as a function that prepends its
+-- chunks to the chunks already collected.
+newtype Builder = Builder ([ByteString] -> [ByteString])
+
+-- | The chunks a builder contributes, in front of the given ones.
+runBuilder :: Builder -> [ByteString] -> [ByteString]
+runBuilder (Builder f) = f
+
+instance Semigroup Builder where
+  (<>) x y = Builder (\rest -> runBuilder x (runBuilder y rest))
+
+instance Monoid Builder where
+  mempty = Builder (\rest -> rest)
+  mconcat xs = foldr (<>) mempty xs
+
+-- | Append the chunk, unless it is empty.
+pushChunk :: ByteString -> [ByteString] -> [ByteString]
+pushChunk bs rest = case null bs of
+  True -> rest
+  False -> bs : rest
+
+-- | Denote the same bytes as a strict 'ByteString'.
+fromByteString :: ByteString -> Builder
+fromByteString bs = Builder (\rest -> pushChunk bs rest)
+
+-- | Collect the bytes a builder denotes.
+toByteString :: Builder -> ByteString
+toByteString b = concat (runBuilder b [])
+
+-- | Collect the bytes a builder denotes. Moggi's 'ByteString' is strict, so
+-- this is 'toByteString'.
+toLazyByteString :: Builder -> ByteString
+toLazyByteString b = toByteString b
+
+-- | Run a builder, then the bytes it is handed to. The two buffer-size
+-- arguments size the Haskell buffers, which do not exist here.
+toLazyByteStringWith :: Int -> Int -> Int -> Builder -> ByteString -> ByteString
+toLazyByteStringWith _ _ _ builder k = append (toByteString builder) k
+
+-- | Hand the whole result to the action, once.
+toByteStringIO :: (ByteString -> IO ()) -> Builder -> IO ()
+toByteStringIO io builder = io (toByteString builder)
+
+-- | 'toByteStringIO' with a buffer size, which does not exist here.
+toByteStringIOWith :: Int -> (ByteString -> IO ()) -> Builder -> IO ()
+toByteStringIOWith _ io builder = io (toByteString builder)
+
+-- | The UTF-8 bytes of a character.
+fromCharUtf8 :: Char -> Builder
+fromCharUtf8 c = fromByteString (encodeUtf8 (S.singleton c))
+
+-- | The UTF-8 bytes of a string.
+fromStringUtf8 :: String -> Builder
+fromStringUtf8 s = fromByteString (encodeUtf8 s)
+
+-- | A 'Write' is a chunk together with the number of bytes it can need.
+data Write = Write Int ByteString
+
+-- | The bound: how many bytes this write can produce.
+bound :: Write -> Int
+bound (Write n _) = n
+
+-- | The bytes this write produces.
+payload :: Write -> ByteString
+payload (Write _ bs) = bs
+
+-- | Write a strict 'ByteString'.
+writeByteString :: ByteString -> Write
+writeByteString bs = Write (length bs) bs
+
+-- | Write a UTF-8 encoded character.
+writeUtf8Char :: Char -> Write
+writeUtf8Char c = writeByteString (encodeUtf8 (S.singleton c))
+
+-- | Write the lower eight bits of a character.
+writeChar8 :: Char -> Write
+writeChar8 c = Write 1 (pack [byte (ord c)])
+
+byte :: Int -> Word8
+byte n = word8FromInt# (mod n 256)
+
+-- | Turn a write into a builder.
+fromWrite :: Write -> Builder
+fromWrite w = fromByteString (payload w)
+
+-- | A write specialised to one value.
+fromWriteSingleton :: (a -> Write) -> (a -> Builder)
+fromWriteSingleton f a = fromWrite (f a)
+
+-- | A write for every value of a list.
+fromWriteList :: (a -> Write) -> [a] -> Builder
+fromWriteList f xs = mconcat (map (\x -> fromWrite (f x)) xs)
+
+-- | Flush the buffer. A builder here has no buffer, so this is 'mempty'.
+flush :: Builder
+flush = mempty

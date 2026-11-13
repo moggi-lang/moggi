@@ -1,0 +1,44 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Builders and writes for strict bytestrings. A byte string here is strict,
+-- so the lazy variants of the Haskell library are spelled with the same type.
+module Blaze.ByteString.Builder.ByteString
+  ( writeByteString
+  , fromByteString
+  , fromByteStringWith
+  , copyByteString
+  , insertByteString
+  , fromLazyByteString
+  , fromLazyByteStringWith
+  , copyLazyByteString
+  , insertLazyByteString
+  ) where
+
+import Blaze.ByteString.Builder.Internal (Builder, fromByteString, writeByteString)
+import Data.ByteString (ByteString)
+import Data.Int (Int)
+
+-- | Copy a strict 'ByteString' when it is at most this many bytes, and insert
+-- it directly otherwise. Nothing here is shared, so both branches concatenate.
+fromByteStringWith :: Int -> ByteString -> Builder
+fromByteStringWith _ bs = fromByteString bs
+
+-- | Copy the bytes into the output.
+copyByteString :: ByteString -> Builder
+copyByteString bs = fromByteString bs
+
+-- | Insert the bytes directly as one chunk.
+insertByteString :: ByteString -> Builder
+insertByteString bs = fromByteString bs
+
+-- | The strict 'ByteString' in moggi plays both roles.
+fromLazyByteString :: ByteString -> Builder
+fromLazyByteString bs = fromByteString bs
+
+fromLazyByteStringWith :: Int -> ByteString -> Builder
+fromLazyByteStringWith _ bs = fromByteString bs
+
+copyLazyByteString :: ByteString -> Builder
+copyLazyByteString bs = fromByteString bs
+
+insertLazyByteString :: ByteString -> Builder
+insertLazyByteString bs = fromByteString bs

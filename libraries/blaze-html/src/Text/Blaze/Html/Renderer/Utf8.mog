@@ -1,0 +1,24 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Render HTML as UTF-8 bytes.
+module Text.Blaze.Html.Renderer.Utf8
+  ( renderHtmlBuilder
+  , renderHtml
+  , renderHtmlToByteStringIO
+  ) where
+
+import Blaze.ByteString.Builder (Builder)
+import Data.ByteString (ByteString)
+import System.IO (IO)
+import Text.Blaze.Html (Html)
+import Text.Blaze.Renderer.Utf8 qualified as R
+
+renderHtmlBuilder :: Html -> Builder
+renderHtmlBuilder h = R.renderMarkupBuilder h
+
+renderHtml :: Html -> ByteString
+renderHtml h = R.renderMarkup h
+
+-- | Render HTML, handing the output to an action. Nothing is buffered here, so
+-- the action is called once.
+renderHtmlToByteStringIO :: (ByteString -> IO ()) -> Html -> IO ()
+renderHtmlToByteStringIO io h = R.renderMarkupToByteStringIO io h

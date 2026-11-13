@@ -1,0 +1,53 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Builders and writes for the lower eight bits of characters, the encoding
+-- @Data.ByteString.Char8@ uses.
+module Blaze.ByteString.Builder.Char8
+  ( writeChar
+  , fromChar
+  , fromString
+  , fromShow
+  , fromText
+  , fromLazyText
+  ) where
+
+import Blaze.ByteString.Builder.Internal
+  ( Builder
+  , Write
+  , fromByteString
+  , writeChar8
+  )
+import Data.Char (Char, ord)
+import Data.ByteString (pack)
+import Data.Int (Int)
+import Data.List ((:), map)
+import Data.Real (Integral (div, mod))
+import Data.String (String)
+import Data.String qualified as S
+import Data.Word (Word8)
+import Moggi.Internal.Prim (word8FromInt#)
+import Text.Show (Show, show)
+
+byte :: Char -> Word8
+byte c = word8FromInt# (mod (ord c) 256)
+
+-- | Write the lower eight bits of a character.
+writeChar :: Char -> Write
+writeChar = writeChar8
+
+-- | Serialize the lower eight bits of a character.
+fromChar :: Char -> Builder
+fromChar c = fromByteString (pack (byte c : []))
+
+-- | Serialize the lower eight bits of every character of a string.
+fromString :: String -> Builder
+fromString s = fromByteString (pack (map byte (S.unpack s)))
+
+-- | Serialize a value by showing it and taking the lower eight bits.
+fromShow :: Show a => a -> Builder
+fromShow a = fromString (show a)
+
+fromText :: String -> Builder
+fromText = fromString
+
+fromLazyText :: String -> Builder
+fromLazyText = fromString

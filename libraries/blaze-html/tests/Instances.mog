@@ -1,0 +1,111 @@
+-- The instance surface of the two conversion classes.
+--
+-- Upstream gives @ToMarkup@ and @ToValue@ an instance per scalar type the
+-- library supports, plus one for a non-empty string and, for @ToMarkup@, one
+-- for a list of markup. A missing instance is invisible until a user writes
+-- @toHtml (42 :: Int)@, so every one of them is exercised here through the real
+-- renderer: the markup instances through 'Text.Blaze.Renderer.String' and the
+-- value instances through an attribute of a rendered element.
+
+module Instances (instanceSuite) where
+
+import Data.Bool (Bool (..))
+import Data.Char (Char)
+import Data.Double (Double)
+import Data.Int (Int, Int32, Int64)
+import Data.Integer (Integer)
+import Data.List ((:))
+import Data.List.NonEmpty (NonEmpty ((:|)))
+import Data.String (String)
+import Data.Word (Word, Word32, Word64)
+import Support (expect)
+import Text.Blaze
+  ( AttributeValue
+  , ToMarkup (..)
+  , ToValue (..)
+  , (!)
+  , dataAttribute
+  , stringValue
+  )
+import Text.Blaze.Html5 qualified as H
+import Text.Blaze.Renderer.String qualified as R
+
+-- One value of each scalar type the classes have an instance for. Naming the
+-- type at the top level is what selects the instance; a bare literal would
+-- leave the choice to defaulting.
+anInt :: Int
+anInt = 42
+
+anInt32 :: Int32
+anInt32 = 42
+
+anInt64 :: Int64
+anInt64 = 42
+
+anInteger :: Integer
+anInteger = 42
+
+aChar :: Char
+aChar = '<'
+
+aBool :: Bool
+aBool = True
+
+aDouble :: Double
+aDouble = 1.5
+
+aWord :: Word
+aWord = 255
+
+aWord32 :: Word32
+aWord32 = 255
+
+aWord64 :: Word64
+aWord64 = 255
+
+aNonEmpty :: NonEmpty Char
+aNonEmpty = 'a' :| ['b', 'c']
+
+aNonEmptyEscaped :: NonEmpty Char
+aNonEmptyEscaped = '<' :| ['b']
+
+-- Render an attribute value on a real element, so the value goes through the
+-- renderer's escaping rather than being inspected as a structure.
+renderedValue :: AttributeValue -> String
+renderedValue v = R.renderMarkup (H.div ! dataAttribute "k" v $ H.string "t")
+
+instanceSuite :: IO ()
+instanceSuite = do
+  -- ToMarkup: the payload types.
+  expect "ToMarkup Markup keeps the tree" (R.renderMarkup (toMarkup (H.string "a<b"))) "a&lt;b"
+  expect "ToMarkup [Markup] concatenates" (R.renderMarkup (toMarkup [H.string "a", H.string "b"])) "ab"
+  expect "ToMarkup String escapes" (R.renderMarkup (toMarkup ("a<b" :: String))) "a&lt;b"
+  expect "ToMarkup String honours preEscapedToMarkup" (R.renderMarkup (preEscapedToMarkup ("a<b" :: String))) "a<b"
+  expect "ToMarkup Int" (R.renderMarkup (toMarkup anInt)) "42"
+  expect "ToMarkup Int32" (R.renderMarkup (toMarkup anInt32)) "42"
+  expect "ToMarkup Int64" (R.renderMarkup (toMarkup anInt64)) "42"
+  expect "ToMarkup Integer" (R.renderMarkup (toMarkup anInteger)) "42"
+  expect "ToMarkup Char escapes" (R.renderMarkup (toMarkup aChar)) "&lt;"
+  expect "ToMarkup Bool" (R.renderMarkup (toMarkup aBool)) "True"
+  expect "ToMarkup Double" (R.renderMarkup (toMarkup aDouble)) "1.5"
+  expect "ToMarkup Word" (R.renderMarkup (toMarkup aWord)) "255"
+  expect "ToMarkup Word32" (R.renderMarkup (toMarkup aWord32)) "255"
+  expect "ToMarkup Word64" (R.renderMarkup (toMarkup aWord64)) "255"
+  expect "ToMarkup (NonEmpty Char)" (R.renderMarkup (toMarkup aNonEmpty)) "abc"
+  expect "ToMarkup (NonEmpty Char) honours preEscapedToMarkup" (R.renderMarkup (preEscapedToMarkup aNonEmptyEscaped)) "<b"
+
+  -- ToValue: the same scalars as attribute values.
+  expect "ToValue AttributeValue is identity" (renderedValue (toValue (stringValue "x"))) "<div data-k=\"x\">t</div>"
+  expect "ToValue String escapes" (renderedValue (toValue ("a<b" :: String))) "<div data-k=\"a&lt;b\">t</div>"
+  expect "ToValue String honours preEscapedToValue" (renderedValue (preEscapedToValue ("a<b" :: String))) "<div data-k=\"a<b\">t</div>"
+  expect "ToValue Int" (renderedValue (toValue anInt)) "<div data-k=\"42\">t</div>"
+  expect "ToValue Int32" (renderedValue (toValue anInt32)) "<div data-k=\"42\">t</div>"
+  expect "ToValue Int64" (renderedValue (toValue anInt64)) "<div data-k=\"42\">t</div>"
+  expect "ToValue Integer" (renderedValue (toValue anInteger)) "<div data-k=\"42\">t</div>"
+  expect "ToValue Char escapes" (renderedValue (toValue aChar)) "<div data-k=\"&lt;\">t</div>"
+  expect "ToValue Bool" (renderedValue (toValue aBool)) "<div data-k=\"True\">t</div>"
+  expect "ToValue Double" (renderedValue (toValue aDouble)) "<div data-k=\"1.5\">t</div>"
+  expect "ToValue Word" (renderedValue (toValue aWord)) "<div data-k=\"255\">t</div>"
+  expect "ToValue Word32" (renderedValue (toValue aWord32)) "<div data-k=\"255\">t</div>"
+  expect "ToValue Word64" (renderedValue (toValue aWord64)) "<div data-k=\"255\">t</div>"
+  expect "ToValue (NonEmpty Char)" (renderedValue (toValue aNonEmpty)) "<div data-k=\"abc\">t</div>"

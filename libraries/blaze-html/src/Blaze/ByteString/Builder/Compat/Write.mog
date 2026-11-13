@@ -1,0 +1,24 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Conversions from the primitives of "Data.ByteString.Builder.Prim" to the
+-- 'Write' type, as upstream: a write is the encoded chunk together with the
+-- size the primitive declares.
+module Blaze.ByteString.Builder.Compat.Write
+  ( Write
+  , writePrimFixed
+  , writePrimBounded
+  ) where
+
+import Blaze.ByteString.Builder.Internal (Write (..), writeByteString)
+import Data.ByteString.Builder.Internal qualified as BI
+import Data.ByteString.Builder.Prim (primFixed)
+import Data.ByteString.Builder.Prim.Internal (BoundedPrim, FixedPrim, runB, sizeBound)
+
+-- | A 'Write' for one value of a fixed-size primitive, with the primitive's
+-- exact size as its bound: the encoder runs once, when the write is built.
+writePrimFixed :: FixedPrim a -> a -> Write
+writePrimFixed prim value = writeByteString (BI.toByteString (primFixed prim value))
+
+-- | A 'Write' for one value of a bounded primitive, bounded by the primitive's
+-- declared size.
+writePrimBounded :: BoundedPrim a -> a -> Write
+writePrimBounded prim value = Write (sizeBound prim) (BI.toByteString (runB prim value))

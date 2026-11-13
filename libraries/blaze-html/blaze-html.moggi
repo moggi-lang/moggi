@@ -1,0 +1,23 @@
+[package]
+name = blaze-html
+version = 0.9.2.0
+license = BSD-3-Clause
+license-file = LICENSE
+description = Blazingly fast HTML combinator library: blaze-builder, blaze-markup and blaze-html as one package
+
+[author]
+name = Sascha-Oliver Prolic
+email = saschaprolic@googlemail.com
+npub = npub1yywlmj053p4qp7z2qvqsrgcwz488mw0pr0t50xz3e5rx7s9uaelsjpdmfm
+
+[lib]
+source-dirs = src
+
+[test-suite]
+main = Suite
+source-dirs = tests
+
+[dependencies]
+base = >=0.2.0
+string = >=0.1.0
+bytestring = >=0.1.0

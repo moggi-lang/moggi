@@ -1,0 +1,19 @@
+-- The blaze-html package's test entry point.
+--
+-- Each module under `tests/` owns one concern and exports a single `…Suite ::
+-- IO ()`; this file only calls them in order. A case failing stops the run with
+-- `FAIL: …` and a non-zero exit, so a clean run is `exit 0` and the line
+-- `all blaze-html checks passed`.
+
+module Suite (main) where
+
+import Control.Monad ((>>))
+import Html (htmlSuite)
+import Instances (instanceSuite)
+import Internals (internalsSuite)
+import Numeric (builderSuite)
+import Pretty (prettySuite)
+import System.IO (IO, putStrLn)
+
+main :: IO ()
+main = htmlSuite >> prettySuite >> instanceSuite >> builderSuite >> internalsSuite >> putStrLn "all blaze-html checks passed"

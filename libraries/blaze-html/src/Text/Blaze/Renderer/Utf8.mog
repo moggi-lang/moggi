@@ -1,0 +1,121 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The recommended renderer: markup as UTF-8 bytes.
+module Text.Blaze.Renderer.Utf8
+  ( renderMarkupBuilder
+  , renderMarkup
+  , renderMarkupToByteStringIO
+  , renderHtmlBuilder
+  , renderHtml
+  , renderHtmlToByteStringIO
+  ) where
+
+import Blaze.ByteString.Builder (Builder, toByteString, toByteStringIO)
+import Blaze.ByteString.Builder.ByteString (copyByteString)
+import Blaze.ByteString.Builder.Char.Utf8 (fromChar, fromString)
+import Blaze.ByteString.Builder.Html.Utf8 (fromHtmlEscapedString)
+import Blaze.ByteString.Builder.Internal (fromByteString)
+import Data.Bool (Bool (..), (&&))
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as BS
+import Data.Char (Char)
+import Data.Eq
+import Data.Int (Int)
+import Data.Maybe (Maybe (..))
+import Data.Monoid (mempty)
+import Data.Semigroup ((<>))
+import Data.String (String)
+import Data.String qualified as S
+import Data.Word (Word8)
+import System.IO (IO)
+import Text.Blaze.Internal (ChoiceString (..), Markup, MarkupM (..), getUtf8ByteString)
+
+-- | Whether the bytes hold the sequence @</@ that would end a script or style
+-- element early.
+containsClose :: ByteString -> Bool
+containsClose bs = scanClose (BS.unpack bs)
+
+scanClose :: [Word8] -> Bool
+scanClose ws = case ws of
+  [] -> False
+  a : rest -> case rest of
+    b : more -> if a == 60 && b == 47 then True else scanClose rest
+    [] -> False
+
+-- | Whether the text holds the sequence @</@ that would end a script or style
+-- element early.
+containsCloseString :: String -> Bool
+containsCloseString s = scanChars (S.unpack s)
+
+scanChars :: [Char] -> Bool
+scanChars cs = case cs of
+  [] -> False
+  a : rest -> case rest of
+    b : more -> if a == '<' && b == '/' then True else scanChars rest
+    [] -> False
+
+-- | Render a 'ChoiceString'.
+fromChoiceString :: ChoiceString -> Builder
+fromChoiceString cs = case cs of
+  Static s -> copyByteString (getUtf8ByteString s)
+  String s -> fromHtmlEscapedString s
+  Text s -> fromHtmlEscapedString s
+  ByteString bs -> fromByteString bs
+  PreEscaped x -> case x of
+    String s -> fromString s
+    Text s -> fromString s
+    other -> fromChoiceString other
+  External x -> case x of
+    String s -> if containsCloseString s then mempty else fromString s
+    Text s -> if containsCloseString s then mempty else fromString s
+    ByteString bs -> if containsClose bs then mempty else fromByteString bs
+    other -> fromChoiceString other
+  AppendChoiceString x y -> fromChoiceString x <> fromChoiceString y
+  EmptyChoiceString -> mempty
+
+-- | Render markup, collecting any pending attributes.
+go :: Builder -> MarkupM a -> Builder
+go attrs m = case m of
+  Parent _ open close content ->
+    copyByteString (getUtf8ByteString open) <> attrs <> fromChar '>'
+      <> go mempty content <> copyByteString (getUtf8ByteString close)
+  CustomParent tag content ->
+    fromChar '<' <> fromChoiceString tag <> attrs <> fromChar '>'
+      <> go mempty content <> fromString "</" <> fromChoiceString tag <> fromChar '>'
+  Leaf _ begin end _ ->
+    copyByteString (getUtf8ByteString begin) <> attrs
+      <> copyByteString (getUtf8ByteString end)
+  CustomLeaf tag close _ ->
+    fromChar '<' <> fromChoiceString tag <> attrs
+      <> (if close then fromString " />" else fromChar '>')
+  AddAttribute _ key value h ->
+    go (copyByteString (getUtf8ByteString key) <> fromChoiceString value
+      <> fromChar '"' <> attrs) h
+  AddCustomAttribute key value h ->
+    go (fromChar ' ' <> fromChoiceString key <> fromString "=\"" <> fromChoiceString value
+      <> fromChar '"' <> attrs) h
+  Content content _ -> fromChoiceString content
+  Comment comment _ -> fromString "<!-- " <> fromChoiceString comment <> fromString " -->"
+  Append h1 h2 -> go attrs h1 <> go attrs h2
+  Empty _ -> mempty
+
+-- | Render markup to a 'Builder'.
+renderMarkupBuilder :: Markup -> Builder
+renderMarkupBuilder markup = go mempty markup
+
+renderHtmlBuilder :: Markup -> Builder
+renderHtmlBuilder = renderMarkupBuilder
+
+-- | Render markup to UTF-8 bytes.
+renderMarkup :: Markup -> ByteString
+renderMarkup markup = toByteString (renderMarkupBuilder markup)
+
+renderHtml :: Markup -> ByteString
+renderHtml = renderMarkup
+
+-- | Render markup, handing each piece of output to an action. Nothing is
+-- buffered here, so the action is called once.
+renderMarkupToByteStringIO :: (ByteString -> IO ()) -> Markup -> IO ()
+renderMarkupToByteStringIO io markup = toByteStringIO io (renderMarkupBuilder markup)
+
+renderHtmlToByteStringIO :: (ByteString -> IO ()) -> Markup -> IO ()
+renderHtmlToByteStringIO = renderMarkupToByteStringIO

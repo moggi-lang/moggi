@@ -1,0 +1,81 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The HTML flavour of the markup combinators: the same trees as "Text.Blaze",
+-- under the name a page is written with.
+module Text.Blaze.Html
+  ( Markup
+  , Tag
+  , Attribute
+  , AttributeValue
+
+  , dataAttribute
+  , customAttribute
+
+  , ToMarkup (..)
+  , text
+  , preEscapedText
+  , string
+  , preEscapedString
+  , unsafeByteString
+
+  , textComment
+  , stringComment
+  , unsafeByteStringComment
+
+  , textTag
+  , stringTag
+
+  , ToValue (..)
+  , textValue
+  , preEscapedTextValue
+  , stringValue
+  , preEscapedStringValue
+  , unsafeByteStringValue
+
+  , (!)
+  , (!?)
+  , contents
+
+  , Html
+  , toHtml
+  , preEscapedToHtml
+  ) where
+
+import Text.Blaze
+  ( Attribute
+  , AttributeValue
+  , Markup
+  , Tag
+  , ToMarkup (..)
+  , ToValue (..)
+  , contents
+  , customAttribute
+  , dataAttribute
+  , preEscapedString
+  , preEscapedStringValue
+  , preEscapedText
+  , preEscapedTextValue
+  , string
+  , stringComment
+  , stringTag
+  , stringValue
+  , text
+  , textComment
+  , textTag
+  , textValue
+  , unsafeByteString
+  , unsafeByteStringComment
+  , unsafeByteStringValue
+  , (!)
+  , (!?)
+  )
+
+-- | HTML is markup: the Haskell library names the same type at this level.
+type Html = Markup
+
+-- | Convert a value to HTML.
+toHtml :: ToMarkup a => a -> Html
+toHtml = toMarkup
+
+-- | Convert a value to HTML without escaping it.
+preEscapedToHtml :: ToMarkup a => a -> Html
+preEscapedToHtml = preEscapedToMarkup

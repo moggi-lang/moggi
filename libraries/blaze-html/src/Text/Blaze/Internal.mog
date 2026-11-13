@@ -1,0 +1,362 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The BlazeMarkup core: the types a markup tree is built from, and the
+-- functions that generate custom elements. Users normally reach markup through
+-- "Text.Blaze" and the element modules instead.
+--
+-- Two things differ from the Haskell library because moggi has fewer types than
+-- GHC has: @Text@ is 'String', so the text and string flavours of every
+-- function coincide, and a lazy @Text@ builder has no counterpart, so the
+-- builder flavours are gone.
+module Text.Blaze.Internal
+  ( ChoiceString (..)
+  , StaticString (..)
+  , getString
+  , getUtf8ByteString
+  , getText
+  , MarkupM (..)
+  , Markup
+  , Tag
+  , Attribute
+  , AttributeValue
+
+  , customParent
+  , customLeaf
+  , attribute
+  , dataAttribute
+  , customAttribute
+
+  , text
+  , preEscapedText
+  , string
+  , preEscapedString
+  , unsafeByteString
+
+  , textComment
+  , stringComment
+  , unsafeByteStringComment
+
+  , textTag
+  , stringTag
+
+  , textValue
+  , preEscapedTextValue
+  , stringValue
+  , preEscapedStringValue
+  , unsafeByteStringValue
+
+  , Attributable
+  , (!)
+  , (!?)
+
+  , contents
+  , external
+  , null
+  ) where
+
+import Data.Bool (Bool (..), (&&))
+import Data.ByteString (ByteString, append)
+import Data.ByteString qualified as BS
+import Data.Char (Char)
+import Data.Eq
+import Data.List ((:), foldr, map)
+import Data.Maybe (Maybe (..))
+import Data.Monoid (Monoid (..))
+import Data.Semigroup ((<>))
+import Data.String (IsString (..), String)
+import Data.String qualified as S
+import Data.String.Encoding (encodeUtf8)
+
+-- | A static string, precomputed for every backend: the function that appends
+-- it to a 'String', its UTF-8 bytes, and the text it is.
+data StaticString = StaticString (String -> String) ByteString String
+
+-- | The appending function of a static string.
+getString :: StaticString -> (String -> String)
+getString ss = case ss of
+  StaticString f _ _ -> f
+
+-- | The UTF-8 bytes of a static string.
+getUtf8ByteString :: StaticString -> ByteString
+getUtf8ByteString ss = case ss of
+  StaticString _ b _ -> b
+
+-- | The text of a static string.
+getText :: StaticString -> String
+getText ss = case ss of
+  StaticString _ _ t -> t
+
+instance IsString StaticString where
+  fromString s = StaticString (\k -> s <> k) (encodeUtf8 s) s
+
+instance Semigroup StaticString where
+  (<>) x y = StaticString
+    (\k -> getString x (getString y k))
+    (append (getUtf8ByteString x) (getUtf8ByteString y))
+    (getText x <> getText y)
+
+-- | A string that knows which of the string representations it came from, so a
+-- renderer can pick the cheapest way to write it.
+data ChoiceString
+  = Static StaticString
+  | String String
+  | Text String
+  | ByteString ByteString
+  | PreEscaped ChoiceString
+  | External ChoiceString
+  | AppendChoiceString ChoiceString ChoiceString
+  | EmptyChoiceString
+
+instance Semigroup ChoiceString where
+  (<>) x y = AppendChoiceString x y
+
+instance Monoid ChoiceString where
+  mempty = EmptyChoiceString
+  mconcat xs = foldr AppendChoiceString EmptyChoiceString xs
+
+instance IsString ChoiceString where
+  fromString s = String s
+
+-- | A markup tree: an element, or text, or one of the things a tree is made of.
+data MarkupM a
+  = Parent StaticString StaticString StaticString (MarkupM a)
+  | CustomParent ChoiceString (MarkupM a)
+  | Leaf StaticString StaticString StaticString a
+  | CustomLeaf ChoiceString Bool a
+  | Content ChoiceString a
+  | Comment ChoiceString a
+  | forall b. Append (MarkupM b) (MarkupM a)
+  | AddAttribute StaticString StaticString ChoiceString (MarkupM a)
+  | AddCustomAttribute ChoiceString ChoiceString (MarkupM a)
+  | Empty a
+
+-- | Markup that carries nothing.
+type Markup = MarkupM ()
+
+instance Monoid a => Semigroup (MarkupM a) where
+  (<>) x y = Append x y
+
+instance Monoid a => Monoid (MarkupM a) where
+  mempty = Empty mempty
+  mconcat xs = foldr Append (Empty mempty) xs
+
+instance Functor MarkupM where
+  map f x = Append x (Empty (f (markupValue x)))
+
+instance Applicative MarkupM where
+  pure x = Empty x
+  (<*>) x y = Append (Append x y) (Empty (markupValue x (markupValue y)))
+  (*>) x y = Append x y
+
+instance Monad MarkupM where
+  (>>) x y = Append x y
+  (>>=) m f = Append m (f (markupValue m))
+
+instance IsString (MarkupM ()) where
+  fromString x = Content (String x) ()
+
+-- | The value a node carries, for the node kinds that carry one.
+markupValue :: MarkupM a -> a
+markupValue m0 = case m0 of
+  Parent _ _ _ m1 -> markupValue m1
+  CustomParent _ m1 -> markupValue m1
+  Leaf _ _ _ x -> x
+  CustomLeaf _ _ x -> x
+  Content _ x -> x
+  Comment _ x -> x
+  Append _ m1 -> markupValue m1
+  AddAttribute _ _ _ m1 -> markupValue m1
+  AddCustomAttribute _ _ m1 -> markupValue m1
+  Empty x -> x
+
+-- | An element name.
+newtype Tag = Tag StaticString
+
+-- | The name an element was made from.
+unTag :: Tag -> StaticString
+unTag (Tag s) = s
+
+instance IsString Tag where
+  fromString s = Tag (fromString s)
+
+-- | An attribute waiting for the element it is applied to. As upstream's
+-- rank-2 field does, it works at whatever payload the element carries.
+newtype Attribute = Attribute (forall a. MarkupM a -> MarkupM a)
+
+instance Semigroup Attribute where
+  -- Attributes append to the markup they are applied to, so the left one has
+  -- to run first: `src "a" <> alt "b"` must render src before alt.
+  (<>) (Attribute f) (Attribute g) = Attribute (\m -> g (f m))
+
+instance Monoid Attribute where
+  mempty = Attribute (\m -> m)
+
+-- | The value part of an attribute.
+newtype AttributeValue = AttributeValue ChoiceString
+
+-- | The choice string behind an attribute value.
+unAttributeValue :: AttributeValue -> ChoiceString
+unAttributeValue (AttributeValue c) = c
+
+instance IsString AttributeValue where
+  fromString s = AttributeValue (String s)
+
+instance Semigroup AttributeValue where
+  (<>) (AttributeValue x) (AttributeValue y) = AttributeValue (AppendChoiceString x y)
+
+instance Monoid AttributeValue where
+  mempty = AttributeValue EmptyChoiceString
+  mconcat xs = AttributeValue (mconcat (map unAttributeValue xs))
+
+-- | An element that wraps content.
+customParent :: Tag -> Markup -> Markup
+customParent tag cont = CustomParent (Static (unTag tag)) cont
+
+-- | An element that stands alone.
+customLeaf :: Tag -> Bool -> Markup
+customLeaf tag close = CustomLeaf (Static (unTag tag)) close ()
+
+-- | An attribute, from its raw key, the key it shares with other attributes,
+-- and its value.
+attribute :: Tag -> Tag -> AttributeValue -> Attribute
+attribute rawKey key value = Attribute (\m ->
+  AddAttribute (unTag rawKey) (unTag key) (unAttributeValue value) m)
+
+-- | A @data-@ attribute.
+dataAttribute :: Tag -> AttributeValue -> Attribute
+dataAttribute tag value = Attribute (\m ->
+  AddCustomAttribute
+    (Static (fromString "data-") <> Static (unTag tag))
+    (unAttributeValue value)
+    m)
+
+-- | An attribute that is not in any specification.
+customAttribute :: Tag -> AttributeValue -> Attribute
+customAttribute tag value = Attribute (\m ->
+  AddCustomAttribute (Static (unTag tag)) (unAttributeValue value) m)
+
+-- | Text content, escaped by the renderer.
+text :: String -> Markup
+text s = contentOf (Text s)
+
+-- | Text content, not escaped.
+preEscapedText :: String -> Markup
+preEscapedText s = contentOf (PreEscaped (Text s))
+
+-- | A string, escaped by the renderer.
+string :: String -> Markup
+string s = contentOf (String s)
+
+-- | A string, not escaped.
+preEscapedString :: String -> Markup
+preEscapedString s = contentOf (PreEscaped (String s))
+
+-- | Bytes inserted as they are: not checked for encoding and not escaped.
+unsafeByteString :: ByteString -> Markup
+unsafeByteString bs = contentOf (ByteString bs)
+
+contentOf :: ChoiceString -> Markup
+contentOf cs = Content cs ()
+
+commentOf :: ChoiceString -> Markup
+commentOf cs = Comment cs ()
+
+-- | A comment whose text should not contain @--@. Not checked.
+textComment :: String -> Markup
+textComment s = commentOf (PreEscaped (Text s))
+
+-- | A comment from a string.
+stringComment :: String -> Markup
+stringComment s = commentOf (PreEscaped (String s))
+
+-- | A comment from bytes.
+unsafeByteStringComment :: ByteString -> Markup
+unsafeByteStringComment bs = commentOf (PreEscaped (ByteString bs))
+
+-- | An element name from text.
+textTag :: String -> Tag
+textTag t = Tag (StaticString (\k -> t <> k) (encodeUtf8 t) t)
+
+-- | An element name from a string.
+stringTag :: String -> Tag
+stringTag = fromString
+
+-- | An attribute value from text.
+textValue :: String -> AttributeValue
+textValue s = AttributeValue (Text s)
+
+preEscapedTextValue :: String -> AttributeValue
+preEscapedTextValue s = AttributeValue (PreEscaped (Text s))
+
+-- | An attribute value from a string.
+stringValue :: String -> AttributeValue
+stringValue s = AttributeValue (String s)
+
+preEscapedStringValue :: String -> AttributeValue
+preEscapedStringValue s = AttributeValue (PreEscaped (String s))
+
+-- | An attribute value from bytes.
+unsafeByteStringValue :: ByteString -> AttributeValue
+unsafeByteStringValue bs = AttributeValue (ByteString bs)
+
+-- | The values an attribute can be applied to: a markup tree, or an element
+-- that is waiting for its content.
+class Attributable h where
+  (!) :: h -> Attribute -> h
+
+instance Attributable (MarkupM a) where
+  (!) h (Attribute f) = f h
+
+instance Attributable (MarkupM a -> MarkupM b) where
+  (!) h (Attribute f) = \x -> f (h x)
+
+-- | Set an attribute when the condition holds.
+(!?) :: Attributable h => h -> (Bool, Attribute) -> h
+(!?) h cond = case cond of
+  (c, a) -> if c then (!) h a else h
+
+-- | Mark content as external data, as a @style@ or @script@ element holds.
+external :: MarkupM a -> MarkupM a
+external m = case m of
+  Content x a -> Content (External x) a
+  Append x y -> Append (external x) (external y)
+  Parent x y z i -> Parent x y z (external i)
+  CustomParent x i -> CustomParent x (external i)
+  AddAttribute x y z i -> AddAttribute x y z (external i)
+  AddCustomAttribute x y i -> AddCustomAttribute x y (external i)
+  other -> other
+
+-- | Keep only the text content of a tree.
+contents :: MarkupM a -> MarkupM a
+contents m = case m of
+  Parent _ _ _ c -> contents c
+  CustomParent _ c -> contents c
+  Content c x -> Content c x
+  Append c1 c2 -> Append (contents c1) (contents c2)
+  AddAttribute _ _ _ c -> contents c
+  AddCustomAttribute _ _ c -> contents c
+  other -> Empty (markupValue other)
+
+-- | Whether a tree renders to nothing.
+null :: MarkupM a -> Bool
+null markup = case markup of
+  Parent _ _ _ _ -> False
+  CustomParent _ _ -> False
+  Leaf _ _ _ _ -> False
+  CustomLeaf _ _ _ -> False
+  Content c _ -> emptyChoiceString c
+  Comment c _ -> emptyChoiceString c
+  Append c1 c2 -> null c1 && null c2
+  AddAttribute _ _ _ c -> null c
+  AddCustomAttribute _ _ c -> null c
+  Empty _ -> True
+
+emptyChoiceString :: ChoiceString -> Bool
+emptyChoiceString cs = case cs of
+  Static ss -> BS.null (getUtf8ByteString ss)
+  String s -> S.null s
+  Text t -> S.null t
+  ByteString bs -> BS.null bs
+  PreEscaped c -> emptyChoiceString c
+  External c -> emptyChoiceString c
+  AppendChoiceString c1 c2 -> emptyChoiceString c1 && emptyChoiceString c2
+  EmptyChoiceString -> True

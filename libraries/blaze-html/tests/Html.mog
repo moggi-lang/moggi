@@ -1,0 +1,100 @@
+-- The cases of the Haskell blaze-html test-suite (tests/Text/Blaze/Html/
+-- Tests.hs), each rendered through every renderer the library offers and
+-- compared with the same expected markup.
+--
+-- The Haskell suite asserts a lazy UTF-8 ByteString against three renderings of
+-- one tree: its String renderer re-encoded, its text renderer re-encoded, and
+-- its Utf8 renderer. Moggi's text type is 'String', so the text and string
+-- renderings coincide, but both are still exercised; the Utf8 renderer is
+-- compared as bytes, which is where the escapes and multi-byte characters
+-- actually differ.
+
+module Html (htmlSuite) where
+
+import Control.Applicative (pure)
+import Control.Monad ((>>))
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as BS
+import Data.Enum (fromEnum)
+import Data.Eq ((==))
+import Data.Int (Int)
+import Data.Integer (Integer)
+import Data.List ((:), map)
+import Data.Monoid (mconcat, mempty)
+import Data.Semigroup ((<>))
+import Data.String (String)
+import Data.String qualified as S
+import Data.String.Encoding (encodeUtf8)
+import Data.Word (Word8)
+import Support (assertTrue, expect)
+import Text.Blaze.Html5 hiding (map)
+import Text.Blaze.Html5 qualified as H
+import Text.Blaze.Html5.Attributes
+import Text.Blaze.Internal (customLeaf, customParent)
+import Text.Blaze.Renderer.String qualified as R
+import Text.Blaze.Renderer.Text qualified as T
+import Text.Blaze.Renderer.Utf8 qualified as U
+import Text.Show (show)
+
+ints :: [Word8] -> [Int]
+ints ws = case ws of
+  [] -> []
+  w : rest -> fromEnum w : ints rest
+
+byteInts :: ByteString -> [Int]
+byteInts bytes = ints (BS.unpack bytes)
+
+renderUsingString :: Html -> String
+renderUsingString = R.renderHtml
+
+renderUsingText :: Html -> String
+renderUsingText = T.renderHtml
+
+renderUsingUtf8 :: Html -> ByteString
+renderUsingUtf8 = U.renderHtml
+
+-- | One case, through the string, text and UTF-8 renderers.
+check :: String -> String -> Html -> IO ()
+check name expected markup =
+  expect (name <> " (String)") (renderUsingString markup) expected
+    >> expect (name <> " (Text)") (renderUsingText markup) expected
+    >> assertTrue (name <> " (Utf8)") (renderUsingUtf8 markup == encodeUtf8 expected)
+
+-- The one case whose markup is a nested tree rather than a single expression.
+customMarkup :: Html
+customMarkup = (p ! customAttribute (stringTag "dojoType") (stringValue "select")) "A paragraph"
+
+nestedMarkup :: Html
+nestedMarkup = (div ! id "foo") nestedContent
+
+nestedContent :: Html
+nestedContent = p "banana" <> H.span "banana"
+
+htmlSuite :: IO ()
+htmlSuite = do
+  check "case 1" "<div id=\"foo\"><p>banana</p><span>banana</span></div>" nestedMarkup
+  check "case 2" "<img src=\"foo.png\" alt=\"bar\">" (img ! src "foo.png" ! alt "bar")
+  check "case 3" "&quot;&amp;&quot;" "\"&\""
+  check "case 4" "&lt;img&gt;" (toHtml ("<img>" :: String))
+  check "case 5" "&quot;&#39;&quot;" "\"'\""
+  check "case 6" "<img src=\"&amp;\">" (img ! src "&")
+  check "case 7" "<u>hello</u>" (H.u "hello")
+  check "case 8" "<3 Haskell" (preEscapedToMarkup ("<3 Haskell" :: String))
+  check "case 9" "<script />" (preEscapedToMarkup ("<script />" :: String))
+  check "case 10" "<p class=\"'&!;\">bad</p>" ((p ! class_ (preEscapedToValue ("'&!;" :: String))) "bad")
+  check "case 11" "<span id=\"&amp;\">λ</span>" ((H.span ! id "&") "λ")
+  check "case 12" "∀x. x ∈ A" "∀x. x ∈ A"
+  check "case 13" "$6, €7.01, £75" "$6, €7.01, £75"
+  check "case 14" "<li>4</li><li>5</li><li>6</li>" (li (toHtml (4 :: Int)) <> li (toHtml (5 :: Int)) <> li (toHtml (6 :: Int)))
+  check "case 15" "<br><img><area>" (br <> img <> area)
+  check "case 16" "<p data-foo=\"bar\">A paragraph</p>" ((p ! dataAttribute "foo" "bar") "A paragraph")
+  check "case 17" "<p>Hello</p>" ((p ! mempty) "Hello")
+  check "case 18" "<img src=\"foo.png\" alt=\"foo\">" (img ! (src "foo.png" <> alt "foo"))
+  check "case 19" "12345678910" (mconcat (map toHtml ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10] :: [Int])))
+  check "case 20" "<img src=\"funny-picture-4.png\">" (img ! src (toValue "funny-picture-" <> toValue (4 :: Integer) <> toValue ".png"))
+  check "case 21" "abcdefghijklmnopqrstuvwxyz" (mconcat (map toHtml (S.unpack "abcdefghijklmnopqrstuvwxyz")))
+  check "case 22" "<p>A paragraph</p>" (customParent "p" "A paragraph")
+  check "case 23" "<img src=\"foo.png\">" (customLeaf "img" False ! src "foo.png")
+  check "case 24" "<img />" (customLeaf "img" True)
+  check "case 25" "<p dojoType=\"select\">A paragraph</p>" customMarkup
+  check "doctype" "<!DOCTYPE HTML>\n<html><p>x</p></html>" (docTypeHtml (p "x"))

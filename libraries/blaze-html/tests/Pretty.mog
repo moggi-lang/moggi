@@ -1,0 +1,29 @@
+-- The parts of the surface the ported Haskell suite does not reach: the
+-- document type that opens a page, and the indented renderer.
+
+module Pretty (prettySuite) where
+
+import Data.ByteString (ByteString)
+import Data.Eq ((==))
+import Data.Semigroup ((<>))
+import Data.String (String)
+import Data.String.Encoding (encodeUtf8)
+import Support (assertTrue, expect)
+import System.IO (IO)
+import Text.Blaze.Html5 qualified as H
+import Text.Blaze.Renderer.Pretty qualified as P
+import Text.Blaze.Renderer.String qualified as R
+import Text.Blaze.Renderer.Utf8 qualified as U
+import Text.Show (show)
+
+prettyNested :: String
+prettyNested = "<div>\n    <p>\n        a\n    </p>\n</div>\n"
+
+doctypeExpected :: String
+doctypeExpected = "<!DOCTYPE HTML>\n<html><p>x</p></html>"
+
+prettySuite :: IO ()
+prettySuite = do
+  expect "pretty nested" (P.renderHtml (H.div (H.p "a"))) prettyNested
+  expect "doctype (String)" (R.renderHtml (H.docTypeHtml (H.p "x"))) doctypeExpected
+  assertTrue "doctype (Utf8)" (U.renderHtml (H.docTypeHtml (H.p "x")) == encodeUtf8 doctypeExpected)

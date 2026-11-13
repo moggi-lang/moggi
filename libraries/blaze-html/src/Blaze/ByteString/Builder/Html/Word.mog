@@ -1,0 +1,79 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Builders and writes for HTML escaped bytes, taken as Latin-1 characters.
+--
+-- The escaping is upstream's, byte for byte: the five entities for @<@, @>@,
+-- @&@, @\"@ and @'@; bytes above @>@ pass through except @DEL@, which is
+-- dropped; bytes below space pass through only for tab, newline and carriage
+-- return, and are dropped otherwise. The bounded primitive's bound is the
+-- longest entity, @&quot;@.
+module Blaze.ByteString.Builder.Html.Word
+  ( wordHtmlEscaped
+  , writeHtmlEscapedWord
+  , fromHtmlEscapedWord
+  , fromHtmlEscapedWordList
+  , fromHtmlEscapedByteString
+  , fromHtmlEscapedLazyByteString
+  ) where
+
+import Blaze.ByteString.Builder.Char8 (fromString)
+import Blaze.ByteString.Builder.Compat.Write (Write, writePrimBounded)
+import Blaze.ByteString.Builder.Internal (Builder, fromByteString)
+import Data.Bool (Bool (..))
+import Data.ByteString (ByteString, pack)
+import Data.ByteString.Builder.Prim
+  ( BoundedPrim
+  , boundedPrim
+  , primBounded
+  , primMapByteStringBounded
+  , primMapListBounded
+  )
+import Data.Eq ((==))
+import Data.List ((:))
+import Data.Monoid (mempty)
+import Data.Ord ((>), (>=))
+import Data.Word (Word8)
+
+-- | One byte, unescaped.
+single :: Word8 -> Builder
+single w = fromByteString (pack (w : []))
+
+-- | The escaped form of a byte.
+escapeWord :: Word8 -> Builder
+escapeWord w =
+  if w > 62 then
+    if w == 127 then mempty else single w
+  else if w == 60 then fromString "&lt;"
+  else if w == 62 then fromString "&gt;"
+  else if w == 38 then fromString "&amp;"
+  else if w == 34 then fromString "&quot;"
+  else if w == 39 then fromString "&#39;"
+  else if w >= 32 then single w
+  else if w == 9 then single w
+  else if w == 10 then single w
+  else if w == 13 then single w
+  else mempty
+
+-- | The HTML escaping of one byte, bounded by the longest entity.
+wordHtmlEscaped :: BoundedPrim Word8
+wordHtmlEscaped = boundedPrim 6 escapeWord
+
+-- | Write an HTML escaped byte to a buffer.
+writeHtmlEscapedWord :: Word8 -> Write
+writeHtmlEscapedWord w = writePrimBounded wordHtmlEscaped w
+
+-- | Serialize an HTML escaped byte.
+fromHtmlEscapedWord :: Word8 -> Builder
+fromHtmlEscapedWord w = primBounded wordHtmlEscaped w
+
+-- | Serialize an HTML escaped list of bytes.
+fromHtmlEscapedWordList :: [Word8] -> Builder
+fromHtmlEscapedWordList ws = primMapListBounded wordHtmlEscaped ws
+
+-- | Serialize an HTML escaped 'ByteString'.
+fromHtmlEscapedByteString :: ByteString -> Builder
+fromHtmlEscapedByteString bs = primMapByteStringBounded wordHtmlEscaped bs
+
+-- | Serialize an HTML escaped byte string. The Haskell library's lazy
+-- bytestring is the strict one here.
+fromHtmlEscapedLazyByteString :: ByteString -> Builder
+fromHtmlEscapedLazyByteString = fromHtmlEscapedByteString

@@ -1,0 +1,1298 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The combinators for this flavour of HTML, generated from the same
+-- specification the Haskell library generates them from.
+module Text.Blaze.XHtml1.Strict
+  ( Markup
+  , Tag
+  , Attribute
+  , AttributeValue
+  , dataAttribute
+  , customAttribute
+  , ToMarkup (..)
+  , text
+  , preEscapedText
+  , string
+  , preEscapedString
+  , unsafeByteString
+  , textComment
+  , stringComment
+  , unsafeByteStringComment
+  , textTag
+  , stringTag
+  , ToValue (..)
+  , textValue
+  , preEscapedTextValue
+  , stringValue
+  , preEscapedStringValue
+  , unsafeByteStringValue
+  , (!)
+  , (!?)
+  , contents
+  , Html
+  , toHtml
+  , preEscapedToHtml
+  , docType
+  , docTypeHtml
+  , a
+  , abbr
+  , acronym
+  , address
+  , area
+  , b
+  , bdo
+  , big
+  , blockquote
+  , body
+  , br
+  , button
+  , caption
+  , cite
+  , code
+  , col
+  , colgroup
+  , dd
+  , del
+  , dfn
+  , div
+  , dl
+  , dt
+  , em
+  , fieldset
+  , form
+  , h1
+  , h2
+  , h3
+  , h4
+  , h5
+  , h6
+  , head
+  , hr
+  , html
+  , i
+  , img
+  , input
+  , ins
+  , kbd
+  , label
+  , legend
+  , li
+  , link
+  , map
+  , meta
+  , noscript
+  , object
+  , ol
+  , optgroup
+  , option
+  , p
+  , param
+  , pre
+  , q
+  , samp
+  , script
+  , select
+  , small
+  , span
+  , strong
+  , style
+  , sub
+  , sup
+  , table
+  , tbody
+  , td
+  , textarea
+  , tfoot
+  , th
+  , thead
+  , title
+  , tr
+  , tt
+  , ul
+  , var
+  ) where
+
+import Control.Monad ((>>))
+import Data.Bool (Bool (..))
+import Data.Monoid (mempty)
+import Data.Semigroup ((<>))
+import Text.Blaze.Html
+import Text.Blaze.Internal (MarkupM (..), attribute, external)
+
+-- src/Util/GenerateHtmlCombinators.hs:78
+--
+
+
+-- src/Util/GenerateHtmlCombinators.hs:157
+--
+-- | Combinator for the document type. This should be placed at the top
+-- of every HTML page.
+--
+-- Example:
+--
+-- > docType
+--
+-- Result:
+--
+-- > <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+-- >     "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+--
+docType :: Html
+docType = preEscapedText "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\"\n    \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
+
+-- src/Util/GenerateHtmlCombinators.hs:178
+--
+-- | Combinator for the @\<html>@ element. This combinator will also
+-- insert the correct doctype.
+--
+-- Example:
+--
+-- > docTypeHtml $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+-- >     "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+-- > <html><span>foo</span></html>
+--
+docTypeHtml :: Html -> Html
+docTypeHtml inner = docType >> html inner
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<a>@ element.
+--
+-- Example:
+--
+-- > a $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <a><span>foo</span></a>
+--
+a :: Html -> Html
+a = Parent "a" "<a" "</a>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<abbr>@ element.
+--
+-- Example:
+--
+-- > abbr $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <abbr><span>foo</span></abbr>
+--
+abbr :: Html -> Html
+abbr = Parent "abbr" "<abbr" "</abbr>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<acronym>@ element.
+--
+-- Example:
+--
+-- > acronym $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <acronym><span>foo</span></acronym>
+--
+acronym :: Html -> Html
+acronym = Parent "acronym" "<acronym" "</acronym>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<address>@ element.
+--
+-- Example:
+--
+-- > address $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <address><span>foo</span></address>
+--
+address :: Html -> Html
+address = Parent "address" "<address" "</address>"
+
+-- src/Util/GenerateHtmlCombinators.hs:227
+--
+-- | Combinator for the @\<area />@ element.
+--
+-- Example:
+--
+-- > area
+--
+-- Result:
+--
+-- > <area />
+--
+area :: Html
+area = Leaf "area" "<area" " />" ()
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<b>@ element.
+--
+-- Example:
+--
+-- > b $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <b><span>foo</span></b>
+--
+b :: Html -> Html
+b = Parent "b" "<b" "</b>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<bdo>@ element.
+--
+-- Example:
+--
+-- > bdo $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <bdo><span>foo</span></bdo>
+--
+bdo :: Html -> Html
+bdo = Parent "bdo" "<bdo" "</bdo>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<big>@ element.
+--
+-- Example:
+--
+-- > big $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <big><span>foo</span></big>
+--
+big :: Html -> Html
+big = Parent "big" "<big" "</big>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<blockquote>@ element.
+--
+-- Example:
+--
+-- > blockquote $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <blockquote><span>foo</span></blockquote>
+--
+blockquote :: Html -> Html
+blockquote = Parent "blockquote" "<blockquote" "</blockquote>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<body>@ element.
+--
+-- Example:
+--
+-- > body $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <body><span>foo</span></body>
+--
+body :: Html -> Html
+body = Parent "body" "<body" "</body>"
+
+-- src/Util/GenerateHtmlCombinators.hs:227
+--
+-- | Combinator for the @\<br />@ element.
+--
+-- Example:
+--
+-- > br
+--
+-- Result:
+--
+-- > <br />
+--
+br :: Html
+br = Leaf "br" "<br" " />" ()
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<button>@ element.
+--
+-- Example:
+--
+-- > button $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <button><span>foo</span></button>
+--
+button :: Html -> Html
+button = Parent "button" "<button" "</button>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<caption>@ element.
+--
+-- Example:
+--
+-- > caption $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <caption><span>foo</span></caption>
+--
+caption :: Html -> Html
+caption = Parent "caption" "<caption" "</caption>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<cite>@ element.
+--
+-- Example:
+--
+-- > cite $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <cite><span>foo</span></cite>
+--
+cite :: Html -> Html
+cite = Parent "cite" "<cite" "</cite>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<code>@ element.
+--
+-- Example:
+--
+-- > code $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <code><span>foo</span></code>
+--
+code :: Html -> Html
+code = Parent "code" "<code" "</code>"
+
+-- src/Util/GenerateHtmlCombinators.hs:227
+--
+-- | Combinator for the @\<col />@ element.
+--
+-- Example:
+--
+-- > col
+--
+-- Result:
+--
+-- > <col />
+--
+col :: Html
+col = Leaf "col" "<col" " />" ()
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<colgroup>@ element.
+--
+-- Example:
+--
+-- > colgroup $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <colgroup><span>foo</span></colgroup>
+--
+colgroup :: Html -> Html
+colgroup = Parent "colgroup" "<colgroup" "</colgroup>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<dd>@ element.
+--
+-- Example:
+--
+-- > dd $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <dd><span>foo</span></dd>
+--
+dd :: Html -> Html
+dd = Parent "dd" "<dd" "</dd>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<del>@ element.
+--
+-- Example:
+--
+-- > del $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <del><span>foo</span></del>
+--
+del :: Html -> Html
+del = Parent "del" "<del" "</del>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<dfn>@ element.
+--
+-- Example:
+--
+-- > dfn $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <dfn><span>foo</span></dfn>
+--
+dfn :: Html -> Html
+dfn = Parent "dfn" "<dfn" "</dfn>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<div>@ element.
+--
+-- Example:
+--
+-- > div $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <div><span>foo</span></div>
+--
+div :: Html -> Html
+div = Parent "div" "<div" "</div>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<dl>@ element.
+--
+-- Example:
+--
+-- > dl $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <dl><span>foo</span></dl>
+--
+dl :: Html -> Html
+dl = Parent "dl" "<dl" "</dl>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<dt>@ element.
+--
+-- Example:
+--
+-- > dt $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <dt><span>foo</span></dt>
+--
+dt :: Html -> Html
+dt = Parent "dt" "<dt" "</dt>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<em>@ element.
+--
+-- Example:
+--
+-- > em $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <em><span>foo</span></em>
+--
+em :: Html -> Html
+em = Parent "em" "<em" "</em>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<fieldset>@ element.
+--
+-- Example:
+--
+-- > fieldset $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <fieldset><span>foo</span></fieldset>
+--
+fieldset :: Html -> Html
+fieldset = Parent "fieldset" "<fieldset" "</fieldset>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<form>@ element.
+--
+-- Example:
+--
+-- > form $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <form><span>foo</span></form>
+--
+form :: Html -> Html
+form = Parent "form" "<form" "</form>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<h1>@ element.
+--
+-- Example:
+--
+-- > h1 $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <h1><span>foo</span></h1>
+--
+h1 :: Html -> Html
+h1 = Parent "h1" "<h1" "</h1>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<h2>@ element.
+--
+-- Example:
+--
+-- > h2 $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <h2><span>foo</span></h2>
+--
+h2 :: Html -> Html
+h2 = Parent "h2" "<h2" "</h2>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<h3>@ element.
+--
+-- Example:
+--
+-- > h3 $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <h3><span>foo</span></h3>
+--
+h3 :: Html -> Html
+h3 = Parent "h3" "<h3" "</h3>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<h4>@ element.
+--
+-- Example:
+--
+-- > h4 $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <h4><span>foo</span></h4>
+--
+h4 :: Html -> Html
+h4 = Parent "h4" "<h4" "</h4>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<h5>@ element.
+--
+-- Example:
+--
+-- > h5 $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <h5><span>foo</span></h5>
+--
+h5 :: Html -> Html
+h5 = Parent "h5" "<h5" "</h5>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<h6>@ element.
+--
+-- Example:
+--
+-- > h6 $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <h6><span>foo</span></h6>
+--
+h6 :: Html -> Html
+h6 = Parent "h6" "<h6" "</h6>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<head>@ element.
+--
+-- Example:
+--
+-- > head $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <head><span>foo</span></head>
+--
+head :: Html -> Html
+head = Parent "head" "<head" "</head>"
+
+-- src/Util/GenerateHtmlCombinators.hs:227
+--
+-- | Combinator for the @\<hr />@ element.
+--
+-- Example:
+--
+-- > hr
+--
+-- Result:
+--
+-- > <hr />
+--
+hr :: Html
+hr = Leaf "hr" "<hr" " />" ()
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<html>@ element.
+--
+-- Example:
+--
+-- > html $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <html><span>foo</span></html>
+--
+html :: Html -> Html
+html = Parent "html" "<html" "</html>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<i>@ element.
+--
+-- Example:
+--
+-- > i $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <i><span>foo</span></i>
+--
+i :: Html -> Html
+i = Parent "i" "<i" "</i>"
+
+-- src/Util/GenerateHtmlCombinators.hs:227
+--
+-- | Combinator for the @\<img />@ element.
+--
+-- Example:
+--
+-- > img
+--
+-- Result:
+--
+-- > <img />
+--
+img :: Html
+img = Leaf "img" "<img" " />" ()
+
+-- src/Util/GenerateHtmlCombinators.hs:227
+--
+-- | Combinator for the @\<input />@ element.
+--
+-- Example:
+--
+-- > input
+--
+-- Result:
+--
+-- > <input />
+--
+input :: Html
+input = Leaf "input" "<input" " />" ()
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<ins>@ element.
+--
+-- Example:
+--
+-- > ins $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <ins><span>foo</span></ins>
+--
+ins :: Html -> Html
+ins = Parent "ins" "<ins" "</ins>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<kbd>@ element.
+--
+-- Example:
+--
+-- > kbd $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <kbd><span>foo</span></kbd>
+--
+kbd :: Html -> Html
+kbd = Parent "kbd" "<kbd" "</kbd>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<label>@ element.
+--
+-- Example:
+--
+-- > label $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <label><span>foo</span></label>
+--
+label :: Html -> Html
+label = Parent "label" "<label" "</label>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<legend>@ element.
+--
+-- Example:
+--
+-- > legend $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <legend><span>foo</span></legend>
+--
+legend :: Html -> Html
+legend = Parent "legend" "<legend" "</legend>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<li>@ element.
+--
+-- Example:
+--
+-- > li $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <li><span>foo</span></li>
+--
+li :: Html -> Html
+li = Parent "li" "<li" "</li>"
+
+-- src/Util/GenerateHtmlCombinators.hs:227
+--
+-- | Combinator for the @\<link />@ element.
+--
+-- Example:
+--
+-- > link
+--
+-- Result:
+--
+-- > <link />
+--
+link :: Html
+link = Leaf "link" "<link" " />" ()
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<map>@ element.
+--
+-- Example:
+--
+-- > map $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <map><span>foo</span></map>
+--
+map :: Html -> Html
+map = Parent "map" "<map" "</map>"
+
+-- src/Util/GenerateHtmlCombinators.hs:227
+--
+-- | Combinator for the @\<meta />@ element.
+--
+-- Example:
+--
+-- > meta
+--
+-- Result:
+--
+-- > <meta />
+--
+meta :: Html
+meta = Leaf "meta" "<meta" " />" ()
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<noscript>@ element.
+--
+-- Example:
+--
+-- > noscript $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <noscript><span>foo</span></noscript>
+--
+noscript :: Html -> Html
+noscript = Parent "noscript" "<noscript" "</noscript>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<object>@ element.
+--
+-- Example:
+--
+-- > object $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <object><span>foo</span></object>
+--
+object :: Html -> Html
+object = Parent "object" "<object" "</object>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<ol>@ element.
+--
+-- Example:
+--
+-- > ol $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <ol><span>foo</span></ol>
+--
+ol :: Html -> Html
+ol = Parent "ol" "<ol" "</ol>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<optgroup>@ element.
+--
+-- Example:
+--
+-- > optgroup $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <optgroup><span>foo</span></optgroup>
+--
+optgroup :: Html -> Html
+optgroup = Parent "optgroup" "<optgroup" "</optgroup>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<option>@ element.
+--
+-- Example:
+--
+-- > option $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <option><span>foo</span></option>
+--
+option :: Html -> Html
+option = Parent "option" "<option" "</option>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<p>@ element.
+--
+-- Example:
+--
+-- > p $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <p><span>foo</span></p>
+--
+p :: Html -> Html
+p = Parent "p" "<p" "</p>"
+
+-- src/Util/GenerateHtmlCombinators.hs:227
+--
+-- | Combinator for the @\<param />@ element.
+--
+-- Example:
+--
+-- > param
+--
+-- Result:
+--
+-- > <param />
+--
+param :: Html
+param = Leaf "param" "<param" " />" ()
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<pre>@ element.
+--
+-- Example:
+--
+-- > pre $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <pre><span>foo</span></pre>
+--
+pre :: Html -> Html
+pre = Parent "pre" "<pre" "</pre>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<q>@ element.
+--
+-- Example:
+--
+-- > q $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <q><span>foo</span></q>
+--
+q :: Html -> Html
+q = Parent "q" "<q" "</q>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<samp>@ element.
+--
+-- Example:
+--
+-- > samp $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <samp><span>foo</span></samp>
+--
+samp :: Html -> Html
+samp = Parent "samp" "<samp" "</samp>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<script>@ element.
+--
+-- Example:
+--
+-- > script $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <script><span>foo</span></script>
+--
+script :: Html -> Html
+script = \inner -> external (Parent "script" "<script" "</script>" inner)
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<select>@ element.
+--
+-- Example:
+--
+-- > select $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <select><span>foo</span></select>
+--
+select :: Html -> Html
+select = Parent "select" "<select" "</select>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<small>@ element.
+--
+-- Example:
+--
+-- > small $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <small><span>foo</span></small>
+--
+small :: Html -> Html
+small = Parent "small" "<small" "</small>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<span>@ element.
+--
+-- Example:
+--
+-- > span $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <span><span>foo</span></span>
+--
+span :: Html -> Html
+span = Parent "span" "<span" "</span>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<strong>@ element.
+--
+-- Example:
+--
+-- > strong $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <strong><span>foo</span></strong>
+--
+strong :: Html -> Html
+strong = Parent "strong" "<strong" "</strong>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<style>@ element.
+--
+-- Example:
+--
+-- > style $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <style><span>foo</span></style>
+--
+style :: Html -> Html
+style = \inner -> external (Parent "style" "<style" "</style>" inner)
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<sub>@ element.
+--
+-- Example:
+--
+-- > sub $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <sub><span>foo</span></sub>
+--
+sub :: Html -> Html
+sub = Parent "sub" "<sub" "</sub>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<sup>@ element.
+--
+-- Example:
+--
+-- > sup $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <sup><span>foo</span></sup>
+--
+sup :: Html -> Html
+sup = Parent "sup" "<sup" "</sup>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<table>@ element.
+--
+-- Example:
+--
+-- > table $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <table><span>foo</span></table>
+--
+table :: Html -> Html
+table = Parent "table" "<table" "</table>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<tbody>@ element.
+--
+-- Example:
+--
+-- > tbody $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <tbody><span>foo</span></tbody>
+--
+tbody :: Html -> Html
+tbody = Parent "tbody" "<tbody" "</tbody>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<td>@ element.
+--
+-- Example:
+--
+-- > td $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <td><span>foo</span></td>
+--
+td :: Html -> Html
+td = Parent "td" "<td" "</td>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<textarea>@ element.
+--
+-- Example:
+--
+-- > textarea $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <textarea><span>foo</span></textarea>
+--
+textarea :: Html -> Html
+textarea = Parent "textarea" "<textarea" "</textarea>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<tfoot>@ element.
+--
+-- Example:
+--
+-- > tfoot $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <tfoot><span>foo</span></tfoot>
+--
+tfoot :: Html -> Html
+tfoot = Parent "tfoot" "<tfoot" "</tfoot>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<th>@ element.
+--
+-- Example:
+--
+-- > th $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <th><span>foo</span></th>
+--
+th :: Html -> Html
+th = Parent "th" "<th" "</th>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<thead>@ element.
+--
+-- Example:
+--
+-- > thead $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <thead><span>foo</span></thead>
+--
+thead :: Html -> Html
+thead = Parent "thead" "<thead" "</thead>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<title>@ element.
+--
+-- Example:
+--
+-- > title $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <title><span>foo</span></title>
+--
+title :: Html -> Html
+title = Parent "title" "<title" "</title>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<tr>@ element.
+--
+-- Example:
+--
+-- > tr $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <tr><span>foo</span></tr>
+--
+tr :: Html -> Html
+tr = Parent "tr" "<tr" "</tr>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<tt>@ element.
+--
+-- Example:
+--
+-- > tt $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <tt><span>foo</span></tt>
+--
+tt :: Html -> Html
+tt = Parent "tt" "<tt" "</tt>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<ul>@ element.
+--
+-- Example:
+--
+-- > ul $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <ul><span>foo</span></ul>
+--
+ul :: Html -> Html
+ul = Parent "ul" "<ul" "</ul>"
+
+-- src/Util/GenerateHtmlCombinators.hs:200
+--
+-- | Combinator for the @\<var>@ element.
+--
+-- Example:
+--
+-- > var $ span $ toHtml "foo"
+--
+-- Result:
+--
+-- > <var><span>foo</span></var>
+--
+var :: Html -> Html
+var = Parent "var" "<var" "</var>"
