@@ -1,6 +1,6 @@
 <p align="center"><img src="logo.svg" alt="Moggi" width="120" height="120"></p>
 
-# Moggi [Website](https://moggi-lang.org/)
+# Moggi
 
 [![.github/workflows/test.yml](https://github.com/moggi-lang/moggi/actions/workflows/test.yml/badge.svg)](https://github.com/moggi-lang/moggi/actions/workflows/test.yml)
 
@@ -10,6 +10,7 @@ data types, GADT's, pattern matching, type classes, explicit-effect IO — becom
 `.phar`, a `.jar` or a `.dll` or native executable.
 
 [Website](https://moggi-lang.org/)
+
 [YouTube Introduction](https://www.youtube.com/watch?v=hCKdsw2_0FI)
 
 ```moggi
