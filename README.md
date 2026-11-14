@@ -1,6 +1,6 @@
 <p align="center"><img src="logo.svg" alt="Moggi" width="120" height="120"></p>
 
-# Moggi
+# Moggi [Website](https://moggi-lang.org/)
 
 [![.github/workflows/test.yml](https://github.com/moggi-lang/moggi/actions/workflows/test.yml/badge.svg)](https://github.com/moggi-lang/moggi/actions/workflows/test.yml)
 
@@ -9,6 +9,7 @@ that compiles to **PHP**, **JVM** and **.NET**. One `.mog` source — algebraic
 data types, GADT's, pattern matching, type classes, explicit-effect IO — becomes a
 `.phar`, a `.jar` or a `.dll` or native executable.
 
+[Website](https://moggi-lang.org/)
 [YouTube Introduction](https://www.youtube.com/watch?v=hCKdsw2_0FI)
 
 ```moggi
