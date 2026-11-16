@@ -643,7 +643,13 @@ function solveDeferredCoercionsInExpr(TypeCheckState $state, Ast\AstNode $expr):
         }
 
         foreach ($pending as $constraint) {
-            if (! solveDeferredCoercion($state, $constraint)) {
+            if (! erasedConstraintSatisfied($state, $constraint)) {
+                return;
+            }
+
+            if (isCoercionClass($constraint->class)
+                && ! solveDeferredCoercion($state, $constraint)
+            ) {
                 return;
             }
         }
@@ -720,7 +726,26 @@ function coercionMessage(TypeCheckState $state, array $args): string
  */
 function constraintIsErased(Ast\PendingConstraint $constraint): bool
 {
-    return isCoercionClass($constraint->class);
+    return isCoercionClass($constraint->class)
+        || ($constraint->class === 'HasCallStack' && $constraint->args === []);
+}
+
+/**
+ * Whether an erased constraint is already discharged.
+ *
+ * Erasure says the constraint carries no dictionary, not that every erased
+ * obligation has the same proof rule. `Coercible` still has to be proved from
+ * the representations of its two types; a nullary marker such as
+ * `HasCallStack` is satisfied by the scope that admits it and has nothing left
+ * for the solver to check.
+ */
+function erasedConstraintSatisfied(TypeCheckState $state, Ast\PendingConstraint $constraint): bool
+{
+    if (isCoercionClass($constraint->class)) {
+        return coercionObligation($state, $constraint) === CoercionObligation::Satisfied;
+    }
+
+    return true;
 }
 
 /**

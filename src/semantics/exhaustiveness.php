@@ -2,6 +2,8 @@
 
 namespace Moggi\Semantics\Exhaustiveness;
 
+use function Moggi\Semantics\Types\normalizeType;
+
 use function Moggi\Semantics\Kernel\boolTypeName;
 
 use Moggi\Semantics\TypeExpr\TCon;
@@ -223,7 +225,7 @@ function checkDataCaseExhaustiveness(TypeCheckState $state, Ast\CaseExpr $expr, 
  */
 function caseExhaustivenessMode(TypeCheckState $state, Ast\CaseExpr $expr, Type $scrutineeType): array
 {
-    $scrutineeType = prune($state, $scrutineeType);
+    $scrutineeType = normalizeType($state, prune($state, $scrutineeType));
 
     foreach ($expr->alts as $alt) {
         if (patternCoversAll($alt->pattern)) {
@@ -409,6 +411,10 @@ function missingIntegerPatterns(array $literals): array
 function dataNameFromScrutinee(TypeCheckState $state, Type $scrutineeType): ?string
 {
     if (! $scrutineeType instanceof TCon) {
+        return null;
+    }
+
+    if (isset($state->associatedFamilies[$scrutineeType->name])) {
         return null;
     }
 

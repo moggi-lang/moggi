@@ -334,6 +334,17 @@ function instanceMethodSchemes(TypeCheckState $state, Ast\InstanceDecl $decl): a
 
 function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
 {
+    $kindScope = Kinds\pushKindScope($state);
+
+    try {
+        return checkInstanceWithinKindScope($state, $decl);
+    } finally {
+        Kinds\restoreKindScope($state, $kindScope);
+    }
+}
+
+function checkInstanceWithinKindScope(TypeCheckState $state, Ast\InstanceDecl $decl): array
+{
     $state->subst = [];
     $registration = instanceMethodSchemes($state, $decl);
     $headType = $registration['headType'];
@@ -1408,7 +1419,7 @@ function validateNoDuplicateInstance(TypeCheckState $state, Ast\InstanceDecl $de
 
 function instanceHeadIndexKeyFromAst(Ast\AstNode $headAst): string
 {
-    if ($headAst instanceof Ast\TypeCon) {
+    if ($headAst instanceof Ast\TypeCon || $headAst instanceof Ast\TypeQualified) {
         return $headAst->name;
     }
     if ($headAst instanceof Ast\TypeArrow) {
@@ -1424,7 +1435,7 @@ function instanceHeadIndexKeyFromAst(Ast\AstNode $headAst): string
         $flat = flattenInstanceHeadTypeApp($headAst);
         if ($flat !== null) {
             $con = $flat[0];
-            if ($con instanceof Ast\TypeCon) {
+            if ($con instanceof Ast\TypeCon || $con instanceof Ast\TypeQualified) {
                 return $con->name;
             }
             if ($con instanceof Ast\TypePromoted) {
@@ -1637,6 +1648,23 @@ function matchingProjectInstances(TypeCheckState $state, string $className, Type
  */
 function instanceHeadMatchModule(TypeCheckState $state, array $instance): ?string
 {
+    $head = $instance['instanceHead'] ?? null;
+    $con = $head;
+    while ($con instanceof Ast\TypeApp) {
+        $con = $con->con;
+    }
+    if ($con instanceof Ast\TypeQualified) {
+        $declaring = qualifiedTypeDeclaringModule($state, $con->module, $con->name);
+        if (\is_string($declaring) && $declaring !== '') {
+            return $declaring;
+        }
+
+        $namespace = $state->qualifiedModules[$con->module] ?? null;
+        if (\is_string($namespace) && $namespace !== '') {
+            return $namespace;
+        }
+    }
+
     $name = \Moggi\Semantics\Registry\instanceHeadSpelling($instance['instanceHead'] ?? null);
     if ($name === null || ! isset($state->ambiguousTypeNames[$name])) {
         return null;
@@ -2232,7 +2260,7 @@ function instanceContextSatisfied(TypeCheckState $state, array $instance, array 
         }
 
         if (constraintIsErased($constraint)) {
-            if (coercionObligation($state, $constraint) !== CoercionObligation::Satisfied) {
+            if (! erasedConstraintSatisfied($state, $constraint)) {
                 return false;
             }
 
@@ -2325,7 +2353,9 @@ function matchInstanceHeadVars(
     }
 
     if ($pattern instanceof Ast\TypeQualified) {
-        $module = $state->qualifiedModules[$pattern->module] ?? $pattern->module;
+        $module = qualifiedTypeDeclaringModule($state, $pattern->module, $pattern->name)
+            ?? $state->qualifiedModules[$pattern->module]
+            ?? $pattern->module;
         if ($target instanceof TCon) {
             return $target->name === $pattern->name
                 && ($target->module === null || $target->module === $module) ? [] : null;
@@ -3173,10 +3203,14 @@ function checkInstanceMethod(
 
     $savedConstraintMethods = $state->constraintMethods;
     $savedConstraintMethodAmbiguities = $state->constraintMethodAmbiguities;
+    $savedConstraintMethodCandidates = $state->constraintMethodCandidates;
     $state->constraintMethods = [];
     $state->constraintMethodAmbiguities = [];
 
-    if (! $state->stockDeriving) {
+    if ($state->stockDeriving) {
+        $state->constraintMethodCandidates = [];
+        installConstraintMethods($state, $constraints, $env);
+    } else {
         foreach ($constraints as $constraint) {
             $classInfo = $state->classes[$constraint->class];
             $mapping = [];
@@ -3305,6 +3339,7 @@ function checkInstanceMethod(
     assertPendingDictsConsistentInExpr($state, $fn->body);
     $state->constraintMethods = $savedConstraintMethods;
     $state->constraintMethodAmbiguities = $savedConstraintMethodAmbiguities;
+    $state->constraintMethodCandidates = $savedConstraintMethodCandidates;
     unify($state, $bodyType, $bodyExpected, $fn);
     defaultAmbiguousNumericVars($state, $fn->body, quantifiedVars($state, $peeledType), $fn);
     defaultAmbiguousStringVars($state, $fn->body, quantifiedVars($state, $peeledType), $fn);

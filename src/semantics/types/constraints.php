@@ -143,6 +143,22 @@ function parseConstraints(TypeCheckState $state, array $constraints, ?AstNode $a
             $constraint = openQuantifiedConstraint($state, $constraint, $at);
         }
 
+        if ($constraint instanceof Ast\TypeCon) {
+            $className = $constraint->name;
+            $classInfo = $state->classes[$className]
+                ?? throw typeFail($state, "unknown class `{$className}` in constraint", $at);
+            if (\count($classInfo['params']) !== 0) {
+                throw typeFail($state, "class `{$className}` applied to too few arguments", $at ?? $constraint);
+            }
+            $parsed[] = new Ast\PendingConstraint(
+                $className,
+                [],
+                evidenceParamName($className, $i),
+            );
+
+            continue;
+        }
+
         if (! $constraint instanceof Ast\TypeApp || ! $constraint->con instanceof Ast\TypeCon) {
             throw typeFail($state, 'constraint must be a class application', $at);
         }
@@ -1231,7 +1247,7 @@ function tryResolveEvidenceExprs(
     $exprs = [];
     foreach ($constraints as $constraint) {
         if (constraintIsErased($constraint)) {
-            if (coercionObligation($state, $constraint) !== CoercionObligation::Satisfied) {
+            if (! erasedConstraintSatisfied($state, $constraint)) {
                 return null;
             }
 
@@ -1290,8 +1306,13 @@ function ownerEvidenceIndexes(TypeCheckState $state, array $evidence, Ast\Eviden
  * The trailing run `$evidence` holds for the dictionary of `$class` at `$args`:
  * that constraint closed under its superclasses, which the projected method
  * reaches through the dictionary itself and so must not be handed again as an
- * argument. Every entry of the run has to name the same class and head — by
- * reference or by ambient parameter — or there is no run to recognise.
+ * argument. What identifies the run is its position and its sequence of classes:
+ * a scheme lists method-local constraints before the owning class, and expanding
+ * a constraint emits its superclasses before it, so the owning class's group is
+ * exactly the trailing run. The head each evidence entry names cannot decide
+ * this: a generic instance records the head it was declared at (`Typeable (f a)`)
+ * rather than the wanted one (`Typeable (Dual a)`), and is still the same
+ * dictionary the owner supplies.
  *
  * @param list<AstNode> $evidence
  * @param list<Type> $args
@@ -1317,11 +1338,6 @@ function ownerEvidenceRunIndexes(TypeCheckState $state, array $evidence, string 
     for ($i = 0; $i < $size; $i++) {
         $entry = evidenceEntryConstraint($state, $evidence[$start + $i]);
         if ($entry === null || $entry[0] !== $expected[$i]->class) {
-            return [];
-        }
-        if (instanceChainHeadKey($state, $entry[0], $entry[1])
-            !== instanceChainHeadKey($state, $expected[$i]->class, $expected[$i]->args)
-        ) {
             return [];
         }
     }
@@ -1967,7 +1983,7 @@ function constraintsResolvable(TypeCheckState $state, array $constraints): bool
 {
     foreach ($constraints as $constraint) {
         if (constraintIsErased($constraint)) {
-            if (coercionObligation($state, $constraint) !== CoercionObligation::Satisfied) {
+            if (! erasedConstraintSatisfied($state, $constraint)) {
                 return false;
             }
 

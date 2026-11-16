@@ -407,7 +407,9 @@ function gadtConstructorShape(
     }
 
     [$constraintAsts, $signatureAst] = splitTypeAst($signatureAst);
-    $context = $constraintAsts === [] ? [] : parseConstraints($state, $constraintAsts, $ctor);
+    $context = $constraintAsts === []
+        ? []
+        : expandConstraintsWithSuperclasses($state, parseConstraints($state, $constraintAsts, $ctor));
 
     $signature = astType($state, $ctor->signature);
     while ($signature instanceof TForall) {

@@ -137,11 +137,12 @@ function deriveGeneric1(
  * - `const`: the parameter does not occur in it, so it is a constant -- `Rec0`.
  * - `compose`: the parameter is the last argument of another type constructor (`Maybe a`, `[Rose
  *   a]`), which the representation composes -- `Rec1 Maybe :.: Par1`.
+ * - `rec1`: the field is a type parameter applied directly to the abstracted parameter (`f a`),
+ *   which `Rec1 f` represents without needing a `Functor f`.
  * - `bad`: the parameter is somewhere the representation cannot put it -- a non-final argument, or
- *   under a type *variable* (`f a`), where composing would need a `Functor f` the derived instance
- *   cannot name.
+ *   under a type variable in a shape `Rec1` cannot wrap (`f (Maybe a)`).
  *
- * @return array{tag: 'param'|'self'|'const'|'compose'|'bad', type?: Ast\TypeNode, head?: Ast\TypeNode, inner?: array{tag: string}, reason?: string}
+ * @return array{tag: 'param'|'self'|'rec1'|'const'|'compose'|'bad', type?: Ast\TypeNode, head?: Ast\TypeNode, inner?: array{tag: string}, reason?: string}
  */
 function rep1OfType(Ast\DataDecl $decl, string $param, Ast\TypeNode $type): array
 {
@@ -177,11 +178,15 @@ function rep1OfType(Ast\DataDecl $decl, string $param, Ast\TypeNode $type): arra
     }
 
     if ($type->con instanceof Ast\TypeVar) {
+        $last = $type->args[\count($type->args) - 1];
+        if (\count($type->args) === 1 && $last instanceof Ast\TypeVar && $last->name === $param) {
+            return ['tag' => 'rec1', 'type' => $type, 'head' => $type->con];
+        }
+
         return [
             'tag' => 'bad',
             'type' => $type,
-            'reason' => 'the parameter is under a type variable, which would need a Functor '
-                . 'the representation cannot name',
+            'reason' => 'the parameter is under a type variable in a shape Rec1 cannot wrap',
         ];
     }
 
@@ -326,6 +331,7 @@ function rep1TypeOf(Ast\DataDecl $decl, array $desc): Ast\TypeNode
     return match ($desc['tag']) {
         'param' => new Ast\TypeCon('Par1'),
         'self' => typeApp('Rec1', [functorialHeadAst($decl)]),
+        'rec1' => typeApp('Rec1', [$desc['head']]),
         'compose' => new Ast\TypeApp(new Ast\TypeCon(':.:'), [
             typeApp('Rec1', [$desc['head']]),
             rep1TypeOf($decl, $desc['inner']),
@@ -349,6 +355,7 @@ function rep1ValueOfField(Ast\DataDecl $decl, array $desc, Ast\AstNode $value): 
     return match ($desc['tag']) {
         'param' => applyCon('Par1', [$value]),
         'self' => applyCon('Rec1', [$value]),
+        'rec1' => applyCon('Rec1', [$value]),
         'compose' => applyCon('Comp1', [
             applyCon('Rec1', [applyVar('map', rep1Lambda($decl, $desc['inner'], false), $value)]),
         ]),
@@ -389,6 +396,7 @@ function rep1FromRep(Ast\DataDecl $decl, array $desc, Ast\AstNode $rep): Ast\Ast
     $wrapper = match ($desc['tag']) {
         'param' => 'Par1',
         'self' => 'Rec1',
+        'rec1' => 'Rec1',
         default => 'K1',
     };
 
@@ -538,6 +546,7 @@ function synthesizeTo1FieldsPat(array $descs, array $binders): Ast\AstNode
         $parts[] = match ($desc['tag']) {
             'param' => new Ast\PatCon('M1', [new Ast\PatCon('Par1', [$binder])]),
             'self' => new Ast\PatCon('M1', [new Ast\PatCon('Rec1', [$binder])]),
+            'rec1' => new Ast\PatCon('M1', [new Ast\PatCon('Rec1', [$binder])]),
             'compose' => new Ast\PatCon('M1', [
                 new Ast\PatCon('Comp1', [new Ast\PatCon('Rec1', [$binder])]),
             ]),
