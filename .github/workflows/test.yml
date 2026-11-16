@@ -36,21 +36,45 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      # PHP extensions.
-      - name: Cache PHP extensions
-        uses: shivammathur/cache-extensions@v1
-        with:
-          php-version: '8.5'
-          extensions: bcmath, mbstring, zip, phar, ctype, intl
-          key: php-8.5-${{ runner.os }}-${{ runner.arch }}-v1
-
+      # The concurrency runtime needs ZTS PHP and ext-parallel. ext-parallel is
+      # installed with PIE below, not through setup-php's deprecated PECL path.
       - name: Set up PHP
         uses: shivammathur/setup-php@2.40.0
         with:
           php-version: '8.5'
           extensions: bcmath, mbstring, zip, phar, ctype, intl
+          tools: pie
           ini-values: memory_limit=1G
           coverage: none
+        env:
+          phpts: zts
+          fail-fast: true
+
+      # macOS PHP comes from Homebrew and is writable by the runner user, so
+      # PIE can install build tools with brew when they are missing. Linux PHP is
+      # system-owned, so PIE runs as root and may use apt for the same tools.
+      - name: Install ext-parallel with PIE (Linux)
+        if: runner.os == 'Linux'
+        env:
+          COMPOSER_ALLOW_SUPERUSER: '1'
+        run: sudo env "PATH=$PATH" COMPOSER_ALLOW_SUPERUSER=1 "$(command -v pie)" install pecl/parallel --no-interaction --auto-install-build-tools
+
+      - name: Install ext-parallel with PIE (macOS)
+        if: runner.os == 'macOS'
+        env:
+          COMPOSER_ALLOW_SUPERUSER: '1'
+        run: pie install pecl/parallel --no-interaction --auto-install-build-tools
+
+      - name: Install ext-parallel with PIE (Windows)
+        if: runner.os == 'Windows'
+        env:
+          COMPOSER_ALLOW_SUPERUSER: '1'
+        run: pie install pecl/parallel --no-interaction
+
+      - name: Verify ZTS and ext-parallel
+        run: |
+          php -r 'printf("PHP ZTS: %s, parallel: %s\n", PHP_ZTS ? "yes" : "no", extension_loaded("parallel") ? "yes" : "no");'
+          php -r 'exit(PHP_ZTS && extension_loaded("parallel") ? 0 : 1);'
 
       # GraalVM and native-image (jvm only).
       - name: Cache GraalVM
