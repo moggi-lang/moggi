@@ -675,7 +675,7 @@ function resolveConcreteDictCallsInItems(array $items, Facts $facts): array
     $concreteTemps = [];
 
     foreach (denseStmtItems($items) as $item) {
-        if ($item instanceof IR\MatchStmt || $item instanceof IR\MatchReturn) {
+        if ($item instanceof IR\MatchStmt || $item instanceof IR\MatchReturn || $item instanceof IR\IoMatch) {
             $arms = [];
             foreach ($item->arms as $arm) {
                 $nested = resolveConcreteDictCallsInItems($arm->body->items, $facts);
@@ -684,9 +684,26 @@ function resolveConcreteDictCallsInItems(array $items, Facts $facts): array
                 }
                 $arms[] = new IR\MatchArm($arm->pattern, new IR\Block($nested['items']), $arm->guards);
             }
-            $out[] = $item instanceof IR\MatchStmt
-                ? new IR\MatchStmt($item->scrutinee, $arms, $item->dest, $item->exhaustive)
-                : new IR\MatchReturn($item->scrutinee, $arms, $item->exhaustive);
+            $out[] = match ($item::class) {
+                IR\MatchStmt::class => new IR\MatchStmt($item->scrutinee, $arms, $item->dest, $item->exhaustive),
+                IR\MatchReturn::class => new IR\MatchReturn($item->scrutinee, $arms, $item->exhaustive),
+                IR\IoMatch::class => new IR\IoMatch($item->scrutinee, $arms, $item->exhaustive),
+            };
+
+            continue;
+        }
+
+        if ($item instanceof IR\IoAssignAction) {
+            $nested = resolveConcreteDictCallsInItems($item->body->items, $facts);
+            if ($nested['changed']) {
+                $changed = true;
+            }
+            $out[] = new IR\IoAssignAction(
+                $item->dest,
+                new IR\Block($nested['items']),
+                $item->result,
+                $item->srcLoc,
+            );
 
             continue;
         }
@@ -1166,7 +1183,8 @@ function isConcreteSpecializeCall(IR\Call $call, array $concreteTemps, Facts $fa
 function isConcreteApplication(array $call, array $concreteTemps, Facts $facts, array $seen = []): bool
 {
     if ($call['args'] === []) {
-        if (operandIsNonDuplicable(new IR\FnRef($call['callee']), $facts)) {
+        if (! $facts->isEvidence($call['callee'])
+            && operandIsNonDuplicable(new IR\FnRef($call['callee']), $facts)) {
             return false;
         }
 
@@ -1451,7 +1469,7 @@ function countConcretePrefix(array $args, Facts $facts): int
 function isConcreteSpecializeArg(IR\Operand $arg, Facts $facts): bool
 {
     if ($arg instanceof IR\FnRef) {
-        if (operandIsNonDuplicable($arg, $facts)) {
+        if (! $facts->isEvidence($arg->name) && operandIsNonDuplicable($arg, $facts)) {
             return false;
         }
 

@@ -1179,6 +1179,14 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
     }
 
     if ($left instanceof TVar) {
+        if ($right instanceof TCon && isset($state->associatedFamilies[$right->name])) {
+            $reduced = reduceAssociatedFamily($state, $right);
+            if ($reduced !== null && typeToString($reduced) !== typeToString($right)) {
+                unify($state, $left, $reduced, $at);
+
+                return;
+            }
+        }
         if ($right instanceof TVar) {
             if ($left->name === $right->name) {
                 return;
@@ -1372,8 +1380,8 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
 
     if (! $left instanceof TCon || ! $right instanceof TCon) {
         if ($left instanceof TArrow && $right instanceof TArrow) {
-            unify($state, $left->from, $right->from, $at);
             unify($state, $left->to, $right->to, $at);
+            unify($state, $left->from, $right->from, $at);
 
             return;
         }

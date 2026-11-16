@@ -468,7 +468,7 @@ function inferEvidenceMethod(TypeCheckState $state, Ast\AstNode $expr): Type
  *
  * @return array{ambient: list<Ast\PendingConstraint>, byClass: array<string, list<Ast\PendingConstraint>>}
  */
-function installDictArgGiven(TypeCheckState $state, TCon $constraint, ?Ast\AstNode $at = null): array
+function installDictArgGiven(TypeCheckState $state, TCon $constraint, ?Ast\AstNode $at = null, ?string $evidence = null): array
 {
     $saved = [
         'ambient' => $state->ambientConstraints,
@@ -482,7 +482,7 @@ function installDictArgGiven(TypeCheckState $state, TCon $constraint, ?Ast\AstNo
         return $saved;
     }
 
-    $given = new Ast\PendingConstraint(dictArgClass($constraint), dictArgConstraintArgs($constraint), '');
+    $given = new Ast\PendingConstraint(dictArgClass($constraint), dictArgConstraintArgs($constraint), $evidence ?? '');
     $state->ambientConstraints[] = $given;
     $state->ambientConstraintsByClass[$given->class][] = $given;
 
@@ -544,10 +544,41 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
 
     if ($fnType instanceof TArrow && $fnType->from instanceof TCon && isDictArgConstraint($fnType->from)) {
         $constraint = $fnType->from;
-        $savedGivens = installDictArgGiven($state, $constraint, $expr);
+        $callee = $expr->function;
+        while ($callee instanceof Ast\Apply) {
+            $callee = $callee->function;
+        }
+        $wrapped = ! $expr->argument instanceof Ast\Lambda
+            && (($callee instanceof Ast\Variable && $callee->name === 'withTypeable')
+                || ($callee instanceof Ast\QualifiedRef && $callee->name === 'withTypeable'));
+        $dictName = '__dictArg_' . dictArgClass($constraint);
+        if ($wrapped) {
+            $original = $expr->argument;
+            $expr->argument = new Ast\Lambda(
+                [new Ast\LambdaParam(new Ast\PatVar($dictName), null)],
+                $original,
+                $original->line ?? 0,
+                $original->col ?? 0,
+                $original->endCol ?? 0,
+            );
+        }
+        $savedGivens = installDictArgGiven($state, $constraint, $expr, $wrapped ? $dictName : null);
         try {
-            $argType = prune($state, takeKnownOperandType($state, $expr->argument) ?? inferExpr($state, $expr->argument, $argEnv));
+            if ($wrapped) {
+                inferExpr(
+                    $state,
+                    $expr->argument,
+                    $argEnv,
+                    new TArrow($constraint, dictArgBody($constraint)),
+                );
+                $argType = prune($state, dictArgBody($constraint));
+            } else {
+                $argType = prune($state, takeKnownOperandType($state, $expr->argument) ?? inferExpr($state, $expr->argument, $argEnv));
+            }
             unify($state, dictArgBody($constraint), $argType, $expr);
+            if ($wrapped) {
+                $expr->argument = resolvePendingEvidenceInExpr($state, $expr->argument);
+            }
         } finally {
             restoreDictArgGiven($state, $savedGivens);
         }
@@ -565,9 +596,10 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
         checkConstrainedLambda($state, $expr->argument, $argEnv, $fnType->from);
         $argType = prune($state, $fnType->from);
     } else {
-        $argExpected = $expr->argument instanceof Ast\StringLit && $fnType instanceof TArrow
-            ? $fnType->from
-            : null;
+        $argExpected = $fnType instanceof TArrow
+            && ($expr->argument instanceof Ast\StringLit || $expr->argument instanceof Ast\Lambda)
+                ? $fnType->from
+                : null;
         $knownArgType = $expr->argument instanceof Ast\Variable
             ? null
             : takeKnownOperandType($state, $expr->argument);

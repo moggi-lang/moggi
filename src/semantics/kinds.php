@@ -874,6 +874,7 @@ function canonicalTypeConName(string $name): string
         'IO#' => 'IO',
         'IOArray#' => 'IOArray',
         'IORef#' => 'IORef',
+        'MVar#' => 'MVar',
         'Weak#' => 'Weak',
         'StableName#' => 'StableName',
         'ST#' => 'ST',
@@ -940,7 +941,7 @@ function declarationParameterKinds(TypeCheckState $state, Type $type, array $con
 
     $kindOf = static function (string $name) use ($settled, $state, $requirements): Kind {
         $required = $requirements['vars'][$name] ?? null;
-        if ($required instanceof KArrow) {
+        if ($required !== null) {
             return defaultUnresolvedKindVars($required);
         }
 

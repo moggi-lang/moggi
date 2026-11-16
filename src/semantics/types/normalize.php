@@ -11,6 +11,7 @@ use Moggi\Semantics\TypeExpr\TPromoted;
 use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
+use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 
@@ -560,6 +561,9 @@ function typeAstToInternalForNormalize(TypeCheckState $state, Ast\TypeNode $type
             $args = [];
             foreach ($type->args as $argAst) {
                 $args[] = typeAstToInternalForNormalize($state, $argAst, $expanding);
+            }
+            if ($type->con instanceof Ast\TypeVar) {
+                return new TVarApp($type->con->name, $args);
             }
             $prim = primitiveTypeRepresentation($headName);
             if ($prim !== null) {

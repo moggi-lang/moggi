@@ -8,6 +8,7 @@ use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
+use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
@@ -43,7 +44,11 @@ function installConstraintMethods(
         $classInfo = $state->classes[$constraint->class];
         $mapping = [];
         foreach ($classInfo['params'] as $i => $param) {
-            $mapping[$param['name']] = constructorMappingValue($state, $param, $constraint->args[$i]);
+            $mapping[$param['name']] = constructorMappingValue(
+                $state,
+                $param,
+                $constraint->args[$i] ?? new TUnit(),
+            );
         }
 
         foreach ($classInfo['methods'] as $methodName => $methodInfo) {
@@ -65,7 +70,7 @@ function installConstraintMethods(
                 'evidence' => $constraint->evidence,
                 'type' => $methodType,
                 'userConstraints' => $userConstraints,
-                'constraintHead' => prune($state, $constraint->args[0]),
+                'constraintHead' => prune($state, $constraint->args[0] ?? new TUnit()),
                 'constraintArgs' => $constraint->args,
                 'implicit' => $constraint->implicit,
                 'instanceHeadAst' => $constraint->instanceHeadAst,

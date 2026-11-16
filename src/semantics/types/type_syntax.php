@@ -295,6 +295,59 @@ function astTypeNatLit(TypeCheckState $state, Ast\TypeNatLit $type): TNatLit
     return new TNatLit(canonicalNatDigits($type->digits));
 }
 
+/**
+ * The declaration a bare type name denotes, or null when nothing declares it.
+ *
+ * Data types and type synonyms share one namespace, so two imports that bring
+ * both under one spelling make that spelling ambiguous. A declaration in the
+ * current module still shadows what an import put there, as it does for every
+ * other type name.
+ *
+ * @return 'synonym'|'data'|null
+ */
+function unqualifiedTypeDeclaration(
+    TypeCheckState $state,
+    string $name,
+    Ast\AstNode|Ast\TypeNode|null $at = null,
+): ?string {
+    $synonym = $state->typeSynonyms[$name] ?? null;
+    $data = $state->data[$name] ?? null;
+
+    if ($synonym === null) {
+        return $data === null ? null : 'data';
+    }
+    if ($data === null) {
+        return 'synonym';
+    }
+
+    $here = $state->currentModule ?? $state->module ?? null;
+    $synonymModule = $synonym['module'] ?? null;
+    $dataModule = $data['declaringModule'] ?? null;
+    if (! \is_string($dataModule) || $dataModule === '') {
+        $dataModule = ($data['result'] ?? null)?->module ?? null;
+    }
+
+    $synonymIsHere = \is_string($synonymModule) && $synonymModule !== '' && $synonymModule === $here;
+    $dataIsHere = \is_string($dataModule) && $dataModule !== '' && $dataModule === $here;
+
+    if ($synonymIsHere !== $dataIsHere) {
+        return $synonymIsHere ? 'synonym' : 'data';
+    }
+
+    if ($synonymIsHere) {
+        return 'synonym';
+    }
+
+    throw typeFail(
+        $state,
+        ambiguousImportMessage($name, ['origins' => [
+            \is_string($synonymModule) ? $synonymModule : '',
+            \is_string($dataModule) ? $dataModule : '',
+        ]]),
+        $at,
+    );
+}
+
 function resolveTypeCon(TypeCheckState $state, string $name, array $expanding, Ast\AstNode|Ast\TypeNode|null $at = null): Type
 {
     $prim = resolveMagicHashTypeIfInScope($state, $name, $expanding, $at);
@@ -308,7 +361,9 @@ function resolveTypeCon(TypeCheckState $state, string $name, array $expanding, A
         return new TCon($name);
     }
 
-    if (isset($state->typeSynonyms[$name])) {
+    $declaration = unqualifiedTypeDeclaration($state, $name, $at);
+
+    if ($declaration === 'synonym') {
         if (isset($expanding[$name])) {
             throw typeFail($state, "cyclic type synonym `{$name}`", $at);
         }
@@ -326,7 +381,7 @@ function resolveTypeCon(TypeCheckState $state, string $name, array $expanding, A
         return $syn['body'] ?? astType($state, $syn['rhs'], [...$expanding, $name => true]);
     }
 
-    if (isset($state->data[$name])) {
+    if ($declaration === 'data') {
         $info = $state->data[$name];
         $module = $info['declaringModule'] ?? null;
         if (! \is_string($module) || $module === '') {
@@ -515,7 +570,7 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
         return new TCon($baseName, $args);
     }
 
-    if (isset($state->typeSynonyms[$baseName])) {
+    if (unqualifiedTypeDeclaration($state, $baseName, $con) === 'synonym') {
         return expandSynonymApp($state, $baseName, $argAsts, $expanding, $con);
     }
 

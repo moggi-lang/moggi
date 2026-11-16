@@ -819,7 +819,11 @@ function refreshConstraintArgs(TypeCheckState $state, array $constraints): array
  */
 function inferMethodByArgument(TypeCheckState $state, Ast\Apply $expr, array $env): Type
 {
-    $name = $expr->function instanceof Ast\Variable ? $expr->function->name : null;
+    $name = match (true) {
+        $expr->function instanceof Ast\Variable => $expr->function->name,
+        $expr->function instanceof Ast\OperatorRef => $expr->function->name,
+        default => null,
+    };
     if ($name !== null && $name === $state->instanceSelfMethod && $state->instanceSelfScheme !== null) {
         $env[$name] = $state->instanceSelfScheme;
     }
