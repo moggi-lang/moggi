@@ -20,6 +20,7 @@ module Data.Ratio
   , approxRational
   ) where
 
+
 import Control.Applicative
 import Control.Monad
 import Data.Bool
@@ -31,6 +32,14 @@ import Data.Ord
 import Data.Real
 import Text.Read
 import Text.Show
+import Moggi.Internal.Type.Reflection (Typeable(..), kindFun, mkTyCon, mkTyConApp, trLiftedRep)
+
+-- | The unapplied @Ratio@ constructor, represented at @Type -> Type@. A
+-- @Typeable (Ratio a)@ obligation is then built from this and the argument's
+-- representation, the way @base@'s solver builds it, which is what the
+-- @Data (Ratio a)@ instance's 'Typeable' superclass needs.
+instance Typeable Ratio where
+  typeRepOf = mkTyConApp (mkTyCon "GHC.Real" "base" "Ratio") [] (kindFun trLiftedRep trLiftedRep)
 
 -- Ratios print as @n % d@, at the precedence the constructor's fixity gives
 -- them, so a compound ratio is parenthesised.

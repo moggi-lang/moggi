@@ -56,11 +56,9 @@ import Data.Eq
 import Data.Functor.Const (Const(Const), getConst)
 import Data.Function ((.))
 import Data.Functor.Identity (Identity(..))
-import Data.Functor.Product (Product(Pair))
-import Data.Functor.Sum (Sum(InL, InR))
 import Data.List ((!!), break, dropWhile, filter, findIndex, length)
 import Data.Maybe (Maybe(Nothing, Just), fromJust)
-import Data.Monoid (First(..), Last(..))
+import Data.Monoid (Alt, Ap)
 import Data.Num
 import Data.Ord
 import Data.Proxy (Proxy(..))
@@ -80,6 +78,8 @@ import Moggi.Internal.Base
 import Moggi.Internal.Prim
 import Text.Read (Read, reads)
 import Text.Show
+import Moggi.Internal.Type.Reflection (Typeable(..), kindFun, mkTyCon, mkTyConApp, trLiftedRep)
+import Moggi.Internal.Type.Reflection qualified as Reflect
 
 ------------------------------------------------------------------------------
 --
@@ -1051,6 +1051,45 @@ soloType = mkAlgDataType "GHC.Tuple.Solo" (\_ -> [soloConstr])
 soloConstr :: Constr
 soloConstr = mkConstrTag soloType "MkSolo" 1 [] Prefix
 
+-- The wrapper types below have `Data` instances, but their modules sit below
+-- `Type.Reflection` and cannot write their own `Typeable` evidence. A
+-- `Typeable (T ...)` obligation is built from the constructor's own
+-- representation, which is what these supply; the generic application
+-- instance then derives the applied form from it and the arguments.
+
+instance Typeable Proxy where
+  typeRepOf = mkTyConApp (mkTyCon "Data.Proxy" "base" "Proxy") [] (kindFun trLiftedRep trLiftedRep)
+
+instance Typeable Identity where
+  typeRepOf = mkTyConApp (mkTyCon "Data.Functor.Identity" "base" "Identity") [] (kindFun trLiftedRep trLiftedRep)
+
+instance Typeable Const where
+  typeRepOf = mkTyConApp (mkTyCon "Data.Functor.Const" "base" "Const") [] (kindFun trLiftedRep (kindFun trLiftedRep trLiftedRep))
+
+instance Typeable Down where
+  typeRepOf = mkTyConApp (mkTyCon "Data.Ord" "base" "Down") [] (kindFun trLiftedRep trLiftedRep)
+
+instance Typeable Dual where
+  typeRepOf = mkTyConApp (mkTyCon "Data.Semigroup" "base" "Dual") [] (kindFun trLiftedRep trLiftedRep)
+
+instance Typeable All where
+  typeRepOf = mkTyConApp (mkTyCon "Data.Semigroup" "base" "All") [] (kindFun trLiftedRep trLiftedRep)
+
+instance Typeable Any where
+  typeRepOf = mkTyConApp (mkTyCon "Data.Semigroup" "base" "Any") [] (kindFun trLiftedRep trLiftedRep)
+
+instance (Typeable f, Typeable a) => Typeable (Alt f a) where
+  typeRepOf = mkTyConApp (mkTyCon "Data.Monoid" "base" "Alt") [Reflect.SomeTypeRep (Reflect.typeRep :: Reflect.TypeRep f), Reflect.SomeTypeRep (Reflect.typeRep :: Reflect.TypeRep a)] (kindFun (kindFun trLiftedRep trLiftedRep) (kindFun trLiftedRep trLiftedRep))
+
+instance (Typeable f, Typeable a) => Typeable (Ap f a) where
+  typeRepOf = mkTyConApp (mkTyCon "Data.Monoid" "base" "Ap") [Reflect.SomeTypeRep (Reflect.typeRep :: Reflect.TypeRep f), Reflect.SomeTypeRep (Reflect.typeRep :: Reflect.TypeRep a)] (kindFun (kindFun trLiftedRep trLiftedRep) (kindFun trLiftedRep trLiftedRep))
+
+-- | The unapplied @Solo@ constructor. @Data.Tuple@ is reached by
+-- @Type.Reflection@, so the compiler does not synthesize this instance for it,
+-- and @Data (Solo a)@ would otherwise have no 'Typeable' superclass evidence.
+instance Typeable Solo where
+  typeRepOf = mkTyConApp (mkTyCon "Data.Tuple" "base" "Solo") [] (kindFun trLiftedRep trLiftedRep)
+
 instance Data a => Data (Solo a) where
   gfoldl k z s = case s of MkSolo a -> z MkSolo `k` a
   toConstr _ = soloConstr
@@ -1208,54 +1247,6 @@ instance (Data a, Data b) => Data (Const a b) where
 
 ------------------------------------------------------------------------------
 
--- | The @Sum@ and @Product@ instances carry their functor parameters' own
--- 'Typeable' evidence, the way @base@'s standalone derivation writes them: the
--- superclass 'Typeable' of @Data (Sum f g a)@ has to build a representation of
--- @Sum f g a@, which embeds one for @f@ and one for @g@. A 'Data' context such as
--- @Data (f a)@ only supplies @Typeable (f a)@, and a representation of an
--- application cannot be taken apart again for a functor that may be a type
--- family, so the two constraints are written out rather than left to the solver.
-
-sumType :: DataType
-sumType = mkAlgDataType "Data.Functor.Sum.Sum" (\_ -> [inLConstr, inRConstr])
-
-inLConstr :: Constr
-inLConstr = mkConstrTag sumType "InL" 1 [] Prefix
-
-inRConstr :: Constr
-inRConstr = mkConstrTag sumType "InR" 2 [] Prefix
-
-instance (Typeable a, Typeable f, Typeable g, Data (f a), Data (g a)) => Data (Sum f g a) where
-  gfoldl k z s = case s of
-    InL x -> z InL `k` x
-    InR y -> z InR `k` y
-  toConstr s = case s of
-    InL _ -> inLConstr
-    InR _ -> inRConstr
-  gunfold k z c = case constrIndex c of
-    1 -> k (z InL)
-    2 -> k (z InR)
-    _ -> errorWithoutStackTrace "Data.Data.gunfold(Sum)"
-  dataTypeOf _ = sumType
-
-------------------------------------------------------------------------------
-
-productType :: DataType
-productType = mkAlgDataType "Data.Functor.Product.Product" (\_ -> [pairConstr])
-
-pairConstr :: Constr
-pairConstr = mkConstrTag productType "Pair" 1 [] Prefix
-
-instance (Typeable a, Typeable f, Typeable g, Data (f a), Data (g a)) => Data (Product f g a) where
-  gfoldl k z p = case p of Pair x y -> z Pair `k` x `k` y
-  toConstr _ = pairConstr
-  gunfold k z c = case constrIndex c of
-    1 -> k (k (z Pair))
-    _ -> errorWithoutStackTrace "Data.Data.gunfold(Product)"
-  dataTypeOf _ = productType
-
-------------------------------------------------------------------------------
-
 downType :: DataType
 downType = mkAlgDataType "Data.Ord.Down" (\_ -> [downConstr])
 
@@ -1272,38 +1263,6 @@ instance Data a => Data (Down a) where
   dataCast1 f = gcast1 f
 
 ------------------------------------------------------------------------------
-
-firstType :: DataType
-firstType = mkAlgDataType "Data.Monoid.First" (\_ -> [firstConstr])
-
-firstConstr :: Constr
-firstConstr = mkConstrTag firstType "First" 1 [] Prefix
-
-instance Data a => Data (First a) where
-  gfoldl k z f = case f of First m -> z First `k` m
-  toConstr _ = firstConstr
-  gunfold k z c = case constrIndex c of
-    1 -> k (z First)
-    _ -> errorWithoutStackTrace "Data.Data.gunfold(First)"
-  dataTypeOf _ = firstType
-  dataCast1 f = gcast1 f
-
-------------------------------------------------------------------------------
-
-lastType :: DataType
-lastType = mkAlgDataType "Data.Monoid.Last" (\_ -> [lastConstr])
-
-lastConstr :: Constr
-lastConstr = mkConstrTag lastType "Last" 1 [] Prefix
-
-instance Data a => Data (Last a) where
-  gfoldl k z l = case l of Last m -> z Last `k` m
-  toConstr _ = lastConstr
-  gunfold k z c = case constrIndex c of
-    1 -> k (z Last)
-    _ -> errorWithoutStackTrace "Data.Data.gunfold(Last)"
-  dataTypeOf _ = lastType
-  dataCast1 f = gcast1 f
 
 ------------------------------------------------------------------------------
 

@@ -15,6 +15,7 @@ import Control.Applicative
 import Control.Monad (Monad, MonadPlus(mplus, mzero), (>>=))
 import Control.Monad.Zip (MonadZip(mzipWith))
 import Data.Bool
+import Data.Data (Data(..), DataType, Constr, Fixity(Prefix), mkAlgDataType, mkConstrTag, constrIndex)
 import Data.Foldable (Foldable(foldl, foldMap, foldr))
 import Data.Functor (Functor(map))
 import Data.Functor.Classes
@@ -24,13 +25,15 @@ import Data.Ord (Ordering(EQ, GT, LT))
 import Data.Semigroup (Semigroup((<>)))
 import Data.Traversable (Traversable(traverse))
 import Data.Tuple (fst, snd)
+import Moggi.Err (errorWithoutStackTrace)
+import Moggi.Generics
 import Moggi.Internal.Base
 import Text.Read (Read, ReadS, lex, readParen)
 import Text.Show
 
 -- | Lifted product of functors.
 data Product f g a = Pair (f a) (g a)
-  deriving (Eq, Ord, Read, Show)
+  deriving (Eq, Ord, Read, Show, Generic, Generic1)
 
 instance (Eq1 f, Eq1 g) => Eq1 (Product f g) where
   liftEq eq (Pair x1 y1) (Pair x2 y2) = liftEq eq x1 x2 && liftEq eq y1 y2
@@ -102,3 +105,17 @@ productFst (Pair x _) = x
 
 productSnd :: Product f g a -> g a
 productSnd (Pair _ y) = y
+
+productType :: DataType
+productType = mkAlgDataType "Data.Functor.Product.Product" (\_ -> [pairConstr])
+
+pairConstr :: Constr
+pairConstr = mkConstrTag productType "Pair" 1 [] Prefix
+
+instance (Typeable a, Typeable f, Typeable g, Data (f a), Data (g a)) => Data (Product f g a) where
+  gfoldl k z p = case p of Pair x y -> z Pair `k` x `k` y
+  toConstr _ = pairConstr
+  gunfold k z c = case constrIndex c of
+    1 -> k (k (z Pair))
+    _ -> errorWithoutStackTrace "Data.Functor.Product.gunfold(Product)"
+  dataTypeOf _ = productType

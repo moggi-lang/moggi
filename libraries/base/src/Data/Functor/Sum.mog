@@ -13,19 +13,22 @@ module Data.Functor.Sum (
 
 import Control.Applicative ((<|>), Alternative(empty))
 import Data.Bool
+import Data.Data (Data(..), DataType, Constr, Fixity(Prefix), mkAlgDataType, mkConstrTag, constrIndex)
 import Data.Foldable (Foldable(foldMap, foldr))
 import Data.Functor (Functor(map))
 import Data.Functor.Classes
 import Data.List ((++))
 import Data.Ord (Ordering(EQ, GT, LT))
 import Data.Traversable (Traversable(traverse))
+import Moggi.Err (errorWithoutStackTrace)
+import Moggi.Generics
 import Moggi.Internal.Base
 import Text.Read (Read, ReadS, lex, readParen)
 import Text.Show
 
 -- | Lifted sum of functors.
 data Sum f g a = InL (f a) | InR (g a)
-  deriving (Eq, Ord, Read, Show)
+  deriving (Eq, Ord, Read, Show, Generic, Generic1)
 
 instance (Eq1 f, Eq1 g) => Eq1 (Sum f g) where
   liftEq eq (InL x1) (InL x2) = liftEq eq x1 x2
@@ -64,3 +67,25 @@ instance (Foldable f, Foldable g) => Foldable (Sum f g) where
 instance (Traversable f, Traversable g) => Traversable (Sum f g) where
   traverse f (InL x) = map InL (traverse f x)
   traverse f (InR y) = map InR (traverse f y)
+
+sumType :: DataType
+sumType = mkAlgDataType "Data.Functor.Sum.Sum" (\_ -> [inLConstr, inRConstr])
+
+inLConstr :: Constr
+inLConstr = mkConstrTag sumType "InL" 1 [] Prefix
+
+inRConstr :: Constr
+inRConstr = mkConstrTag sumType "InR" 2 [] Prefix
+
+instance (Typeable a, Typeable f, Typeable g, Data (f a), Data (g a)) => Data (Sum f g a) where
+  gfoldl k z s = case s of
+    InL x -> z InL `k` x
+    InR y -> z InR `k` y
+  toConstr s = case s of
+    InL _ -> inLConstr
+    InR _ -> inRConstr
+  gunfold k z c = case constrIndex c of
+    1 -> k (z InL)
+    2 -> k (z InR)
+    _ -> errorWithoutStackTrace "Data.Functor.Sum.gunfold(Sum)"
+  dataTypeOf _ = sumType
