@@ -324,6 +324,7 @@ function moduleUsesMoggiRuntime(IR\Module $module): bool
     };
     $runtimeIntrinsics = [
         'error#' => true,
+        'errorWithoutStackTrace#' => true,
         'fix#' => true,
         'coerce#' => true,
         'unsafeCoerce#' => true,
@@ -333,6 +334,11 @@ function moduleUsesMoggiRuntime(IR\Module $module): bool
         'exceptionUnwrap#' => true,
         'exceptionThrow#' => true,
         'exceptionDisplay#' => true,
+        'exceptionShow#' => true,
+        'exceptionType#' => true,
+        'exceptionClearContext#' => true,
+        'exceptionContext#' => true,
+        'exceptionAddContext#' => true,
     ];
     $visitOperand = static function (IR\Operand $operand) use ($noteForeignPath, $runtimeIntrinsics, &$found): void {
         if ($operand instanceof IR\ForeignCall) {

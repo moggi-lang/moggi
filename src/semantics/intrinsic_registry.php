@@ -238,6 +238,8 @@ function typeSchemes(): array
         'maybeNe#' => scheme(new TArrow($maybeA, new TArrow($maybeA, $bool)), ['a']),
         'maybeCompare#' => scheme(new TArrow($maybeA, new TArrow($maybeA, $ordering)), ['a']),
         'error#' => scheme(new TArrow($str, $a), ['a']),
+        'errorWithoutStackTrace#' => scheme(new TArrow($str, $a), ['a']),
+        'callStack#' => scheme($str, []),
         'fix#' => scheme(new TArrow(new TArrow($a, $a), $a), ['a']),
         'coerce#' => scheme(
             new TArrow(new TVar('a'), new TVar('b')),
@@ -260,7 +262,13 @@ function typeSchemes(): array
             ['a'],
         ),
         'exceptionWrap#' => scheme(
-            new TArrow($str, new TArrow($str, new TArrow($a, new TCon('SomeException', [])))),
+            new TArrow(
+                $str,
+                new TArrow(
+                    $str,
+                    new TArrow($str, new TArrow($str, new TArrow($a, new TCon('SomeException', [])))),
+                ),
+            ),
             ['a'],
         ),
         'exceptionUnwrap#' => scheme(
@@ -268,7 +276,25 @@ function typeSchemes(): array
             ['a'],
         ),
         'exceptionThrow#' => scheme(new TArrow(new TCon('SomeException', []), $a), ['a']),
+        'typeableDict#' => scheme(new TArrow(new TCon('TypeRep', [$a]), new TCon('Typeable', [$a])), ['a']),
         'exceptionDisplay#' => scheme(new TArrow(new TCon('SomeException', []), $str), []),
+        'exceptionShow#' => scheme(new TArrow(new TCon('SomeException', []), $str), []),
+        'exceptionType#' => scheme(new TArrow(new TCon('SomeException', []), $str), []),
+        'exceptionClearContext#' => scheme(
+            new TArrow(new TCon('SomeException', []), new TCon('SomeException', [])),
+            [],
+        ),
+        'exceptionContext#' => scheme(
+            new TArrow(new TCon('SomeException', []), new TCon('Maybe', [new TCon('ExceptionContext', [])])),
+            [],
+        ),
+        'exceptionAddContext#' => scheme(
+            new TArrow(
+                new TCon('ExceptionContext', []),
+                new TArrow($str, new TArrow(new TCon('SomeException', []), new TCon('SomeException', []))),
+            ),
+            [],
+        ),
         'exceptionThrowIo#' => scheme(
             new TArrow(new TCon('SomeException', []), new TCon('IO', [$a])),
             ['a'],
@@ -363,6 +389,71 @@ function typeSchemes(): array
             new TArrow(new TCon('IO', [$a]), $a),
             ['a'],
         ),
+        'forkIO#' => scheme(
+            new TArrow(new TCon('IO', [new TUnit()]), new TCon('IO', [$int])),
+            [],
+        ),
+        'threadDelay#' => scheme(
+            new TArrow($int, new TCon('IO', [new TUnit()])),
+            [],
+        ),
+        'yield#' => scheme(new TCon('IO', [new TUnit()]), []),
+        'newMVar#' => scheme(
+            new TArrow($a, new TCon('IO', [new TCon('MVar', [$a])])),
+            ['a'],
+        ),
+        'newEmptyMVar#' => scheme(
+            new TCon('IO', [new TCon('MVar', [$a])]),
+            ['a'],
+        ),
+        'takeMVar#' => scheme(
+            new TArrow(new TCon('MVar', [$a]), new TCon('IO', [$a])),
+            ['a'],
+        ),
+        'tryTakeMVar#' => scheme(
+            new TArrow(
+                new TCon('MVar', [$a]),
+                new TCon('IO', [new TCon('Maybe', [$a])]),
+            ),
+            ['a'],
+        ),
+        'putMVar#' => scheme(
+            new TArrow(
+                new TCon('MVar', [$a]),
+                new TArrow($a, new TCon('IO', [new TUnit()])),
+            ),
+            ['a'],
+        ),
+        'tryPutMVar#' => scheme(
+            new TArrow(
+                new TCon('MVar', [$a]),
+                new TArrow($a, new TCon('IO', [$bool])),
+            ),
+            ['a'],
+        ),
+        'readMVar#' => scheme(
+            new TArrow(new TCon('MVar', [$a]), new TCon('IO', [$a])),
+            ['a'],
+        ),
+        'isEmptyMVar#' => scheme(
+            new TArrow(new TCon('MVar', [$a]), new TCon('IO', [$bool])),
+            ['a'],
+        ),
+        'tryReadMVar#' => scheme(
+            new TArrow(
+                new TCon('MVar', [$a]),
+                new TCon('IO', [new TCon('Maybe', [$a])]),
+            ),
+            ['a'],
+        ),
+        'sameMVar#' => scheme(
+            new TArrow(
+                new TCon('MVar', [$a]),
+                new TArrow(new TCon('MVar', [$a]), $bool),
+            ),
+            ['a'],
+        ),
+        'myThreadId#' => scheme(new TCon('IO', [$int]), []),
         'performGC#' => scheme(new TCon('IO', [new TUnit()]), []),
         'performMajorGC#' => scheme(new TCon('IO', [new TUnit()]), []),
         'makeStableName#' => scheme(
@@ -678,6 +769,19 @@ function ioPrimopRoles(): array
         'newIORef#' => 'io-action',
         'readIORef#' => 'io-action',
         'writeIORef#' => 'io-action',
+        'forkIO#' => 'io-action',
+        'threadDelay#' => 'io-action',
+        'yield#' => 'io-action',
+        'newMVar#' => 'io-action',
+        'newEmptyMVar#' => 'io-action',
+        'takeMVar#' => 'io-action',
+        'tryTakeMVar#' => 'io-action',
+        'putMVar#' => 'io-action',
+        'tryPutMVar#' => 'io-action',
+        'readMVar#' => 'io-action',
+        'isEmptyMVar#' => 'io-action',
+        'tryReadMVar#' => 'io-action',
+        'myThreadId#' => 'io-action',
         'newIOArray#' => 'io-action',
         'readIOArray#' => 'io-action',
         'writeIOArray#' => 'io-action',
@@ -1008,6 +1112,7 @@ function primTypeTable(): array
         'Double#' => ['params' => [], 'kindArity' => 0],
         'List#' => ['params' => ['a'], 'kindArity' => 1],
         'Array#' => ['params' => ['i', 'e'], 'kindArity' => 2],
+        'MVar#' => ['params' => ['a'], 'kindArity' => 1],
         'SomeException#' => ['params' => [], 'kindArity' => 0],
     ];
 }

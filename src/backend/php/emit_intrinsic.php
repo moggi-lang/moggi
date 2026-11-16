@@ -41,10 +41,17 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): string
     return match ($name) {
         'coerce#', 'unsafeCoerce#' => '(' . $argExprs[0] . ')',
         'error#' => '\\Moggi\\throwErrorCall(' . $argExprs[0] . ', ' . $locExpr . ')',
-        'exceptionWrap#' => '\\Moggi\\exceptionWrap(' . $argExprs[0] . ', ' . $argExprs[1] . ', ' . $argExprs[2] . ')',
+        'errorWithoutStackTrace#' => '\\Moggi\\throwErrorCall(' . $argExprs[0] . ', null)',
+        'callStack#' => '\\Moggi\\callStack()',
+        'exceptionWrap#' => '\\Moggi\\exceptionWrap(' . $argExprs[0] . ', ' . $argExprs[1] . ', ' . $argExprs[2] . ', ' . $argExprs[3] . ', ' . $argExprs[4] . ')',
         'exceptionUnwrap#' => '\\Moggi\\exceptionUnwrap(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
         'exceptionThrow#' => '\\Moggi\\throwSomeException(' . $argExprs[0] . ', ' . $locExpr . ')',
         'exceptionDisplay#' => '\\Moggi\\exceptionDisplay(' . $argExprs[0] . ')',
+        'exceptionShow#' => '\\Moggi\\exceptionShow(' . $argExprs[0] . ')',
+        'exceptionType#' => '\\Moggi\\exceptionType(' . $argExprs[0] . ')',
+        'exceptionClearContext#' => '\\Moggi\\exceptionClearContext(' . $argExprs[0] . ')',
+        'exceptionContext#' => '\\Moggi\\exceptionContext(' . $argExprs[0] . ')',
+        'exceptionAddContext#' => '\\Moggi\\exceptionAddContext(' . $argExprs[0] . ', ' . $argExprs[1] . ', ' . $argExprs[2] . ')',
         'exceptionThrowIo#', 'exceptionCatch#', 'exceptionFinally#' => throw new \InvalidArgumentException(
             "intrinsic `{$name}` must be lowered to IO exception IR",
         ),

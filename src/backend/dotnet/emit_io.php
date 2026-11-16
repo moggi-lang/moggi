@@ -198,6 +198,94 @@ function emitIntrinsicState(EmitEnv $env, IR\Intrinsic $op): bool
             throw new \RuntimeException(
                 "intrinsic `{$op->name}` must be erased by strict IO normalization before DotNet emit",
             );
+        case 'forkIO#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('call int64 Moggi.Rt.Concurrent::Fork(object)');
+            $env->m->emit('box int64');
+
+            return true;
+        case 'threadDelay#':
+            emitOperand($env, $args[0]);
+            unboxInt($env);
+            $env->m->emit('call void Moggi.Rt.Concurrent::ThreadDelay(int64)');
+            $env->m->emit('ldnull');
+
+            return true;
+        case 'yield#':
+            $env->m->emit('call void Moggi.Rt.Concurrent::Yield()');
+            $env->m->emit('ldnull');
+
+            return true;
+        case 'newMVar#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('call class Moggi.Rt.MVar Moggi.Rt.MVar::New(object)');
+
+            return true;
+        case 'newEmptyMVar#':
+            $env->m->emit('call class Moggi.Rt.MVar Moggi.Rt.MVar::Empty()');
+
+            return true;
+        case 'takeMVar#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.MVar');
+            $env->m->emit('call object Moggi.Rt.MVar::Take(class Moggi.Rt.MVar)');
+
+            return true;
+        case 'tryTakeMVar#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.MVar');
+            $env->m->emit('call object Moggi.Rt.MVar::TryTake(class Moggi.Rt.MVar)');
+
+            return true;
+        case 'putMVar#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.MVar');
+            emitOperand($env, $args[1]);
+            $env->m->emit('call void Moggi.Rt.MVar::Put(class Moggi.Rt.MVar, object)');
+            $env->m->emit('ldnull');
+
+            return true;
+        case 'tryPutMVar#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.MVar');
+            emitOperand($env, $args[1]);
+            $env->m->emit('call bool Moggi.Rt.MVar::TryPut(class Moggi.Rt.MVar, object)');
+            $env->m->emit('box bool');
+
+            return true;
+        case 'readMVar#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.MVar');
+            $env->m->emit('call object Moggi.Rt.MVar::Read(class Moggi.Rt.MVar)');
+
+            return true;
+        case 'isEmptyMVar#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.MVar');
+            $env->m->emit('call bool Moggi.Rt.MVar::IsEmpty(class Moggi.Rt.MVar)');
+            $env->m->emit('box bool');
+
+            return true;
+        case 'tryReadMVar#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.MVar');
+            $env->m->emit('call object Moggi.Rt.MVar::TryRead(class Moggi.Rt.MVar)');
+
+            return true;
+        case 'sameMVar#':
+            emitOperand($env, $args[0]);
+            emitOperand($env, $args[1]);
+            $env->m->emit('call bool [System.Runtime]System.Object::Equals(object, object)');
+            $env->m->emit('box bool');
+
+            return true;
+        case 'myThreadId#':
+            $env->m->emit('call class [System.Private.CoreLib]System.Threading.Thread [System.Private.CoreLib]System.Threading.Thread::get_CurrentThread()');
+            $env->m->emit('callvirt instance int32 [System.Private.CoreLib]System.Threading.Thread::get_ManagedThreadId()');
+            $env->m->emit('conv.i8');
+            $env->m->emit('box int64');
+
+            return true;
         case 'stPure#':
             emitOperand($env, $args[0]);
             $env->m->emit('call class Moggi.Rt.ST Moggi.Rt.RT::StPure(object)');

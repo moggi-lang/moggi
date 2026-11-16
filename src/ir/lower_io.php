@@ -554,6 +554,9 @@ function lowerActionValue(Ast\AstNode $expr, LowerCtx $ctx, bool $asStatement, b
     $call = ioActionCall($inner, $ctx);
     if ($call === null) {
         $value = lowerExpr($inner, $ctx);
+        if ($value instanceof Unit) {
+            return new Unit();
+        }
         $ctx->items[] = new IoRun($value, $dest, ioStmtSrcLoc($expr, $ctx));
         $ctx->hasIoRun = true;
 
@@ -647,6 +650,29 @@ function lowerIoActionToBox(Ast\AstNode $expr, LowerCtx $ctx): Operand
     [$items, $result] = lowerActionBody($expr, $ctx, true);
 
     return emitActionBox($expr, $items, $result, $ctx);
+}
+
+/**
+ * The action a `forkIO#` starts.
+ *
+ * A source block or lambda has to be turned into an action here, which is what
+ * `lowerActionValueToBox()` does. A variable already *is* an action value —
+ * `forkIO action` in `Control.Concurrent` passes exactly that — and boxing it
+ * again would wrap the caller's whole do-block, so the child would run the
+ * caller instead of the action. Parenthesised and ascribed forms are unwrapped
+ * for the test, because they do not change what the expression is.
+ */
+function lowerForkActionValue(Ast\AstNode $expr, LowerCtx $ctx): Operand
+{
+    $inner = $expr;
+    while ($inner instanceof Ast\TypeAsc) {
+        $inner = $inner->expr;
+    }
+    if ($inner instanceof Ast\Variable) {
+        return lowerExpr($expr, $ctx);
+    }
+
+    return lowerActionValueToBox($expr, $ctx);
 }
 
 /**
@@ -896,7 +922,13 @@ function ioActionCall(Ast\AstNode $expr, LowerCtx $ctx): Intrinsic|IoCall|null
 
         $args = [];
         foreach ($expr->args as $i => $arg) {
-            $args[] = ($i === 2 && ($expr->name === 'mkWeak#' || $expr->name === 'mkWeakPair#'))
+            if ($i === 0 && $expr->name === 'forkIO#') {
+                $args[] = lowerForkActionValue($arg, $ctx);
+
+                continue;
+            }
+            $boxesAction = $i === 2 && ($expr->name === 'mkWeak#' || $expr->name === 'mkWeakPair#');
+            $args[] = $boxesAction
                 ? lowerActionValueToBox($arg, $ctx)
                 : lowerExpr($arg, $ctx);
         }

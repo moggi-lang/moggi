@@ -246,6 +246,380 @@ final class IORef
 }
 
 /**
+ * A nested MVar handle inside an MVar payload.
+ *
+ * `parallel\Sync` and `parallel\Channel` cannot be serialized, so an MVar
+ * value that contains another MVar (a `Chan` is the common case) is written to
+ * a named relay channel. The serializable envelope then carries only this
+ * reference; the receiving thread opens the relay and recovers the original
+ * pair. A fresh relay is made for every encode, so a later `readMVar` that
+ * re-sends the value does not reuse an exhausted relay. The stable id is
+ * carried in the reference too: PHP arrays are values, so comparing their
+ * wrappers with `===` would make the same MVar appear different after a
+ * relay round-trip.
+ */
+final class ConcurrentMVarRef
+{
+    public function __construct(public string $name, public string $id)
+    {
+    }
+}
+
+/**
+ * Run an IO action. `null` is the erased unit action: the compiler emits the
+ * tail of a boxed do-block as `ioRun(null)`, and running it is a no-op.
+ */
+function ioRun(mixed $action): mixed
+{
+    if ($action === null) {
+        return null;
+    }
+
+    return ($action[1])();
+}
+
+/** The id of the current Moggi thread; forked threads carry the id they were given. */
+function concurrentMyThreadId(): int
+{
+    return (int) ($GLOBALS['__moggiThreadId'] ?? 0);
+}
+
+/**
+ * The prefix an MVar payload uses when the value has to cross the
+ * `ext-parallel` boundary as a serialized string. A leading NUL keeps it out
+ * of the range of ordinary user strings; a user string that does start with
+ * it is escaped by serializing that string too.
+ */
+const CONCURRENT_MVAR_SERIALIZED = "\0moggi:mvar\0";
+
+/**
+ * Turn an MVar value into something an `ext-parallel` channel accepts.
+ *
+ * Channels carry scalars and `parallel` objects only, so arrays (and ordinary
+ * objects) are serialized into a string here and restored by
+ * {@see concurrentMVarDecode()}. This keeps `MVar (Either e a)` and every
+ * other algebraic value working across PHP threads without pushing the
+ * restriction onto every user of `MVar`.
+ */
+function concurrentMVarEncode(mixed $value): mixed
+{
+    if (\is_object($value) && \str_starts_with($value::class, 'parallel\\')) {
+        return $value;
+    }
+    if (\is_array($value)
+        || \is_object($value)
+        || (\is_string($value) && \str_starts_with($value, CONCURRENT_MVAR_SERIALIZED))) {
+        try {
+            return CONCURRENT_MVAR_SERIALIZED . \serialize(concurrentMVarTransferable($value));
+        } catch (\Throwable $e) {
+            throw new \RuntimeException(
+                'MVar cannot share a value of type ' . \get_debug_type($value) . ': ' . $e->getMessage(),
+                0,
+                $e,
+            );
+        }
+    }
+
+    return $value;
+}
+
+/**
+ * Drop state that belongs to the thread that raised an exception.
+ *
+ * A `SomeException#` carries its host `MoggiException` in slot 4 so a report
+ * can show where it was raised. That object holds PHP stack metadata and is not
+ * serializable; the tag, payload, display, show, type and rendered context
+ * already in slots 1-3 and 6-8 are the cross-thread value. Every other array
+ * is copied unchanged.
+ */
+function concurrentMVarTransferable(mixed $value): mixed
+{
+    if (! \is_array($value)) {
+        return $value;
+    }
+
+    if (($value[0] ?? null) === '__mvar'
+        && ($value[1] ?? null) instanceof \parallel\Sync
+        && ($value[2] ?? null) instanceof \parallel\Channel) {
+        $name = 'moggi:mvar:' . \getmypid() . ':' . \bin2hex(\random_bytes(16));
+        $relay = \parallel\Channel::make($name, 2);
+        $relay->send($value[1]);
+        $relay->send($value[2]);
+
+        return new ConcurrentMVarRef($name, (string) ($value[3] ?? ''));
+    }
+
+    if (($value[0] ?? null) === '__se') {
+        unset($value[4]);
+    }
+    foreach ($value as $key => $item) {
+        $value[$key] = concurrentMVarTransferable($item);
+    }
+
+    return $value;
+}
+
+/** Recover nested MVar handles wrapped by {@see concurrentMVarTransferable()}. */
+function concurrentMVarRestore(mixed $value): mixed
+{
+    if ($value instanceof ConcurrentMVarRef) {
+        $relay = \parallel\Channel::open($value->name);
+        $state = $relay->recv();
+        $cell = $relay->recv();
+        $relay->close();
+        if (! $state instanceof \parallel\Sync || ! $cell instanceof \parallel\Channel) {
+            throw new \RuntimeException('MVar relay did not carry a valid MVar handle');
+        }
+
+        return ['__mvar', $state, $cell, $value->id];
+    }
+    if (\is_array($value)) {
+        foreach ($value as $key => $item) {
+            $value[$key] = concurrentMVarRestore($item);
+        }
+    }
+
+    return $value;
+}
+
+function concurrentMVarDecode(mixed $value): mixed
+{
+    if (! \is_string($value) || ! \str_starts_with($value, CONCURRENT_MVAR_SERIALIZED)) {
+        return $value;
+    }
+
+    return concurrentMVarRestore(
+        \unserialize(\substr($value, \strlen(CONCURRENT_MVAR_SERIALIZED))),
+    );
+}
+
+/**
+ * Build an MVar.
+ *
+ * The value lives in a one-slot {@see \parallel\Channel} and the full/empty
+ * flag in a {@see \parallel\Sync}; the flag is the lock, and `wait()` releases it
+ * while a thread sleeps, so a blocked writer never keeps a reader out. There is
+ * no single-threaded fallback: if ext-parallel is absent, constructing these
+ * host objects fails.
+ *
+ * @return array{string, mixed, mixed, string}
+ */
+function concurrentMakeMVar(mixed $value, bool $full): array
+{
+    $id = 'mvar:' . \getmypid() . ':' . \bin2hex(\random_bytes(16));
+    $state = new \parallel\Sync($full);
+    $cell = new \parallel\Channel(1);
+    if ($full) {
+        $cell->send(concurrentMVarEncode($value));
+    }
+
+    return ['__mvar', $state, $cell, $id];
+}
+
+/** @return array{string, mixed, mixed, string} */
+function concurrentNewMVar(mixed $value): array
+{
+    return concurrentMakeMVar($value, true);
+}
+
+/** @return array{string, mixed, mixed, string} */
+function concurrentNewEmptyMVar(): array
+{
+    return concurrentMakeMVar(null, false);
+}
+
+/** Whether two handles name the same MVar. */
+function concurrentSameMVar(array $left, array $right): bool
+{
+    $id = $left[3] ?? null;
+
+    return $id !== null && $id === ($right[3] ?? null);
+}
+
+function concurrentTakeMVar(array $mvar): mixed
+{
+    [, $state, $cell] = $mvar;
+    $value = $state(static function () use ($state, $cell): mixed {
+        while (! ((bool) $state->get())) {
+            $state->wait();
+        }
+        $value = $cell->recv();
+        $state->set(false);
+
+        return $value;
+    });
+    $state->notify(true);
+
+    return concurrentMVarDecode($value);
+}
+
+function concurrentPutMVar(array $mvar, mixed $value): void
+{
+    [, $state, $cell] = $mvar;
+    $state(static function () use ($state, $cell, $value): void {
+        while ((bool) $state->get()) {
+            $state->wait();
+        }
+        $cell->send(concurrentMVarEncode($value));
+        $state->set(true);
+    });
+    $state->notify(true);
+}
+
+function concurrentReadMVar(array $mvar): mixed
+{
+    [, $state, $cell] = $mvar;
+    $value = $state(static function () use ($state, $cell): mixed {
+        while (! ((bool) $state->get())) {
+            $state->wait();
+        }
+        $value = concurrentMVarDecode($cell->recv());
+        $cell->send(concurrentMVarEncode($value));
+
+        return $value;
+    });
+
+    return $value;
+}
+
+/** @return array{'Nothing'}|array{0: 'Just', 1: mixed} */
+function concurrentTryTakeMVar(array $mvar): array
+{
+    [, $state, $cell] = $mvar;
+    $result = $state(static function () use ($state, $cell): array {
+        if (! ((bool) $state->get())) {
+            return ['Nothing'];
+        }
+        $value = $cell->recv();
+        $state->set(false);
+
+        return ['Just', $value];
+    });
+    if ($result[0] === 'Nothing') {
+        return $result;
+    }
+    $state->notify(true);
+
+    return ['Just', concurrentMVarDecode($result[1])];
+}
+
+function concurrentTryPutMVar(array $mvar, mixed $value): bool
+{
+    [, $state, $cell] = $mvar;
+    $stored = $state(static function () use ($state, $cell, $value): bool {
+        if ((bool) $state->get()) {
+            return false;
+        }
+        $cell->send(concurrentMVarEncode($value));
+        $state->set(true);
+
+        return true;
+    });
+    if ($stored) {
+        $state->notify(true);
+    }
+
+    return $stored;
+}
+
+/** @return array{'Nothing'}|array{0: 'Just', 1: mixed} */
+function concurrentTryReadMVar(array $mvar): array
+{
+    [, $state, $cell] = $mvar;
+
+    return $state(static function () use ($state, $cell): array {
+        if (! ((bool) $state->get())) {
+            return ['Nothing'];
+        }
+        $value = concurrentMVarDecode($cell->recv());
+        $cell->send(concurrentMVarEncode($value));
+
+        return ['Just', $value];
+    });
+}
+
+function concurrentIsEmptyMVar(array $mvar): bool
+{
+    [, $state] = $mvar;
+
+    return ! $state(
+        static fn (): bool => (bool) $state->get(),
+    );
+}
+
+/**
+ * Start a host thread running the given IO action.
+ *
+ * The action value is a compiled `['__io', closure]`. ext-parallel copies a
+ * closure into the new thread by value, and the child `require`s the entry file
+ * first, so the functions and classes the closure calls exist there. The guard
+ * is a thread-local global, set before the include: `putenv` is process-wide and
+ * would make the parent skip its own `main`.
+ *
+ * The runtime is kept in a global so it is not closed while its task runs; the
+ * process ends without joining, which is the daemonic-thread rule `forkIO`
+ * promises.
+ */
+function concurrentFork(array $action): int
+{
+    $entry = $GLOBALS['__moggiEntryFile'] ?? null;
+    if (! \is_string($entry) || ! \is_file($entry)) {
+        throw new \RuntimeException('forkIO cannot locate the compiled entry file to load in the child thread');
+    }
+
+    static $next = null;
+    if ($next === null) {
+        $next = (concurrentMyThreadId() + 1) * 1000000;
+    }
+    $id = $next++;
+
+    static $shutdownRegistered = false;
+    if (! $shutdownRegistered) {
+        $shutdownRegistered = true;
+        \register_shutdown_function(static function (): void {
+            foreach ($GLOBALS['__moggiForkRuntimes'] ?? [] as $runtime) {
+                try {
+                    $runtime->kill();
+                } catch (\Throwable) {
+                    // A runtime that already finished needs no shutdown.
+                }
+            }
+        });
+    }
+
+    $runtime = new \parallel\Runtime();
+    $GLOBALS['__moggiForkRuntimes'][] = $runtime;
+    $runtime->run(static function (array $action, string $entry, int $id): void {
+        $GLOBALS['__moggiForkChild'] = true;
+        $GLOBALS['__moggiThreadId'] = $id;
+
+        try {
+            require $entry;
+            ($action[1])();
+        } catch (\Throwable $error) {
+            \file_put_contents('php://stderr', formatExceptionReport($error));
+        }
+    }, [$action, $entry, $id]);
+
+    return $id;
+}
+
+function concurrentThreadDelay(int $microseconds): void
+{
+    $remaining = $microseconds;
+    while ($remaining > 0) {
+        $slice = \min($remaining, 1000);
+        \usleep($slice);
+        $remaining -= $slice;
+    }
+}
+
+function concurrentYield(): void
+{
+    \usleep(0);
+}
+
+/**
  * ST actions are re-executable descriptions: `['__st', thunk]`, the same
  * shape as IO's `['__io', thunk]` under a distinct tag so the two media
  * never mix. Building a description is pure; running it (`stRun`) performs
@@ -848,7 +1222,8 @@ function phpMapEntries(array $entries): array
 }
 
 /* ---------------------------------------------------------------------------
-   Exception runtime (SomeException# = ['__se', stableTag, payload, display])
+   Exception runtime
+   (SomeException# = ['__se', stableTag, payload, display, origin, context, show, type, contextDisplay])
    --------------------------------------------------------------------------- */
 
 /** Stable exception type tags (must match Control.Exception / Moggi.IO.Exception). */
@@ -881,6 +1256,59 @@ function exceptionAttachWrapper(array $se, MoggiException $e): array
     $se[4] = $e;
 
     return $se;
+}
+
+/**
+ * The exception context in slot five. Slot four is the rethrow origin, so the
+ * context gets its own slot and a plain 4-slot wrapper reports `Nothing`.
+ *
+ * @return array{'Nothing'}|array{0: 'Just', 1: mixed}
+ */
+function exceptionContext(mixed $se): array
+{
+    if (\is_array($se)
+        && ($se[0] ?? null) === '__se'
+        && \array_key_exists(5, $se)
+        && $se[5] !== null) {
+        return ['Just', $se[5]];
+    }
+
+    return ['Nothing'];
+}
+
+/**
+ * Attach a context and its already-rendered display, preserving the payload,
+ * display and origin. The display is produced only at annotation time.
+ */
+function exceptionAddContext(mixed $ctx, string $display, array $se): array
+{
+    $se[5] = $ctx;
+    $se[8] = $display;
+
+    return $se;
+}
+
+/** Drop the context, as `toException (SomeException e)` does in base. */
+function exceptionClearContext(mixed $se): mixed
+{
+    if (\is_array($se) && ($se[0] ?? null) === '__se') {
+        unset($se[5], $se[8]);
+    }
+
+    return $se;
+}
+
+/** The pre-rendered context text, or the empty string. */
+function exceptionContextDisplay(mixed $se): string
+{
+    if (\is_array($se) && ($se[0] ?? null) === '__se') {
+        $stored = $se[8] ?? null;
+        if (\is_string($stored)) {
+            return $stored;
+        }
+    }
+
+    return '';
 }
 
 /**
@@ -956,17 +1384,24 @@ final class MoggiException extends \RuntimeException
 }
 
 /**
- * Build a SomeException#: tag, payload, and the display text rendered where the
- * value still had its `Exception` dictionary.
+ * Build a SomeException#: tag, payload, the display text, and the `show` and
+ * type spellings rendered where the value still had its `Exception`
+ * dictionary.
  *
- * The display travels with the exception because the runtime has no dictionaries
- * of its own: a rethrow or an uncaught report can print it verbatim instead of
- * reconstructing it from the payload's shape. Payloads the runtime builds itself
- * (host throwables, IO failures) pass their message instead.
+ * The rendered strings travel with the exception because the runtime has no
+ * dictionaries of its own: a rethrow or an uncaught report can print them
+ * verbatim instead of reconstructing them from the payload's shape. Payloads
+ * the runtime builds itself (host throwables, IO failures) pass their message
+ * and their runtime type name instead.
  */
-function exceptionWrap(string $tag, string $display, mixed $payload): array
-{
-    return ['__se', $tag, $payload, $display];
+function exceptionWrap(
+    string $tag,
+    string $display,
+    string $show,
+    string $typeDisplay,
+    mixed $payload,
+): array {
+    return ['__se', $tag, $payload, $display, null, null, $show, $typeDisplay, null];
 }
 
 /** @return array{'Nothing'}|array{0: 'Just', 1: mixed} */
@@ -982,10 +1417,47 @@ function exceptionUnwrap(string $tag, mixed $se): array
 /**
  * @param ?array{siteId?: int, symbolId?: string, displayPath?: string, line?: int, col?: int} $throwSite
  */
+/**
+ * The host call chain, serialized for `Moggi.Stack.callStack`.
+ *
+ * One frame per line, six tab-separated fields: package, module, function,
+ * file, line, column. A field the host cannot supply is written `-`, which the
+ * Haskell decoder maps back to the empty string, so every kept frame can be
+ * turned into a `SrcLoc`. The runtime's own frames are skipped.
+ */
+function callStack(): string
+{
+    $frames = \debug_backtrace(\DEBUG_BACKTRACE_IGNORE_ARGS, 48);
+    $out = '';
+    foreach ($frames as $frame) {
+        $function = (string) ($frame['function'] ?? '');
+        if (($frame['file'] ?? '') === __FILE__) {
+            continue;
+        }
+        if ($function === '') {
+            $function = '<top-level>';
+        }
+        $file = displaySourcePath((string) ($frame['file'] ?? ''));
+        if ($file === '') {
+            $file = '-';
+        }
+        $line = (int) ($frame['line'] ?? 0);
+        $out .= "-\t-\t" . $function . "\t" . $file . "\t" . $line . "\t0\n";
+    }
+
+    return $out;
+}
+
 function throwErrorCall(string $message, ?array $throwSite = null): never
 {
     throw new MoggiException(
-        exceptionWrap(EX_TAG_ERROR_CALL, $message, ['ErrorCall', $message]),
+        exceptionWrap(
+            EX_TAG_ERROR_CALL,
+            $message,
+            $message,
+            'base:Moggi.Exception.Type.ErrorCall',
+            ['ErrorCall', $message],
+        ),
         null,
         $throwSite,
     );
@@ -1003,6 +1475,7 @@ function throwSomeException(mixed $se, ?array $throwSite = null): never
     if (\is_array($se) && ($se[0] ?? null) === '__se') {
         $origin = $se[4] ?? null;
         if ($origin instanceof MoggiException) {
+            $origin->someException = $se;
             throw $origin;
         }
 
@@ -1047,8 +1520,7 @@ function formatExceptionReport(\Throwable $e): string
         }
 
         $tag = (string) ($e->someException[1] ?? 'SomeException');
-        $msg = $e->getMessage();
-        $out = 'moggi: ' . formatExceptionHeader($tag, $e->someException[2] ?? null, $msg) . "\n";
+        $out = 'moggi: ' . formatExceptionInfo($e->someException) . "\n";
 
         $cause = $e->getPrevious();
         $hasHostSection = $cause !== null && ! ($cause instanceof MoggiException);
@@ -1056,6 +1528,7 @@ function formatExceptionReport(\Throwable $e): string
         $shown = [];
         $frames = [];
         $throwKey = null;
+        $noStack = $tag === EX_TAG_ERROR_CALL && $e->throwSite === null;
         if ($e->throwSite !== null) {
             $loc = resolveThrowSite($e->throwSite);
             $frames[] = $loc;
@@ -1063,13 +1536,19 @@ function formatExceptionReport(\Throwable $e): string
             $shown[$throwKey] = true;
         }
 
-        foreach (moggCallerFrames($e, ! $hasHostSection) as $frame) {
-            $key = frameKey($frame);
-            if ($throwKey !== null && $key === $throwKey) {
-                continue;
+        if (! $noStack) {
+            foreach (moggCallerFrames($e, ! $hasHostSection) as $frame) {
+                $key = frameKey($frame);
+                if ($throwKey !== null && $key === $throwKey) {
+                    continue;
+                }
+                $frames[] = $frame;
+                $shown[$key] = true;
             }
-            $frames[] = $frame;
-            $shown[$key] = true;
+        }
+
+        if ($tag === EX_TAG_ERROR_CALL && ! $noStack) {
+            $out .= "\nCallStack (from HasCallStack):\n";
         }
 
         $out .= formatMoggFrames($frames);
@@ -1107,17 +1586,16 @@ function formatMoggFrames(array $frames): string
     return $out;
 }
 
-/** Header line: tag, plus the IOException subtype when it carries one. */
-function formatExceptionHeader(string $tag, mixed $payload, string $message): string
+/** The body of an uncaught report: type, display text and optional context. */
+function formatExceptionInfo(array $se): string
 {
-    if ($tag === EX_TAG_IO_EXCEPTION && \is_array($payload)) {
-        $ioType = (string) (($payload[2][0] ?? '') ?: '');
-        if ($ioType !== '') {
-            return "{$tag} ({$ioType}): {$message}";
-        }
+    $out = 'Uncaught exception ' . exceptionType($se) . ":\n\n" . exceptionDisplay($se);
+    $context = exceptionContextDisplay($se);
+    if ($context !== '') {
+        $out .= "\n\n" . $context;
     }
 
-    return "{$tag}: {$message}";
+    return $out;
 }
 
 /** @param array{symbolId: string, displayPath: string, line: int, col: int} $loc */
@@ -1415,7 +1893,13 @@ function hostExceptionPayload(string $backend, string $nativeType, string $messa
 {
     $payload = ['HostException', $backend, $nativeType, $message];
 
-    return exceptionWrap(EX_TAG_HOST, $message, $payload);
+    return exceptionWrap(
+        EX_TAG_HOST,
+        $message,
+        $message,
+        'base:Moggi.IO.Exception.HostException',
+        $payload,
+    );
 }
 
 /**
@@ -1453,6 +1937,34 @@ function exceptionDisplay(mixed $se): string
         }
 
         return exceptionDisplayMessage((string) ($se[1] ?? 'SomeException'), $se[2] ?? null);
+    }
+
+    return 'SomeException';
+}
+
+/** The `Show` spelling of the wrapped exception, when the wrapper carries one. */
+function exceptionShow(mixed $se): string
+{
+    if (\is_array($se) && ($se[0] ?? null) === '__se') {
+        $stored = $se[6] ?? null;
+        if (\is_string($stored)) {
+            return $stored;
+        }
+    }
+
+    return exceptionDisplay($se);
+}
+
+/** The `package:module.Name` spelling used by `displayExceptionWithInfo`. */
+function exceptionType(mixed $se): string
+{
+    if (\is_array($se) && ($se[0] ?? null) === '__se') {
+        $stored = $se[7] ?? null;
+        if (\is_string($stored) && $stored !== '') {
+            return $stored;
+        }
+
+        return (string) ($se[1] ?? 'SomeException');
     }
 
     return 'SomeException';

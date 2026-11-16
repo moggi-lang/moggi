@@ -18,6 +18,25 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitOperand($env, $args[0]);
 
             return;
+        case 'callStack#':
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'callStackFrames', '()Ljava/lang/String;'),
+                0,
+                true,
+            );
+
+            return;
+        case 'errorWithoutStackTrace#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('java/lang/String'));
+            $env->c->aconst_null();
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'throwErrorCall', '(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;'),
+                2,
+                true,
+            );
+
+            return;
         case 'error#':
             emitOperand($env, $args[0]);
             $env->c->checkcast($env->cp->class_('java/lang/String'));
@@ -35,9 +54,13 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitOperand($env, $args[1]);
             $env->c->checkcast($env->cp->class_('java/lang/String'));
             emitOperand($env, $args[2]);
+            $env->c->checkcast($env->cp->class_('java/lang/String'));
+            emitOperand($env, $args[3]);
+            $env->c->checkcast($env->cp->class_('java/lang/String'));
+            emitOperand($env, $args[4]);
             $env->c->invokestatic(
-                $env->cp->methodRef('moggi/rt/RT', 'exceptionWrap', '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;'),
-                3,
+                $env->cp->methodRef('moggi/rt/RT', 'exceptionWrap', '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;'),
+                5,
                 true,
             );
 
@@ -68,6 +91,53 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->invokestatic(
                 $env->cp->methodRef('moggi/rt/RT', 'exceptionDisplay', '(Ljava/lang/Object;)Ljava/lang/String;'),
                 1,
+                true,
+            );
+
+            return;
+        case 'exceptionShow#':
+            emitOperand($env, $args[0]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'exceptionShow', '(Ljava/lang/Object;)Ljava/lang/String;'),
+                1,
+                true,
+            );
+
+            return;
+        case 'exceptionType#':
+            emitOperand($env, $args[0]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'exceptionType', '(Ljava/lang/Object;)Ljava/lang/String;'),
+                1,
+                true,
+            );
+
+            return;
+        case 'exceptionClearContext#':
+            emitOperand($env, $args[0]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'exceptionClearContext', '(Ljava/lang/Object;)[Ljava/lang/Object;'),
+                1,
+                true,
+            );
+
+            return;
+        case 'exceptionContext#':
+            emitOperand($env, $args[0]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'exceptionContext', '(Ljava/lang/Object;)Ljava/lang/Object;'),
+                1,
+                true,
+            );
+
+            return;
+        case 'exceptionAddContext#':
+            emitOperand($env, $args[0]);
+            emitOperand($env, $args[1]);
+            emitOperand($env, $args[2]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'exceptionAddContext', '(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)[Ljava/lang/Object;'),
+                3,
                 true,
             );
 
