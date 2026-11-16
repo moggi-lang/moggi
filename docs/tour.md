@@ -332,8 +332,12 @@ When an exception escapes `main`, the runtime prints a report that names *your*
 code — on every backend — and exits non-zero:
 
 ```text
-moggi: ErrorCall: mapped
-  at Control.Exception.Base.throwIO (libraries/base/src/Control/Exception/Base.mog:42:13)
+moggi: Uncaught exception base:Moggi.Exception.Type.ErrorCall:
+
+mapped
+
+CallStack (from HasCallStack):
+  at Control.Exception.Base.throwIO (libraries/base/src/Control/Exception/Base.mog:90:13)
   at Main.boom (Main.mog:5:8)
   at Main.main (Main.mog:13:3)
 ```
@@ -408,7 +412,7 @@ These are deliberate, and they are the ones most likely to surprise you:
 | `String` | the host's native string, and **not** a list of `Char`: `head "abc"` is a type error. Use `Data.String` for string work, `Data.ByteString` for bytes |
 | Folds | one `foldl`, and it is strict — no `foldl'`, no `seq`, no `$!` |
 | Structures | no infinite or lazy structures anywhere; recursion must terminate |
-| `SomeException` | opaque: you cannot pattern-match it, you ask with `fromException` |
+| `SomeException` | any exception; build with `toException` or `SomeException e`, match with `fromException` or the `SomeException e` pattern |
 | Backends | the same program prints the same thing on all three (a differential test enforces it); only trace *precision* differs |
 | Frames | a trace names the statement being executed, with the fault's own location in the innermost frame |
 

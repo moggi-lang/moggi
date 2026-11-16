@@ -77,6 +77,8 @@ source-compatibility target and keeps one spelling per operation:
 - `Monad` has no `return`. Use `pure`, which `base` itself says `return` should
   equal. `Monoid` likewise has no `mappend`: `(<>)` is the only spelling, as
   `base` recommends.
+- `IsList` is `Moggi.IsList`; there is no `GHC.IsList`, and `OverloadedLists`
+  syntax is not implemented.
 - `Alternative`'s `some` and `many` are class methods with defaults (as in
   `base`), so an instance with a faster repetition strategy can override them.
 
@@ -119,40 +121,46 @@ directories from `import System.Directory`.
 
 ## Exceptions
 
-Only synchronous exceptions exist: `throw`, `throwIO`, `catch`, `bracket`,
-`finally`, and friends, but no async exceptions, no `mask`, and no
-`ExceptionContext`.
+The synchronous `base-4.22` API is available, including typed handlers,
+`ExceptionContext`, annotations, and the masking names. The differences that
+matter are:
 
-- The `Exception` superclass is `Show` only. `Type.Reflection` provides a
-  `Typeable` class and type representations, and every data type a project
-  declares gets a synthesized `Typeable` instance; the standard library's
-  built-in types have written instances. One generic `Typeable (f a)` instance
-  covers type applications, so a partially applied type such as `Sum f` is
-  `Typeable` from the representations of its parts, the way GHC's solver builds
-  it, without an instance for each such type. `Data.Dynamic` provides `Dynamic`
-  and the `toDyn`/`fromDynamic` conversions on top of those representations.
-  Exceptions are matched by a stable string tag naming the type. Writing an
-  instance still requires `toException` and `fromException` bodies where `base`
-  needs none (the compiler cannot synthesize the tag yet); take care to keep the
-  tag equal to the type name.
-- There is no `HasCallStack` mechanism and no `CallStack`/`SrcLoc` types yet,
-  so `throw` and `error` carry no call stack. Uncaught reports still print
-  backend frames; the report header reads `moggi: <Tag>: <display>`.
-- A failure of the host itself — a missing method, a wrong arity — surfaces as
-  `HostException backend nativeType message`, which is catchable like any other
-  exception. `System.IO` translates file-operation failures into the
-  `IOException` its callers expect.
+- No asynchronous delivery: `throwTo` and `killThread` only target the calling
+  thread, and masking is a no-op (`getMaskingState` is always `Unmasked`).
+- `Exception` requires `(Typeable, Show)`. `Typeable` is synthesized, so a
+  normal exception only needs `Show`; `SomeException` is a pattern synonym but
+  still constructs and matches as expected. `Control.Exception.Backtrace` is
+  not available.
+- `HasCallStack` works. `error`, `throw`, `throwIO`, and `ioError` report the
+  host stack at the raise site; `errorWithoutStackTrace` omits it. The API is
+  in `Moggi.Stack`/`Moggi.Stack.Types`, and the stack is a snapshot, not GHC's
+  solver-grown stack (`whoCreated` has no allocation stack).
+- `mapException` is the identity because its argument is already evaluated.
+- Host failures are `HostException` from `Moggi.IO.Exception`;
+  `Control.Exception` does not re-export it. `System.IO` still translates file
+  errors to `IOException`.
+- `ExceptionAnnotation` instances must write `displayExceptionAnnotation`;
+  there are no default signatures.
 
-Three diagnostics choices differ from GHC on purpose: an instance that satisfies
-none of its class's `{-# MINIMAL … #-}` alternatives is a compile error (GHC
-warns), because Moggi has no warning channel and a silent default here would
-diverge at run time; two instances that are equally specific at one use site are
-a compile error naming every colliding declaration and where each is written,
-however many instances reach that use site, because there are no overlap pragmas
-to break the tie and picking one silently would make the result depend on
-declaration order; and `ArithException`, shift
-clamping, and `bitSize` on `Integer` behave exactly as documented under
-`Data.Bits`.
+## Concurrency
+
+`Control.Concurrent` and the `MVar`, `Chan`, `QSem`, and `QSemN` modules are
+available. `forkIO` creates an OS thread, not a green thread; forked threads
+are daemons and do not keep the process alive after `main`. A blocking foreign
+call blocks only the thread that makes it.
+
+- Async exceptions cannot cross threads; `throwTo`/`killThread` only target the
+  caller, and masking is a no-op.
+- Capabilities are fixed at one: `forkOn` ignores its argument,
+  `getNumCapabilities` is `1`, `setNumCapabilities` has no effect, and `forkOS`
+  is `forkIO`.
+- `threadWaitRead`, `threadWaitWrite`, and their STM forms raise an unsupported
+  operation error: there is no descriptor readiness or STM.
+- `getChanContents` is strict: it drains the values queued at the call and
+  returns `[]` when empty; use `readChan` in a loop for a live stream.
+- PHP needs ZTS and `ext-parallel`, with no single-threaded fallback. A forked
+  action is copied by value, so captures must be serializable: ordinary data
+  and `MVar`/`Chan` values work; host handles and nested closures do not.
 
 ## Calling the host
 
@@ -191,15 +199,20 @@ where you import it — there is no separate `.cabal` package tree to learn.
 
 ## What is missing
 
-Nothing is stubbed: a module either exists with `base`'s API or is absent, and
-the [standard library](stdlib.md#what-is-not-there) page lists what is absent,
-so a name you cannot bring into scope is simply not there rather than
-half-implemented. What shapes a port is not a missing function but the language:
+No public module is a placeholder: a module either exists with `base`'s API or
+is absent, and the [standard library](stdlib.md#what-is-not-there) page lists
+what is absent, so a name you cannot bring into scope is simply not there. A few
+operations whose host machinery does not exist are still present with their
+`base` signatures and report the missing capability when called, as described
+under [Concurrency](#concurrency) and [Exceptions](#exceptions). What shapes a
+port is not a missing function but the language:
 `Float` has no counterpart ([Numbers](#numbers)), `IO` does not nest, so
 `MonadIO` has only its `IO` instance (see the
 [purity boundary](effects/io.md#the-purity-boundary)), and the lazy shapes
 listed above — `ZipList`, `unsafeInterleaveIO`, `iterate`, `mfix` on lists —
-cannot be expressed at all.
+cannot be expressed at all. `Debug.Trace`'s eventlog and marker functions are
+no-ops, and `traceStack` prints host frames where `base` would print profiling
+annotations.
 
 ## No language extensions to enable
 

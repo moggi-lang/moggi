@@ -178,9 +178,9 @@ missing file — a type-correct lie you asked for.
 ## 5. When the host fails
 
 A host error that Moggi does not classify arrives as `HostException backend
-nativeType message` (`Control.Exception` re-exports it), with the native
-throwable in the report's `caused by:` section and the Moggi frame that made the
-call:
+nativeType message` (from `Moggi.IO.Exception`; `Control.Exception` does not
+re-export this host-specific type), with the native throwable in the report's
+`caused by:` section and the Moggi frame that made the call:
 
 ```moggi
 foreign php function f "strlen" :: Maybe Int -> Int
@@ -189,7 +189,9 @@ main = putStrLn (show (f (Just 1)))
 ```
 
 ```
-moggi: HostException: strlen(): Argument #1 ($string) must be of type string, array given
+moggi: Uncaught exception base:Moggi.IO.Exception.HostException:
+
+strlen(): Argument #1 ($string) must be of type string, array given
   at Main.main (Main.mog:5:8)
 caused by: TypeError: strlen(): Argument #1 ($string) must be of type string, array given
   #0 Main\f (Main.php:16)

@@ -125,15 +125,21 @@ honest. `runtest syntax semantics` runs them.
 ## Uncaught exceptions
 
 ```text
-moggi: ErrorCall: mapped
-  at Control.Exception.Base.throwIO (libraries/base/src/Control/Exception/Base.mog:43:13)
+moggi: Uncaught exception base:Moggi.Exception.Type.ErrorCall:
+
+mapped
+
+CallStack (from HasCallStack):
+  at Control.Exception.Base.throwIO (libraries/base/src/Control/Exception/Base.mog:90:13)
   at Main.boom (tests/backend/runtime/Exec-Exception-Trace.mog:5:8)
   at Main.indirect (tests/backend/runtime/Exec-Exception-Trace.mog:8:12)
   at Main.main (tests/backend/runtime/Exec-Exception-Trace.mog:13:3)
 ```
 
-* **Header** — `moggi: <Tag>: <message>`. An `IOException` also names its
-  subtype: `moggi: IOException (NoSuchThing): gone`.
+* **Header** — `moggi: Uncaught exception <package:module.Type>:`, followed by a
+  blank line and `displayException`. The exception context, when present,
+  follows after another blank line. This is the same body
+  `displayExceptionWithInfo` produces.
 * **Frames** — each indented two spaces: `at <Module.Function> (<path>:<line>:<col>)`,
   innermost first. The named function is the one *executing*, and the location
   is the call it was making. Paths are project-relative, so a report never leaks the build
@@ -151,16 +157,18 @@ underneath the Moggi path — and the *Moggi* part is identical on all three
 backends, because it comes from the same source map:
 
 ```text
-php     moggi: HostException: Division by zero
-jvm     moggi: HostException: / by zero
-dotnet  moggi: HostException: Attempted to divide by zero.
+moggi: Uncaught exception base:Moggi.IO.Exception.HostException:
+
+Division by zero
   at Main.boom (tests/backend/runtime/Exec-Exception-HostFrame.mog:10:8)
   at Main.main (tests/backend/runtime/Exec-Exception-HostFrame.mog:13:8)
-caused by: DivisionByZeroError: Division by zero          # php
-caused by: java.lang.ArithmeticException: / by zero       # jvm
-caused by: System.DivideByZeroException: Attempted …      # dotnet
+caused by: DivisionByZeroError: Division by zero
   #0 intdiv (tests/backend/runtime/Exec-Exception-HostFrame.php:15)
 ```
+
+The native failure text and host frames differ by backend: PHP reports
+`DivisionByZeroError`, the JVM `java.lang.ArithmeticException`, and .NET
+`System.DivideByZeroException`.
 
 * **`caused by:` is unconditional.** It is never gated behind an environment
   variable, because a production failure cannot be re-run with a diagnostic

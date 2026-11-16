@@ -12,7 +12,7 @@ Seven packages are bundled:
 
 | Package | What it provides |
 |---|---|
-| `base` | the Prelude, the core types and classes, `System.IO`, `System.Environment`, `System.Exit`, `System.Info`, `Control.Exception`, `Control.Monad.ST`, `Data.STRef`, `Moggi.Generics` |
+| `base` | the Prelude, the core types and classes, `System.IO`, `System.Environment`, `System.Exit`, `System.Info`, `Control.Exception`, `Control.Concurrent`, `Control.Monad.ST`, `Data.STRef`, `Moggi.Generics` |
 | `array` | immutable and mutable boxed arrays: `Data.Array`, `Data.Array.ST`, `Data.Array.IO`, `Data.Array.MArray`, `Data.Array.IArray` |
 | `containers` | `Data.Map`, `Data.Set`, `Data.IntMap`, `Data.IntSet`, `Data.Sequence`, `Data.Tree`, `Data.Graph` |
 | `directory` | `System.Directory` |
@@ -49,12 +49,14 @@ facade with a `{-# BACKEND … #-}` pragma chooses the implementation per target
 | Namespace | Modules |
 |---|---|
 | `Prelude` | the implicit import; see `libraries/base/src/Prelude.mog` |
-| `Control.*` | `Applicative`, `Arrow`, `Category`, `Exception` (+ `Exception.Base`), `Monad`, `Monad.Fail`, `Monad.Fix`, `Monad.IO.Class`, `Monad.ST` |
+| `Control.*` | `Applicative`, `Arrow`, `Category`, `Concurrent` (+ `Concurrent.MVar`, `Concurrent.Chan`, `Concurrent.QSem`, `Concurrent.QSemN`), `Exception` (+ `Exception.Base`, `Exception.Annotation`, `Exception.Context`), `Monad`, `Monad.Fail`, `Monad.Fix`, `Monad.IO.Class`, `Monad.ST` |
 | `Data.*` | `Array.Byte`, `Bifoldable`, `Bifoldable1`, `Bifunctor`, `Bits`, `Bool`, `Bounded`, `ByteString` (+ `Char8`), `Char`, `Coerce`, `Complex`, `Double`, `Either`, `Enum`, `Eq`, `Fixed`, `Foldable`, `Function`, `Functor` (+ `Classes`, `Compose`, `Const`, `Contravariant`, `Identity`, `Product`, `Sum`), `Int`, `Integer`, `IORef`, `Ix`, `Kind`, `List`, `List.NonEmpty`, `Maybe`, `Monoid`, `Num`, `Ord`, `Proxy`, `Ratio`, `Real`, `Semigroup`, `STRef`, `String`, `Traversable`, `Tuple`, `Type.Bool`, `Type.Coercion`, `Type.Equality`, `Type.Ord`, `Version`, `Void`, `Word` |
 | `Numeric.*` | `Natural` |
 | `System.*` | `Clock`, `Console.GetOpt`, `CPUTime`, `Environment`, `Exit`, `IO` (+ `IO.Base`, `IO.Error`, `IO.Types`, `IO.Unsafe`), `Info`, `Mem` (+ `Mem.StableName`, `Mem.Weak`) |
 | `Text.*` | `ParserCombinators.ReadPrec`, `Printf`, `Read`, `Show` |
-| `Moggi.*` | `Err`, `Exception` (+ `Exception.Type`), `Generics`, `IO.Exception`, `Internal.*` (primitives and the numeric backend) |
+| `Debug.*` | `Trace` |
+| `Type.*` | `Reflection` |
+| `Moggi.*` | `Err`, `Exception` (+ `Exception.Type`, `Exception.Context`), `Generics`, `IO.Exception`, `IsList`, `Stack` (+ `Stack.Types`), `Internal.*` (primitives and the numeric backend) |
 | `Platform.PHP` | PHP reification (`PHPValue`); importing it makes a module PHP-only ([FFI](ffi.md)) |
 
 `Moggi.Internal.*` is implementation: primitives, the numeric types and the

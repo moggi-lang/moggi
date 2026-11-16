@@ -216,10 +216,13 @@ A field the parameter does not occur in is a constant (`Rec0`), which is how
 `Pair a b` gets a `Par1` for its last parameter and constants for the ones before
 it.
 
-A parameter anywhere else is refused at the declaration: in a non-final argument
-of an application it has no position to be mapped into, and under a type
-*variable* (`f a`, as a `Free f a` would have) mapping it would need a
-`Functor f` that the derived instance cannot name.
+A field that applies a type parameter directly to the abstracted parameter
+(`f a` in `Free f a`) is `Rec1 f`: the wrapper holds the field as it is, so no
+`Functor f` is needed. A parameter anywhere else is refused at the declaration:
+in a non-final argument of an application it has no position to be mapped into,
+and inside a variable-headed application that is not exactly `f a` (such as
+`f (Maybe a)`) mapping it would need a `Functor f` the derived instance cannot
+name.
 
 A declaration may derive `Generic` and `Generic1` together: the metadata
 instances the two representations share are stated once.
@@ -234,8 +237,9 @@ once you write the instances your own classes need; they are not a drop-in
 
 ## Limits
 
-* **`Generic1` cannot name a `Functor` constraint.** A parameter under a type
-  *variable* (`f a`) is refused rather than approximated; one under a concrete
+* **`Generic1` cannot name a `Functor` constraint.** A direct `f a` is represented
+  by `Rec1 f` and needs none; a deeper variable-headed shape such as `f (Maybe
+  a)` is refused rather than approximated. A parameter under a concrete
   constructor is represented by composition ([above](#generic1)).
 * **`Generic` is stock-only.** `deriving newtype (Generic)` is refused: the
   representation must be the structure of the declaration, not of its

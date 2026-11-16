@@ -232,8 +232,15 @@ root ([Standard library](../stdlib.md)).
 
 ## Limits
 
-* **No concurrency.** There is no `forkIO`, no `MVar`, no `IORef`, and no async
-  exception API. Effects are sequential.
+* **Concurrency is host threads.** `Control.Concurrent` provides `forkIO`,
+  `MVar`, `Chan`, `QSem` and `QSemN`, and the JVM, .NET and PHP runtimes each
+  back them with a real OS thread. `throwTo` and `killThread` exist but can only
+  target the calling thread: there is no cross-thread asynchronous delivery.
+  The `mask` family is the identity and `getMaskingState` is always `Unmasked`
+  for the same reason. Descriptor and STM waiting (`threadWaitRead`,
+  `threadWaitWrite` and their STM forms) have `base`'s signatures but report
+  that the runtime has neither. `IORef` remains non-atomic; use an `MVar` where
+  two threads share a cell.
 * **No `IO` in data**, as above. If a computation must be passed around, pass a
   function returning `IO`.
 * **No lifting between `ST` and `IO` except `stToIO`.** An `IO` action cannot be
