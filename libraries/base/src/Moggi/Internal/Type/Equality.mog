@@ -1,0 +1,32 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The equality witnesses, below the reflection layer.
+--
+-- `Data.Type.Equality` also carries its `Read`/`Enum` instances, and those
+-- reach the numeric modules and the exception layer. `Type.Reflection` needs
+-- only the two witness types, so they live here and the public module
+-- re-exports them.
+module Moggi.Internal.Type.Equality
+  ( (:~:)(..)
+  , (:~~:)(..)
+  , TestEquality(..)
+  ) where
+
+import Data.Maybe (Maybe(..))
+
+-- | Propositional equality.
+data (:~:) a b where
+  Refl :: a :~: a
+
+-- | Kind-heterogeneous propositional equality.
+data (:~~:) (a :: k1) (b :: k2) where
+  HRefl :: (:~~:) a a
+
+-- | Types whose terms can decide equality of their type arguments.
+class TestEquality f where
+  testEquality :: f a -> f b -> Maybe (a :~: b)
+
+instance TestEquality ((:~:) a) where
+  testEquality Refl Refl = Just Refl
+
+instance TestEquality ((:~~:) a) where
+  testEquality HRefl HRefl = Just Refl

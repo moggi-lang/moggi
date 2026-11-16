@@ -1263,22 +1263,22 @@ function syntheticInstanceTypeName(Ast\InstanceDecl $instance): ?string
  */
 function synthesizeTypeableInstances(array &$units): void
 {
-    if (! isset($units['Type.Reflection'])) {
+    if (! isset($units['Moggi.Internal.Type.Reflection'])) {
         return;
     }
 
-    $reflection = $units['Type.Reflection'];
+    $reflection = $units['Moggi.Internal.Type.Reflection'];
     if (($reflection['parsed'] ?? false) !== true || ! ($reflection['program'] ?? null) instanceof Ast\Program) {
         return;
     }
 
-    if (! \array_key_exists('typeableInstances', $units['Type.Reflection'])) {
+    if (! \array_key_exists('typeableInstances', $units['Moggi.Internal.Type.Reflection'])) {
         $tupleInstances = synthesizedTupleTypeableInstances();
-        $units['Type.Reflection']['typeableInstances'] = $tupleInstances;
-        appendSyntheticUnitDecls($units['Type.Reflection']['program'], $units['Type.Reflection']);
+        $units['Moggi.Internal.Type.Reflection']['typeableInstances'] = $tupleInstances;
+        appendSyntheticUnitDecls($units['Moggi.Internal.Type.Reflection']['program'], $units['Moggi.Internal.Type.Reflection']);
     }
 
-    $reachedByReflection = typeableReachedModules($units, 'Type.Reflection');
+    $reachedByReflection = typeableReachedModules($units, 'Moggi.Internal.Type.Reflection');
     $writtenInstances = manualTypeableTypeNames($units);
 
     foreach ($units as $moduleName => &$unit) {
@@ -1295,29 +1295,37 @@ function synthesizeTypeableInstances(array &$units): void
             continue;
         }
 
-        if ($moduleName === 'Type.Reflection' || isset($reachedByReflection[$moduleName])) {
+        if ($moduleName === 'Moggi.Internal.Type.Reflection' || isset($reachedByReflection[$moduleName])) {
             continue;
         }
 
         $package = \str_contains((string) ($unit['path'] ?? ''), '/libraries/') ? 'base' : 'main';
         $instances = [];
         foreach ($program->items as $item) {
-            if (! $item instanceof Ast\DataDecl || isset($writtenInstances[$moduleName . "\0" . $item->name])) {
+            if (! $item instanceof Ast\DataDecl) {
                 continue;
             }
 
+            $written = $writtenInstances[$moduleName . "\0" . $item->name]
+                ?? ['constructor' => false, 'applied' => false];
             if ($item->params === []) {
-                $instances[] = synthesizedTypeableInstance($item, $moduleName, $package, false);
-            } else {
-                $instances[] = synthesizedTypeableInstance($item, $moduleName, $package, true);
-                if (typeableConstructorInstanceKindIsConcrete($item)) {
+                if (! $written['constructor']) {
                     $instances[] = synthesizedTypeableInstance($item, $moduleName, $package, false);
                 }
+
+                continue;
+            }
+
+            if (! $written['applied']) {
+                $instances[] = synthesizedTypeableInstance($item, $moduleName, $package, true);
+            }
+            if (! $written['constructor'] && typeableConstructorInstanceKindIsConcrete($item)) {
+                $instances[] = synthesizedTypeableInstance($item, $moduleName, $package, false);
             }
         }
 
         $unit['typeableInstances'] = $instances;
-        if ($instances !== [] && $moduleName !== 'Type.Reflection') {
+        if ($instances !== [] && $moduleName !== 'Moggi.Internal.Type.Reflection') {
             foreach (synthesizedTypeableImports() as $import) {
                 $unit['imports'][] = $import;
                 $program->imports[] = $import;
@@ -1366,8 +1374,14 @@ function typeableReachedModules(array $units, string $start): array
  * imports. Keying by the bare name instead let `Type.Reflection`'s written
  * `Typeable Sum` suppress the instances `Data.Functor.Sum`'s own `Sum` needs.
  *
+ * The two forms are tracked separately because they are different instances:
+ * `Typeable Proxy` represents the constructor, while `Typeable (Proxy a)` also
+ * represents the argument. A written constructor instance must not suppress the
+ * synthesized applied one; that is exactly how `Data.Data` supplies the former
+ * for types whose own modules cannot import reflection.
+ *
  * @param array<string, array<string, mixed>> $units
- * @return array<string, true> keyed `"<module>\0<type>"`
+ * @return array<string, array{constructor: bool, applied: bool}> keyed `"<module>\0<type>"`
  */
 function manualTypeableTypeNames(array $units): array
 {
@@ -1402,13 +1416,13 @@ function manualTypeableTypeNames(array $units): array
 
             $name = typeableTypeName($item->head);
             if ($name !== null) {
-                $written[] = [$moduleName, $name];
+                $written[] = [$moduleName, $name, $item->head instanceof Ast\TypeApp];
             }
         }
     }
 
     $names = [];
-    foreach ($written as [$moduleName, $name]) {
+    foreach ($written as [$moduleName, $name, $applied]) {
         $candidates = $declaredIn[$name] ?? [];
         $reachable = $candidates === [] ? [] : typeableReachedModules($units, $moduleName);
         $selected = [];
@@ -1424,7 +1438,10 @@ function manualTypeableTypeNames(array $units): array
         }
 
         foreach ($selected as $candidate) {
-            $names[$candidate . "\0" . $name] = true;
+            $key = $candidate . "\0" . $name;
+            $forms = $names[$key] ?? ['constructor' => false, 'applied' => false];
+            $forms[$applied ? 'applied' : 'constructor'] = true;
+            $names[$key] = $forms;
         }
     }
 
@@ -1468,11 +1485,75 @@ function typeableInstanceParameterType(Ast\DataParam $param, Ast\DataDecl $decl)
         }
     }
 
-    if ($isGadt && $param->kind instanceof Ast\KindInfer) {
+    if ($isGadt && $param->kind instanceof Ast\KindInfer
+        && ! typeableParameterIsAppliedAsHead($decl, $param->name)) {
         return new Ast\TypeKindAnnot($param->name, new Ast\KindType());
     }
 
     return new Ast\TypeVar($param->name);
+}
+
+/**
+ * Whether a GADT parameter is applied to arguments in any constructor field.
+ *
+ * Such a parameter's kind is not free: `data Tree f a where Branch :: f a -> ...`
+ * fixes `f` at `Type -> Type`, so pinning it to `Type` in the synthesized
+ * `Typeable` instance head contradicts the declaration.
+ */
+function typeableParameterIsAppliedAsHead(Ast\DataDecl $decl, string $name): bool
+{
+    foreach ($decl->constructors as $ctor) {
+        foreach ($ctor->fieldTypeAsts() as $field) {
+            if (typeAstAppliesVar($field, $name)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+function typeAstAppliesVar(Ast\TypeNode $type, string $name): bool
+{
+    if ($type instanceof Ast\TypeApp) {
+        $head = $type->con;
+        while ($head instanceof Ast\TypeApp) {
+            $head = $head->con;
+        }
+        if ($head instanceof Ast\TypeVar && $head->name === $name) {
+            return true;
+        }
+        if (typeAstAppliesVar($head, $name)) {
+            return true;
+        }
+        foreach ($type->args as $arg) {
+            if (typeAstAppliesVar($arg, $name)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    if ($type instanceof Ast\TypeArrow) {
+        return typeAstAppliesVar($type->from, $name) || typeAstAppliesVar($type->to, $name);
+    }
+
+    if ($type instanceof Ast\TypeForall) {
+        return typeAstAppliesVar($type->body, $name);
+    }
+
+    if ($type instanceof Ast\TypeConstrained) {
+        foreach ($type->constraints as $constraint) {
+            if (typeAstAppliesVar($constraint, $name)) {
+                return true;
+            }
+        }
+
+        return typeAstAppliesVar($type->body, $name);
+    }
+
+    return false;
 }
 
 /** Whether a bare instance for the constructor has a monomorphic kind. */
@@ -1488,18 +1569,19 @@ function typeableConstructorInstanceKindIsConcrete(Ast\DataDecl $decl): bool
 }
 
 /**
- * `Typeable` instances for the built-in tuple constructors `Tuple8`..`Tuple64`.
+ * `Typeable` instances for the built-in tuple constructors `Tuple2`..`Tuple64`.
  *
- * Lower arities are written in `Type.Reflection`; these are the same shape
- * generated once, so the representation and its kind stay in step with the
- * compiler's tuple table instead of being repeated 57 times.
+ * The tuple constructors are compiler built-ins rather than declarations in a
+ * module, so they cannot be synthesized where they are named. `Type.Reflection`
+ * names them all, and one generator keeps the representation and its kind in
+ * step with the compiler's tuple table instead of repeating 63 instances.
  *
  * @return list<Ast\InstanceDecl>
  */
 function synthesizedTupleTypeableInstances(): array
 {
     $instances = [];
-    for ($arity = 8; $arity <= 64; ++$arity) {
+    for ($arity = 2; $arity <= 64; ++$arity) {
         $constraints = [];
         $arguments = [];
         $head = new Ast\TypeCon('Tuple' . $arity);
@@ -1523,6 +1605,33 @@ function synthesizedTupleTypeableInstances(): array
                 new Ast\Variable('trLiftedRep'),
                 $kind,
             ]);
+        }
+
+        if ($arity < 8) {
+            $instances[] = new Ast\InstanceDecl(
+                'Typeable',
+                new Ast\TypeCon('Tuple' . $arity),
+                [new Ast\FunctionDecl(
+                    'typeRepOf',
+                    null,
+                    [],
+                    synthesizedApply(new Ast\Variable('tupleRep'), [
+                        new Ast\StringLit('(' . \str_repeat(',', $arity - 1) . ')'),
+                        $kind,
+                        new Ast\ListLit([]),
+                    ]),
+                    instanceMethod: true,
+                    line: 1,
+                    col: 1,
+                    endCol: 1,
+                )],
+                [],
+                1,
+                1,
+                1,
+            );
+
+            continue;
         }
 
         $body = synthesizedApply(new Ast\Variable('tupleRep'), [
@@ -1657,12 +1766,12 @@ function synthesizedTypeableImports(): array
 {
     return [
         new Ast\ImportDecl(
-            ['Type.Reflection'],
+            ['Moggi.Internal.Type.Reflection'],
             'named',
             [new Ast\ImportItem('Typeable')],
         ),
         new Ast\ImportDecl(
-            ['Type.Reflection'],
+            ['Moggi.Internal.Type.Reflection'],
             'qualifiedAs',
             [
                 new Ast\ImportItem('typeRep'),
@@ -1709,7 +1818,11 @@ function reparseModuleWithPatternSynonyms(
         }
 
         foreach ($qualifiedPatternSynonyms as $name => $definition) {
-            if (($definition['module'] ?? null) !== $target) {
+            $declaring = $definition['module'] ?? null;
+            $reexportedBy = \is_array($definition['exportedBy'] ?? null)
+                ? $definition['exportedBy']
+                : [];
+            if ($declaring !== $target && ! \in_array($target, $reexportedBy, true)) {
                 continue;
             }
 

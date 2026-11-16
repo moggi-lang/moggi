@@ -89,8 +89,8 @@ module Data.Typeable
     , trLiftedRep
     ) where
 
-import Type.Reflection qualified as I
-import Type.Reflection
+import Moggi.Internal.Type.Reflection qualified as I
+import Moggi.Internal.Type.Reflection
   ( Typeable, Fingerprint, SomeTypeRep(..)
   , TyCon, tyConPackage, tyConModule, tyConName, rnfTyCon, tyConFingerprint
   , trLiftedRep
@@ -110,14 +110,14 @@ type TypeRep = SomeTypeRep
 
 -- | Observe a type representation for the type of a value.
 typeOf :: forall a. Typeable a => a -> TypeRep
-typeOf _ = I.someTypeRep (I.typeRepProxy (Proxy :: Proxy a))
+typeOf _ = I.someTypeRep (Proxy :: Proxy a)
 
 -- | Takes a value of type @a@ and returns a concrete representation
 -- of that type.
 --
 -- @since base-4.7.0.0
 typeRep :: forall proxy a. Typeable a => proxy a -> TypeRep
-typeRep _ = I.someTypeRep (I.typeRepProxy (Proxy :: Proxy a))
+typeRep _ = I.someTypeRep (Proxy :: Proxy a)
 
 -- | Show a type representation
 showsTypeRep :: TypeRep -> ShowS
@@ -200,7 +200,7 @@ funResultTy a b = I.funResultTy a b
 
 -- | Build a function type.
 mkFunTy :: TypeRep -> TypeRep -> TypeRep
-mkFunTy (SomeTypeRep arg) (SomeTypeRep res) = I.someTypeRep (I.mkFunTy arg res)
+mkFunTy (SomeTypeRep arg) (SomeTypeRep res) = I.SomeTypeRep (I.mkFunTy arg res)
 
 -- | Splits a type constructor application. Note that if the type constructor is
 -- polymorphic, this will not return the kinds that were used.
@@ -231,22 +231,22 @@ rnfTypeRep = I.rnfSomeTypeRep
 
 -- Keeping backwards-compatibility
 typeOf1 :: forall t a. Typeable t => t a -> TypeRep
-typeOf1 _ = I.someTypeRep (I.typeRepProxy (Proxy :: Proxy t))
+typeOf1 _ = I.someTypeRep (Proxy :: Proxy t)
 
 typeOf2 :: forall t a b. Typeable t => t a b -> TypeRep
-typeOf2 _ = I.someTypeRep (I.typeRepProxy (Proxy :: Proxy t))
+typeOf2 _ = I.someTypeRep (Proxy :: Proxy t)
 
 typeOf3 :: forall t a b c. Typeable t => t a b c -> TypeRep
-typeOf3 _ = I.someTypeRep (I.typeRepProxy (Proxy :: Proxy t))
+typeOf3 _ = I.someTypeRep (Proxy :: Proxy t)
 
 typeOf4 :: forall t a b c d. Typeable t => t a b c d -> TypeRep
-typeOf4 _ = I.someTypeRep (I.typeRepProxy (Proxy :: Proxy t))
+typeOf4 _ = I.someTypeRep (Proxy :: Proxy t)
 
 typeOf5 :: forall t a b c d e. Typeable t => t a b c d e -> TypeRep
-typeOf5 _ = I.someTypeRep (I.typeRepProxy (Proxy :: Proxy t))
+typeOf5 _ = I.someTypeRep (Proxy :: Proxy t)
 
 typeOf6 :: forall t a b c d e f. Typeable t => t a b c d e f -> TypeRep
-typeOf6 _ = I.someTypeRep (I.typeRepProxy (Proxy :: Proxy t))
+typeOf6 _ = I.someTypeRep (Proxy :: Proxy t)
 
 typeOf7 :: forall t a b c d e f g. Typeable t => t a b c d e f g -> TypeRep
-typeOf7 _ = I.someTypeRep (I.typeRepProxy (Proxy :: Proxy t))
+typeOf7 _ = I.someTypeRep (Proxy :: Proxy t)

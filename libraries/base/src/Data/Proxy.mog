@@ -13,12 +13,15 @@ import Data.Bool
 import Data.Bounded
 import Data.Enum
 import Data.Eq
+import Data.Foldable (Foldable(..))
+import Data.Traversable (Traversable(..))
 import Moggi.Internal.Base
 import Text.Read
 import Data.Functor
 import Data.Monoid
 import Data.Ord
 import Data.Semigroup
+import Moggi.Generics
 import Moggi.Err
 import Text.Show
 import Moggi.Internal.Prim
@@ -42,7 +45,7 @@ import Moggi.Internal.Prim
 -- >>> Proxy :: Proxy Functor
 -- Proxy
 data Proxy t = Proxy
-  deriving (Bounded, Read)
+  deriving (Bounded, Read, Generic, Generic1)
 
 -- | A concrete, promotable proxy type, for use at the kind level.
 -- There are no instances for this because it is intended at the kind level only.
@@ -92,6 +95,17 @@ instance Monad Proxy where
   (>>=) _ _ = Proxy
 
 instance MonadPlus Proxy
+
+instance Foldable Proxy where
+  foldMap _ _ = mempty
+  foldr _ z _ = z
+  foldl _ z _ = z
+
+instance Traversable Proxy where
+  traverse _ _ = pure Proxy
+  sequenceA _ = pure Proxy
+  mapM _ _ = pure Proxy
+  sequence _ = pure Proxy
 
 -- | 'asProxyTypeOf' is a type-restricted version of 'const'.
 -- It is usually used as an infix operator, and its typing forces its first

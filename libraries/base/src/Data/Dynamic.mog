@@ -41,10 +41,11 @@ import Data.Maybe (Maybe(..))
 import Data.Semigroup ((<>))
 import Data.Type.Equality (HRefl)
 import Moggi.Err (errorWithoutStackTrace)
-import Moggi.Exception.Type (Exception)
+import Moggi.Exception.Type (Exception, exceptionTypeDisplay)
 import Moggi.Internal.Prim (exceptionUnwrap#, exceptionWrap#)
 import Text.Show (Show(..), show, showString)
-import Type.Reflection (Fun, SomeTypeRep(..), TypeRep, eqTypeRep, mkFunTy, typeOf, typeRep)
+import Type.Reflection (Fun, SomeTypeRep(..), TypeRep, eqTypeRep, typeOf, typeRep)
+import Moggi.Internal.Type.Reflection (mkFunTy)
 
 -------------------------------------------------------------
 --
@@ -73,7 +74,7 @@ instance Show Dynamic where
 -- here so that it isn't an orphan
 -- | @since base-4.0.0.0
 instance Exception Dynamic where
-  toException e = exceptionWrap# "Dynamic" (displayException e) e
+  toException e = exceptionWrap# "Dynamic" (displayException e) (show e) (exceptionTypeDisplay e) e
   fromException se = exceptionUnwrap# "Dynamic" se
 
 -- | Converts an arbitrary value into an object of type 'Dynamic'.
