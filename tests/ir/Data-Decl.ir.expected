@@ -2,8 +2,15 @@ module
   data Option a
     constructor None
     constructor Some
+  function typeRepOf(__ev_Typeable)
+      t0 = call Moggi.Internal.Type.Reflection::mkTyCon("Ir.DataDecl", "main", "Option")
+      t1 = call Moggi.Internal.Type.Reflection::typeRep(__ev_Typeable)
+      t2 = call Moggi.Internal.Type.Reflection::SomeTypeRep(t1)
+      t3 = call Moggi.Internal.Type.Reflection::kindFun(@Moggi.Internal.Type.Reflection::trLiftedRep, @Moggi.Internal.Type.Reflection::trLiftedRep)
+      t4 = call Moggi.Internal.Type.Reflection::mkTyConApp(t0, [t2], t3)
+      ret t4
   function none()
       ret @None
   function some(x)
-      t0 = call Some(x)
-      ret t0
+      t5 = call Some(x)
+      ret t5

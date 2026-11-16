@@ -31,7 +31,7 @@ function __w_sequenceLocal($_p0) {
         $__scrut_0 = $_p0;
         $a = $__scrut_0[0];
         $rest = \array_slice($__scrut_0, 1);
-        ($_p0[0][1])();
+        \Moggi\ioRun($_p0[0]);
         $__t1 = __w_sequenceLocal(\array_slice($_p0, 1));
         return null;
     }
@@ -59,6 +59,6 @@ function __w_main() {
     $__t9 = __w_sequenceLocal([$__t6, $__t8]);
     $__t10 = \System\IO\__w_putStrLn("traverse_");
     $__t11 = traverse_(__ev_Foldable_List(), __ev_Functor_IO(), __ev_Applicative_IO(), putStrLn(...), ["c", "d"]);
-    ($__t11[1])();
+    \Moggi\ioRun($__t11);
     return null;
 }

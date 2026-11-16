@@ -1,17 +1,24 @@
 module
   data Chain a
     constructor :>
+  function typeRepOf(__ev_Typeable)
+      t0 = call Moggi.Internal.Type.Reflection::mkTyCon("Tc.Infix.Constructor.Fixity", "main", "Chain")
+      t1 = call Moggi.Internal.Type.Reflection::typeRep(__ev_Typeable)
+      t2 = call Moggi.Internal.Type.Reflection::SomeTypeRep(t1)
+      t3 = call Moggi.Internal.Type.Reflection::kindFun(@Moggi.Internal.Type.Reflection::trLiftedRep, @Moggi.Internal.Type.Reflection::trLiftedRep)
+      t4 = call Moggi.Internal.Type.Reflection::mkTyConApp(t0, [t2], t3)
+      ret t4
   function nested()
-      t0 = call :>(1, [2, 3])
-      ret t0
+      t5 = call :>(1, [2, 3])
+      ret t5
   function ok()
       match_return @nested
         arm x :> xs
-            t4 = match intrinsic intEq#(x, 1)
+            t9 = match intrinsic intEq#(x, 1)
               arm True
-                  t6 = call __ev_Eq_List_1(@__ev_Eq_Int)
-                  t5 = dict_call t6->==(xs, [2, 3])
-                  t4 = t5
+                  t11 = call __ev_Eq_List_1(@__ev_Eq_Int)
+                  t10 = dict_call t11->==(xs, [2, 3])
+                  t9 = t10
               arm False
-                  t4 = @False
-            ret t4
+                  t9 = @False
+            ret t9

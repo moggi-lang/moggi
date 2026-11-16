@@ -33,3 +33,6 @@ not-io
 boom
 ok
 recovered-ok
+some-show:wrapped
+some-unwrap:wrapped
+some-unwrap-missing

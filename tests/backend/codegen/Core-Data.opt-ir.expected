@@ -15,16 +15,20 @@ module
       match_return __record
         arm User _ __value
             ret __value
-  function makeUser()
-      t8 = call User(1, 30)
-      ret t8
-  function getAge(user)
-      t9 = call __field1(user)
+  function typeRepOf()
+      t8 = call Moggi.Internal.Type.Reflection::mkTyCon("Main", "main", "User")
+      t9 = call Moggi.Internal.Type.Reflection::mkTyConApp(t8, [], @Moggi.Internal.Type.Reflection::trLiftedRep)
       ret t9
+  function makeUser()
+      t10 = call User(1, 30)
+      ret t10
+  function getAge(user)
+      t11 = call __field1(user)
+      ret t11
   function showUser(_p0)
-      t10 = call __field0(_p0)
-      t11 = call __field1(_p0)
-      ret intrinsic intAdd#(t10, t11)
-  function ageOf(_p0)
+      t12 = call __field0(_p0)
       t13 = call __field1(_p0)
-      ret t13
+      ret intrinsic intAdd#(t12, t13)
+  function ageOf(_p0)
+      t15 = call __field1(_p0)
+      ret t15

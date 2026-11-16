@@ -1,0 +1,46 @@
+import Debug.Trace
+import Moggi.IsList (fromList, toList)
+import Moggi.Stack
+import Moggi.Stack.Types (SrcLoc(..))
+import Moggi.Exception.Type (ErrorCall(..), pattern ErrorCallWithLocation)
+import System.IO
+
+stackFromSites :: [(String, SrcLoc)] -> CallStack
+stackFromSites = fromList
+
+stackSites :: CallStack -> [(String, SrcLoc)]
+stackSites stack = toList stack
+
+main :: IO ()
+main = do
+  let traced = trace "trace:hello" (42 :: Int)
+  putStrLn ("trace-value:" <> show traced)
+  let sites = getCallStack callStack
+  putStrLn ("stack-nonempty:" <> show (not (prettyCallStack callStack == "")))
+  putStrLn ("frames-present:" <> show (length sites > 0))
+  putStrLn ("frame-names:" <> show (allNamed sites))
+  putStrLn ("empty-pretty:" <> show (prettyCallStack emptyCallStack == ""))
+  putStrLn ("empty-srcloc:" <> prettySrcLoc emptyLoc)
+  let site = SrcLoc "base" "M" "F.hs" 3 5 3 9
+  let pushed = pushCallStack ("f", site) emptyCallStack
+  putStrLn ("pretty-srcloc:" <> show (prettySrcLoc site == "F.hs:3:5 in base:M"))
+  putStrLn ("pretty-pushed:" <> show (prettyCallStack pushed == "CallStack (from HasCallStack):\n  f, called at F.hs:3:5 in base:M"))
+  putStrLn ("pretty-order:" <> show (prettyCallStack (pushCallStack ("a", emptyLoc) (pushCallStack ("b", site) emptyCallStack)) == "CallStack (from HasCallStack):\n  a, called at :0:0 in :\n  b, called at F.hs:3:5 in base:M"))
+  putStrLn ("pretty-frozen:" <> show (prettyCallStack (freezeCallStack pushed) == "CallStack (from HasCallStack):\n  f, called at F.hs:3:5 in base:M"))
+  putStrLn ("show-callstack:" <> show (show pushed == show (getCallStack pushed)))
+  putStrLn ("with-frozen:" <> show (withFrozenCallStack (not (getCallStack callStack == []))))
+  putStrLn ("push-pop:" <> show (getCallStack (popCallStack (pushCallStack ("site", emptyLoc) emptyCallStack)) == []))
+  putStrLn ("frozen-push:" <> show (getCallStack (pushCallStack ("site", emptyLoc) (freezeCallStack emptyCallStack)) == []))
+  putStrLn ("call-site-list:" <> show (length (getCallStack (fromCallSiteList [("a", emptyLoc), ("b", emptyLoc)])) == 2))
+  putStrLn ("frozen-pop:" <> show (getCallStack (popCallStack (freezeCallStack pushed)) == getCallStack pushed))
+  putStrLn ("islist-roundtrip:" <> show (getCallStack (stackFromSites (getCallStack pushed)) == getCallStack pushed))
+  putStrLn ("islist-tolist:" <> show (length (stackSites pushed) == 1))
+  putStrLn ("pattern-message:" <> show (case ErrorCallWithLocation "m" "loc" of ErrorCallWithLocation msg _ -> msg == "m"))
+  traceIO "trace:io"
+
+emptyLoc :: SrcLoc
+emptyLoc = SrcLoc "" "" "" 0 0 0 0
+
+allNamed :: [(String, SrcLoc)] -> Bool
+allNamed [] = True
+allNamed ((name, _) : rest) = not (name == "") && allNamed rest

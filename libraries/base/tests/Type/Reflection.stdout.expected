@@ -5,7 +5,7 @@ Bool
 Data.Char
 ()
 Int -> Bool
-[] Int
+[Int]
 True
 False
 Moggi.Internal.Data.Semigroup
@@ -103,7 +103,6 @@ handle Handle Handle 0
 ioMode IOMode IOMode 0
 readPrec ReadPrec Int ReadPrec 1
 lexeme Lexeme Lexeme 0
-fingerprint Fingerprint Fingerprint 0
 typeRep TypeRep Int TypeRep 1
 unit () () 0
 tuple8 (Int, Int, Int, Int, Int, Int, Int, Int) (,,,,,,,) 8

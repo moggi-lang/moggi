@@ -2,6 +2,7 @@ module Main where
 
 import Data.Int (Int8)
 import Data.Proxy
+import Data.Typeable (showsTypeRep)
 import Data.Word (Word64)
 import Type.Reflection
 
@@ -9,20 +10,23 @@ data Colour = Red | Green
 
 data Box a = Box a
 
+showIndexed :: TypeRep a -> String
+showIndexed t = showsTypeRep (SomeTypeRep t) ""
+
 main :: IO ()
 main = do
-  putStrLn (showsTypeRep (typeOf Red) "")
-  putStrLn (showsTypeRep (typeOf (Box Red)) "")
-  putStrLn (showsTypeRep (typeRep :: TypeRep (Box (Box Colour))) "")
-  putStrLn (showsTypeRep (typeRep :: TypeRep [Box Int]) "")
-  putStrLn (showsTypeRep (typeRep :: TypeRep (Colour -> Bool)) "")
-  putStrLn (showsTypeRep (typeOf (Proxy :: Proxy Colour)) "")
-  putStrLn (showsTypeRep (typeRep :: TypeRep (Int, Bool)) "")
-  putStrLn (showsTypeRep (typeRep :: TypeRep (IO ())) "")
-  putStrLn (showsTypeRep (typeOf LT) "")
-  putStrLn (showsTypeRep (typeRep :: TypeRep Int8) "")
-  putStrLn (showsTypeRep (typeRep :: TypeRep Word64) "")
-  putStrLn (showsTypeRep (typeRep :: TypeRep Integer) "")
-  putStrLn (showsTypeRep (typeRep :: TypeRep (Maybe Int)) "")
-  putStrLn (showsTypeRep (typeRep :: TypeRep (Either Int Bool)) "")
-  putStrLn (showsTypeRep (typeRep :: TypeRep (Int, Bool, Char, Int, Bool, Char, Int)) "")
+  putStrLn (showIndexed (typeOf Red))
+  putStrLn (showIndexed (typeOf (Box Red)))
+  putStrLn (showIndexed (typeRep :: TypeRep (Box (Box Colour))))
+  putStrLn (showIndexed (typeRep :: TypeRep [Box Int]))
+  putStrLn (showIndexed (typeRep :: TypeRep (Colour -> Bool)))
+  putStrLn (showIndexed (typeOf (Proxy :: Proxy Colour)))
+  putStrLn (showIndexed (typeRep :: TypeRep (Int, Bool)))
+  putStrLn (showIndexed (typeRep :: TypeRep (IO ())))
+  putStrLn (showIndexed (typeOf LT))
+  putStrLn (showIndexed (typeRep :: TypeRep Int8))
+  putStrLn (showIndexed (typeRep :: TypeRep Word64))
+  putStrLn (showIndexed (typeRep :: TypeRep Integer))
+  putStrLn (showIndexed (typeRep :: TypeRep (Maybe Int)))
+  putStrLn (showIndexed (typeRep :: TypeRep (Either Int Bool)))
+  putStrLn (showIndexed (typeRep :: TypeRep (Int, Bool, Char, Int, Bool, Char, Int)))

@@ -25,6 +25,20 @@ program
         evidence_method Eq./= evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
+  function __ev_Typeable_ViaSimple_typeRepOf :: TypeRep ViaSimple
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "ViaSimple"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   newtype ViaSum
     constructor ViaSum
       field  :: Int
@@ -74,6 +88,20 @@ program
       alt
         pat_con False
         constructor_ref True
+  function __ev_Typeable_ViaSum_typeRepOf :: TypeRep ViaSum
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "ViaSum"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   newtype ViaWrapped
     constructor ViaWrapped
       field  :: Int
@@ -108,6 +136,20 @@ program
       apply
         constructor_ref ViaSum
         variable __v1
+  function __ev_Typeable_ViaWrapped_typeRepOf :: TypeRep ViaWrapped
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "ViaWrapped"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   newtype ViaInner
     constructor ViaInner
       field  :: Int
@@ -157,6 +199,20 @@ program
       alt
         pat_con False
         constructor_ref True
+  function __ev_Typeable_ViaInner_typeRepOf :: TypeRep ViaInner
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "ViaInner"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   newtype ViaOuter
     constructor ViaOuter
       field  :: ViaInner
@@ -187,6 +243,20 @@ program
         evidence_method Eq./= evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
+  function __ev_Typeable_ViaOuter_typeRepOf :: TypeRep ViaOuter
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "ViaOuter"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   class ViaEq a
     method === :: a -> a -> Bool
   function __ev_ViaEq_Int_Op3d3d3d :: Int -> Int -> Bool
@@ -210,3 +280,17 @@ program
         evidence_method ViaEq.=== evidence=__ev_ViaEq nullary=0
         variable __v0
       variable __v1
+  function __ev_Typeable_ViaUser_typeRepOf :: TypeRep ViaUser
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "ViaUser"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep

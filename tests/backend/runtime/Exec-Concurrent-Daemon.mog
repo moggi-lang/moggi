@@ -1,0 +1,7 @@
+import Control.Concurrent
+import System.IO
+
+main :: IO ()
+main = do
+  _ <- forkIO (threadDelay 300000000)
+  putStrLn "done"

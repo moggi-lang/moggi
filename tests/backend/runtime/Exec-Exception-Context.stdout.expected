@@ -1,0 +1,20 @@
+annotation
+context-constructor
+boom|site
+base:Moggi.Exception.Type.ErrorCall:
+
+manual
+
+manual
+shown
+displayed
+shown
+True
+handler-error:caught
+while-handling:True
+catches-unmatched:False
+2
+Unmasked
+Assertion failed
+async:thread killed
+False

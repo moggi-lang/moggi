@@ -297,6 +297,20 @@ program
       apply
         evidence_method Num.fromInteger evidence=__ev_Num nullary=0
         variable __n0
+  function __ev_Typeable_Age_typeRepOf :: TypeRep Age
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Age"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   data NotAge
     constructor NotAge
       field  :: Int
@@ -399,11 +413,25 @@ program
             evidence_ref Show NotAge
         variable ls
       variable s
+  function __ev_Typeable_NotAge_typeRepOf :: TypeRep NotAge
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "NotAge"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   newtype Id a
     constructor Id
       field  :: a
     deriving (Functor)
-  function map :: t80 -> t78 -> Id t80 -> Id t78
+  function map :: t82 -> t80 -> Id t82 -> Id t80
     pat_var __f
     pat_var __x
     case
@@ -416,6 +444,31 @@ program
           apply
             variable __f
             variable __v0
+  function __ev_Typeable_Id_1_typeRepOf :: __Dict_Typeable t84 -> TypeRep Id t84
+    pat_var __ev_Typeable
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Id"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        qualified_ref MoggiTypeable.trLiftedRep
   function addAge :: Age -> Age -> Age
     pat_var x
     pat_var y
@@ -1006,6 +1059,20 @@ program
     apply
       variable readListPrecDefault
       evidence_ref Read Color
+  function __ev_Typeable_Color_typeRepOf :: TypeRep Color
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Color"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function cmp :: Ordering
     apply
       apply
@@ -1092,6 +1159,20 @@ program
       alt
         pat_con False
         constructor_ref True
+  function __ev_Typeable_StockColor_typeRepOf :: TypeRep StockColor
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "StockColor"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function same :: Bool
     apply
       apply

@@ -185,12 +185,26 @@ program
       alt
         pat_con False
         constructor_ref True
+  function __ev_Typeable_Color_typeRepOf :: TypeRep Color
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Color"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   data Pair a b
     constructor MkPair
       field  :: a
       field  :: b
     deriving (Generic)
-  function __ev_Generic_Pair_2_from :: Pair t119 t120 -> Rep Pair t119 t120 t127
+  function __ev_Generic_Pair_2_from :: Pair t122 t123 -> Rep Pair t122 t123 t130
     pat_var __x
     case
       variable __x
@@ -213,7 +227,7 @@ program
                 apply
                   constructor_ref K1
                   variable __f1
-  function __ev_Generic_Pair_2_to :: Rep Pair t119 t120 t182 -> Pair t119 t120
+  function __ev_Generic_Pair_2_to :: Rep Pair t122 t123 t185 -> Pair t122 t123
     pat_var __r
     case
       variable __r
@@ -262,6 +276,42 @@ program
   function __ev_Selector_h_267033c39ff05e23_selName :: MetaProxy MetaSel Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy -> String
     pat_var _s
     string ""
+  function __ev_Typeable_h_809ab9f3cbd4cefa_typeRepOf :: __Dict_Typeable t189 -> __Dict_Typeable t190 -> TypeRep Pair t189 t190
+    pat_var __ev_Typeable
+    pat_var __ev_Typeable_1
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Pair"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep b
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_1
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        apply
+          apply
+            qualified_ref MoggiTypeable.kindFun
+            qualified_ref MoggiTypeable.trLiftedRep
+          qualified_ref MoggiTypeable.trLiftedRep
   data Person
     constructor Person
       field name :: String
@@ -285,7 +335,7 @@ program
           pat_wild _
           pat_var __value
         variable __value
-  function __ev_Generic_Person_from :: Person -> Rep Person t196
+  function __ev_Generic_Person_from :: Person -> Rep Person t215
     pat_var __x
     case
       variable __x
@@ -308,7 +358,7 @@ program
                 apply
                   constructor_ref K1
                   variable __f1
-  function __ev_Generic_Person_to :: Rep Person t249 -> Person
+  function __ev_Generic_Person_to :: Rep Person t268 -> Person
     pat_var __r
     case
       variable __r
@@ -360,11 +410,25 @@ program
   function __ev_Selector_h_5a8bc8e1b8f7e7c4_selName :: MetaProxy MetaSel Just "age" 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy -> String
     pat_var _s
     string "age"
+  function __ev_Typeable_Person_typeRepOf :: TypeRep Person
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Person"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   newtype Age
     constructor Age
       field  :: Int
     deriving (Generic)
-  function __ev_Generic_Age_from :: Age -> Rep Age t255
+  function __ev_Generic_Age_from :: Age -> Rep Age t277
     pat_var __x
     case
       variable __x
@@ -380,7 +444,7 @@ program
               apply
                 constructor_ref K1
                 variable __f0
-  function __ev_Generic_Age_to :: Rep Age t288 -> Age
+  function __ev_Generic_Age_to :: Rep Age t310 -> Age
     pat_var __r
     case
       variable __r
@@ -420,15 +484,29 @@ program
   function __ev_Constructor_h_1035541180fb6ede_conArity :: MetaProxy MetaCons "Age" 'PrefixI 'False -> Int
     pat_var _c
     integer 1
+  function __ev_Typeable_Age_typeRepOf :: TypeRep Age
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Age"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   data Empty
     deriving (Generic)
-  function __ev_Generic_Empty_from :: Empty -> Rep Empty t294
+  function __ev_Generic_Empty_from :: Empty -> Rep Empty t319
     pat_var __x
     apply
       evidence_method Generic.from evidence= nullary=0
         instance Empty
       variable __x
-  function __ev_Generic_Empty_to :: Rep Empty t297 -> Empty
+  function __ev_Generic_Empty_to :: Rep Empty t322 -> Empty
     pat_var __r
     apply
       evidence_method Generic.to evidence= nullary=0
@@ -452,12 +530,26 @@ program
   function __ev_Datatype_h_603e1f30f9e7caac_isSum :: MetaProxy MetaData "Empty" "Main" "moggi" 'False -> Bool
     pat_var _d
     constructor_ref False
+  function __ev_Typeable_Empty_typeRepOf :: TypeRep Empty
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Empty"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   data :|| a b
     constructor :||
       field  :: a
       field  :: b
     deriving (Generic)
-  function __ev_Generic_h_b8548481df989cca_from :: t304 :|| t305 -> Rep t304 :|| t305 t312
+  function __ev_Generic_h_b8548481df989cca_from :: t332 :|| t333 -> Rep t332 :|| t333 t340
     pat_var __x
     case
       variable __x
@@ -480,7 +572,7 @@ program
                 apply
                   constructor_ref K1
                   variable __f1
-  function __ev_Generic_h_b8548481df989cca_to :: Rep t304 :|| t305 t367 -> t304 :|| t305
+  function __ev_Generic_h_b8548481df989cca_to :: Rep t332 :|| t333 t395 -> t332 :|| t333
     pat_var __r
     case
       variable __r
@@ -524,6 +616,42 @@ program
   function __ev_Constructor_h_7bfdbba6bd92c825_conArity :: MetaProxy MetaCons ":||" 'InfixI 'LeftAssociative 'False -> Int
     pat_var _c
     integer 2
+  function __ev_Typeable_h_0c0263f3315fd2bd_typeRepOf :: __Dict_Typeable t399 -> __Dict_Typeable t400 -> TypeRep t399 :|| t400
+    pat_var __ev_Typeable
+    pat_var __ev_Typeable_1
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string ":||"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep b
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_1
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        apply
+          apply
+            qualified_ref MoggiTypeable.kindFun
+            qualified_ref MoggiTypeable.trLiftedRep
+          qualified_ref MoggiTypeable.trLiftedRep
   function roundtrip :: Color -> Color
     pat_var c
     apply

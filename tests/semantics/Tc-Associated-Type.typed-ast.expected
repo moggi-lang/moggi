@@ -4,9 +4,7 @@ program
     method get :: a -> F a
   function get :: Bool -> F Bool
     pat_var b
-    intrinsic intFromInteger#
-      intrinsic intToInteger#
-        integer 0
+    integer 0
   function asInt :: F Bool -> Int
     pat_var x
     variable x

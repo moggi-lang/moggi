@@ -1,0 +1,117 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+import Control.Concurrent (myThreadId)
+import Control.Exception
+import Control.Exception.Annotation
+import Control.Exception.Context
+import Control.Monad ((>>=))
+import Data.Bool (Bool(..))
+import Data.Either (Either(..))
+import Data.Maybe (Maybe(..))
+import Data.Num ((+))
+import Data.Semigroup ((<>))
+import Data.String (String)
+import System.IO (IO, print, putStrLn)
+import Text.Show (show)
+
+data Marker = Marker String
+
+instance Show Marker where
+  show (Marker s) = s
+
+instance ExceptionAnnotation Marker where
+  displayExceptionAnnotation (Marker s) = s
+
+data ShownDifferently = ShownDifferently
+
+instance Show ShownDifferently where
+  show _ = "shown"
+
+instance Exception ShownDifferently where
+  displayException _ = "displayed"
+
+annotated :: IO ()
+annotated = annotateIO (Marker "site") (throwIO (ErrorCall "boom"))
+
+showContext :: Either (ExceptionWithContext ErrorCall) () -> IO ()
+showContext r = case r of
+  Left (ExceptionWithContext ctx e) ->
+    putStrLn (displayException e <> "|" <> displayExceptionContext ctx)
+  Right _ -> putStrLn "unexpected"
+
+errorHandler :: ErrorCall -> IO ()
+errorHandler e = putStrLn ("handler-error:" <> displayException e)
+
+ioHandler :: IOException -> IO ()
+ioHandler _ = putStrLn "handler-io"
+
+rethrowHandler :: ErrorCall -> IO ()
+rethrowHandler _ = throwIO (ErrorCall "from-handler")
+
+hasWhileHandling :: ExceptionContext -> Bool
+hasWhileHandling ctx = case (getExceptionAnnotations ctx :: [WhileHandling]) of
+  [] -> False
+  _ -> True
+
+clearContext :: SomeException -> Bool
+clearContext se = case getAllExceptionAnnotations (someExceptionContext (toException se)) of
+  [] -> True
+  _ -> False
+
+whileLine :: IO ()
+whileLine = do
+  result <- (tryWithContext (catch (throwIO (ErrorCall "inner")) rethrowHandler) :: IO (Either (ExceptionWithContext ErrorCall) ()))
+  case result of
+    Left (ExceptionWithContext ctx _) ->
+      putStrLn ("while-handling:" <> show (hasWhileHandling ctx))
+    Right _ -> putStrLn "while-handling:unexpected"
+
+unmatchedLine :: IO ()
+unmatchedLine = do
+  result <- (tryWithContext (catches (throwIO (ErrorCall "unmatched")) [Handler ioHandler]) :: IO (Either (ExceptionWithContext ErrorCall) ()))
+  case result of
+    Left (ExceptionWithContext ctx _) ->
+      putStrLn ("catches-unmatched:" <> show (hasWhileHandling ctx))
+    Right _ -> putStrLn "catches-unmatched:unexpected"
+
+showAnnotation :: SomeExceptionAnnotation -> String
+showAnnotation a = case a of
+  SomeExceptionAnnotation m -> displayExceptionAnnotation m
+
+main :: IO ()
+main = do
+  putStrLn (showAnnotation (SomeExceptionAnnotation (Marker "annotation")))
+  putStrLn (case ExceptionContext [] of
+    ExceptionContext _ -> "context-constructor")
+
+  r <- tryWithContext annotated
+  showContext r
+
+  let se = addExceptionContext (Marker "manual") (toException (ErrorCall "manual"))
+  putStrLn (displayExceptionWithInfo se)
+  putStrLn (show (toException ShownDifferently))
+  putStrLn (displayException (toException ShownDifferently))
+  putStrLn (show (SomeAsyncException ShownDifferently))
+  putStrLn (show (clearContext se))
+
+  catches (throwIO (ErrorCall "caught")) [Handler errorHandler, Handler ioHandler]
+  whileLine
+  unmatchedLine
+
+  value <- evaluate (1 + 1)
+  print value
+
+  state <- getMaskingState
+  print state
+
+  failed <- try (evaluate (assert False ()))
+  putStrLn (case failed of
+    Left e -> displayException (e :: AssertionFailed)
+    Right _ -> "unexpected")
+
+  self <- myThreadId
+  stopped <- try (throwTo self ThreadKilled)
+  putStrLn (case stopped of
+    Left e -> "async:" <> show (e :: AsyncException)
+    Right _ -> "unexpected")
+
+  print (backtraceDesired (NoBacktrace (ErrorCall "x")))

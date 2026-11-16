@@ -1,6 +1,10 @@
 module
   data Secret
     constructor Secret
+  function typeRepOf()
+      t0 = call Moggi.Internal.Type.Reflection::mkTyCon("Internal", "main", "Secret")
+      t1 = call Moggi.Internal.Type.Reflection::mkTyConApp(t0, [], @Moggi.Internal.Type.Reflection::trLiftedRep)
+      ret t1
   function peek(_p0)
-      t0 = call __field0(_p0)
-      ret t0
+      t2 = call __field0(_p0)
+      ret t2

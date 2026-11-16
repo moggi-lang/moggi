@@ -1,0 +1,22 @@
+import Control.Concurrent
+import Control.Exception
+import System.IO
+
+putValue :: MVar Int -> IO ()
+putValue box = putMVar box 42
+
+finish :: MVar (Either SomeException Int) -> Either SomeException Int -> IO ()
+finish done outcome = putMVar done outcome
+
+main :: IO ()
+main = do
+  box <- newEmptyMVar
+  _ <- forkIO do putMVar box 42
+  value <- takeMVar box
+  putStrLn (show value)
+  done <- newEmptyMVar
+  _ <- forkFinally (pure 7) (finish done)
+  result <- takeMVar done
+  case result of
+    Left _ -> putStrLn "failed"
+    Right n -> putStrLn (show n)

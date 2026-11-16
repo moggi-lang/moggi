@@ -200,7 +200,7 @@ try {
         $names === [
             '__ev_Peek_Box_bigness', 'bigness', 'both', 'bound', 'chosen', 'countdown', 'hold', 'hollow',
             'inferred', 'inferredConstrained', 'keyed', 'label', 'listed', 'main', 'openValue', 'projected',
-            'shown', 'sumDown', 'tag', 'twice',
+            'shown', 'sumDown', 'tag', 'twice', 'typeRepOf',
         ],
         'every declaration the module lowers is recorded, got: ' . \implode(', ', $names),
     );

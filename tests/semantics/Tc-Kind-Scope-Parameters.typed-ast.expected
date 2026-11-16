@@ -1,9 +1,81 @@
 program
   data Phantom (a :: Type)
     constructor Phantom
+  function __ev_Typeable_Phantom_1_typeRepOf :: __Dict_Typeable t0 -> TypeRep Phantom t0
+    pat_var __ev_Typeable
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Phantom"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        qualified_ref MoggiTypeable.trLiftedRep
+  function __ev_Typeable_Phantom_typeRepOf :: TypeRep Phantom
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Phantom"
+        list
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        qualified_ref MoggiTypeable.trLiftedRep
   data Higher (a :: Type -> Type)
     constructor Higher
       field  :: a Int
+  function __ev_Typeable_Higher_1_typeRepOf :: __Dict_Typeable t15 -> TypeRep Higher t15
+    pat_var __ev_Typeable
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Higher"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          apply
+            apply
+              qualified_ref MoggiTypeable.kindFun
+              qualified_ref MoggiTypeable.trLiftedRep
+            qualified_ref MoggiTypeable.trLiftedRep
+        qualified_ref MoggiTypeable.trLiftedRep
   function higher :: Higher Maybe -> Int
     pat_var h
     integer 0

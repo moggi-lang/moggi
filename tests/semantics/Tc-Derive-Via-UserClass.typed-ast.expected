@@ -40,3 +40,17 @@ program
         evidence_method MyEq./== evidence=__ev_MyEq nullary=0
         variable __v0
       variable __v1
+  function typeRepOf :: TypeRep MyInt
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "MyInt"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep

@@ -1,0 +1,105 @@
+import Control.Concurrent
+import Control.Exception
+import Data.Either
+import Data.Maybe
+import System.IO
+
+-- One module exercises the supported threading and asynchronous-exception
+-- surface together: host-thread forks, MVar hand-off, forkFinally outcomes,
+-- self-directed throwTo/killThread, the async hierarchy, masking state, and
+-- exception propagation out of a forked action.
+
+handoff :: MVar Int -> IO ()
+handoff box = putMVar box 42
+
+finishInt :: MVar (Either SomeException Int) -> Either SomeException Int -> IO ()
+finishInt done outcome = putMVar done outcome
+
+reportOutcome :: MVar (Either SomeException Int) -> String -> IO ()
+reportOutcome done label = do
+  outcome <- takeMVar done
+  case outcome of
+    Left e -> putStrLn (label <> ":left:" <> displayException e)
+    Right n -> putStrLn (label <> ":right:" <> show n)
+
+tryAsync :: IO a -> IO (Either AsyncException a)
+tryAsync action = try action
+
+tryError :: IO a -> IO (Either ErrorCall a)
+tryError action = try action
+
+selfThrowTo :: IO ()
+selfThrowTo = do
+  tid <- myThreadId
+  result <- tryAsync (throwTo tid ThreadKilled)
+  case result of
+    Left e -> putStrLn ("throwTo-self:" <> show e)
+    Right _ -> putStrLn "throwTo-self:unexpected"
+
+selfKill :: IO ()
+selfKill = do
+  tid <- myThreadId
+  result <- tryAsync (killThread tid)
+  case result of
+    Left e -> putStrLn ("kill-self:" <> show e)
+    Right _ -> putStrLn "kill-self:unexpected"
+
+asyncHierarchy :: IO ()
+asyncHierarchy = do
+  direct <- tryAsync (throwIO ThreadKilled)
+  case direct of
+    Left e -> putStrLn ("async-direct:" <> show e)
+    Right _ -> putStrLn "async-direct:unexpected"
+  wrapped <- tryAsync (throwIO (asyncExceptionToException ThreadKilled))
+  case wrapped of
+    Left e -> putStrLn ("async-wrapped:" <> show e)
+    Right _ -> putStrLn "async-wrapped:unexpected"
+
+maskState :: IO ()
+maskState = do
+  plain <- getMaskingState
+  putStrLn ("mask-plain:" <> show plain)
+  inside <- mask (\_ -> getMaskingState)
+  putStrLn ("mask-inside:" <> show inside)
+  unmasked <- mask (\restore -> restore getMaskingState)
+  putStrLn ("mask-restore:" <> show unmasked)
+  uninterruptible <- uninterruptibleMask (\_ -> getMaskingState)
+  putStrLn ("mask-uninterruptible:" <> show uninterruptible)
+
+main :: IO ()
+main = do
+  tid <- myThreadId
+  again <- myThreadId
+  putStrLn ("thread-id-stable:" <> show (tid == again))
+
+  box <- newEmptyMVar
+  _ <- forkIO (handoff box)
+  value <- takeMVar box
+  putStrLn ("fork-handoff:" <> show value)
+
+  success <- newEmptyMVar
+  _ <- forkFinally (pure 7) (finishInt success)
+  reportOutcome success "fork-finally-ok"
+
+  failure <- newEmptyMVar
+  _ <- forkFinally (throwIO (ErrorCall "child-boom")) (finishInt failure)
+  reportOutcome failure "fork-finally-fail"
+
+  nested <- newEmptyMVar
+  inner <- newMVar 5
+  _ <- forkIO (putMVar nested inner)
+  received <- takeMVar nested
+  nestedValue <- readMVar received
+  putStrLn ("nested-mvar:" <> show nestedValue)
+
+  selfThrowTo
+  selfKill
+  asyncHierarchy
+  maskState
+
+  caught <- tryError (throwIO (ErrorCall "caught-in-main"))
+  case caught of
+    Left e -> putStrLn ("main-catch:" <> displayException e)
+    Right _ -> putStrLn "main-catch:unexpected"
+
+  putStrLn "done"

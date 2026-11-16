@@ -65,7 +65,7 @@ function __w_pickOrError($b) {
     }
     elseif ($b === false) {
         $__t9 = error("no");
-        ($__t9[1])();
+        \Moggi\ioRun($__t9);
         return null;
     }
     return null;

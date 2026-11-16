@@ -4,9 +4,37 @@ program
   data T
     constructor T
       field  :: Int
+  function __ev_Typeable_T_typeRepOf :: TypeRep T
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "T"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   newtype TV
     constructor TV
       field  :: T
+  function __ev_Typeable_TV_typeRepOf :: TypeRep TV
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "TV"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function __ev_MyEq_TV_Op3d3d3d :: TV -> TV -> Bool
     pat_con TV
       pat_con T

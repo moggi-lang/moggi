@@ -1,0 +1,7 @@
+module Main
+
+import Syn (T)
+import Dat (T)
+
+main :: T Int
+main = T 0

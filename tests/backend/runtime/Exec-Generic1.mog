@@ -23,6 +23,10 @@ data Rose a = Rose a (List (Rose a)) deriving (Generic1, Eq)
 -- once, so the pair derives rather than colliding with itself.
 data Pair1 a b = P1 a b deriving (Generic, Generic1, Eq)
 
+-- A parameter applied directly to the abstracted parameter is `Rec1 f`, not a composition, so no
+-- `Functor f` is needed.
+data Wrapped f a = Wrapped (f a) deriving (Generic1, Eq)
+
 -- Structure-directed walks over the derived `Rep1`, which is what the representation is for.
 leaves :: Tree1 Int -> Int
 leaves t = case from1 t of
@@ -46,6 +50,12 @@ kidsTotal ks = case ks of
   [] -> 0
   k : rest -> (case k of Rec1 kid -> roseTotal kid) + kidsTotal rest
 
+wrapped :: Wrapped Maybe1 Int -> Int
+wrapped w = case from1 w of
+  M1 (M1 (M1 (Rec1 m))) -> case m of
+    N1 -> 0
+    J1 x -> x
+
 main :: IO ()
 main = do
   putStrLn (show (leaves (Node1 (Leaf1 1) (Leaf1 2))))
@@ -59,3 +69,6 @@ main = do
   putStrLn (show (to1 (from1 (Nested Nothing :: Nested Int)) == Nested Nothing))
   putStrLn (show (roseTotal (Rose 1 [Rose 2 [], Rose 3 []])))
   putStrLn (show (to1 (from1 (Rose (1 :: Int) [Rose 2 [], Rose 3 []])) == Rose 1 [Rose 2 [], Rose 3 []]))
+  putStrLn (show (wrapped (Wrapped (J1 7))))
+  putStrLn (show (wrapped (Wrapped (N1 :: Maybe1 Int))))
+  putStrLn (show (to1 (from1 (Wrapped (J1 (7 :: Int)))) == Wrapped (J1 7)))

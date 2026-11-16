@@ -4,6 +4,31 @@ program
   newtype Box a
     constructor Box
       field  :: a
+  function typeRepOf :: __Dict_Typeable t1 -> TypeRep Box t1
+    pat_var __ev_Typeable
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Box"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        qualified_ref MoggiTypeable.trLiftedRep
   function peek :: Box a -> Int
     pat_con Box
       pat_wild _

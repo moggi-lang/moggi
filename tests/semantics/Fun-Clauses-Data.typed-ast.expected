@@ -21,6 +21,20 @@ program
           pat_wild _
           pat_var __value
         variable __value
+  function __ev_Typeable_Person_typeRepOf :: TypeRep Person
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Person"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function greet :: Person -> String
     pat_con Person
       pat_var name
@@ -58,6 +72,20 @@ program
           pat_wild _
           pat_var __value
         variable __value
+  function __ev_Typeable_Shape_typeRepOf :: TypeRep Shape
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Shape"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function area :: Shape -> Int
     pat_var _p0
     case
@@ -79,6 +107,20 @@ program
     constructor User
       field name :: String
       field age :: Int
+  function __ev_Typeable_User_typeRepOf :: TypeRep User
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "User"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function greetUser :: User -> String
     pat_con User
       pat_var name
@@ -114,6 +156,20 @@ program
           pat_var __value
           pat_wild _
         variable __value
+  function __ev_Typeable_Expr_typeRepOf :: TypeRep Expr
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Expr"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function eval :: Expr -> Int
     pat_var _p0
     case

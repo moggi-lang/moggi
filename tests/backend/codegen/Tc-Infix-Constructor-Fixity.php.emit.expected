@@ -2,17 +2,38 @@
 
 namespace Tc\Infix\Constructor\Fixity;
 
-const __MOGGI_MAP = [[28 => 2, 29 => 2], ['Tc\\Infix\\Constructor\\Fixity\\nested' => 0, 'Tc\\Infix\\Constructor\\Fixity\\ok' => 1], [], [], [[0, 0, 14, 1], [1, 0, 18, 6], [1, 0, 19, 24]], ['Tc.Infix.Constructor.Fixity.nested', 'Tc.Infix.Constructor.Fixity.ok'], ['tests/backend/codegen/Tc-Infix-Constructor-Fixity.mog']];
+const __MOGGI_MAP = [[49 => 2, 50 => 2], ['Tc\\Infix\\Constructor\\Fixity\\nested' => 0, 'Tc\\Infix\\Constructor\\Fixity\\ok' => 1], [], [], [[0, 0, 14, 1], [1, 0, 18, 6], [1, 0, 19, 24]], ['Tc.Infix.Constructor.Fixity.nested', 'Tc.Infix.Constructor.Fixity.ok'], ['tests/backend/codegen/Tc-Infix-Constructor-Fixity.mog']];
 
 require_once __DIR__ . '/../../../libraries/base/src/Data/Eq.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/List.php';
 require_once __DIR__ . '/../../../libraries/base/src/Moggi/Internal/Base.php';
+require_once __DIR__ . '/../../../libraries/base/src/Moggi/Internal/Type/Reflection.php';
 
 use function Data\Eq\__ev_Eq_Int;
 use function Data\List\__ev_Eq_List_1;
+use function Moggi\Internal\Type\Reflection\kindFun;
+use function Moggi\Internal\Type\Reflection\mkTyCon;
+use function Moggi\Internal\Type\Reflection\mkTyConApp;
+use function Moggi\Internal\Type\Reflection\trLiftedRep;
+use function Moggi\Internal\Type\Reflection\typeRep;
+use Moggi\Internal\Type\Reflection as MoggiTypeable;
 
 function __fn_3a3e($v0, $v1) {
     return [':>', $v0, $v1];
+}
+
+function __ev_Typeable_Chain_1($__ev_Typeable): array {
+    return [
+        "typeRepOf" => fn(...$args) => typeRepOf($__ev_Typeable, ...$args)
+    ];
+}
+
+function typeRepOf($__ev_Typeable) {
+    $__t0 = MoggiTypeable\mkTyCon("Tc.Infix.Constructor.Fixity", "main", "Chain");
+    $__t1 = MoggiTypeable\typeRep($__ev_Typeable);
+    $__t2 = ["SomeTypeRep", $__t1];
+    $__t3 = MoggiTypeable\kindFun(MoggiTypeable\trLiftedRep(), MoggiTypeable\trLiftedRep());
+    return MoggiTypeable\mkTyConApp($__t0, [$__t2], $__t3);
 }
 
 function nested() {
@@ -25,13 +46,13 @@ function ok() {
         $x = $__scrut_0[1];
         $xs = $__scrut_0[2];
         if (($x === 1) === true) {
-            $__t6 = __ev_Eq_List_1(__ev_Eq_Int());
-            $__t5 = ($__t6["=="])($xs, [2, 3]);
-            $__t4 = $__t5;
+            $__t11 = __ev_Eq_List_1(__ev_Eq_Int());
+            $__t10 = ($__t11["=="])($xs, [2, 3]);
+            $__t9 = $__t10;
         }
         elseif (($x === 1) === false) {
-            $__t4 = false;
+            $__t9 = false;
         }
-        return $__t4;
+        return $__t9;
     }
 }

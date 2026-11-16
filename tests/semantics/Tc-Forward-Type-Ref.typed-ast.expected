@@ -3,6 +3,20 @@ program
   data User
     constructor User
       field id :: UserId
+  function typeRepOf :: TypeRep User
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "User"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   type UserId = Int
   function firstId :: User -> Int
     pat_var u

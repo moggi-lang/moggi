@@ -1,0 +1,31 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Main (SomeException(..), main) where
+
+import Control.Exception (SomeException(..), SomeAsyncException(..), ErrorCall(..), Exception(..))
+import Control.Monad ((>>))
+import Data.Maybe (Maybe(..))
+import Data.Semigroup ((<>))
+import Data.String (String)
+import System.IO (IO, putStrLn)
+
+wrap :: ErrorCall -> SomeException
+wrap = SomeException
+
+unwrap :: Exception ErrorCall => SomeException -> Maybe ErrorCall
+unwrap se = case se of
+  SomeException e -> Just e
+  _ -> Nothing
+
+asyncWrap :: ErrorCall -> SomeAsyncException
+asyncWrap = SomeAsyncException
+
+someLine :: String
+someLine = case unwrap (wrap (ErrorCall "some")) of
+  Just e -> "some:" <> displayException e
+  Nothing -> "some:missing"
+
+asyncLine :: String
+asyncLine = "async:" <> displayException (asyncWrap (ErrorCall "async"))
+
+main :: IO ()
+main = putStrLn someLine >> putStrLn asyncLine

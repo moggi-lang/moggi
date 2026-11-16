@@ -1,6 +1,31 @@
 program
   data FixedBytes (n :: Nat)
     constructor FixedBytes
+  function __ev_Typeable_FixedBytes_1_typeRepOf :: __Dict_Typeable t0 -> TypeRep FixedBytes t0
+    pat_var __ev_Typeable
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "FixedBytes"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep n
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        qualified_ref MoggiTypeable.trLiftedRep
   function zero :: FixedBytes 0
     constructor_ref FixedBytes
   function one :: FixedBytes 1
@@ -11,6 +36,42 @@ program
     constructor_ref FixedBytes
   data Matrix (rows :: Nat) (cols :: Nat)
     constructor Matrix
+  function __ev_Typeable_h_b765d32728a02408_typeRepOf :: __Dict_Typeable t13 -> __Dict_Typeable t14 -> TypeRep Matrix t13 t14
+    pat_var __ev_Typeable
+    pat_var __ev_Typeable_1
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Matrix"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep rows
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep cols
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_1
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        apply
+          apply
+            qualified_ref MoggiTypeable.kindFun
+            qualified_ref MoggiTypeable.trLiftedRep
+          qualified_ref MoggiTypeable.trLiftedRep
   function m34 :: Matrix 3 4
     constructor_ref Matrix
   function same :: FixedBytes 1024 -> FixedBytes 1024

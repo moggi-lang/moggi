@@ -2,9 +2,107 @@ program
   data Compose f a
     constructor Compose
       field  :: f a
+  function __ev_Typeable_h_692c496f52cb63da_typeRepOf :: __Dict_Typeable t0 -> __Dict_Typeable t1 -> TypeRep Compose t0 t1
+    pat_var __ev_Typeable
+    pat_var __ev_Typeable_1
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Compose"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep f
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_1
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        apply
+          apply
+            qualified_ref MoggiTypeable.kindFun
+            qualified_ref MoggiTypeable.trLiftedRep
+          qualified_ref MoggiTypeable.trLiftedRep
   data M1 (i :: Type) (c :: Type) (f :: Type -> Type) (p :: Type)
     constructor M1
       field  :: f p
+  function __ev_Typeable_h_26cbd1c94a7f44f1_typeRepOf :: __Dict_Typeable t16 -> __Dict_Typeable t17 -> __Dict_Typeable t18 -> __Dict_Typeable t19 -> TypeRep M1 t16 t17 t18 t19
+    pat_var __ev_Typeable
+    pat_var __ev_Typeable_1
+    pat_var __ev_Typeable_2
+    pat_var __ev_Typeable_3
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "M1"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep i
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep c
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_1
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep f
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_2
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep p
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_3
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        apply
+          apply
+            qualified_ref MoggiTypeable.kindFun
+            qualified_ref MoggiTypeable.trLiftedRep
+          apply
+            apply
+              qualified_ref MoggiTypeable.kindFun
+              apply
+                apply
+                  qualified_ref MoggiTypeable.kindFun
+                  qualified_ref MoggiTypeable.trLiftedRep
+                qualified_ref MoggiTypeable.trLiftedRep
+            apply
+              apply
+                qualified_ref MoggiTypeable.kindFun
+                qualified_ref MoggiTypeable.trLiftedRep
+              qualified_ref MoggiTypeable.trLiftedRep
   function nested :: Maybe Either Int Bool -> Int
     pat_var m
     case
@@ -44,10 +142,85 @@ program
   data Color
     constructor Red
     constructor Blue
+  function __ev_Typeable_Color_typeRepOf :: TypeRep Color
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Color"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   data OnlyColor (c :: Color)
     constructor OnlyColor
+  function __ev_Typeable_OnlyColor_1_typeRepOf :: __Dict_Typeable t74 -> TypeRep OnlyColor t74
+    pat_var __ev_Typeable
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "OnlyColor"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep c
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        qualified_ref MoggiTypeable.trLiftedRep
   data PairColor (a :: Color) (b :: Color)
     constructor PairColor
+  function __ev_Typeable_h_ed65176d5db81b85_typeRepOf :: __Dict_Typeable t83 -> __Dict_Typeable t84 -> TypeRep PairColor t83 t84
+    pat_var __ev_Typeable
+    pat_var __ev_Typeable_1
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "PairColor"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep b
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_1
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        apply
+          apply
+            qualified_ref MoggiTypeable.kindFun
+            qualified_ref MoggiTypeable.trLiftedRep
+          qualified_ref MoggiTypeable.trLiftedRep
   function rb :: PairColor 'Red 'Blue
     constructor_ref PairColor
   function okColor :: OnlyColor 'Red -> String

@@ -4,8 +4,26 @@ namespace Internal;
 
 const __MOGGI_MAP = [[], ['Internal\\peek' => 0], [], [], [[0, 0, 6, 23]], ['Internal.peek'], ['lib/Internal.mog']];
 
+require_once __DIR__ . '/../../../../libraries/base/src/Moggi/Internal/Type/Reflection.php';
+
+use function Moggi\Internal\Type\Reflection\mkTyCon;
+use function Moggi\Internal\Type\Reflection\mkTyConApp;
+use function Moggi\Internal\Type\Reflection\trLiftedRep;
+use Moggi\Internal\Type\Reflection as MoggiTypeable;
+
 function Secret($v0) {
     return ['Secret', $v0];
+}
+
+function __ev_Typeable_Secret(): array {
+    return [
+        "typeRepOf" => fn(...$args) => typeRepOf(...$args)
+    ];
+}
+
+function typeRepOf() {
+    $__t0 = MoggiTypeable\mkTyCon("Internal", "main", "Secret");
+    return MoggiTypeable\mkTyConApp($__t0, [], MoggiTypeable\trLiftedRep());
 }
 
 function peek($_p0) {

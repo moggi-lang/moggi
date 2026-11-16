@@ -3,13 +3,21 @@ module
     constructor Age
   data Box
     constructor Box
+  function __ev_Typeable_Age_typeRepOf()
+      t0 = call Moggi.Internal.Type.Reflection::mkTyCon("Main", "main", "Age")
+      t1 = call Moggi.Internal.Type.Reflection::mkTyConApp(t0, [], @Moggi.Internal.Type.Reflection::trLiftedRep)
+      ret t1
+  function __ev_Typeable_Box_typeRepOf()
+      t2 = call Moggi.Internal.Type.Reflection::mkTyCon("Main", "main", "Box")
+      t3 = call Moggi.Internal.Type.Reflection::mkTyConApp(t2, [], @Moggi.Internal.Type.Reflection::trLiftedRep)
+      ret t3
   function unwrapAge(_p0)
       ret _p0
   function unwrapBox(_p0)
-      t0 = call __field0(_p0)
-      ret t0
+      t4 = call __field0(_p0)
+      ret t4
   function wrapAge(n)
       ret n
   function wrapBox(n)
-      t1 = call Box(n)
-      ret t1
+      t5 = call Box(n)
+      ret t5
