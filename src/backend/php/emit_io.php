@@ -25,7 +25,7 @@ use function Moggi\IR\Visit\collectLocalsInBlock;
  */
 function emitIoRunResultExpr(string $resultExpr): string
 {
-    return '(' . $resultExpr . '[1])()';
+    return '\\Moggi\\ioRun(' . $resultExpr . ')';
 }
 
 function emitIoAssignAction(EmitEnv $env, IR\IoAssignAction $stmt, int $indent): string
@@ -270,6 +270,20 @@ function emitIntrinsicState(EmitEnv $env, IR\Intrinsic $op, array $argExprs): ?s
         'deRefWeak#' => '\\Moggi\\platformDeRefWeak(' . $argExprs[0] . ')',
         'finalizeWeak#' => '\\Moggi\\platformFinalizeWeak(' . $argExprs[0] . ')',
         'unsafePerformIO#' => emitIoRunResultExpr($argExprs[0]),
+        'forkIO#' => '\\Moggi\\concurrentFork(' . $argExprs[0] . ')',
+        'threadDelay#' => '\\Moggi\\concurrentThreadDelay(' . $argExprs[0] . ')',
+        'yield#' => '\\Moggi\\concurrentYield()',
+        'newMVar#' => '\\Moggi\\concurrentNewMVar(' . $argExprs[0] . ')',
+        'newEmptyMVar#' => '\\Moggi\\concurrentNewEmptyMVar()',
+        'takeMVar#' => '\\Moggi\\concurrentTakeMVar(' . $argExprs[0] . ')',
+        'tryTakeMVar#' => '\\Moggi\\concurrentTryTakeMVar(' . $argExprs[0] . ')',
+        'putMVar#' => '\\Moggi\\concurrentPutMVar(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
+        'tryPutMVar#' => '\\Moggi\\concurrentTryPutMVar(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
+        'readMVar#' => '\\Moggi\\concurrentReadMVar(' . $argExprs[0] . ')',
+        'isEmptyMVar#' => '\\Moggi\\concurrentIsEmptyMVar(' . $argExprs[0] . ')',
+        'tryReadMVar#' => '\\Moggi\\concurrentTryReadMVar(' . $argExprs[0] . ')',
+        'sameMVar#' => '\\Moggi\\concurrentSameMVar(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
+        'myThreadId#' => '\\Moggi\\concurrentMyThreadId()',
         default => null,
     };
 }

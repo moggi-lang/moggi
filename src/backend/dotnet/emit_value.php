@@ -201,6 +201,21 @@ function emitIntrinsicValue(EmitEnv $env, IR\Intrinsic $op): bool
             $env->m->emit('call string [System.Runtime]System.String::Concat(string, string)');
 
             return true;
+        case 'typeableDict#':
+            $env->m->emit('ldc.i4.2');
+            $env->m->emit('newarr [System.Runtime]System.Object');
+            $env->m->emit('dup');
+            $env->m->emit('ldc.i4.0');
+            $env->m->emit('ldstr "typeRepOf"');
+            $env->m->emit('stelem.ref');
+            $env->m->emit('dup');
+            $env->m->emit('ldc.i4.1');
+            emitOperand($env, $args[0]);
+            $env->m->emit('newobj instance void Moggi.Rt.ConstFn::.ctor(object)');
+            $env->m->emit('stelem.ref');
+            $env->m->emit('newobj instance void Moggi.Rt.Dict::.ctor(object[])');
+
+            return true;
         case 'stringCons#':
             emitOperand($env, $args[0]);
             unboxInt($env);

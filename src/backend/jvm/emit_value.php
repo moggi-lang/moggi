@@ -266,6 +266,33 @@ function emitIntrinsicValue(EmitEnv $env, IR\Intrinsic $op): bool
             );
 
             return true;
+        case 'typeableDict#':
+            $env->c->new_($env->cp->class_('moggi/rt/Dict'));
+            $env->c->dup();
+            $env->c->iconst(2);
+            $env->c->anewarray($env->cp->class_('java/lang/Object'));
+            $env->c->dup();
+            $env->c->iconst(0);
+            $env->c->ldc($env->cp->string_('typeRepOf'));
+            $env->c->aastore();
+            $env->c->dup();
+            $env->c->iconst(1);
+            $env->c->new_($env->cp->class_('moggi/rt/ConstFn'));
+            $env->c->dup();
+            emitOperand($env, $args[0]);
+            $env->c->invokespecial(
+                $env->cp->methodRef('moggi/rt/ConstFn', '<init>', '(Ljava/lang/Object;)V'),
+                2,
+                false,
+            );
+            $env->c->aastore();
+            $env->c->invokespecial(
+                $env->cp->methodRef('moggi/rt/Dict', '<init>', '([Ljava/lang/Object;)V'),
+                2,
+                false,
+            );
+
+            return true;
         case 'stringCons#':
             emitOperand($env, $args[0]);
             unboxInt($env);

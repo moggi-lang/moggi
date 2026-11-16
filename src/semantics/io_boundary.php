@@ -461,6 +461,14 @@ function validateIoIntrinsic(Ast\IntrinsicCall $expr, string $source, string $fi
     }
 
     if ($role === 'io-action') {
+        if ($expr->name === 'forkIO#') {
+            if (! exprReturnsIo($expr->args[0])) {
+                fail('forkIO# action must return IO', $expr->args[0], $source, $filename);
+            }
+            validateIoBuildExpr($expr->args[0], $source, $filename);
+
+            return;
+        }
         if ($expr->name === 'mkWeak#' || $expr->name === 'mkWeakPair#') {
             validatePureExpr($expr->args[0], $source, $filename);
             validatePureExpr($expr->args[1], $source, $filename);

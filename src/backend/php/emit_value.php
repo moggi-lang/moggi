@@ -87,6 +87,7 @@ function emitIntrinsicValue(EmitEnv $env, IR\Intrinsic $op, array $argExprs): ?s
         'bytesCompare#' => stringCompareExpr($argExprs[0], $argExprs[1]),
         'bytesFromString#' => $argExprs[0],
         'bytesToString#' => $argExprs[0],
+        'typeableDict#' => '["typeRepOf" => static fn() => ' . $argExprs[0] . ']',
         'listCons#' => '[' . $argExprs[0] . ', ...' . $argExprs[1] . ']',
         'listHead#' => $argExprs[0] . '[0]',
         'listTail#' => '\array_slice(' . $argExprs[0] . ', 1)',

@@ -39,7 +39,9 @@ namespace Moggi\Backend\Jvm;
  *   RT.ioCatch / ioFinally / throwSomeException back IoCatch/IoFinally/IoThrow.
  *
  * Exceptions (SomeException#)
- *   Object[] { "__se", stableTag, payload } — mirrors PHP ['__se', tag, payload]
+ *   Object[] { "__se", stableTag, payload, display } plus optional
+ *   origin/context/show/type/contextDisplay at 4..8 — mirrors PHP's nine-slot
+ *   wrapper.
  *   moggi.rt.MoggiException extends RuntimeException with:
  *     someException: Object[], throwSite: Object[]|null
  *   throwSite Object[] = {Integer siteId, String symbolId, String displayPath,
@@ -100,6 +102,8 @@ function languageRuntime(): array
         'moggi/rt/ST' => buildSTClass(),
         'moggi/rt/STRef' => buildSTRefClass(),
         'moggi/rt/IORef' => buildIORefClass(),
+        'moggi/rt/MVar' => buildMVarClass(),
+        'moggi/rt/ForkTask' => buildForkTaskClass(),
         'moggi/rt/StableName' => buildStableNameClass(),
         'moggi/rt/Weak' => buildWeakClass(),
         'moggi/rt/ArrHole' => buildArrHoleClass(),
@@ -660,6 +664,522 @@ function buildStableNameClass(): string
 }
 
 /**
+ * The machine MVar: a value cell ordered by two semaphores rather than a monitor.
+ *
+ * `full` holds the permit that says a value is present, `empty` the permit that
+ * says a writer may store one. Taking acquires `full` and releases `empty`;
+ * putting the reverse. `reading` serializes the value copy with take and put,
+ * but a reader does not consume `full` while copying: another reader must still
+ * see the value, and `tryRead` must not mistake an active reader for an empty
+ * MVar. A blocked reader releases `reading` and parks briefly instead of
+ * waiting on `full`, because acquiring that permit just to wait would make a
+ * concurrent `tryTake` see an empty MVar.
+ */
+function buildMVarClass(): string
+{
+    $sem = 'Ljava/util/concurrent/Semaphore;';
+    $b = new ClassBuilder('moggi/rt/MVar');
+    $b->addField('full', $sem, 0x0011);
+    $b->addField('empty', $sem, 0x0011);
+    $b->addField('reading', $sem, 0x0011);
+    $b->addField('value', 'Ljava/lang/Object;', 0x0001);
+
+    $b->addMethod(
+        '<init>',
+        '(Ljava/lang/Object;Z)V',
+        0x0001,
+        3,
+        ['moggi/rt/MVar', 'java/lang/Object', 'int'],
+        static function (CodeBuilder $c, ConstantPool $cp) use ($sem): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->new_($cp->class_('java/util/concurrent/Semaphore'));
+            $c->dup();
+            $c->iload(2);
+            $c->invokespecial(
+                $cp->methodRef('java/util/concurrent/Semaphore', '<init>', '(I)V'),
+                1,
+                false,
+            );
+            $c->putfield($cp->fieldRef('moggi/rt/MVar', 'full', $sem));
+            $c->aload(0);
+            $c->new_($cp->class_('java/util/concurrent/Semaphore'));
+            $c->dup();
+            $c->iconst(1);
+            $c->iload(2);
+            $c->isub();
+            $c->invokespecial(
+                $cp->methodRef('java/util/concurrent/Semaphore', '<init>', '(I)V'),
+                1,
+                false,
+            );
+            $c->putfield($cp->fieldRef('moggi/rt/MVar', 'empty', $sem));
+            $c->aload(0);
+            $c->new_($cp->class_('java/util/concurrent/Semaphore'));
+            $c->dup();
+            $c->iconst(1);
+            $c->invokespecial(
+                $cp->methodRef('java/util/concurrent/Semaphore', '<init>', '(I)V'),
+                1,
+                false,
+            );
+            $c->putfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/MVar', 'value', 'Ljava/lang/Object;'));
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'take',
+        '()Ljava/lang/Object;',
+        0x0001,
+        2,
+        ['moggi/rt/MVar', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp) use ($sem): void {
+            $c->aconst_null();
+            $c->astore(1);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'full', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'acquire', '()V'),
+                0,
+                false,
+            );
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'acquire', '()V'),
+                0,
+                false,
+            );
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'value', 'Ljava/lang/Object;'));
+            $c->astore(1);
+            $c->aload(0);
+            $c->aconst_null();
+            $c->putfield($cp->fieldRef('moggi/rt/MVar', 'value', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'release', '()V'),
+                0,
+                false,
+            );
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'empty', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'release', '()V'),
+                0,
+                false,
+            );
+            $c->aload(1);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'put',
+        '(Ljava/lang/Object;)V',
+        0x0001,
+        2,
+        ['moggi/rt/MVar', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp) use ($sem): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'empty', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'acquire', '()V'),
+                0,
+                false,
+            );
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'acquire', '()V'),
+                0,
+                false,
+            );
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/MVar', 'value', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'release', '()V'),
+                0,
+                false,
+            );
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'full', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'release', '()V'),
+                0,
+                false,
+            );
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'read',
+        '()Ljava/lang/Object;',
+        0x0001,
+        2,
+        ['moggi/rt/MVar', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp) use ($sem): void {
+            $c->aconst_null();
+            $c->astore(1);
+            $c->label('retry');
+            $c->noteFrame(['moggi/rt/MVar', 'java/lang/Object']);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'acquire', '()V'),
+                0,
+                false,
+            );
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'full', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'tryAcquire', '()Z'),
+                0,
+                true,
+            );
+            $c->ifeq('wait');
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'value', 'Ljava/lang/Object;'));
+            $c->astore(1);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'full', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'release', '()V'),
+                0,
+                false,
+            );
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'release', '()V'),
+                0,
+                false,
+            );
+            $c->aload(1);
+            $c->areturn();
+            $c->label('wait');
+            $c->noteFrame(['moggi/rt/MVar', 'java/lang/Object']);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'release', '()V'),
+                0,
+                false,
+            );
+            $c->ldc2_w($cp->long(1000000));
+            $c->invokestatic(
+                $cp->methodRef('java/util/concurrent/locks/LockSupport', 'parkNanos', '(J)V'),
+                2,
+                false,
+            );
+            $c->goto_('retry');
+        }
+    );
+
+    $b->addMethod(
+        'tryTake',
+        '()Ljava/lang/Object;',
+        0x0001,
+        2,
+        ['moggi/rt/MVar', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp) use ($sem): void {
+            $c->aconst_null();
+            $c->astore(1);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'full', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'tryAcquire', '()Z'),
+                0,
+                true,
+            );
+            $c->ifeq('nothing');
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'acquire', '()V'),
+                0,
+                false,
+            );
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'value', 'Ljava/lang/Object;'));
+            $c->astore(1);
+            $c->aload(0);
+            $c->aconst_null();
+            $c->putfield($cp->fieldRef('moggi/rt/MVar', 'value', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'release', '()V'),
+                0,
+                false,
+            );
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'empty', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'release', '()V'),
+                0,
+                false,
+            );
+            $c->aload(1);
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/Platform', 'memJust', '(Ljava/lang/Object;)Lmoggi/rt/Con;'),
+                1,
+                true,
+            );
+            $c->areturn();
+            $c->label('nothing');
+            $c->noteFrame(['moggi/rt/MVar', 'java/lang/Object']);
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/Platform', 'memNothing', '()Lmoggi/rt/Con;'),
+                0,
+                true,
+            );
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'tryRead',
+        '()Ljava/lang/Object;',
+        0x0001,
+        2,
+        ['moggi/rt/MVar', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp) use ($sem): void {
+            $c->aconst_null();
+            $c->astore(1);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'acquire', '()V'),
+                0,
+                false,
+            );
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'full', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'tryAcquire', '()Z'),
+                0,
+                true,
+            );
+            $c->ifeq('nothing');
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'value', 'Ljava/lang/Object;'));
+            $c->astore(1);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'full', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'release', '()V'),
+                0,
+                false,
+            );
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'release', '()V'),
+                0,
+                false,
+            );
+            $c->aload(1);
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/Platform', 'memJust', '(Ljava/lang/Object;)Lmoggi/rt/Con;'),
+                1,
+                true,
+            );
+            $c->areturn();
+            $c->label('nothing');
+            $c->noteFrame(['moggi/rt/MVar', 'java/lang/Object']);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'release', '()V'),
+                0,
+                false,
+            );
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/Platform', 'memNothing', '()Lmoggi/rt/Con;'),
+                0,
+                true,
+            );
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'tryPut',
+        '(Ljava/lang/Object;)Z',
+        0x0001,
+        2,
+        ['moggi/rt/MVar', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp) use ($sem): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'empty', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'tryAcquire', '()Z'),
+                0,
+                true,
+            );
+            $c->ifeq('full');
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'acquire', '()V'),
+                0,
+                false,
+            );
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/MVar', 'value', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'release', '()V'),
+                0,
+                false,
+            );
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'full', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'release', '()V'),
+                0,
+                false,
+            );
+            $c->iconst(1);
+            $c->ireturn();
+            $c->label('full');
+            $c->noteFrame(['moggi/rt/MVar', 'java/lang/Object']);
+            $c->iconst(0);
+            $c->ireturn();
+        }
+    );
+
+    $b->addMethod(
+        'isEmpty',
+        '()Z',
+        0x0001,
+        1,
+        ['moggi/rt/MVar'],
+        static function (CodeBuilder $c, ConstantPool $cp) use ($sem): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'acquire', '()V'),
+                0,
+                false,
+            );
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'full', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'availablePermits', '()I'),
+                0,
+                true,
+            );
+            $c->ifeq('empty');
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'release', '()V'),
+                0,
+                false,
+            );
+            $c->iconst(0);
+            $c->ireturn();
+            $c->label('empty');
+            $c->noteFrame(['moggi/rt/MVar']);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/MVar', 'reading', $sem));
+            $c->invokevirtual(
+                $cp->methodRef('java/util/concurrent/Semaphore', 'release', '()V'),
+                0,
+                false,
+            );
+            $c->iconst(1);
+            $c->ireturn();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/**
+ * The body a forked JVM thread runs: the Moggi action, with an uncaught
+ * exception reported exactly as the entry point reports one — printed, not
+ * followed by `System.exit`, because the process belongs to the other threads.
+ */
+function buildForkTaskClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/ForkTask');
+    $b->implement('java/lang/Runnable');
+    $b->addField('action', 'Ljava/lang/Object;', 0x0011);
+
+    $b->addMethod(
+        '<init>',
+        '(Ljava/lang/Object;)V',
+        0x0001,
+        2,
+        ['moggi/rt/ForkTask', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/ForkTask', 'action', 'Ljava/lang/Object;'));
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'run',
+        '()V',
+        0x0001,
+        2,
+        ['moggi/rt/ForkTask', 'java/lang/Throwable'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->label('try_start');
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ForkTask', 'action', 'Ljava/lang/Object;'));
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'ioRun', '(Ljava/lang/Object;)Ljava/lang/Object;'),
+                1,
+                true,
+            );
+            $c->pop_();
+            $c->return_();
+            $c->label('try_end');
+            $c->label('handler');
+            $c->assumeStackDelta(1);
+            $c->noteFrame(['moggi/rt/ForkTask', 'top'], ['java/lang/Throwable']);
+            $c->astore(1);
+            $c->getstatic($cp->fieldRef('java/lang/System', 'err', 'Ljava/io/PrintStream;'));
+            $c->aload(1);
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'formatExceptionReport', '(Ljava/lang/Throwable;)Ljava/lang/String;'),
+                1,
+                true,
+            );
+            $c->invokevirtual(
+                $cp->methodRef('java/io/PrintStream', 'print', '(Ljava/lang/String;)V'),
+                1,
+                false,
+            );
+            $c->return_();
+            $c->exception('try_start', 'try_end', 'handler', $cp->class_('java/lang/Throwable'));
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/**
  * One weak pointer. The key lives only through a host `WeakReference`; the
  * value is strong, and `self`/`pair` say how to rebuild the dereference result
  * without retaining the key in the common `mkWeakPtr` and `mkWeakPair` shapes.
@@ -981,7 +1501,7 @@ function buildThawArrayFnClass(): string
 function buildMoggiExceptionClass(): string
 {
     $b = new ClassBuilder('moggi/rt/MoggiException', 'java/lang/RuntimeException');
-    $b->addField('someException', '[Ljava/lang/Object;', 0x0011);
+    $b->addField('someException', '[Ljava/lang/Object;', 0x0001);
     $b->addField('throwSite', '[Ljava/lang/Object;', 0x0011);
 
     $b->addMethod(
@@ -1836,6 +2356,107 @@ function addRtFrameAppenders(ClassBuilder $b): void
             $c->return_();
         }
     );
+
+    $b->addMethod(
+        'callStackFrames',
+        '()Ljava/lang/String;',
+        0x0009,
+        5,
+        [],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $locals = ['java/lang/StringBuilder', '[Ljava/lang/StackTraceElement;', 'int', 'java/lang/StackTraceElement', 'java/lang/String'];
+
+            $c->new_($cp->class_('java/lang/StringBuilder'));
+            $c->dup();
+            $c->invokespecial($cp->methodRef('java/lang/StringBuilder', '<init>', '()V'), 0, false);
+            $c->astore(0);
+            $c->invokestatic(
+                $cp->methodRef('java/lang/Thread', 'currentThread', '()Ljava/lang/Thread;'),
+                0,
+                true,
+            );
+            $c->invokevirtual(
+                $cp->methodRef('java/lang/Thread', 'getStackTrace', '()[Ljava/lang/StackTraceElement;'),
+                0,
+                true,
+            );
+            $c->astore(1);
+            $c->iconst(0);
+            $c->istore(2);
+            $c->aconst_null();
+            $c->astore(3);
+            $c->aconst_null();
+            $c->astore(4);
+
+            $c->label('loop');
+            $c->noteFrame($locals);
+            $c->iload(2);
+            $c->aload(1);
+            $c->arraylength();
+            $c->if_icmpge('done');
+
+            $c->aload(1);
+            $c->iload(2);
+            $c->aaload();
+            $c->checkcast($cp->class_('java/lang/StackTraceElement'));
+            $c->astore(3);
+
+            $c->aload(3);
+            $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getClassName', '()Ljava/lang/String;'), 0, true);
+            $c->ldc($cp->string_('moggi.rt.'));
+            $c->invokevirtual($cp->methodRef('java/lang/String', 'startsWith', '(Ljava/lang/String;)Z'), 1, true);
+            $c->ifne('next');
+
+            $c->aload(3);
+            $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getClassName', '()Ljava/lang/String;'), 0, true);
+            $c->ldc($cp->string_('java.lang.reflect.'));
+            $c->invokevirtual($cp->methodRef('java/lang/String', 'startsWith', '(Ljava/lang/String;)Z'), 1, true);
+            $c->ifne('next');
+
+            $c->aload(3);
+            $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getFileName', '()Ljava/lang/String;'), 0, true);
+            $c->astore(4);
+
+            $c->aload(0);
+            rtAppendString($c, $cp, "-\t");
+            rtAppendString($c, $cp, "-\t");
+            $c->aload(3);
+            $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getClassName', '()Ljava/lang/String;'), 0, true);
+            rtAppendTop($c, $cp);
+            rtAppendChar($c, $cp, 46);
+            $c->aload(3);
+            $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getMethodName', '()Ljava/lang/String;'), 0, true);
+            rtAppendTop($c, $cp);
+            rtAppendString($c, $cp, "\t");
+            $c->aload(4);
+            $c->ifnonnull('has_file');
+            rtAppendString($c, $cp, '-');
+            $c->goto_('file_done');
+            $c->label('has_file');
+            $c->noteFrame($locals, ['java/lang/StringBuilder']);
+            $c->aload(4);
+            rtAppendTop($c, $cp);
+            $c->label('file_done');
+            $c->noteFrame($locals, ['java/lang/StringBuilder']);
+            rtAppendString($c, $cp, "\t");
+            $c->aload(3);
+            $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getLineNumber', '()I'), 0, true);
+            rtAppendInt($c, $cp);
+            rtAppendString($c, $cp, "\t0\n");
+            $c->pop_();
+
+            $c->label('next');
+            $c->noteFrame($locals);
+            $c->iinc(2, 1);
+            $c->goto_('loop');
+
+            $c->label('done');
+            $c->noteFrame($locals);
+            $c->aload(0);
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'toString', '()Ljava/lang/String;'), 0, true);
+            $c->areturn();
+        }
+    );
 }
 
 /**
@@ -1937,7 +2558,7 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
         ['[Ljava/lang/Object;', 'moggi/rt/MoggiException'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
             $c->aload(0);
-            $c->iconst(5);
+            $c->iconst(9);
             $c->invokestatic(
                 $cp->methodRef('java/util/Arrays', 'copyOf', '([Ljava/lang/Object;I)[Ljava/lang/Object;'),
                 2,
@@ -2192,16 +2813,47 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
             $c->aload(2);
             $c->ldc($cp->string_('moggi: '));
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
-            $c->aload(3);
-            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
-            $c->ldc($cp->string_(': '));
-            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
             $c->aload(1);
-            $c->invokevirtual($cp->methodRef('java/lang/Throwable', 'getMessage', '()Ljava/lang/String;'), 0, true);
+            $c->getfield($cp->fieldRef('moggi/rt/MoggiException', 'someException', '[Ljava/lang/Object;'));
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'formatExceptionInfo', '([Ljava/lang/Object;)Ljava/lang/String;'),
+                1,
+                true,
+            );
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
             $c->bipush(10);
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(C)Ljava/lang/StringBuilder;'), 1, true);
             $c->pop_();
+
+            $c->aload(3);
+            $c->ldc($cp->string_('ErrorCall'));
+            $c->invokevirtual($cp->methodRef('java/lang/String', 'equals', '(Ljava/lang/Object;)Z'), 1, true);
+            $c->ifeq('no_call_stack');
+            $c->aload(1);
+            $c->getfield($cp->fieldRef('moggi/rt/MoggiException', 'throwSite', '[Ljava/lang/Object;'));
+            $c->ifnull('no_call_stack');
+            $c->aload(2);
+            rtAppendString($c, $cp, "\nCallStack (from HasCallStack):\n");
+            $c->pop_();
+            $c->label('no_call_stack');
+            $c->noteFrame([
+                'java/lang/Throwable', 'moggi/rt/MoggiException', 'java/lang/StringBuilder',
+                'java/lang/String', 'top',
+            ]);
+
+            $c->aload(3);
+            $c->ldc($cp->string_('ErrorCall'));
+            $c->invokevirtual($cp->methodRef('java/lang/String', 'equals', '(Ljava/lang/Object;)Z'), 1, true);
+            $c->ifeq('append_frames');
+            $c->aload(1);
+            $c->getfield($cp->fieldRef('moggi/rt/MoggiException', 'throwSite', '[Ljava/lang/Object;'));
+            $c->ifnonnull('append_frames');
+            $c->goto_('after_frames');
+            $c->label('append_frames');
+            $c->noteFrame([
+                'java/lang/Throwable', 'moggi/rt/MoggiException', 'java/lang/StringBuilder',
+                'java/lang/String', 'top',
+            ]);
 
             $c->aload(2);
             $c->aload(1);
@@ -2225,6 +2877,12 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
                 3,
                 false,
             );
+
+            $c->label('after_frames');
+            $c->noteFrame([
+                'java/lang/Throwable', 'moggi/rt/MoggiException', 'java/lang/StringBuilder',
+                'java/lang/String', 'top',
+            ]);
 
             $c->aload(1);
             $c->invokevirtual($cp->methodRef('java/lang/Throwable', 'getCause', '()Ljava/lang/Throwable;'), 0, true);
@@ -3456,23 +4114,29 @@ function buildRTClass(): string
         ['java/lang/Object'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
             $c->aload(0);
+            $c->ifnull('nullAction');
+            $c->aload(0);
             $c->checkcast($cp->class_('moggi/rt/IO'));
             $c->getfield($cp->fieldRef('moggi/rt/IO', 'action', 'Ljava/lang/Object;'));
             $c->iconst(0);
             $c->anewarray($cp->class_('java/lang/Object'));
             $c->invokestatic($cp->methodRef('moggi/rt/RT', 'apply', '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;'), 2, true);
             $c->areturn();
+            $c->label('nullAction');
+            $c->noteFrame(['java/lang/Object']);
+            $c->aconst_null();
+            $c->areturn();
         }
     );
 
     $b->addMethod(
         'exceptionWrap',
-        '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;',
+        '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;',
         0x0009,
-        4,
-        ['java/lang/String', 'java/lang/String', 'java/lang/Object'],
+        6,
+        ['java/lang/String', 'java/lang/String', 'java/lang/String', 'java/lang/String', 'java/lang/Object'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
-            $c->iconst(4);
+            $c->iconst(9);
             $c->anewarray($cp->class_('java/lang/Object'));
             $c->dup();
             $c->iconst(0);
@@ -3484,12 +4148,133 @@ function buildRTClass(): string
             $c->aastore();
             $c->dup();
             $c->iconst(2);
-            $c->aload(2);
+            $c->aload(4);
             $c->aastore();
             $c->dup();
             $c->iconst(3);
             $c->aload(1);
             $c->aastore();
+            $c->dup();
+            $c->iconst(6);
+            $c->aload(2);
+            $c->aastore();
+            $c->dup();
+            $c->iconst(7);
+            $c->aload(3);
+            $c->aastore();
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'exceptionContext',
+        '(Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0009,
+        3,
+        ['java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aconst_null();
+            $c->astore(1);
+            $c->aload(0);
+            $c->instanceof_($cp->class_('[Ljava/lang/Object;'));
+            $c->ifeq('nothing');
+            $c->aload(0);
+            $c->checkcast($cp->class_('[Ljava/lang/Object;'));
+            $c->astore(1);
+            $c->aload(1);
+            $c->arraylength();
+            $c->iconst(6);
+            $c->if_icmplt('nothing');
+            $c->aload(1);
+            $c->iconst(5);
+            $c->aaload();
+            $c->astore(2);
+            $c->aload(2);
+            $c->ifnull('nothing');
+            $c->ldc($cp->string_('Just'));
+            $c->iconst(1);
+            $c->anewarray($cp->class_('java/lang/Object'));
+            $c->dup();
+            $c->iconst(0);
+            $c->aload(2);
+            $c->aastore();
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'con', '(Ljava/lang/String;[Ljava/lang/Object;)Lmoggi/rt/Con;'), 2, true);
+            $c->areturn();
+            $c->label('nothing');
+            $c->noteFrame(['java/lang/Object', '[Ljava/lang/Object;']);
+            $c->ldc($cp->string_('Nothing'));
+            $c->iconst(0);
+            $c->anewarray($cp->class_('java/lang/Object'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'con', '(Ljava/lang/String;[Ljava/lang/Object;)Lmoggi/rt/Con;'), 2, true);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'exceptionAddContext',
+        '(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)[Ljava/lang/Object;',
+        0x0009,
+        6,
+        ['java/lang/Object', 'java/lang/Object', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(2);
+            $c->checkcast($cp->class_('[Ljava/lang/Object;'));
+            $c->astore(3);
+            $c->aload(3);
+            $c->iconst(9);
+            $c->invokestatic($cp->methodRef('java/util/Arrays', 'copyOf', '([Ljava/lang/Object;I)[Ljava/lang/Object;'), 2, true);
+            $c->astore(4);
+            $c->aload(4);
+            $c->iconst(5);
+            $c->aload(0);
+            $c->aastore();
+            $c->aload(4);
+            $c->iconst(8);
+            $c->aload(1);
+            $c->aastore();
+            $c->aload(4);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'exceptionClearContext',
+        '(Ljava/lang/Object;)[Ljava/lang/Object;',
+        0x0009,
+        4,
+        ['java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->instanceof_($cp->class_('[Ljava/lang/Object;'));
+            $c->ifeq('not_array');
+            $c->aload(0);
+            $c->checkcast($cp->class_('[Ljava/lang/Object;'));
+            $c->astore(1);
+            $c->aload(1);
+            $c->iconst(9);
+            $c->invokestatic($cp->methodRef('java/util/Arrays', 'copyOf', '([Ljava/lang/Object;I)[Ljava/lang/Object;'), 2, true);
+            $c->astore(2);
+            $c->aload(2);
+            $c->iconst(5);
+            $c->aconst_null();
+            $c->aastore();
+            $c->aload(2);
+            $c->iconst(8);
+            $c->aconst_null();
+            $c->aastore();
+            $c->aload(2);
+            $c->areturn();
+
+            $c->label('as_is');
+            $c->noteFrame(['java/lang/Object', '[Ljava/lang/Object;']);
+            $c->aload(0);
+            $c->checkcast($cp->class_('[Ljava/lang/Object;'));
+            $c->areturn();
+
+            $c->label('not_array');
+            $c->noteFrame(['java/lang/Object']);
+            $c->aload(0);
+            $c->checkcast($cp->class_('[Ljava/lang/Object;'));
             $c->areturn();
         }
     );
@@ -3607,6 +4392,214 @@ function buildRTClass(): string
             $c->label('fallback');
             $c->noteFrame(['java/lang/Object', 'top', 'top', 'top']);
             $c->ldc($cp->string_('SomeException'));
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'exceptionShow',
+        '(Ljava/lang/Object;)Ljava/lang/String;',
+        0x0009,
+        4,
+        ['java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->instanceof_($cp->class_('[Ljava/lang/Object;'));
+            $c->ifeq('not_array');
+            $c->aload(0);
+            $c->checkcast($cp->class_('[Ljava/lang/Object;'));
+            $c->astore(1);
+            $c->aload(1);
+            $c->arraylength();
+            $c->iconst(7);
+            $c->if_icmplt('fallback');
+            $c->aload(1);
+            $c->iconst(6);
+            $c->aaload();
+            $c->instanceof_($cp->class_('java/lang/String'));
+            $c->ifeq('fallback');
+            $c->aload(1);
+            $c->iconst(6);
+            $c->aaload();
+            $c->checkcast($cp->class_('java/lang/String'));
+            $c->areturn();
+
+            $c->label('fallback');
+            $c->noteFrame(['java/lang/Object', '[Ljava/lang/Object;', 'top']);
+            $c->aload(0);
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'exceptionDisplay', '(Ljava/lang/Object;)Ljava/lang/String;'),
+                1,
+                true,
+            );
+            $c->areturn();
+
+            $c->label('not_array');
+            $c->noteFrame(['java/lang/Object']);
+            $c->aload(0);
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'exceptionDisplay', '(Ljava/lang/Object;)Ljava/lang/String;'),
+                1,
+                true,
+            );
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'exceptionType',
+        '(Ljava/lang/Object;)Ljava/lang/String;',
+        0x0009,
+        4,
+        ['java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->instanceof_($cp->class_('[Ljava/lang/Object;'));
+            $c->ifeq('not_array');
+            $c->aload(0);
+            $c->checkcast($cp->class_('[Ljava/lang/Object;'));
+            $c->astore(1);
+            $c->aload(1);
+            $c->arraylength();
+            $c->iconst(8);
+            $c->if_icmplt('tag_fallback');
+            $c->aload(1);
+            $c->iconst(7);
+            $c->aaload();
+            $c->instanceof_($cp->class_('java/lang/String'));
+            $c->ifeq('tag_fallback');
+            $c->aload(1);
+            $c->iconst(7);
+            $c->aaload();
+            $c->checkcast($cp->class_('java/lang/String'));
+            $c->astore(2);
+            $c->aload(2);
+            $c->invokevirtual($cp->methodRef('java/lang/String', 'isEmpty', '()Z'), 0, true);
+            $c->ifne('tag_fallback');
+            $c->aload(2);
+            $c->areturn();
+
+            $c->label('tag_fallback');
+            $c->noteFrame(['java/lang/Object', '[Ljava/lang/Object;', 'top']);
+            $c->aload(0);
+            $c->instanceof_($cp->class_('[Ljava/lang/Object;'));
+            $c->ifeq('no_tag');
+            $c->aload(0);
+            $c->checkcast($cp->class_('[Ljava/lang/Object;'));
+            $c->astore(1);
+            $c->aload(1);
+            $c->arraylength();
+            $c->iconst(2);
+            $c->if_icmplt('no_tag');
+            $c->aload(1);
+            $c->iconst(1);
+            $c->aaload();
+            $c->instanceof_($cp->class_('java/lang/String'));
+            $c->ifeq('no_tag');
+            $c->aload(1);
+            $c->iconst(1);
+            $c->aaload();
+            $c->checkcast($cp->class_('java/lang/String'));
+            $c->areturn();
+
+            $c->label('no_tag');
+            $c->noteFrame(['java/lang/Object', '[Ljava/lang/Object;', 'top']);
+            $c->ldc($cp->string_('SomeException'));
+            $c->areturn();
+
+            $c->label('not_array');
+            $c->noteFrame(['java/lang/Object']);
+            $c->ldc($cp->string_('SomeException'));
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'exceptionContextDisplay',
+        '(Ljava/lang/Object;)Ljava/lang/String;',
+        0x0009,
+        4,
+        ['java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->instanceof_($cp->class_('[Ljava/lang/Object;'));
+            $c->ifeq('not_array');
+            $c->aload(0);
+            $c->checkcast($cp->class_('[Ljava/lang/Object;'));
+            $c->astore(1);
+            $c->aload(1);
+            $c->arraylength();
+            $c->iconst(9);
+            $c->if_icmplt('empty');
+            $c->aload(1);
+            $c->iconst(8);
+            $c->aaload();
+            $c->instanceof_($cp->class_('java/lang/String'));
+            $c->ifeq('empty');
+            $c->aload(1);
+            $c->iconst(8);
+            $c->aaload();
+            $c->checkcast($cp->class_('java/lang/String'));
+            $c->areturn();
+
+            $c->label('empty');
+            $c->noteFrame(['java/lang/Object', '[Ljava/lang/Object;', 'top']);
+            $c->ldc($cp->string_(''));
+            $c->areturn();
+
+            $c->label('not_array');
+            $c->noteFrame(['java/lang/Object']);
+            $c->ldc($cp->string_(''));
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'formatExceptionInfo',
+        '([Ljava/lang/Object;)Ljava/lang/String;',
+        0x0009,
+        4,
+        ['[Ljava/lang/Object;'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('java/lang/StringBuilder'));
+            $c->dup();
+            $c->invokespecial($cp->methodRef('java/lang/StringBuilder', '<init>', '()V'), 0, false);
+            $c->astore(1);
+
+            $c->aload(1);
+            $c->ldc($cp->string_('Uncaught exception '));
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
+            $c->aload(0);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'exceptionType', '(Ljava/lang/Object;)Ljava/lang/String;'), 1, true);
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
+            $c->ldc($cp->string_(":\n\n"));
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
+            $c->aload(0);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'exceptionDisplay', '(Ljava/lang/Object;)Ljava/lang/String;'), 1, true);
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
+            $c->pop_();
+
+            $c->aload(0);
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'exceptionContextDisplay', '(Ljava/lang/Object;)Ljava/lang/String;'),
+                1,
+                true,
+            );
+            $c->astore(2);
+            $c->aload(2);
+            $c->invokevirtual($cp->methodRef('java/lang/String', 'isEmpty', '()Z'), 0, true);
+            $c->ifne('done');
+            $c->aload(1);
+            $c->ldc($cp->string_("\n\n"));
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
+            $c->aload(2);
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
+            $c->pop_();
+
+            $c->label('done');
+            $c->noteFrame(['[Ljava/lang/Object;', 'java/lang/StringBuilder', 'java/lang/String']);
+            $c->aload(1);
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'toString', '()Ljava/lang/String;'), 0, true);
             $c->areturn();
         }
     );
@@ -3758,6 +4751,9 @@ function buildRTClass(): string
             $c->iconst(4);
             $c->aaload();
             $c->checkcast($cp->class_('moggi/rt/MoggiException'));
+            $c->dup();
+            $c->aload(3);
+            $c->putfield($cp->fieldRef('moggi/rt/MoggiException', 'someException', '[Ljava/lang/Object;'));
             $c->athrow();
 
             $c->label('fresh_se');
@@ -3798,10 +4794,12 @@ function buildRTClass(): string
             $c->astore(4);
             $c->ldc($cp->string_('HostException'));
             $c->aconst_null();
+            $c->aconst_null();
+            $c->ldc($cp->string_('base:Moggi.IO.Exception.HostException'));
             $c->aload(4);
             $c->invokestatic(
-                $cp->methodRef('moggi/rt/RT', 'exceptionWrap', '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;'),
-                3,
+                $cp->methodRef('moggi/rt/RT', 'exceptionWrap', '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;'),
+                5,
                 true,
             );
             $c->astore(3);
@@ -3832,11 +4830,13 @@ function buildRTClass(): string
             $c->invokestatic($cp->methodRef('moggi/rt/RT', 'con', '(Ljava/lang/String;[Ljava/lang/Object;)Lmoggi/rt/Con;'), 2, true);
             $c->astore(2);
             $c->ldc($cp->string_('ErrorCall'));
-            $c->aconst_null();
+            $c->aload(0);
+            $c->aload(0);
+            $c->ldc($cp->string_('base:Moggi.Exception.Type.ErrorCall'));
             $c->aload(2);
             $c->invokestatic(
-                $cp->methodRef('moggi/rt/RT', 'exceptionWrap', '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;'),
-                3,
+                $cp->methodRef('moggi/rt/RT', 'exceptionWrap', '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;'),
+                5,
                 true,
             );
             $c->astore(2);
@@ -3934,10 +4934,12 @@ function buildRTClass(): string
             $c->astore(3);
             $c->ldc($cp->string_('HostException'));
             $c->aconst_null();
+            $c->aconst_null();
+            $c->ldc($cp->string_('base:Moggi.IO.Exception.HostException'));
             $c->aload(3);
             $c->invokestatic(
-                $cp->methodRef('moggi/rt/RT', 'exceptionWrap', '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;'),
-                3,
+                $cp->methodRef('moggi/rt/RT', 'exceptionWrap', '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;'),
+                5,
                 true,
             );
             $c->areturn();

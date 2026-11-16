@@ -35,7 +35,9 @@ namespace Moggi\Backend\DotNet;
  *   RT.IoCatch / IoFinally / ThrowSomeException back IoCatch/IoFinally/IoThrow.
  *
  * Exceptions (SomeException#)
- *   object[] { "__se", stableTag, payload } — mirrors PHP ['__se', tag, payload]
+ *   object[] { "__se", stableTag, payload, display } plus optional
+ *   origin/context/show/type/contextDisplay at 4..8 — mirrors PHP's nine-slot
+ *   wrapper.
  *   Moggi.Rt.MoggiException extends System.Exception with someException / throwSite
  *   throwSite object[] = {int siteId, string symbolId, string displayPath, int line, int col}
  *   RT.FormatExceptionReport / ReportUncaught mirror PHP stderr reports
@@ -92,6 +94,8 @@ function languageRuntime(): string
         stClassIl(),
         stRefClassIl(),
         ioRefClassIl(),
+        mVarClassIl(),
+        concurrentClassIl(),
         stBindFnClassIl(),
         stNewRefFnClassIl(),
         stReadRefFnClassIl(),
@@ -1296,6 +1300,362 @@ function staticFnClassesIl(array $arities): string
     return $out;
 }
 
+function mVarClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.MVar
+       extends [System.Runtime]System.Object
+{
+  .field private class [System.Threading]System.Threading.SemaphoreSlim full
+  .field private class [System.Threading]System.Threading.SemaphoreSlim empty
+  .field private class [System.Threading]System.Threading.SemaphoreSlim reading
+  .field private object stored
+
+  .method public hidebysig static class Moggi.Rt.MVar New(object v) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldc.i4.1
+    newobj instance void Moggi.Rt.MVar::.ctor(object, bool)
+    ret
+  }
+
+  .method public hidebysig static class Moggi.Rt.MVar Empty() cil managed
+  {
+    .maxstack 8
+    ldnull
+    ldc.i4.0
+    newobj instance void Moggi.Rt.MVar::.ctor(object, bool)
+    ret
+  }
+
+  .method public hidebysig specialname rtspecialname instance void .ctor(object v, bool isFull) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.2
+    brtrue FullSlot
+    ldc.i4.0
+    ldc.i4.1
+    newobj instance void [System.Threading]System.Threading.SemaphoreSlim::.ctor(int32, int32)
+    br StoreFull
+    FullSlot:
+    ldc.i4.1
+    ldc.i4.1
+    newobj instance void [System.Threading]System.Threading.SemaphoreSlim::.ctor(int32, int32)
+    StoreFull:
+    stfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::full
+    ldarg.0
+    ldarg.2
+    brtrue EmptySlot
+    ldc.i4.1
+    ldc.i4.1
+    newobj instance void [System.Threading]System.Threading.SemaphoreSlim::.ctor(int32, int32)
+    br StoreEmpty
+    EmptySlot:
+    ldc.i4.0
+    ldc.i4.1
+    newobj instance void [System.Threading]System.Threading.SemaphoreSlim::.ctor(int32, int32)
+    StoreEmpty:
+    stfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::empty
+    ldarg.0
+    ldc.i4.1
+    ldc.i4.1
+    newobj instance void [System.Threading]System.Threading.SemaphoreSlim::.ctor(int32, int32)
+    stfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    ldarg.0
+    ldarg.1
+    stfld object Moggi.Rt.MVar::stored
+    ret
+  }
+
+  .method public hidebysig static object Take(class Moggi.Rt.MVar m) cil managed
+  {
+    .maxstack 8
+    .locals init (object v)
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::full
+    callvirt instance void [System.Threading]System.Threading.SemaphoreSlim::Wait()
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    callvirt instance void [System.Threading]System.Threading.SemaphoreSlim::Wait()
+    ldarg.0
+    ldfld object Moggi.Rt.MVar::stored
+    stloc v
+    ldarg.0
+    ldnull
+    stfld object Moggi.Rt.MVar::stored
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    callvirt instance int32 [System.Threading]System.Threading.SemaphoreSlim::Release()
+    pop
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::empty
+    callvirt instance int32 [System.Threading]System.Threading.SemaphoreSlim::Release()
+    pop
+    ldloc v
+    ret
+  }
+
+  .method public hidebysig static void Put(class Moggi.Rt.MVar m, object v) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::empty
+    callvirt instance void [System.Threading]System.Threading.SemaphoreSlim::Wait()
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    callvirt instance void [System.Threading]System.Threading.SemaphoreSlim::Wait()
+    ldarg.0
+    ldarg.1
+    stfld object Moggi.Rt.MVar::stored
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    callvirt instance int32 [System.Threading]System.Threading.SemaphoreSlim::Release()
+    pop
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::full
+    callvirt instance int32 [System.Threading]System.Threading.SemaphoreSlim::Release()
+    pop
+    ret
+  }
+
+  .method public hidebysig static object Read(class Moggi.Rt.MVar m) cil managed
+  {
+    .maxstack 8
+    .locals init (object v)
+  Retry:
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    callvirt instance void [System.Threading]System.Threading.SemaphoreSlim::Wait()
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::full
+    ldc.i4.0
+    callvirt instance bool [System.Threading]System.Threading.SemaphoreSlim::Wait(int32)
+    brfalse.s WaitForValue
+    ldarg.0
+    ldfld object Moggi.Rt.MVar::stored
+    stloc v
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::full
+    callvirt instance int32 [System.Threading]System.Threading.SemaphoreSlim::Release()
+    pop
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    callvirt instance int32 [System.Threading]System.Threading.SemaphoreSlim::Release()
+    pop
+    ldloc v
+    ret
+  WaitForValue:
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    callvirt instance int32 [System.Threading]System.Threading.SemaphoreSlim::Release()
+    pop
+    ldc.i4.1
+    call void [System.Private.CoreLib]System.Threading.Thread::Sleep(int32)
+    br.s Retry
+  }
+
+  .method public hidebysig static object TryTake(class Moggi.Rt.MVar m) cil managed
+  {
+    .maxstack 8
+    .locals init (object v)
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::full
+    ldc.i4.0
+    callvirt instance bool [System.Threading]System.Threading.SemaphoreSlim::Wait(int32)
+    brtrue Taken
+    call class Moggi.Rt.Con Moggi.Rt.Platform::MaybeNothing()
+    ret
+    Taken:
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    callvirt instance void [System.Threading]System.Threading.SemaphoreSlim::Wait()
+    ldarg.0
+    ldfld object Moggi.Rt.MVar::stored
+    stloc v
+    ldarg.0
+    ldnull
+    stfld object Moggi.Rt.MVar::stored
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    callvirt instance int32 [System.Threading]System.Threading.SemaphoreSlim::Release()
+    pop
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::empty
+    callvirt instance int32 [System.Threading]System.Threading.SemaphoreSlim::Release()
+    pop
+    ldloc v
+    call class Moggi.Rt.Con Moggi.Rt.Platform::MaybeJust(object)
+    ret
+  }
+
+  .method public hidebysig static object TryRead(class Moggi.Rt.MVar m) cil managed
+  {
+    .maxstack 8
+    .locals init (object v)
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    callvirt instance void [System.Threading]System.Threading.SemaphoreSlim::Wait()
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::full
+    ldc.i4.0
+    callvirt instance bool [System.Threading]System.Threading.SemaphoreSlim::Wait(int32)
+    brtrue Present
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    callvirt instance int32 [System.Threading]System.Threading.SemaphoreSlim::Release()
+    pop
+    call class Moggi.Rt.Con Moggi.Rt.Platform::MaybeNothing()
+    ret
+    Present:
+    ldarg.0
+    ldfld object Moggi.Rt.MVar::stored
+    stloc v
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::full
+    callvirt instance int32 [System.Threading]System.Threading.SemaphoreSlim::Release()
+    pop
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    callvirt instance int32 [System.Threading]System.Threading.SemaphoreSlim::Release()
+    pop
+    ldloc v
+    call class Moggi.Rt.Con Moggi.Rt.Platform::MaybeJust(object)
+    ret
+  }
+
+  .method public hidebysig static bool TryPut(class Moggi.Rt.MVar m, object v) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::empty
+    ldc.i4.0
+    callvirt instance bool [System.Threading]System.Threading.SemaphoreSlim::Wait(int32)
+    brtrue Stored
+    ldc.i4.0
+    ret
+    Stored:
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    callvirt instance void [System.Threading]System.Threading.SemaphoreSlim::Wait()
+    ldarg.0
+    ldarg.1
+    stfld object Moggi.Rt.MVar::stored
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    callvirt instance int32 [System.Threading]System.Threading.SemaphoreSlim::Release()
+    pop
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::full
+    callvirt instance int32 [System.Threading]System.Threading.SemaphoreSlim::Release()
+    pop
+    ldc.i4.1
+    ret
+  }
+
+  .method public hidebysig static bool IsEmpty(class Moggi.Rt.MVar m) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    callvirt instance void [System.Threading]System.Threading.SemaphoreSlim::Wait()
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::full
+    callvirt instance int32 [System.Threading]System.Threading.SemaphoreSlim::get_CurrentCount()
+    ldc.i4.0
+    ceq
+    ldarg.0
+    ldfld class [System.Threading]System.Threading.SemaphoreSlim Moggi.Rt.MVar::reading
+    callvirt instance int32 [System.Threading]System.Threading.SemaphoreSlim::Release()
+    pop
+    ret
+  }
+}
+
+IL;
+}
+
+function concurrentClassIl(): string
+{
+    return <<<'IL'
+.class public abstract auto ansi sealed beforefieldinit Moggi.Rt.Concurrent
+       extends [System.Runtime]System.Object
+{
+  .method public hidebysig static int64 Fork(object action) cil managed
+  {
+    .maxstack 8
+    ldnull
+    ldftn void Moggi.Rt.Concurrent::RunTask(object)
+    newobj instance void [System.Private.CoreLib]System.Threading.ParameterizedThreadStart::.ctor(object, native int)
+    newobj instance void [System.Private.CoreLib]System.Threading.Thread::.ctor(class [System.Private.CoreLib]System.Threading.ParameterizedThreadStart)
+    dup
+    ldc.i4.1
+    callvirt instance void [System.Private.CoreLib]System.Threading.Thread::set_IsBackground(bool)
+    dup
+    ldarg.0
+    callvirt instance void [System.Private.CoreLib]System.Threading.Thread::Start(object)
+    callvirt instance int32 [System.Private.CoreLib]System.Threading.Thread::get_ManagedThreadId()
+    conv.i8
+    ret
+  }
+
+  .method public hidebysig static void RunTask(object state) cil managed
+  {
+    .maxstack 8
+    .locals init (class [System.Runtime]System.Exception e)
+    .try
+    {
+      ldarg.0
+      call object Moggi.Rt.RT::IoRun(object)
+      pop
+      leave.s Done
+    }
+    catch [System.Runtime]System.Exception
+    {
+      stloc.0
+      call class [System.Runtime]System.IO.TextWriter [System.Console]System.Console::get_Error()
+      ldloc.0
+      call string Moggi.Rt.RT::FormatExceptionReport(class [System.Runtime]System.Exception)
+      callvirt instance void [System.Private.CoreLib]System.IO.TextWriter::Write(string)
+      leave.s Done
+    }
+    Done:
+    ret
+  }
+
+  .method public hidebysig static void ThreadDelay(int64 us) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldc.i4.0
+    conv.i8
+    bgt.s DoSleep
+    ret
+    DoSleep:
+    ldarg.0
+    ldc.i4.s 10
+    conv.i8
+    mul
+    newobj instance void [System.Runtime]System.TimeSpan::.ctor(int64)
+    call void [System.Private.CoreLib]System.Threading.Thread::Sleep(valuetype [System.Runtime]System.TimeSpan)
+    ret
+  }
+
+  .method public hidebysig static void Yield() cil managed
+  {
+    .maxstack 8
+    call bool [System.Private.CoreLib]System.Threading.Thread::Yield()
+    pop
+    ret
+  }
+}
+
+IL;
+}
+
 function rtClassIl(): string
 {
     return \implode("\n", [
@@ -1322,8 +1682,15 @@ function rtClassIl(): string
         rtUnboxIntIl(),
         rtIoRunIl(),
         rtExceptionWrapIl(),
+        rtExceptionContextIl(),
+        rtExceptionAddContextIl(),
+        rtExceptionClearContextIl(),
         rtExceptionUnwrapIl(),
         rtExceptionDisplayIl(),
+        rtExceptionShowIl(),
+        rtExceptionTypeIl(),
+        rtExceptionContextDisplayIl(),
+        rtFormatExceptionInfoIl(),
         rtExceptionDisplayMessageIl(),
         rtThrowSiteIl(),
         rtExceptionAttachWrapperIl(),
@@ -1331,6 +1698,7 @@ function rtClassIl(): string
         rtAppendFrameReportIl(),
         rtAppendMoggFramesIl(),
         rtAppendHostFramesIl(),
+        rtCallStackFramesIl(),
         rtFormatExceptionReportIl(),
         rtReportUncaughtIl(),
         rtThrowSomeExceptionIl(),
@@ -2669,6 +3037,11 @@ function rtIoRunIl(): string
   {
     .maxstack 8
     ldarg.0
+    brtrue Run
+    ldnull
+    ret
+    Run:
+    ldarg.0
     castclass Moggi.Rt.IO
     ldfld object Moggi.Rt.IO::action
     ldc.i4.0
@@ -2683,10 +3056,10 @@ IL;
 function rtExceptionWrapIl(): string
 {
     return <<<'IL'
-  .method public hidebysig static object[] ExceptionWrap(string tag, string display, object payload) cil managed
+  .method public hidebysig static object[] ExceptionWrap(string tag, string display, string show, string typeName, object payload) cil managed
   {
     .maxstack 8
-    ldc.i4.4
+    ldc.i4.s 9
     newarr object
     dup
     ldc.i4.0
@@ -2698,12 +3071,248 @@ function rtExceptionWrapIl(): string
     stelem.ref
     dup
     ldc.i4.2
-    ldarg.2
+    ldarg 4
     stelem.ref
     dup
     ldc.i4.3
     ldarg.1
     stelem.ref
+    dup
+    ldc.i4.6
+    ldarg.2
+    stelem.ref
+    dup
+    ldc.i4.7
+    ldarg.3
+    stelem.ref
+    ret
+  }
+
+IL;
+}
+
+function rtExceptionContextIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object ExceptionContext(object se) cil managed
+  {
+    .maxstack 8
+    .locals init (object[] arr, object context)
+
+    ldarg.0
+    isinst object[]
+    brfalse Nothing
+    ldarg.0
+    castclass object[]
+    stloc arr
+    ldloc arr
+    ldlen
+    conv.i4
+    ldc.i4.6
+    blt Nothing
+    ldloc arr
+    ldc.i4.5
+    ldelem.ref
+    stloc context
+    ldloc context
+    brfalse Nothing
+
+    ldstr "Just"
+    ldc.i4.1
+    newarr object
+    dup
+    ldc.i4.0
+    ldloc context
+    stelem.ref
+    call class Moggi.Rt.Con Moggi.Rt.RT::Con(string, object[])
+    ret
+
+    Nothing:
+    ldstr "Nothing"
+    ldc.i4.0
+    newarr object
+    call class Moggi.Rt.Con Moggi.Rt.RT::Con(string, object[])
+    ret
+  }
+
+IL;
+}
+
+function rtExceptionAddContextIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object[] ExceptionAddContext(object ctx, object display, object se) cil managed
+  {
+    .maxstack 8
+    .locals init (object[] arr, object[] grown, int32 n)
+
+    ldarg.2
+    castclass object[]
+    stloc arr
+    ldc.i4.s 9
+    newarr object
+    stloc grown
+    ldloc arr
+    ldlen
+    conv.i4
+    ldc.i4.s 9
+    call int32 [System.Runtime]System.Math::Min(int32, int32)
+    stloc n
+    ldloc arr
+    ldc.i4.0
+    ldloc grown
+    ldc.i4.0
+    ldloc n
+    call void [System.Runtime]System.Array::Copy(class [System.Runtime]System.Array, int32, class [System.Runtime]System.Array, int32, int32)
+    ldloc grown
+    ldc.i4.5
+    ldarg.0
+    stelem.ref
+    ldloc grown
+    ldc.i4.8
+    ldarg.1
+    stelem.ref
+    ldloc grown
+    ret
+  }
+
+IL;
+}
+
+function rtExceptionClearContextIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object[] ExceptionClearContext(object se) cil managed
+  {
+    .maxstack 8
+    .locals init (object[] arr, object[] grown, int32 n)
+
+    ldarg.0
+    isinst object[]
+    brfalse AsIs
+    ldarg.0
+    castclass object[]
+    stloc arr
+    ldc.i4.s 9
+    newarr object
+    stloc grown
+    ldloc arr
+    ldlen
+    conv.i4
+    ldc.i4.s 9
+    call int32 [System.Runtime]System.Math::Min(int32, int32)
+    stloc n
+    ldloc arr
+    ldc.i4.0
+    ldloc grown
+    ldc.i4.0
+    ldloc n
+    call void [System.Runtime]System.Array::Copy(class [System.Runtime]System.Array, int32, class [System.Runtime]System.Array, int32, int32)
+    ldloc grown
+    ldc.i4.5
+    ldnull
+    stelem.ref
+    ldloc grown
+    ldc.i4.8
+    ldnull
+    stelem.ref
+    ldloc grown
+    ret
+
+    AsIs:
+    ldarg.0
+    castclass object[]
+    ret
+  }
+
+IL;
+}
+
+function rtExceptionContextDisplayIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static string ExceptionContextDisplay(object se) cil managed
+  {
+    .maxstack 8
+    .locals init (object[] arr, string text)
+
+    ldarg.0
+    isinst object[]
+    brfalse Empty
+    ldarg.0
+    castclass object[]
+    stloc arr
+    ldloc arr
+    ldlen
+    conv.i4
+    ldc.i4.s 9
+    blt Empty
+    ldloc arr
+    ldc.i4.8
+    ldelem.ref
+    isinst string
+    stloc text
+    ldloc text
+    brfalse Empty
+    ldloc text
+    ret
+
+    Empty:
+    ldstr ""
+    ret
+  }
+
+IL;
+}
+
+function rtFormatExceptionInfoIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static string FormatExceptionInfo(object[] se) cil managed
+  {
+    .maxstack 8
+    .locals init (
+      string typeName,
+      string display,
+      string context,
+      class [System.Runtime]System.Text.StringBuilder sb)
+
+    ldarg.0
+    call string Moggi.Rt.RT::ExceptionType(object)
+    stloc typeName
+    ldarg.0
+    call string Moggi.Rt.RT::ExceptionDisplay(object)
+    stloc display
+    ldarg.0
+    call string Moggi.Rt.RT::ExceptionContextDisplay(object)
+    stloc context
+
+    newobj instance void [System.Runtime]System.Text.StringBuilder::.ctor()
+    stloc sb
+    ldloc sb
+    ldstr "Uncaught exception "
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
+    ldloc typeName
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
+    ldstr ":\n\n"
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
+    ldloc display
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
+    pop
+
+    ldloc context
+    callvirt instance int32 [System.Runtime]System.String::get_Length()
+    brfalse Done
+    ldloc sb
+    ldstr "\n\n"
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
+    ldloc context
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
+    pop
+
+    Done:
+    ldloc sb
+    callvirt instance string [System.Runtime]System.Object::ToString()
     ret
   }
 
@@ -2822,6 +3431,103 @@ function rtExceptionDisplayIl(): string
     ret
 
     Fallback:
+    ldstr "SomeException"
+    ret
+  }
+
+IL;
+}
+
+function rtExceptionShowIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static string ExceptionShow(object se) cil managed
+  {
+    .maxstack 8
+    .locals init (object[] arr, string text)
+
+    ldarg.0
+    isinst object[]
+    brfalse Fallback
+    ldarg.0
+    castclass object[]
+    stloc arr
+    ldloc arr
+    ldlen
+    conv.i4
+    ldc.i4.7
+    blt Fallback
+    ldloc arr
+    ldc.i4.6
+    ldelem.ref
+    isinst string
+    stloc text
+    ldloc text
+    brfalse Fallback
+    ldloc text
+    ret
+
+    Fallback:
+    ldarg.0
+    call string Moggi.Rt.RT::ExceptionDisplay(object)
+    ret
+  }
+
+IL;
+}
+
+function rtExceptionTypeIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static string ExceptionType(object se) cil managed
+  {
+    .maxstack 8
+    .locals init (object[] arr, string text)
+
+    ldarg.0
+    isinst object[]
+    brfalse Fallback
+    ldarg.0
+    castclass object[]
+    stloc arr
+    ldloc arr
+    ldlen
+    conv.i4
+    ldc.i4.8
+    blt Fallback
+    ldloc arr
+    ldc.i4.7
+    ldelem.ref
+    isinst string
+    stloc text
+    ldloc text
+    brfalse Fallback
+    ldloc text
+    ret
+
+    Fallback:
+    ldarg.0
+    isinst object[]
+    brfalse NoTag
+    ldarg.0
+    castclass object[]
+    stloc arr
+    ldloc arr
+    ldlen
+    conv.i4
+    ldc.i4.2
+    blt NoTag
+    ldloc arr
+    ldc.i4.1
+    ldelem.ref
+    isinst string
+    stloc text
+    ldloc text
+    brfalse NoTag
+    ldloc text
+    ret
+
+    NoTag:
     ldstr "SomeException"
     ret
   }
@@ -2969,13 +3675,13 @@ function rtExceptionAttachWrapperIl(): string
   {
     .maxstack 6
     .locals init (object[] grown, int32 n)
-    ldc.i4.5
+    ldc.i4.s 9
     newarr object
     stloc grown
     ldarg.0
     ldlen
     conv.i4
-    ldc.i4.4
+    ldc.i4.s 9
     call int32 [System.Runtime]System.Math::Min(int32, int32)
     stloc n
     ldarg.0
@@ -3519,6 +4225,134 @@ function rtAppendHostFramesIl(): string
 IL;
 }
 
+function rtCallStackFramesIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static string CallStackFrames() cil managed
+  {
+    .maxstack 8
+    .locals init (
+      class [System.Diagnostics.StackTrace]System.Diagnostics.StackTrace st,
+      class [System.Diagnostics.StackTrace]System.Diagnostics.StackFrame[] frames,
+      class [System.Runtime]System.Text.StringBuilder sb,
+      int32 i,
+      int32 line,
+      class [System.Diagnostics.StackTrace]System.Diagnostics.StackFrame f,
+      class [System.Runtime]System.Reflection.MethodBase mb,
+      class [System.Runtime]System.Type dt,
+      string typeName,
+      string file)
+
+    ldc.i4.1
+    newobj instance void [System.Diagnostics.StackTrace]System.Diagnostics.StackTrace::.ctor(bool)
+    stloc st
+    ldloc st
+    callvirt instance class [System.Diagnostics.StackTrace]System.Diagnostics.StackFrame[] [System.Diagnostics.StackTrace]System.Diagnostics.StackTrace::GetFrames()
+    stloc frames
+    newobj instance void [System.Runtime]System.Text.StringBuilder::.ctor()
+    stloc sb
+    ldc.i4.0
+    stloc i
+
+    Loop:
+    ldloc frames
+    brfalse Done
+    ldloc i
+    ldloc frames
+    ldlen
+    conv.i4
+    bge Done
+    ldloc frames
+    ldloc i
+    ldelem.ref
+    stloc f
+
+    ldloc f
+    callvirt instance class [System.Runtime]System.Reflection.MethodBase [System.Diagnostics.StackTrace]System.Diagnostics.StackFrame::GetMethod()
+    stloc mb
+    ldloc mb
+    brfalse Next
+    ldloc mb
+    callvirt instance class [System.Runtime]System.Type [System.Runtime]System.Reflection.MemberInfo::get_DeclaringType()
+    stloc dt
+    ldloc dt
+    brfalse Next
+    ldloc dt
+    callvirt instance string [System.Runtime]System.Type::get_FullName()
+    stloc typeName
+    ldloc typeName
+    brfalse Next
+    ldloc typeName
+    ldstr "Moggi.Rt.RT"
+    call bool [System.Runtime]System.String::op_Equality(string, string)
+    brtrue Next
+
+    ldloc f
+    callvirt instance int32 [System.Diagnostics.StackTrace]System.Diagnostics.StackFrame::GetFileLineNumber()
+    stloc line
+
+    ldloc f
+    callvirt instance string [System.Diagnostics.StackTrace]System.Diagnostics.StackFrame::GetFileName()
+    stloc file
+
+    ldloc sb
+    ldstr "-"
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
+    ldc.i4.s 9
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(char)
+    ldstr "-"
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
+    ldc.i4.s 9
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(char)
+    ldloc typeName
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
+    ldc.i4.s 46
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(char)
+    ldloc mb
+    callvirt instance string [System.Runtime]System.Reflection.MemberInfo::get_Name()
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
+    ldc.i4.s 9
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(char)
+
+    ldloc file
+    call bool [System.Runtime]System.String::IsNullOrEmpty(string)
+    brtrue NoFile
+    ldloc file
+    br UseFile
+
+    NoFile:
+    ldstr "-"
+
+    UseFile:
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
+    ldc.i4.s 9
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(char)
+    ldloc line
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(int32)
+    ldc.i4.s 9
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(char)
+    ldstr "0"
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
+    ldc.i4.s 10
+    callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(char)
+    pop
+
+    Next:
+    ldloc i
+    ldc.i4.1
+    add
+    stloc i
+    br Loop
+
+    Done:
+    ldloc sb
+    callvirt instance string [System.Runtime]System.Object::ToString()
+    ret
+  }
+
+IL;
+}
+
 function rtFormatExceptionReportIl(): string
 {
     return <<<'IL'
@@ -3562,17 +4396,37 @@ function rtFormatExceptionReportIl(): string
       ldloc sb
       ldstr "moggi: "
       callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
-      ldloc tag
-      callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
-      ldstr ": "
-      callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
       ldloc me
-      callvirt instance string [System.Runtime]System.Exception::get_Message()
+      ldfld object[] Moggi.Rt.MoggiException::someException
+      call string Moggi.Rt.RT::FormatExceptionInfo(object[])
       callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
       ldc.i4.s 10
       callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(char)
       pop
 
+      ldloc tag
+      ldstr "ErrorCall"
+      call bool [System.Runtime]System.String::op_Equality(string, string)
+      brfalse NoCallStack
+      ldloc me
+      ldfld object[] Moggi.Rt.MoggiException::throwSite
+      brfalse NoCallStack
+      ldloc sb
+      ldstr "\nCallStack (from HasCallStack):\n"
+      callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
+      pop
+      NoCallStack:
+
+      ldloc tag
+      ldstr "ErrorCall"
+      call bool [System.Runtime]System.String::op_Equality(string, string)
+      brfalse DoFrames
+      ldloc me
+      ldfld object[] Moggi.Rt.MoggiException::throwSite
+      brtrue DoFrames
+      br AfterFrames
+
+      DoFrames:
       ldloc sb
       ldloc me
       ldfld object[] Moggi.Rt.MoggiException::throwSite
@@ -3584,6 +4438,7 @@ function rtFormatExceptionReportIl(): string
       ldfld object[] Moggi.Rt.MoggiException::throwSite
       call void Moggi.Rt.RT::AppendMoggFrames(class [System.Runtime]System.Text.StringBuilder, class [System.Runtime]System.Exception, object[])
 
+      AfterFrames:
       ldloc me
       callvirt instance class [System.Runtime]System.Exception [System.Runtime]System.Exception::get_InnerException()
       stloc cause
@@ -3695,6 +4550,9 @@ function rtThrowSomeExceptionIl(): string
     isinst Moggi.Rt.MoggiException
     brfalse FreshSe
     ldloc origin
+    ldloc arr
+    stfld object[] Moggi.Rt.MoggiException::someException
+    ldloc origin
     call class [System.Runtime]System.Runtime.ExceptionServices.ExceptionDispatchInfo [System.Runtime]System.Runtime.ExceptionServices.ExceptionDispatchInfo::Capture(class [System.Runtime]System.Exception)
     callvirt instance void [System.Runtime]System.Runtime.ExceptionServices.ExceptionDispatchInfo::Throw()
     ldnull
@@ -3730,8 +4588,10 @@ function rtThrowSomeExceptionIl(): string
     stloc payload
     ldstr "HostException"
     ldnull
+    ldnull
+    ldstr "base:Moggi.IO.Exception.HostException"
     ldloc payload
-    call object[] Moggi.Rt.RT::ExceptionWrap(string, string, object)
+    call object[] Moggi.Rt.RT::ExceptionWrap(string, string, string, string, object)
     stloc arr
     ldloc arr
     ldarg.1
@@ -3761,9 +4621,11 @@ function rtThrowErrorCallIl(): string
     call class Moggi.Rt.Con Moggi.Rt.RT::Con(string, object[])
     stloc payload
     ldstr "ErrorCall"
-    ldnull
+    ldarg.0
+    ldarg.0
+    ldstr "base:Moggi.Exception.Type.ErrorCall"
     ldloc payload
-    call object[] Moggi.Rt.RT::ExceptionWrap(string, string, object)
+    call object[] Moggi.Rt.RT::ExceptionWrap(string, string, string, string, object)
     stloc se
     ldloc se
     ldarg.1
@@ -3882,8 +4744,10 @@ function rtNormalizeHostExceptionIl(): string
     stloc payload
     ldstr "HostException"
     ldnull
+    ldnull
+    ldstr "base:Moggi.IO.Exception.HostException"
     ldloc payload
-    call object[] Moggi.Rt.RT::ExceptionWrap(string, string, object)
+    call object[] Moggi.Rt.RT::ExceptionWrap(string, string, string, string, object)
     ret
   }
 

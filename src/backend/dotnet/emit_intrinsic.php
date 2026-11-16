@@ -18,6 +18,17 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitOperand($env, $args[0]);
 
             return;
+        case 'callStack#':
+            $env->m->emit('call string Moggi.Rt.RT::CallStackFrames()');
+
+            return;
+        case 'errorWithoutStackTrace#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass string');
+            $env->m->emit('ldnull');
+            $env->m->emit('call object Moggi.Rt.RT::ThrowErrorCall(string, object[])');
+
+            return;
         case 'error#':
             emitOperand($env, $args[0]);
             $env->m->emit('castclass string');
@@ -48,7 +59,11 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitOperand($env, $args[1]);
             $env->m->emit('castclass string');
             emitOperand($env, $args[2]);
-            $env->m->emit('call object[] Moggi.Rt.RT::ExceptionWrap(string, string, object)');
+            $env->m->emit('castclass string');
+            emitOperand($env, $args[3]);
+            $env->m->emit('castclass string');
+            emitOperand($env, $args[4]);
+            $env->m->emit('call object[] Moggi.Rt.RT::ExceptionWrap(string, string, string, string, object)');
 
             return;
         case 'exceptionUnwrap#':
@@ -67,6 +82,33 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
         case 'exceptionDisplay#':
             emitOperand($env, $args[0]);
             $env->m->emit('call string Moggi.Rt.RT::ExceptionDisplay(object)');
+
+            return;
+        case 'exceptionShow#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('call string Moggi.Rt.RT::ExceptionShow(object)');
+
+            return;
+        case 'exceptionType#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('call string Moggi.Rt.RT::ExceptionType(object)');
+
+            return;
+        case 'exceptionClearContext#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('call object[] Moggi.Rt.RT::ExceptionClearContext(object)');
+
+            return;
+        case 'exceptionContext#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('call object Moggi.Rt.RT::ExceptionContext(object)');
+
+            return;
+        case 'exceptionAddContext#':
+            emitOperand($env, $args[0]);
+            emitOperand($env, $args[1]);
+            emitOperand($env, $args[2]);
+            $env->m->emit('call object[] Moggi.Rt.RT::ExceptionAddContext(object, object, object)');
 
             return;
         case 'exceptionThrowIo#':

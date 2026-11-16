@@ -454,9 +454,11 @@ function emitMain(IR\Module $module, array $phpNames): string
         ? "\$__moggiEntry = {$mainName}();\n    (\$__moggiEntry[1])();"
         : "{$mainName}();";
 
-    return "\ntry {\n    {$call}\n} catch (\\Throwable \$__moggiUncaught) {\n"
+    return "\n\$GLOBALS['__moggiEntryFile'] = __FILE__;\n"
+        . "if ((\$GLOBALS['__moggiForkChild'] ?? false) !== true) {\n"
+        . "try {\n    {$call}\n} catch (\\Throwable \$__moggiUncaught) {\n"
         . "    \\Moggi\\reportUncaught(\$__moggiUncaught);\n"
-        . "}\n";
+        . "}\n}\n";
 }
 
 /** Whether the module's entry answers with an action value — its own published convention. */

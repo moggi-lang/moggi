@@ -223,6 +223,193 @@ function emitIntrinsicState(EmitEnv $env, IR\Intrinsic $op): bool
             throw new \RuntimeException(
                 "intrinsic `{$op->name}` must be erased by strict IO normalization before JVM emit",
             );
+        case 'forkIO#':
+            $env->c->new_($env->cp->class_('java/lang/Thread'));
+            $env->c->dup();
+            $env->c->new_($env->cp->class_('moggi/rt/ForkTask'));
+            $env->c->dup();
+            emitOperand($env, $args[0]);
+            $env->c->invokespecial(
+                $env->cp->methodRef('moggi/rt/ForkTask', '<init>', '(Ljava/lang/Object;)V'),
+                1,
+                false,
+            );
+            $env->c->invokespecial(
+                $env->cp->methodRef('java/lang/Thread', '<init>', '(Ljava/lang/Runnable;)V'),
+                1,
+                false,
+            );
+            $env->c->dup();
+            $env->c->iconst(1);
+            $env->c->invokevirtual(
+                $env->cp->methodRef('java/lang/Thread', 'setDaemon', '(Z)V'),
+                1,
+                false,
+            );
+            $env->c->dup();
+            $env->c->invokevirtual($env->cp->methodRef('java/lang/Thread', 'start', '()V'), 0, false);
+            $env->c->invokevirtual($env->cp->methodRef('java/lang/Thread', 'getId', '()J'), 0, 2);
+            $env->c->invokestatic(
+                $env->cp->methodRef('java/lang/Long', 'valueOf', '(J)Ljava/lang/Long;'),
+                2,
+                true,
+            );
+
+            return true;
+        case 'threadDelay#':
+            emitOperand($env, $args[0]);
+            unboxInt($env);
+            $env->c->ldc2_w($env->cp->long(1000));
+            $env->c->lmul();
+            $env->c->invokestatic(
+                $env->cp->methodRef('java/util/concurrent/locks/LockSupport', 'parkNanos', '(J)V'),
+                2,
+                false,
+            );
+            $env->c->aconst_null();
+
+            return true;
+        case 'yield#':
+            $env->c->invokestatic($env->cp->methodRef('java/lang/Thread', 'yield', '()V'), 0, false);
+            $env->c->aconst_null();
+
+            return true;
+        case 'newMVar#':
+            $env->c->new_($env->cp->class_('moggi/rt/MVar'));
+            $env->c->dup();
+            emitOperand($env, $args[0]);
+            $env->c->iconst(1);
+            $env->c->invokespecial(
+                $env->cp->methodRef('moggi/rt/MVar', '<init>', '(Ljava/lang/Object;Z)V'),
+                2,
+                false,
+            );
+
+            return true;
+        case 'newEmptyMVar#':
+            $env->c->new_($env->cp->class_('moggi/rt/MVar'));
+            $env->c->dup();
+            $env->c->aconst_null();
+            $env->c->iconst(0);
+            $env->c->invokespecial(
+                $env->cp->methodRef('moggi/rt/MVar', '<init>', '(Ljava/lang/Object;Z)V'),
+                2,
+                false,
+            );
+
+            return true;
+        case 'takeMVar#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/MVar'));
+            $env->c->invokevirtual(
+                $env->cp->methodRef('moggi/rt/MVar', 'take', '()Ljava/lang/Object;'),
+                0,
+                true,
+            );
+
+            return true;
+        case 'tryTakeMVar#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/MVar'));
+            $env->c->invokevirtual(
+                $env->cp->methodRef('moggi/rt/MVar', 'tryTake', '()Ljava/lang/Object;'),
+                0,
+                true,
+            );
+
+            return true;
+        case 'putMVar#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/MVar'));
+            emitOperand($env, $args[1]);
+            $env->c->invokevirtual(
+                $env->cp->methodRef('moggi/rt/MVar', 'put', '(Ljava/lang/Object;)V'),
+                1,
+                false,
+            );
+            $env->c->aconst_null();
+
+            return true;
+        case 'tryPutMVar#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/MVar'));
+            emitOperand($env, $args[1]);
+            $env->c->invokevirtual(
+                $env->cp->methodRef('moggi/rt/MVar', 'tryPut', '(Ljava/lang/Object;)Z'),
+                1,
+                true,
+            );
+            $env->c->invokestatic(
+                $env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'),
+                1,
+                true,
+            );
+
+            return true;
+        case 'readMVar#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/MVar'));
+            $env->c->invokevirtual(
+                $env->cp->methodRef('moggi/rt/MVar', 'read', '()Ljava/lang/Object;'),
+                0,
+                true,
+            );
+
+            return true;
+        case 'isEmptyMVar#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/MVar'));
+            $env->c->invokevirtual(
+                $env->cp->methodRef('moggi/rt/MVar', 'isEmpty', '()Z'),
+                0,
+                true,
+            );
+            $env->c->invokestatic(
+                $env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'),
+                1,
+                true,
+            );
+
+            return true;
+        case 'tryReadMVar#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/MVar'));
+            $env->c->invokevirtual(
+                $env->cp->methodRef('moggi/rt/MVar', 'tryRead', '()Ljava/lang/Object;'),
+                0,
+                true,
+            );
+
+            return true;
+        case 'sameMVar#':
+            emitOperand($env, $args[0]);
+            emitOperand($env, $args[1]);
+            $env->c->invokevirtual(
+                $env->cp->methodRef('java/lang/Object', 'equals', '(Ljava/lang/Object;)Z'),
+                1,
+                true,
+            );
+            $env->c->invokestatic(
+                $env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'),
+                1,
+                true,
+            );
+
+            return true;
+        case 'myThreadId#':
+            $env->c->invokestatic(
+                $env->cp->methodRef('java/lang/Thread', 'currentThread', '()Ljava/lang/Thread;'),
+                0,
+                true,
+            );
+            $env->c->invokevirtual($env->cp->methodRef('java/lang/Thread', 'getId', '()J'), 0, 2);
+            $env->c->invokestatic(
+                $env->cp->methodRef('java/lang/Long', 'valueOf', '(J)Ljava/lang/Long;'),
+                2,
+                true,
+            );
+
+            return true;
         case 'stPure#':
             emitOperand($env, $args[0]);
             $env->c->invokestatic(
