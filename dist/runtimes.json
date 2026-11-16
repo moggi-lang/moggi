@@ -20,9 +20,10 @@
         "acknowledgement": "This product includes PHP software, freely available from <https://www.php.net/software/>."
       },
       "checksumsUrl": "https://www.php.net/releases/index.php?json&version={version}",
-      "extensions": ["bcmath", "intl", "mbstring"],
+      "extensions": ["bcmath", "intl", "mbstring", "parallel"],
       "configureFlags": [
         "--disable-all",
+        "--enable-zts",
         "--disable-cgi",
         "--enable-cli",
         "--enable-bcmath",
@@ -173,7 +174,7 @@
         "tool": "spc",
         "php": "8.5",
         "sapi": "micro",
-        "extensions": ["bcmath", "intl", "mbstring", "phar"],
+        "extensions": ["bcmath", "intl", "mbstring", "parallel", "phar"],
         "note": "The native compiler runs itself from the archive appended to its binary, so the micro runtime needs the phar wrapper on top of the extensions compiled programs require."
       }
     },

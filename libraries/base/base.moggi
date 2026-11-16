@@ -21,3 +21,4 @@ version = 8.5
 bcmath = *
 intl = *
 mbstring = *
+parallel = *

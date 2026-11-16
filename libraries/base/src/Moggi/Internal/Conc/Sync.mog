@@ -1,0 +1,7 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The names @base@'s concurrency API mentions but does not export.
+module Moggi.Internal.Conc.Sync (STM) where
+
+-- | Placeholder for the STM transaction type. Moggi has no STM runtime; the
+-- type exists so descriptor-wait signatures keep @base@'s shape.
+data STM a = STM

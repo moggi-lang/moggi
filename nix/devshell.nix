@@ -21,11 +21,16 @@ let
   moggiRootScript = ''
     git -C "''${PWD}" rev-parse --show-toplevel 2>/dev/null || pwd
   '';
+  # The compiler shells out to PHP; the concurrency runtime needs a ZTS build
+  # with ext-parallel, which is exactly what `parallel` requires.
+  php = (pkgs.php85.override { ztsSupport = true; }).withExtensions (
+    { enabled, all, ... }: enabled ++ [ all.parallel ]
+  );
 in
 {
   packages = with pkgs; [
     git
-    php85
+    php
     # GraalVM CE provides the Java 21 toolchain plus native-image.
     graalvmPackages.graalvm-ce
     # .NET 8 SDK for the DotNet IL backend (run + Native AOT).
@@ -44,20 +49,20 @@ in
     '')
     (writeShellScriptBin "moggi" ''
       ROOT="$(${moggiRootScript})"
-      exec ${php85}/bin/php "$ROOT/moggi.php" "$@"
+      exec ${php}/bin/php "$ROOT/moggi.php" "$@"
     '')
     (writeShellScriptBin "runtest" ''
       ROOT="$(${moggiRootScript})"
-      exec ${php85}/bin/php "$ROOT/test.php" "$@"
+      exec ${php}/bin/php "$ROOT/test.php" "$@"
     '')
     (writeShellScriptBin "runalltest" ''
       ROOT="$(${moggiRootScript})"
-      exec ${php85}/bin/php "$ROOT/test-all.php" "$@"
+      exec ${php}/bin/php "$ROOT/test-all.php" "$@"
     '')
   ];
 
   shellHook = ''
-    echo "PHP $(php --version | head -n1) (pinned ${pinnedVersions.php})"
+    echo "PHP $(php --version | head -n1) (ZTS: $(php -r 'echo PHP_ZTS ? "yes" : "no";') / parallel: $(php -r 'echo extension_loaded("parallel") ? "yes" : "no";'); pinned ${pinnedVersions.php})"
     echo "nixpkgs ${nixpkgsRev}"
     echo "Java $(java -version 2>&1 | head -n1) (nixpkgs graalvmPackages.graalvm-ce; JVM backend target)"
     echo "native-image $(native-image --version 2>&1 | head -n1)"

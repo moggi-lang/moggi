@@ -1,0 +1,93 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Quantity semaphores whose waiters ask for an arbitrary amount.
+module Control.Concurrent.QSemN
+  ( QSemN
+  , newQSemN
+  , waitQSemN
+  , signalQSemN
+  ) where
+
+import Control.Applicative
+import Control.Concurrent.MVar
+import Control.Exception (mask_, onException, uninterruptibleMask_)
+import Control.Monad
+import Data.List (reverse, (:))
+import Data.Maybe (Maybe(..))
+import Data.Num
+import Moggi.Internal.Base
+import Moggi.IO.Exception (ioError, userError)
+import System.IO (IO)
+
+-- | A quantity semaphore acquired and released in arbitrary amounts.
+newtype QSemN = QSemN (MVar (Int, [(Int, MVar ())], [(Int, MVar ())]))
+
+-- | Build a semaphore with the given initial quantity, which must be at least
+-- zero.
+newQSemN :: Int -> IO QSemN
+newQSemN initial =
+  case initial < 0 of
+    True -> ioError (userError "newQSemN: Initial quantity must be non-negative")
+    False -> do
+      sem <- newMVar (initial, [], [])
+      pure (QSemN sem)
+
+-- | Wait until @amount@ units are available, then take them. Waiters are
+-- satisfied in FIFO order.
+waitQSemN :: QSemN -> Int -> IO ()
+waitQSemN (QSemN sem) amount = mask_ (do
+  state <- takeMVar sem
+  case state of
+    (available, ready, blocked) ->
+      case available - amount < 0 of
+        False -> putMVar sem (available - amount, ready, blocked)
+        True -> do
+          waiter <- newEmptyMVar
+          putMVar sem (available, ready, (amount, waiter) : blocked)
+          waitQSemNWaiter sem amount waiter)
+
+waitQSemNWaiter :: MVar (Int, [(Int, MVar ())], [(Int, MVar ())]) -> Int -> MVar () -> IO ()
+waitQSemNWaiter sem amount waiter =
+  onException (takeMVar waiter)
+    (uninterruptibleMask_ (do
+      state <- takeMVar sem
+      alreadyWoken <- tryTakeMVar waiter
+      case alreadyWoken of
+        Just () -> do
+          next <- signalQSemNState state amount
+          putMVar sem next
+        Nothing -> do
+          putMVar waiter ()
+          putMVar sem state))
+
+-- | Return @amount@ units, waking as many of the longest waiters as now fit.
+signalQSemN :: QSemN -> Int -> IO ()
+signalQSemN (QSemN sem) amount = uninterruptibleMask_ (do
+  state <- takeMVar sem
+  next <- signalQSemNState state amount
+  putMVar sem next)
+
+signalQSemNState :: (Int, [(Int, MVar ())], [(Int, MVar ())]) -> Int -> IO (Int, [(Int, MVar ())], [(Int, MVar ())])
+signalQSemNState (available, ready, blocked) amount =
+  wake (available + amount) ready blocked
+
+-- | The @base@ signal loop.
+--
+-- @wake@ runs while the state MVar is held and never blocks: it only asks
+-- whether a waiter's MVar is already full or fills it with 'tryPutMVar'. A
+-- waiter that an exception already removed is skipped rather than counted.
+wake :: Int -> [(Int, MVar ())] -> [(Int, MVar ())] -> IO (Int, [(Int, MVar ())], [(Int, MVar ())])
+wake 0 ready blocked = pure (0, ready, blocked)
+wake available [] [] = pure (available, [], [])
+wake available [] blocked = wake available (reverse blocked) []
+wake available ((need, waiter) : rest) blocked =
+  case need > available of
+    True -> do
+      empty <- isEmptyMVar waiter
+      case empty of
+        True -> pure (available, (need, waiter) : rest, blocked)
+        False -> wake available rest blocked
+    False -> do
+      woken <- tryPutMVar waiter ()
+      case woken of
+        True -> wake (available - need) rest blocked
+        False -> wake available rest blocked

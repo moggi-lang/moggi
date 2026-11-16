@@ -1,0 +1,103 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- Unbounded channels.
+--
+-- The channels are implemented with 'Control.Concurrent.MVar's and therefore inherit all the
+-- caveats that apply to @MVar@s (possibility of races, deadlocks etc).
+--
+-- @base@'s 'getChanContents' returns a lazy stream that keeps waiting for
+-- future writes.  Moggi's lists are strict, so its 'getChanContents' instead
+-- drains the values already queued and returns them as a finite list.  Read a
+-- live stream with 'readChan' in a loop.
+module Control.Concurrent.Chan
+  (
+        -- * The 'Chan' type
+        Chan,                   -- abstract
+
+        -- * Operations
+        newChan,
+        writeChan,
+        readChan,
+        dupChan,
+
+        -- * Stream interface
+        getChanContents,
+        writeList2Chan,
+   ) where
+
+import Control.Applicative
+import Control.Concurrent.MVar
+import Control.Monad
+import Data.List (reverse, (:))
+import Moggi.Internal.Base
+import System.IO (IO)
+
+-- | One written value and the hole after it.
+data ChItem a = ChItem
+  { itemValue :: a
+  , itemNext :: MVar (ChItem a)
+  }
+
+-- | An unbounded FIFO channel: the read end and the write end, each holding the
+-- current hole.
+data Chan a = Chan (MVar (MVar (ChItem a))) (MVar (MVar (ChItem a))) deriving (Eq)
+
+-- | Build a new, empty channel.
+newChan :: IO (Chan a)
+newChan = do
+  hole <- newEmptyMVar
+  readEnd <- newMVar hole
+  writeEnd <- newMVar hole
+  pure (Chan readEnd writeEnd)
+
+-- | Append a value. Never blocks.
+writeChan :: Chan a -> a -> IO ()
+writeChan (Chan _ writeEnd) value = do
+  newHole <- newEmptyMVar
+  modifyMVarMasked_ writeEnd (\oldHole -> do
+    putMVar oldHole (ChItem value newHole)
+    pure newHole)
+
+-- | Take the next value, waiting while the channel is empty.
+readChan :: Chan a -> IO a
+readChan (Chan readEnd _) = readEndItem readEnd
+
+readEndItem :: MVar (MVar (ChItem a)) -> IO a
+readEndItem readEnd =
+  modifyMVar readEnd (\end -> do
+    item <- readMVar end
+    pure (item.itemNext, item.itemValue))
+
+-- | A second read end that sees everything written from now on.
+dupChan :: Chan a -> IO (Chan a)
+dupChan (Chan _ writeEnd) = do
+  hole <- readMVar writeEnd
+  readEnd <- newMVar hole
+  pure (Chan readEnd writeEnd)
+
+-- | Drain the values currently queued on the channel, in FIFO order.
+--
+-- Unlike @base@'s lazy stream, this returns a finite snapshot: it does not wait
+-- for future writes.  Use 'readChan' in a loop for a live stream.
+getChanContents :: Chan a -> IO [a]
+getChanContents (Chan readEnd writeEnd) =
+  modifyMVar readEnd (\start -> do
+    end <- readMVar writeEnd
+    items <- collectChanContents start end []
+    pure (end, items))
+
+-- The write end is read while the read end is held, so the list stops at one
+-- stable point: values written after that point are in holes after @end@.
+collectChanContents :: MVar (ChItem a) -> MVar (ChItem a) -> [a] -> IO [a]
+collectChanContents start end acc =
+  case start == end of
+    True -> pure (reverse acc)
+    False -> do
+      item <- readMVar start
+      collectChanContents item.itemNext end (item.itemValue : acc)
+
+-- | Write every element of a list, in order.
+writeList2Chan :: Chan a -> [a] -> IO ()
+writeList2Chan _ [] = pure ()
+writeList2Chan channel (value : rest) = do
+  writeChan channel value
+  writeList2Chan channel rest
