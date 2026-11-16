@@ -1,0 +1,12 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Exception annotations: typed metadata that can be attached to a
+-- 'Control.Exception.SomeException' through an exception context.
+--
+-- This is the @base-4.22@ module. The existential constructor is public, as
+-- in @base@; the context API is the usual way to build annotations.
+module Control.Exception.Annotation
+  ( SomeExceptionAnnotation(..)
+  , ExceptionAnnotation(..)
+  ) where
+
+import Moggi.Internal.Exception.Annotation

@@ -1,0 +1,159 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Context-aware exception views and combinators.
+--
+-- A context rides in slot five of the runtime's @SomeException#@ value; slot
+-- four is the rethrow origin, so the two do not collide. The primitive
+-- operations are in 'Moggi.Internal.Prim'.
+module Moggi.Exception.Context
+  ( ExceptionWithContext(..)
+  , NoBacktrace(..)
+  , WhileHandling(..)
+  , addExceptionContext
+  , someExceptionContext
+  , annotateIO
+  , rethrowIO
+  , catchNoPropagate
+  , tryWithContext
+  , displayExceptionWithInfo
+  ) where
+
+import Control.Applicative (pure)
+import Control.Monad ((>>=))
+import Control.Exception.Annotation
+import Control.Exception.Context
+import Data.Either
+import Data.Maybe
+import Data.Semigroup ((<>))
+import Data.String (String, lines, null)
+import Moggi.Exception.Type
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import Moggi.Internal.IO
+import System.IO.Base (IO)
+import Text.Show
+
+-- | Wrap an exception together with the context it was caught with.
+data ExceptionWithContext a = ExceptionWithContext ExceptionContext a
+
+instance Show a => Show (ExceptionWithContext a) where
+  show (ExceptionWithContext _ e) = "ExceptionWithContext _ " <> show e
+
+instance Exception a => Exception (ExceptionWithContext a) where
+  toException (ExceptionWithContext ctx e) = setExceptionContext ctx (toException e)
+  fromException se = case (fromException se :: Maybe a) of
+    Just e -> Just (ExceptionWithContext (someExceptionContext se) e)
+    Nothing -> Nothing
+  displayException (ExceptionWithContext _ e) = displayException e
+  backtraceDesired (ExceptionWithContext _ e) = backtraceDesired e
+
+-- | Mark an exception as not wanting a backtrace. The marker is erased when
+-- thrown; catching through this wrapper simply gives the inner exception a
+-- 'backtraceDesired' of 'False'.
+newtype NoBacktrace e = NoBacktrace e
+
+instance Show e => Show (NoBacktrace e) where
+  show (NoBacktrace e) = "NoBacktrace " <> show e
+
+instance Exception e => Exception (NoBacktrace e) where
+  toException (NoBacktrace e) = toException e
+  fromException se = case (fromException se :: Maybe e) of
+    Just e -> Just (NoBacktrace e)
+    Nothing -> Nothing
+  backtraceDesired _ = False
+
+-- | Annotation recording that an exception was rethrown while being handled.
+-- Each rethrow adds one, so the chain of rethrow sites is recoverable.
+data WhileHandling = WhileHandling SomeException
+
+instance Show WhileHandling where
+  show (WhileHandling se) = "WhileHandling " <> show se
+
+instance ExceptionAnnotation WhileHandling where
+  displayExceptionAnnotation (WhileHandling se) =
+    "While handling " <> indentContinuation (displayException se)
+
+indentContinuation :: String -> String
+indentContinuation text = case lines text of
+  [] -> ""
+  first : rest -> first <> "\n" <> continuationLines rest
+
+continuationLines :: [String] -> String
+continuationLines ss = case ss of
+  [] -> ""
+  line : rest ->
+    (case null line of
+      True -> "  |"
+      False -> "  | " <> line)
+      <> "\n"
+      <> continuationLines rest
+
+-- | Attach a context together with its already-rendered display text. The
+-- text is only produced on exception paths, never on the happy path.
+setExceptionContext :: ExceptionContext -> SomeException -> SomeException
+setExceptionContext ctx se =
+  exceptionAddContext# ctx (displayExceptionContext ctx) se
+
+-- | Add an annotation to an exception's context.
+addExceptionContext :: ExceptionAnnotation a => a -> SomeException -> SomeException
+addExceptionContext a se =
+  let ctx = addExceptionAnnotation a (someExceptionContext se)
+  in setExceptionContext ctx se
+
+-- | The context attached to an exception, or the empty context.
+someExceptionContext :: SomeException -> ExceptionContext
+someExceptionContext se = case exceptionContext# se of
+  Just ctx -> ctx
+  Nothing -> emptyExceptionContext
+
+-- | Run an action, adding an annotation to any synchronous exception it
+-- throws. Asynchronous exceptions are not decorated.
+annotateIO :: ExceptionAnnotation e => e -> IO a -> IO a
+annotateIO annotation action =
+  exceptionCatch# action (annotateHandler annotation)
+
+annotateHandler :: ExceptionAnnotation e => e -> SomeException -> IO a
+annotateHandler annotation se =
+  exceptionThrowIo# (addExceptionContext annotation se)
+
+-- | Rethrow an exception with the context it was caught with, adding a
+-- 'WhileHandling' annotation for this rethrow.
+rethrowIO :: Exception e => ExceptionWithContext e -> IO a
+rethrowIO (ExceptionWithContext ctx e) =
+  exceptionThrowIo# (setExceptionContext ctx (toException e))
+
+-- | Catch an exception, passing the handler its context, and rethrow without
+-- adding the handler's context if the type does not match.
+catchNoPropagate :: Exception e => IO a -> (ExceptionWithContext e -> IO a) -> IO a
+catchNoPropagate action handler =
+  exceptionCatch# action (catchNoPropagateHandler handler)
+
+catchNoPropagateHandler :: Exception e => (ExceptionWithContext e -> IO a) -> SomeException -> IO a
+catchNoPropagateHandler handler se = case fromException se of
+  Just e -> handler (ExceptionWithContext (someExceptionContext se) e)
+  Nothing -> exceptionThrowIo# se
+
+-- | Like 'Control.Exception.try', but return the caught exception with its
+-- context.
+tryWithContext :: Exception e => IO a -> IO (Either (ExceptionWithContext e) a)
+tryWithContext action =
+  exceptionCatch# (tryContextSuccess action) tryContextFailure
+
+tryContextSuccess :: IO a -> IO (Either e a)
+tryContextSuccess action = do
+  x <- action
+  pure (Right x)
+
+tryContextFailure :: Exception e => SomeException -> IO (Either (ExceptionWithContext e) a)
+tryContextFailure se = case fromException se of
+  Just e -> pure (Left (ExceptionWithContext (someExceptionContext se) e))
+  Nothing -> exceptionThrowIo# se
+
+-- | The exception type, its 'displayException', and its context, laid out as
+-- @base-4.22@'s default uncaught-exception report does.
+displayExceptionWithInfo :: SomeException -> String
+displayExceptionWithInfo se =
+  let ctx = someExceptionContext se
+      msg = exceptionType# se <> ":\n\n" <> displayException se
+  in case displayExceptionContext ctx of
+       "" -> msg
+       rendered -> msg <> "\n\n" <> rendered

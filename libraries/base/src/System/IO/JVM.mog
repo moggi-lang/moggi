@@ -27,7 +27,7 @@ import Moggi.Internal.Base
 import Text.Show
 import Data.Bool
 import Control.Applicative
-import Control.Exception (catch)
+import Control.Exception.Base (catch)
 import Control.Monad
 import System.IO.Base (IO, FilePath)
 import Moggi.Err

@@ -3,17 +3,38 @@
 --
 -- bracket/finally restore the handler on every path, which is the whole
 -- contract under synchronous-only exceptions: there is no async delivery to
--- interleave between acquisition and release (no mask).
+-- interleave between acquisition and release, so masking is the identity.
 module Control.Exception.Base
-  ( SomeException
+  ( SomeException(..)
   , Exception(..)
-  , IOException(..)
-  , HostException(..)
+  , IOException
+  , ArithException(..)
+  , ArrayException(..)
+  , AssertionFailed(..)
+  , SomeAsyncException(..)
+  , AsyncException(..)
+  , asyncExceptionToException
+  , asyncExceptionFromException
+  , NonTermination(..)
+  , NestedAtomically(..)
+  , BlockedIndefinitelyOnMVar(..)
+  , BlockedIndefinitelyOnSTM(..)
+  , AllocationLimitExceeded(..)
+  , CompactionFailed(..)
+  , Deadlock(..)
+  , FixIOException(..)
+  , NoMethodError(..)
+  , PatternMatchFail(..)
+  , RecConError(..)
+  , RecSelError(..)
+  , RecUpdError(..)
   , ErrorCall(..)
-  , throw
+  , TypeError(..)
+  , NoMatchingContinuationPrompt(..)
   , throwIO
-  , rethrowIO
+  , throw
   , ioError
+  , throwTo
   , catch
   , catchJust
   , handle
@@ -21,38 +42,67 @@ module Control.Exception.Base
   , try
   , tryJust
   , onException
+  , evaluate
   , mapException
+  , mask
+  , mask_
+  , uninterruptibleMask
+  , uninterruptibleMask_
+  , MaskingState(..)
+  , getMaskingState
+  , assert
+  , recSelError
+  , recConError
+  , impossibleError
+  , impossibleConstraintError
+  , nonExhaustiveGuardsError
+  , patError
+  , noMethodBindingError
+  , typeError
+  , nonTermination
+  , nestedAtomically
+  , noMatchingContinuationPrompt
   , bracket
   , bracket_
   , bracketOnError
   , finally
-  , assert
   ) where
 
 import Control.Applicative
 import Control.Monad
 import Data.Bool
 import Data.Either
+import Data.Function (id)
 import Data.Maybe
-import Moggi.Err (error)
 import Moggi.Exception (throw)
+import Moggi.Err (errorWithoutStackTrace)
+import Moggi.Exception.Context (WhileHandling(..), annotateIO)
 import Moggi.Exception.Type
 import Moggi.Internal.Base
 import Moggi.Internal.IO
 import Moggi.Internal.Prim
 import System.IO.Base (IO)
-import Moggi.IO.Exception
+import Moggi.Internal.Thread (ThreadId(..))
+import Text.Show
+import Moggi.IO.Exception (IOException, ioError)
 
-throwIO :: Exception e => e -> IO a
+throwIO :: (HasCallStack, Exception e) => e -> IO a
 throwIO e = exceptionThrowIo# (toException e)
 
-rethrowIO :: Exception e => e -> IO a
-rethrowIO e = throwIO e
+-- | Throw an exception in a thread. Only the calling thread is supported:
+-- the machine has no way to deliver an exception into another host thread, so
+-- a foreign target fails with 'ErrorCall' rather than being silently ignored.
+throwTo :: Exception e => ThreadId -> e -> IO ()
+throwTo (ThreadId target) e = do
+  self <- myThreadId#
+  case target == self of
+    True -> throwIO e
+    False -> throwIO (ErrorCall "throwTo to another thread is not supported by the Moggi runtime")
 
 -- Handler is a named top-level so catch does not rely on IO-returning lambdas.
 mkCatchHandler :: Exception e => (e -> IO a) -> SomeException -> IO a
 mkCatchHandler handler se =
-  maybe (exceptionThrowIo# se) handler (fromException se)
+  maybe (exceptionThrowIo# se) (\e -> annotateIO (WhileHandling se) (handler e)) (fromException se)
 
 catch :: Exception e => IO a -> (e -> IO a) -> IO a
 catch action handler =
@@ -124,17 +174,83 @@ bracketOnError before after thing = do
   a <- before
   onException (thing a) (after a)
 
--- Mapping an exception in pure code needs imprecise exceptions, which strict
--- evaluation does not have, so this is the identity until a sync strategy is
--- designed.
+-- | Evaluate a value to weak head normal form. Moggi is strict, so the
+-- argument has already been evaluated when this is called; the action only
+-- gives the value an 'IO' context, exactly as @base@'s does.
+evaluate :: a -> IO a
+evaluate x = pure x
+
+-- Strict evaluation has already evaluated the argument before this call, so
+-- there is no deferred computation whose exception could be caught and mapped.
+-- Identity is therefore the exact strict-language analogue of @base@'s
+-- 'mapException'.
 mapException :: (Exception e1, Exception e2) => (e1 -> e2) -> a -> a
 mapException _ x = x
 
+-- | Mask asynchronous exceptions for the action. There are no asynchronous
+-- exceptions, so the unmask function is 'id'.
+mask :: ((forall a. IO a -> IO a) -> IO b) -> IO b
+mask f = f id
+
+mask_ :: IO a -> IO a
+mask_ action = action
+
+-- | 'mask' without interruptible operations. Every operation is already
+-- uninterruptible here, so this is the same identity.
+uninterruptibleMask :: ((forall a. IO a -> IO a) -> IO b) -> IO b
+uninterruptibleMask f = f id
+
+uninterruptibleMask_ :: IO a -> IO a
+uninterruptibleMask_ action = action
+
+-- | The masking state of the calling thread.
+data MaskingState
+  = Unmasked
+  | MaskedInterruptible
+  | MaskedUninterruptible
+  deriving (Eq, Ord, Show)
+
+-- | There is never a mask, so the state is always 'Unmasked'.
+getMaskingState :: IO MaskingState
+getMaskingState = pure Unmasked
+
 -- | @'assert' pred x@ returns @x@ when @pred@ holds and fails otherwise.
---
--- @base@ raises the @AssertionFailed@ exception; Moggi has no such exception
--- type yet, so this raises an 'ErrorCall' through 'error'.
 assert :: Bool -> a -> a
 assert pred x = case pred of
   True -> x
-  False -> error "Assertion failed"
+  False -> throw (AssertionFailed "Assertion failed")
+
+-- | Report a missing record field. These are the runtime-error entry points
+-- @base@ exposes from this module.
+recSelError :: String -> a
+recSelError message = throw (RecSelError message)
+
+recConError :: String -> a
+recConError message = throw (RecConError message)
+
+impossibleError :: String -> a
+impossibleError message = errorWithoutStackTrace message
+
+impossibleConstraintError :: String -> a
+impossibleConstraintError message = errorWithoutStackTrace message
+
+nonExhaustiveGuardsError :: String -> a
+nonExhaustiveGuardsError message = throw (PatternMatchFail message)
+
+patError :: String -> a
+patError message = throw (PatternMatchFail message)
+
+noMethodBindingError :: String -> a
+noMethodBindingError message = throw (NoMethodError message)
+
+typeError :: String -> a
+typeError message = throw (TypeError message)
+
+nonTermination :: SomeException
+nonTermination = toException NonTermination
+
+nestedAtomically :: SomeException
+nestedAtomically = toException NestedAtomically
+
+noMatchingContinuationPrompt :: SomeException
+noMatchingContinuationPrompt = toException NoMatchingContinuationPrompt

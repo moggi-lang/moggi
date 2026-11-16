@@ -1,0 +1,63 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | @base@'s 'IsList' class: types that can be built from a list of items.
+--
+-- The class lives here rather than in @GHC.IsList@ because this library does
+-- not use @GHC.*@ module names. The 'CallStack' instance is declared beside
+-- this class, as in @base@; the 'ByteArray' instance remains beside
+-- 'ByteArray' in "Data.Array.Byte".
+module Moggi.IsList
+  ( IsList(..)
+  ) where
+
+import Data.Function (id)
+import Data.Int (Int)
+import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty qualified as NonEmpty
+import Data.String (String)
+import Data.Version (Version, makeVersion, versionBranch)
+import Moggi.Stack.Types (CallStack, SrcLoc, fromCallSiteList, getCallStack)
+
+-- | The 'IsList' class and its methods are intended to be used in
+-- conjunction with the @OverloadedLists@ extension, which this compiler does
+-- not implement. The methods are still usable directly.
+class IsList l where
+  type Item l
+
+  -- | Build the structure @l@ from a list of its items.
+  fromList :: [Item l] -> l
+
+  -- | Like 'fromList', with the input list's length as a hint. The default
+  -- ignores the hint.
+  fromListN :: Int -> [Item l] -> l
+  fromListN _ = fromList
+
+  -- | The items of @l@, in order.
+  toList :: l -> [Item l]
+
+-- | A list is already the structure its items form.
+instance IsList [a] where
+  type Item [a] = a
+  fromList xs = xs
+  fromListN _ xs = xs
+  toList xs = xs
+
+-- | A non-empty list's items are its elements; an empty input is an error.
+instance IsList (NonEmpty a) where
+  type Item (NonEmpty a) = a
+  fromList = NonEmpty.fromList
+  fromListN _ = NonEmpty.fromList
+  toList = NonEmpty.toList
+
+-- | A version's items are the numbers of its branch.
+instance IsList Version where
+  type Item Version = Int
+  fromList = makeVersion
+  fromListN _ = makeVersion
+  toList = versionBranch
+
+-- | A call stack's items are its @(name, 'SrcLoc')@ pairs, most recent first.
+instance IsList CallStack where
+  type Item CallStack = (String, SrcLoc)
+  fromList = fromCallSiteList
+  fromListN _ = fromCallSiteList
+  toList = getCallStack

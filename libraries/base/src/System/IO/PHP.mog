@@ -25,7 +25,7 @@ module System.IO.PHP
 
 import Moggi.Internal.Base hiding (take, drop, unpack)
 import Text.Show
-import Control.Exception (catch)
+import Control.Exception.Base (catch)
 import Moggi.IO.Exception
 import System.IO.Error (mkIOError)
 import System.IO.Types

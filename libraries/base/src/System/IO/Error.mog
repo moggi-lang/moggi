@@ -56,7 +56,7 @@ module System.IO.Error
   ) where
 
 import Control.Applicative
-import Control.Exception (catch, throwIO)
+import Control.Exception.Base (catch, throwIO)
 import Control.Monad
 import Data.Bool
 import Data.Either

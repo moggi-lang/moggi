@@ -1,0 +1,78 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Type definitions for implicit call stacks.
+--
+-- 'CallStack' is @base@'s structure: a list of call sites ordered with the most
+-- recent call first, plus the marker that freezes it. 'HasCallStack' is
+-- declared at the bottom of the library, in "Moggi.Internal.Base", because
+-- @error@ sits below this module and names the constraint; it is re-exported
+-- here under its @base@ name.
+module Moggi.Stack.Types
+  ( CallStack(..)
+  , HasCallStack
+  , SrcLoc(..)
+  , emptyCallStack
+  , freezeCallStack
+  , fromCallSiteList
+  , getCallStack
+  , pushCallStack
+  ) where
+
+import Data.Eq (Eq(..))
+import Data.Int (Int)
+import Data.List ((:))
+import Data.String (String)
+import Moggi.Internal.Base
+import Text.Show
+
+-- | A single location in the source code. The field names and order match
+-- @base@'s, so a recorded location can travel between the two APIs.
+data SrcLoc = SrcLoc
+  { srcLocPackage :: String
+  , srcLocModule :: String
+  , srcLocFile :: String
+  , srcLocStartLine :: Int
+  , srcLocStartCol :: Int
+  , srcLocEndLine :: Int
+  , srcLocEndCol :: Int
+  }
+  deriving (Eq, Show)
+
+-- | A partial call stack: the call sites seen so far, most recent first.
+--
+-- The constructors match @base@'s, including the frozen form: pushing onto a
+-- frozen stack leaves it unchanged.
+data CallStack
+  = EmptyCallStack
+  | PushCallStack String SrcLoc CallStack
+  | FreezeCallStack CallStack
+
+-- @base@ shows the underlying call-site list here; 'prettyCallStack' is the
+-- separate human-readable rendering.
+instance Show CallStack where
+  show stack = show (getCallStack stack)
+
+-- | The empty call stack.
+emptyCallStack :: CallStack
+emptyCallStack = EmptyCallStack
+
+-- | Prevent further call sites from being pushed onto a stack.
+freezeCallStack :: CallStack -> CallStack
+freezeCallStack = FreezeCallStack
+
+-- | Push one call site onto a stack. A frozen stack is left alone.
+pushCallStack :: (String, SrcLoc) -> CallStack -> CallStack
+pushCallStack (name, loc) stack = case stack of
+  FreezeCallStack _ -> stack
+  _ -> PushCallStack name loc stack
+
+-- | Build a stack from call sites ordered most recent first.
+fromCallSiteList :: [(String, SrcLoc)] -> CallStack
+fromCallSiteList [] = EmptyCallStack
+fromCallSiteList (site : rest) = pushCallStack site (fromCallSiteList rest)
+
+-- | The call sites in a stack, most recent first. A frozen stack reports the
+-- sites it froze rather than a separate marker.
+getCallStack :: CallStack -> [(String, SrcLoc)]
+getCallStack EmptyCallStack = []
+getCallStack (PushCallStack name loc rest) = (name, loc) : getCallStack rest
+getCallStack (FreezeCallStack rest) = getCallStack rest
