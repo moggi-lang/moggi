@@ -1,0 +1,124 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Functions that trace their arguments to standard error.
+--
+-- Tracing is deliberately outside 'IO' in its type: it is a debugging aid, not
+-- a sequencing primitive. The write happens when the call is evaluated, which
+-- in a strict language is when it is made.
+module Debug.Trace
+  ( trace
+  , traceId
+  , traceShow
+  , traceShowId
+  , traceWith
+  , traceShowWith
+  , traceM
+  , traceShowM
+  , traceStack
+  , traceIO
+  , putTraceMsg
+  , traceEvent
+  , traceEventWith
+  , traceEventIO
+  , flushEventLog
+  , traceMarker
+  , traceMarkerIO
+  ) where
+
+import Control.Applicative (Applicative, pure)
+import Control.Monad ((>>), (>>=))
+import Data.Function (id)
+import Data.Semigroup ((<>))
+import Data.String (String)
+import Moggi.Stack (currentCallStack)
+import System.IO (IO, hPutStrLn, stderr)
+import System.IO.Unsafe (unsafePerformIO)
+import Text.Show (Show, show)
+
+-- | Write a message to standard error and return the second argument.
+trace :: String -> a -> a
+trace message value = unsafePerformIO (do
+  hPutStrLn stderr message
+  pure value)
+
+-- | 'trace' a value and return that same value.
+traceId :: String -> String
+traceId message = trace message message
+
+-- | 'trace' the 'show'n form of a value.
+traceShow :: Show a => a -> b -> b
+traceShow value next = trace (show value) next
+
+-- | 'traceShow' a value and return that same value.
+traceShowId :: Show a => a -> a
+traceShowId value = traceShow value value
+
+-- | Like 'trace', but prints the result of applying the function to the value.
+traceWith :: (a -> String) -> a -> a
+traceWith f value = trace (f value) value
+
+-- | Like 'traceWith', but 'show's the function's result.
+traceShowWith :: Show b => (a -> b) -> a -> a
+traceShowWith f value = trace (show (f value)) value
+
+-- | Run a message in an applicative context, for use inside @do@ blocks.
+traceM :: Applicative f => String -> f ()
+traceM message = trace message (pure ())
+
+-- | 'traceM' the 'show'n form of a value.
+traceShowM :: (Show a, Applicative f) => a -> f ()
+traceShowM value = traceM (show value)
+
+-- | 'trace' the message, then the host call stack when there is one.
+--
+-- @base@'s version reports only profiling SCC annotations; here the host frames
+-- are available, so the deprecated name keeps its shape (no 'HasCallStack'
+-- constraint) and prints them when present.
+traceStack :: String -> a -> a
+traceStack message value = unsafePerformIO (do
+  traceIO message
+  stack <- currentCallStack
+  case stack of
+    [] -> pure ()
+    names -> traceIO (renderStack names)
+  pure value)
+
+renderStack :: [String] -> String
+renderStack names = "CallStack (from HasCallStack):\n" <> stackLines names
+
+stackLines :: [String] -> String
+stackLines [] = ""
+stackLines (name : rest) = "  " <> name <> stackRest rest
+
+stackRest :: [String] -> String
+stackRest [] = ""
+stackRest (name : rest) = "\n  " <> name <> stackRest rest
+
+-- | Write a message to standard error from 'IO'.
+traceIO :: String -> IO ()
+traceIO message = hPutStrLn stderr message
+
+-- | @base@'s old spelling of 'traceIO'.
+putTraceMsg :: String -> IO ()
+putTraceMsg = traceIO
+
+-- | The eventlog variants are accepted but have no eventlog to write to.
+traceEvent :: String -> a -> a
+traceEvent _ value = value
+
+traceEventIO :: String -> IO ()
+traceEventIO _ = pure ()
+
+-- | 'traceEvent' with the message computed from the value.
+traceEventWith :: (a -> String) -> a -> a
+traceEventWith f value = traceEvent (f value) value
+
+-- | Flushing the event log is a no-op: there is no event log.
+flushEventLog :: IO ()
+flushEventLog = pure ()
+
+-- | Markers are eventlog-only, so they are accepted and ignored.
+traceMarker :: String -> a -> a
+traceMarker _ value = value
+
+traceMarkerIO :: String -> IO ()
+traceMarkerIO _ = pure ()

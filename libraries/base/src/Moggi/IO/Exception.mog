@@ -209,7 +209,7 @@ ioErrorEq a b =
     && ioe_filename a == ioe_filename b
 
 instance Exception IOException where
-  toException e = exceptionWrap# "IOException" (displayException e) e
+  toException e = exceptionWrap# "IOException" (displayException e) (show e) (exceptionTypeDisplay e) e
   fromException se = exceptionUnwrap# "IOException" se
 
 instance Show HostException where
@@ -217,15 +217,15 @@ instance Show HostException where
     be <> "/" <> nativeTy <> ": " <> msg
 
 instance Exception HostException where
-  toException e = exceptionWrap# "HostException" (displayException e) e
+  toException e = exceptionWrap# "HostException" (displayException e) (show e) (exceptionTypeDisplay e) e
   fromException se = exceptionUnwrap# "HostException" se
   displayException (HostException _be _nativeTy msg) = msg
 
-ioException :: IOException -> IO a
+ioException :: HasCallStack => IOException -> IO a
 ioException e = throwIO e
 
 -- | Raise an 'IOError' in the 'IO' monad.
-ioError :: IOError -> IO a
+ioError :: HasCallStack => IOError -> IO a
 ioError e = ioException e
 
 -- | Construct an 'IOError' value with a string describing the error.
@@ -234,5 +234,5 @@ userError :: String -> IOError
 userError msg = IOError Nothing UserError "" msg Nothing Nothing
 
 -- Local throwIO to avoid importing Control.Exception (cycle).
-throwIO :: Exception e => e -> IO a
+throwIO :: (HasCallStack, Exception e) => e -> IO a
 throwIO e = exceptionThrowIo# (toException e)

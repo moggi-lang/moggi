@@ -1,12 +1,15 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 -- | Exceptions and exception-handling functions.
 --
--- `Exception` carries `Show` as its superclass; there is no `Typeable` and no
--- implicit call stack, `SomeException` is a compiler-provided tagged value with
--- no constructor, and `CallStack`/`SrcLoc` are not reified yet.
+-- `Exception` carries `(Typeable e, Show e)` as its superclasses, and
+-- `SomeException` is the compiler-provided tagged value, with @base@'s
+-- constructor available as the 'SomeException' pattern. `Moggi.Stack` provides
+-- `CallStack` and `SrcLoc`; the call stack is a runtime snapshot rather than
+-- GHC's compile-time implicit stack.
 module Moggi.Exception
   ( Exception(..)
   , SomeException
+  , pattern SomeException
   , throw
   , ArithException(..)
   , divZeroException
@@ -21,7 +24,7 @@ import Moggi.Exception.Type
 import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
-throw :: Exception e => e -> a
+throw :: (HasCallStack, Exception e) => e -> a
 throw e = exceptionThrow# (toException e)
 
 errorCallException :: String -> SomeException

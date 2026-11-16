@@ -1,13 +1,39 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- | Exception class, SomeException and the arithmetic exceptions.
+-- | Exception class, SomeException and the built-in exception types.
 --
--- Exceptions are matched by a stable tag (`fromException`), so no type
--- representation is involved and `Exception` needs only a `Show` superclass.
+-- Exceptions are matched by a stable tag (`fromException`), while the public
+-- `Exception` class has @base@'s `Typeable` and `Show` superclasses. The two
+-- are independent: the tag decides `fromException`, and `Typeable` is what
+-- `Data.Dynamic` and the annotation layer use.
 module Moggi.Exception.Type
   ( SomeException
-  , Exception(toException, fromException, displayException)
+  , pattern SomeException
+  , exceptionTypeDisplay
+  , Exception(toException, fromException, displayException, backtraceDesired)
   , ErrorCall(ErrorCall)
+  , pattern ErrorCallWithLocation
   , ArithException(..)
+  , ArrayException(..)
+  , AssertionFailed(..)
+  , NoMethodError(..)
+  , PatternMatchFail(..)
+  , RecConError(..)
+  , RecSelError(..)
+  , RecUpdError(..)
+  , TypeError(..)
+  , SomeAsyncException(..)
+  , AsyncException(..)
+  , asyncExceptionToException
+  , asyncExceptionFromException
+  , NonTermination(..)
+  , NestedAtomically(..)
+  , BlockedIndefinitelyOnMVar(..)
+  , BlockedIndefinitelyOnSTM(..)
+  , AllocationLimitExceeded(..)
+  , CompactionFailed(..)
+  , Deadlock(..)
+  , FixIOException(..)
+  , NoMatchingContinuationPrompt(..)
   , divZeroException
   , overflowException
   , ratioZeroDenomException
@@ -17,19 +43,85 @@ module Moggi.Exception.Type
 import Data.Eq
 import Data.Maybe
 import Data.Ord
+import Data.Void (Void)
 import Moggi.Internal.Base
 import Text.Show
 import Moggi.Internal.Prim
+import Moggi.Internal.Type.Reflection
+  ( Typeable(..)
+  , TypeRep
+  , mkTyCon
+  , mkTyConApp
+  , trLiftedRep
+  , tyConModule
+  , tyConName
+  , tyConPackage
+  , typeRepTyCon
+  )
 
 type SomeException = SomeException#
 
-class Show e => Exception e where
+instance Typeable SomeException where
+  typeRepOf = mkTyConApp (mkTyCon "Moggi.Exception.Type" "base" "SomeException") [] trLiftedRep
+
+-- | A representation request that names the type through a value, so a
+-- default method does not need to spell the instance head's variable.
+data TypeTag a = TypeTag
+
+exceptionTypeTag :: forall a. Typeable a => TypeTag a -> String
+exceptionTypeTag _ = show (typeRepOf :: TypeRep a)
+
+-- | The @package:module.Name@ spelling @base@ uses in
+-- 'displayExceptionWithInfo'.
+exceptionTypeDisplay :: forall a. Typeable a => a -> String
+exceptionTypeDisplay _ =
+  let tc = typeRepTyCon (typeRepOf :: TypeRep a)
+  in stringAppend# (tyConPackage tc)
+       (stringAppend# ":"
+         (stringAppend# (tyConModule tc)
+           (stringAppend# "." (tyConName tc))))
+
+exceptionWrapDefault :: (Typeable e, Show e) => (e -> String) -> e -> SomeException
+exceptionWrapDefault display e =
+  exceptionWrap# (exceptionTypeTag (TypeTag :: TypeTag e)) (display e) (show e)
+    (exceptionTypeDisplay e) e
+
+exceptionUnwrapDefault :: forall e. Typeable e => SomeException -> Maybe e
+exceptionUnwrapDefault se =
+  exceptionUnwrap# (exceptionTypeTag (TypeTag :: TypeTag e)) se
+
+class (Typeable e, Show e) => Exception e where
   toException :: e -> SomeException
+  toException = exceptionWrapDefault displayException
   fromException :: SomeException -> Maybe e
+  fromException = exceptionUnwrapDefault
   displayException :: e -> String
   displayException e = show e
+  -- | Whether a backtrace is wanted for this exception. There is no RTS
+  -- backtrace machinery in Moggi, so the method cannot affect rendering; the
+  -- default stays 'True' for source compatibility with @base-4.22@.
+  backtraceDesired :: e -> Bool
+  backtraceDesired _ = True
+
+-- | @base@'s existential 'SomeException' constructor over the runtime's tagged
+-- value. Building wraps the concrete exception with 'toException'; matching
+-- unwraps it with 'fromException'.
+wrapSomeException :: Exception e => e -> SomeException
+wrapSomeException = toException
+
+pattern SomeException :: Exception e => e -> SomeException
+pattern SomeException e <- (fromException -> Just e) where
+  SomeException e = wrapSomeException e
+
 
 data ErrorCall = ErrorCall String
+
+-- | @base@'s location-carrying view of 'ErrorCall', deprecated there since
+-- @base-4.22@ because 'ErrorCall' is message-only. Matching yields the message
+-- (there is no location to yield) and building ignores the location argument.
+pattern ErrorCallWithLocation :: String -> String -> ErrorCall
+pattern ErrorCallWithLocation message location <- ErrorCall message where
+  ErrorCallWithLocation message location = ErrorCall message
 
 instance Show ErrorCall where
   show (ErrorCall s) = s
@@ -37,6 +129,7 @@ instance Show ErrorCall where
 errorCallMessage :: ErrorCall -> String
 errorCallMessage e = case e of
   ErrorCall s -> s
+
 
 -- The monomorphic operator fast path would resolve `==` to this instance
 -- again, so the underlying String comparison uses the same intrinsics
@@ -49,15 +142,17 @@ instance Ord ErrorCall where
   compare a b = stringCompare# (errorCallMessage a) (errorCallMessage b)
 
 instance Exception ErrorCall where
-  toException e = exceptionWrap# "ErrorCall" (displayException e) e
+  toException e = exceptionWrap# "ErrorCall" (displayException e) (show e) (exceptionTypeDisplay e) e
   fromException se = exceptionUnwrap# "ErrorCall" se
   displayException (ErrorCall s) = s
 
 instance Show SomeException where
-  show se = exceptionDisplay# se
+  show se = exceptionShow# se
+
+instance Exception Void
 
 instance Exception SomeException where
-  toException se = se
+  toException se = exceptionClearContext# se
   fromException se = Just se
   displayException se = exceptionDisplay# se
 
@@ -100,9 +195,262 @@ instance Ord ArithException where
   compare a b = intCompare# (arithExceptionTag a) (arithExceptionTag b)
 
 instance Exception ArithException where
-  toException e = exceptionWrap# "ArithException" (displayException e) e
+  toException e = exceptionWrap# "ArithException" (displayException e) (show e) (exceptionTypeDisplay e) e
   fromException se = exceptionUnwrap# "ArithException" se
   displayException e = arithExceptionString e
+
+-- | Exceptions generated by array operations.
+data ArrayException
+  = IndexOutOfBounds String
+  | UndefinedElement String
+  deriving (Eq, Ord)
+
+instance Show ArrayException where
+  showsPrec _ e = showString (arrayExceptionString e)
+
+arrayExceptionString :: ArrayException -> String
+arrayExceptionString e = case e of
+  IndexOutOfBounds s -> case s of
+    "" -> "array index out of range"
+    _ -> stringAppend# "array index out of range: " s
+  UndefinedElement s -> case s of
+    "" -> "undefined array element"
+    _ -> stringAppend# "undefined array element: " s
+
+-- | @assert@ was applied to 'False'.
+newtype AssertionFailed = AssertionFailed String
+  deriving (Eq, Ord)
+
+instance Show AssertionFailed where
+  show (AssertionFailed message) = message
+
+newtype NoMethodError = NoMethodError String
+  deriving (Eq, Ord)
+
+instance Show NoMethodError where
+  showsPrec _ (NoMethodError message) = showString message
+
+newtype PatternMatchFail = PatternMatchFail String
+  deriving (Eq, Ord)
+
+instance Show PatternMatchFail where
+  showsPrec _ (PatternMatchFail message) = showString message
+
+newtype RecConError = RecConError String
+  deriving (Eq, Ord)
+
+instance Show RecConError where
+  showsPrec _ (RecConError message) = showString message
+
+newtype RecSelError = RecSelError String
+  deriving (Eq, Ord)
+
+instance Show RecSelError where
+  showsPrec _ (RecSelError message) = showString message
+
+newtype RecUpdError = RecUpdError String
+  deriving (Eq, Ord)
+
+instance Show RecUpdError where
+  showsPrec _ (RecUpdError message) = showString message
+
+newtype TypeError = TypeError String
+  deriving (Eq, Ord)
+
+instance Show TypeError where
+  showsPrec _ (TypeError message) = showString message
+
+newtype CompactionFailed = CompactionFailed String
+  deriving (Eq, Ord)
+
+instance Show CompactionFailed where
+  showsPrec _ (CompactionFailed why) =
+    showString (stringAppend# "compaction failed: " why)
+
+data NonTermination = NonTermination
+  deriving (Eq, Ord)
+
+instance Show NonTermination where
+  showsPrec _ NonTermination = showString "<<loop>>"
+
+data NestedAtomically = NestedAtomically
+  deriving (Eq, Ord)
+
+instance Show NestedAtomically where
+  showsPrec _ NestedAtomically =
+    showString "Control.Concurrent.STM.atomically was nested"
+
+data BlockedIndefinitelyOnMVar = BlockedIndefinitelyOnMVar
+  deriving (Eq, Ord)
+
+instance Show BlockedIndefinitelyOnMVar where
+  showsPrec _ BlockedIndefinitelyOnMVar =
+    showString "thread blocked indefinitely in an MVar operation"
+
+data BlockedIndefinitelyOnSTM = BlockedIndefinitelyOnSTM
+  deriving (Eq, Ord)
+
+instance Show BlockedIndefinitelyOnSTM where
+  showsPrec _ BlockedIndefinitelyOnSTM =
+    showString "thread blocked indefinitely in an STM transaction"
+
+data AllocationLimitExceeded = AllocationLimitExceeded
+  deriving (Eq, Ord)
+
+instance Show AllocationLimitExceeded where
+  showsPrec _ AllocationLimitExceeded =
+    showString "allocation limit exceeded"
+
+data Deadlock = Deadlock
+  deriving (Eq, Ord)
+
+instance Show Deadlock where
+  showsPrec _ Deadlock = showString "<<deadlock>>"
+
+data FixIOException = FixIOException
+  deriving (Eq, Ord)
+
+instance Show FixIOException where
+  showsPrec _ FixIOException = showString "cyclic evaluation in fixIO"
+
+data NoMatchingContinuationPrompt = NoMatchingContinuationPrompt
+  deriving (Eq, Ord)
+
+instance Show NoMatchingContinuationPrompt where
+  showsPrec _ NoMatchingContinuationPrompt =
+    showString "GHC.Internal.Exts.control0#: no matching prompt in the current continuation"
+
+-- | The superclass of asynchronous exceptions.
+--
+-- @base@ exposes the constructor existentially, so any 'Exception' can be
+-- treated as asynchronous.
+data SomeAsyncException where
+  SomeAsyncException :: Exception e => e -> SomeAsyncException
+
+showSomeAsyncException :: SomeAsyncException -> String
+showSomeAsyncException (SomeAsyncException e) = show e
+
+instance Show SomeAsyncException where
+  show = showSomeAsyncException
+
+instance Exception SomeAsyncException where
+  displayException (SomeAsyncException e) = displayException e
+
+-- | Asynchronous exceptions.
+data AsyncException
+  = StackOverflow
+  | HeapOverflow
+  | ThreadKilled
+  | UserInterrupt
+  deriving (Eq, Ord)
+
+asyncExceptionString :: AsyncException -> String
+asyncExceptionString e = case e of
+  StackOverflow -> "stack overflow"
+  HeapOverflow -> "heap overflow"
+  ThreadKilled -> "thread killed"
+  UserInterrupt -> "user interrupt"
+
+instance Show AsyncException where
+  showsPrec _ e = showString (asyncExceptionString e)
+
+-- | Wrap an exception in the asynchronous-exception hierarchy. An
+-- 'AsyncException' already carries that wrapper in its 'toException', so
+-- wrapping it again would make the outer wrapper hide the concrete
+-- 'AsyncException' from 'fromException'.
+asyncExceptionToException :: Exception e => e -> SomeException
+asyncExceptionToException e =
+  case (fromException (toException e) :: Maybe AsyncException) of
+    Just _ -> toException e
+    Nothing -> toException (SomeAsyncException e)
+
+-- | Recover an exception from the asynchronous-exception hierarchy.
+asyncExceptionFromException :: Exception e => SomeException -> Maybe e
+asyncExceptionFromException se =
+  case (fromException se :: Maybe SomeAsyncException) of
+    Just (SomeAsyncException inner) -> fromException (toException inner)
+    Nothing -> Nothing
+
+instance Exception AsyncException where
+  toException e =
+    exceptionWrap# "SomeAsyncException" (show e) (show (SomeAsyncException e))
+      (exceptionTypeDisplay (SomeAsyncException e))
+      (exceptionWrap# "AsyncException" (show e) (show e) (exceptionTypeDisplay e) e)
+  fromException se = case exceptionUnwrap# "SomeAsyncException" se of
+    Just inner -> exceptionUnwrap# "AsyncException" inner
+    Nothing -> Nothing
+
+-- Every concrete exception is a tag plus its value. The tag is the stable
+-- identity `fromException` uses; the display text is recorded with the value so
+-- a rethrow or an uncaught report does not need a dictionary.
+instance Exception ArrayException where
+  toException e = exceptionWrap# "ArrayException" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "ArrayException" se
+
+instance Exception AssertionFailed where
+  toException e = exceptionWrap# "AssertionFailed" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "AssertionFailed" se
+
+instance Exception NoMethodError where
+  toException e = exceptionWrap# "NoMethodError" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "NoMethodError" se
+
+instance Exception PatternMatchFail where
+  toException e = exceptionWrap# "PatternMatchFail" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "PatternMatchFail" se
+
+instance Exception RecConError where
+  toException e = exceptionWrap# "RecConError" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "RecConError" se
+
+instance Exception RecSelError where
+  toException e = exceptionWrap# "RecSelError" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "RecSelError" se
+
+instance Exception RecUpdError where
+  toException e = exceptionWrap# "RecUpdError" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "RecUpdError" se
+
+instance Exception TypeError where
+  toException e = exceptionWrap# "TypeError" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "TypeError" se
+
+instance Exception NonTermination where
+  toException e = exceptionWrap# "NonTermination" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "NonTermination" se
+
+instance Exception NestedAtomically where
+  toException e = exceptionWrap# "NestedAtomically" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "NestedAtomically" se
+
+instance Exception BlockedIndefinitelyOnMVar where
+  toException e = exceptionWrap# "BlockedIndefinitelyOnMVar" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "BlockedIndefinitelyOnMVar" se
+
+instance Exception BlockedIndefinitelyOnSTM where
+  toException e = exceptionWrap# "BlockedIndefinitelyOnSTM" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "BlockedIndefinitelyOnSTM" se
+
+instance Exception AllocationLimitExceeded where
+  toException e = exceptionWrap# "AllocationLimitExceeded" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "AllocationLimitExceeded" se
+
+instance Exception CompactionFailed where
+  toException e = exceptionWrap# "CompactionFailed" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "CompactionFailed" se
+
+instance Exception Deadlock where
+  toException e = exceptionWrap# "Deadlock" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "Deadlock" se
+  displayException _ = "no threads to run:  infinite loop or deadlock?"
+
+instance Exception FixIOException where
+  toException e = exceptionWrap# "FixIOException" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "FixIOException" se
+
+instance Exception NoMatchingContinuationPrompt where
+  toException e = exceptionWrap# "NoMatchingContinuationPrompt" (displayException e) (show e) (exceptionTypeDisplay e) e
+  fromException se = exceptionUnwrap# "NoMatchingContinuationPrompt" se
 
 divZeroException :: SomeException
 divZeroException = toException DivideByZero

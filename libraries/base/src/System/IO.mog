@@ -60,7 +60,7 @@ module System.IO
   ) where
 
 import Control.Applicative hiding (empty)
-import Control.Exception (bracket)
+import Control.Exception.Base (bracket)
 import Control.Monad
 import Data.Bool
 import Data.Eq

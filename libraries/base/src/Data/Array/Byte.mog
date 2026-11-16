@@ -40,6 +40,7 @@ import Data.Bool
 import Data.Char (intToDigit)
 import Data.Eq
 import Data.Int (Int)
+import Data.List (length)
 import Data.Maybe
 import Data.Monoid
 import Data.Num
@@ -51,6 +52,7 @@ import Moggi.Err (error)
 import Moggi.Internal.Base
 import Moggi.Internal.Prim
 import Moggi.Internal.ST
+import Moggi.IsList (IsList(..))
 import Text.Show
 
 -- | An immutable row of bytes, indexed from @0@ to @'sizeofByteArray' - 1@.
@@ -235,6 +237,13 @@ instance Semigroup ByteArray where
 instance Monoid ByteArray where
   mempty = emptyByteArray
   mconcat arrs = concatByteArray arrs
+
+-- | A byte array's items are its bytes.
+instance IsList ByteArray where
+  type Item ByteArray = Word8
+  fromList xs = byteArrayFromListN (length xs) xs
+  fromListN = byteArrayFromListN
+  toList = byteArrayToList
 
 -- | Shows as a bracketed list of two-digit lower-case hex bytes:
 -- @[0x01, 0xff]@.

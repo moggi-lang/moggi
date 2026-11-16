@@ -32,7 +32,7 @@ module System.Mem.Weak
   ) where
 
 import Control.Applicative
-import Control.Exception (SomeException, catch)
+import Control.Exception.Base (SomeException, catch)
 import Control.Monad
 import Data.IORef
 import Data.Maybe

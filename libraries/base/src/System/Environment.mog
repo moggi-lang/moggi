@@ -16,7 +16,7 @@ module System.Environment
   ) where
 
 import Control.Applicative
-import Control.Exception (bracket_)
+import Control.Exception.Base (bracket_)
 import Control.Monad
 import Data.Bool
 import Data.Char (Char, chr, toLower)

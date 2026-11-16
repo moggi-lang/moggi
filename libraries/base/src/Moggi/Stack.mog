@@ -1,0 +1,166 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Call stacks and source locations.
+--
+-- The compiler models every Moggi thread as a host thread, so the runtime can
+-- expose the host call chain at the point where a stack is demanded. Each host
+-- frame is decoded into a function name and a 'SrcLoc', which is what makes
+-- 'getCallStack' answer real frames instead of an empty list. The implicit
+-- stack still does not grow with every call site the way GHC's simulated one
+-- does: 'callStack' is a snapshot, and 'pushCallStack'/'popCallStack' change
+-- only the value they are given.
+module Moggi.Stack
+  ( -- * Call stacks
+    CallStack
+  , HasCallStack
+  , callStack
+  , emptyCallStack
+  , freezeCallStack
+  , fromCallSiteList
+  , getCallStack
+  , popCallStack
+  , prettyCallStack
+  , pushCallStack
+  , withFrozenCallStack
+  , currentCallStack
+  , whoCreated
+  , errorWithStackTrace
+
+    -- * Source locations
+  , SrcLoc(..)
+  , prettySrcLoc
+  ) where
+
+import Control.Applicative (pure)
+import Data.Int (Int)
+import Data.List ((:))
+import Data.Maybe (Maybe(..))
+import Data.Semigroup ((<>))
+import Data.String (String, lines, splitOn)
+import Text.Show (show)
+import Moggi.Err (errorWithoutStackTrace)
+import Moggi.Stack.Types
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import System.IO (IO)
+import Text.Read (readMaybe)
+
+-- | The stack in the current evaluation context. The host frames are captured
+-- where 'callStack' is demanded; the frames are ordered most recent first and,
+-- as in @base@, the call-site of 'callStack' itself is not included.
+callStack :: HasCallStack => CallStack
+callStack = case decodeCallSites callStack# of
+  [] -> EmptyCallStack
+  _ : sites -> fromCallSiteList sites
+
+-- | Decode the runtime's serialized frames. Each frame is one line of six
+-- tab-separated fields: package, module, function, file, line, column. An
+-- unknown package, module or file is written @-@.
+decodeCallSites :: String -> [(String, SrcLoc)]
+decodeCallSites rendered = decodeLines (lines rendered)
+
+decodeLines :: [String] -> [(String, SrcLoc)]
+decodeLines [] = []
+decodeLines (line : rest) = case decodeCallSite line of
+  Nothing -> decodeLines rest
+  Just site -> site : decodeLines rest
+
+decodeCallSite :: String -> Maybe (String, SrcLoc)
+decodeCallSite line = case splitOn "\t" line of
+  package : moduleName : name : file : startLine : startCol : _ ->
+    case (readMaybe startLine, readMaybe startCol) of
+      (Just lineNo, Just colNo) ->
+        Just
+          ( name
+          , SrcLoc
+              (unset package)
+              (unset moduleName)
+              (unset file)
+              lineNo
+              colNo
+              lineNo
+              colNo
+          )
+      _ -> Nothing
+  _ -> Nothing
+
+-- | The runtime writes @-@ where a field is unknown.
+unset :: String -> String
+unset value = case value == "-" of
+  True -> ""
+  False -> value
+
+-- | Pop the most recent call site. Popping an empty stack is a programming
+-- error, as in @base@, and a frozen stack is returned unchanged.
+popCallStack :: CallStack -> CallStack
+popCallStack stack = case stack of
+  EmptyCallStack -> errorWithoutStackTrace "popCallStack: empty stack"
+  PushCallStack _ _ rest -> rest
+  FreezeCallStack _ -> stack
+
+-- | Run an action without adding new entries to its 'CallStack'.
+--
+-- @base@ implements this by rebinding the implicit @?callStack@ parameter.
+-- 'HasCallStack' is a nullary class here and 'callStack' is a snapshot of the
+-- host stack, so there is no dictionary to rebind; the action runs unchanged.
+withFrozenCallStack :: HasCallStack => (HasCallStack => a) -> a
+withFrozenCallStack action = action
+
+-- | The frames of the current host stack as text, most recent first. This is
+-- @base@'s deprecated name; 'getCallStack' is the typed replacement.
+currentCallStack :: IO [String]
+currentCallStack = pure (frameNames (dropOwnFrame (decodeCallSites callStack#)))
+
+dropOwnFrame :: [(String, SrcLoc)] -> [(String, SrcLoc)]
+dropOwnFrame sites = case sites of
+  [] -> []
+  _ : rest -> rest
+
+frameNames :: [(String, SrcLoc)] -> [String]
+frameNames [] = []
+frameNames ((name, _) : rest) = name : frameNames rest
+
+-- | The stack attached to an object when it was created. Moggi does not
+-- retain allocation stacks, so the list is empty rather than invented.
+whoCreated :: a -> IO [String]
+whoCreated _ = pure []
+
+-- | @base@'s deprecated name for 'error'; the raise is the ordinary one, and
+-- uncaught reports print the frames from the raise site.
+errorWithStackTrace :: String -> a
+errorWithStackTrace message = error# message
+
+-- | Render a stack the way @base@ renders it. An empty stack renders as the
+-- empty string.
+prettyCallStack :: CallStack -> String
+prettyCallStack stack = joinLines (prettyCallStackLines stack)
+
+joinLines :: [String] -> String
+joinLines [] = ""
+joinLines (line : rest) = line <> restLines rest
+
+restLines :: [String] -> String
+restLines [] = ""
+restLines (line : rest) = "\n" <> line <> restLines rest
+
+prettyCallStackLines :: CallStack -> [String]
+prettyCallStackLines stack = case getCallStack stack of
+  [] -> []
+  sites -> "CallStack (from HasCallStack):" : siteLines sites
+
+siteLines :: [(String, SrcLoc)] -> [String]
+siteLines [] = []
+siteLines ((name, loc) : rest) =
+  ("  " <> name <> ", called at " <> prettySrcLoc loc) : siteLines rest
+
+-- | Render a location as @file:line:col in package:module@, matching @base@.
+prettySrcLoc :: SrcLoc -> String
+prettySrcLoc loc =
+  srcLocFile loc
+    <> ":"
+    <> show (srcLocStartLine loc)
+    <> ":"
+    <> show (srcLocStartCol loc)
+    <> " in "
+    <> srcLocPackage loc
+    <> ":"
+    <> srcLocModule loc

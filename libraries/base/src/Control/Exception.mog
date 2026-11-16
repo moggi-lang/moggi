@@ -1,36 +1,121 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 -- | Throwing, catching and bracketing exceptions.
 --
--- Synchronous only: there is no async-exception machinery here (no mask, no
--- ExceptionContext, no implicit call stacks).
+-- The export list is @base-4.22@'s. Synchronous delivery is exact; there is no
+-- asynchronous delivery to another host thread, so 'throwTo' and 'killThread'
+-- only target the calling thread. Masking is the identity because nothing can
+-- arrive asynchronously, and the masking-state names report that truth.
 module Control.Exception
-  ( SomeException
+  ( -- * The 'SomeException' type
+    SomeException(..)
+    -- ** The 'Exception' class
   , Exception(..)
+  , addExceptionContext
+  , someExceptionContext
+  , annotateIO
+  , NoBacktrace(..)
+  , ExceptionWithContext(..)
+  , WhileHandling(..)
+    -- * Concrete exception types
+  , IOException
   , ArithException(..)
-  , IOException(..)
-  , HostException(..)
+  , ArrayException(..)
+  , AssertionFailed(..)
+  , NoMethodError(..)
+  , PatternMatchFail(..)
+  , RecConError(..)
+  , RecSelError(..)
+  , RecUpdError(..)
   , ErrorCall(..)
+  , TypeError(..)
+    -- ** Asynchronous exceptions
+  , SomeAsyncException(..)
+  , AsyncException(..)
+  , asyncExceptionToException
+  , asyncExceptionFromException
+  , NonTermination(..)
+  , NestedAtomically(..)
+  , BlockedIndefinitelyOnMVar(..)
+  , BlockedIndefinitelyOnSTM(..)
+  , AllocationLimitExceeded(..)
+  , CompactionFailed(..)
+  , Deadlock(..)
+    -- * Throwing exceptions
   , throw
   , throwIO
   , rethrowIO
   , ioError
+  , throwTo
+    -- * Catching Exceptions
   , catch
-  , handle
-  , try
+  , catchNoPropagate
+  , catches
+  , Handler(..)
   , catchJust
+    -- ** The @handle@ functions
+  , handle
   , handleJust
+    -- ** The @try@ functions
+  , try
+  , tryWithContext
   , tryJust
+    -- ** The @evaluate@ function
+  , evaluate
+    -- ** The @mapException@ function
   , mapException
+    -- * Asynchronous Exceptions
+  , mask
+  , mask_
+  , uninterruptibleMask
+  , uninterruptibleMask_
+  , MaskingState(..)
+  , getMaskingState
+  , interruptible
+  , allowInterrupt
+    -- * Assertions
+  , assert
+    -- * Utilities
   , bracket
   , bracket_
   , bracketOnError
   , finally
   , onException
-  , assert
+    -- ** Printing
+  , displayExceptionWithInfo
   ) where
 
+import Control.Applicative (pure)
 import Control.Exception.Base
-import Moggi.Exception
-import Moggi.Exception.Type
-import Moggi.IO.Exception
+import Control.Monad ((>>=))
+import Data.List ((:))
+import Data.Maybe (Maybe(..))
+import Moggi.Exception.Context
 import Moggi.Internal.Base
+import System.IO.Base (IO)
+
+-- | A handler for one exception type, used by 'catches'.
+data Handler a where
+  Handler :: Exception e => (e -> IO a) -> Handler a
+
+-- | Catch the first exception whose handler type matches. If none does, the
+-- exception is rethrown.
+catches :: IO a -> [Handler a] -> IO a
+catches action handlers =
+  catchNoPropagate action (runHandlers handlers)
+
+runHandlers :: [Handler a] -> ExceptionWithContext SomeException -> IO a
+runHandlers handlers (ExceptionWithContext ctx se) = case handlers of
+  [] -> rethrowIO (ExceptionWithContext ctx se)
+  Handler handler : rest -> case fromException se of
+    Just e -> annotateIO (WhileHandling se) (handler e)
+    Nothing -> runHandlers rest (ExceptionWithContext ctx se)
+
+-- | An action that can receive an asynchronous exception. There is no masking
+-- here, so it is the action itself.
+interruptible :: IO a -> IO a
+interruptible action = action
+
+-- | Poll for an asynchronous exception. None can be pending, so this is a
+-- no-op.
+allowInterrupt :: IO ()
+allowInterrupt = pure ()

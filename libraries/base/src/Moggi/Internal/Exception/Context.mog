@@ -1,0 +1,23 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Internal representation of an exception context.
+--
+-- It lives below the exception types so @ErrorCall@ can attach a 'CallStack'
+-- annotation without importing the public context module, which imports
+-- 'Data.Dynamic' and therefore 'Moggi.Err'.
+module Moggi.Internal.Exception.Context
+  ( ExceptionContext(..)
+  ) where
+
+import Data.List ((:), (++))
+import Data.Semigroup ((<>))
+import Moggi.Internal.Base
+import Moggi.Internal.Exception.Annotation (SomeExceptionAnnotation)
+
+-- | A collection of annotations associated with an exception.
+data ExceptionContext = ExceptionContext [SomeExceptionAnnotation]
+
+instance Semigroup ExceptionContext where
+  (<>) (ExceptionContext a) (ExceptionContext b) = ExceptionContext (a ++ b)
+
+instance Monoid ExceptionContext where
+  mempty = ExceptionContext []

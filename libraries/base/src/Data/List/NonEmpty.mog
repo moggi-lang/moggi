@@ -458,7 +458,7 @@ unzip ne = case ne of
 
 fromList :: [a] -> NonEmpty a
 fromList (a : xs) = a :| xs
-fromList [] = error "Data.List.NonEmpty.fromList: empty list"
+fromList [] = error "NonEmpty.fromList: empty list"
 
 toList :: NonEmpty a -> [a]
 toList ne = case ne of

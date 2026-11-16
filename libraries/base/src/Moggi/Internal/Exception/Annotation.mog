@@ -1,0 +1,28 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Internal definition of the exception-annotation existential.
+--
+-- 'Control.Exception.Annotation' re-exports the type and its constructor, as
+-- @base@ does; the context implementation uses them to store and display
+-- annotations.
+module Moggi.Internal.Exception.Annotation
+  ( SomeExceptionAnnotation(..)
+  , ExceptionAnnotation(..)
+  ) where
+
+import Data.String (String)
+import Type.Reflection (Typeable)
+
+-- | Types that decorate exceptions with context.
+--
+-- The superclass is @base@'s: only 'Typeable', because an annotation is
+-- queried by type and need not be printable. @base@ gives the method a
+-- default for 'Show' types through a default signature; this compiler has no
+-- default signatures, so an instance writes the method (usually @show@).
+class Typeable a => ExceptionAnnotation a where
+  -- | Render the annotation for display to the user.
+  displayExceptionAnnotation :: a -> String
+
+-- | An annotation whose concrete type has been erased. The dictionary is
+-- stored beside the value, so a context can display it and query it by type.
+data SomeExceptionAnnotation where
+  SomeExceptionAnnotation :: ExceptionAnnotation a => a -> SomeExceptionAnnotation

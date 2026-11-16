@@ -74,6 +74,7 @@ module Moggi.Internal.Base
   , Ordering(..)
   , Eq(..)
   , Ord(..)
+  , HasCallStack
   , (&&)
   , (||)
   , not
@@ -242,6 +243,15 @@ class Eq a => Ord a where
     True -> x
     False -> y
   {-# MINIMAL compare | (<=) #-}
+
+-- | The implicit call-stack marker.
+--
+-- @base@ declares this in @Moggi.Stack.Types@ as an implicit-parameter alias.
+-- It lives here instead because @Moggi.Err@'s @error@ sits below @Moggi.Stack@
+-- and names the constraint. A nullary class carries no dictionary, so its
+-- position in the tree costs nothing, and @Moggi.Stack@ re-exports it under its
+-- @base@ name.
+class HasCallStack
 
 -- | A non-empty list: a head element followed by a possibly empty tail. The
 -- `sconcat` method of 'Semigroup' names it, and the module that declares the

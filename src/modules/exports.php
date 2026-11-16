@@ -480,6 +480,13 @@ function addExportedPatternSynonym(
         throw exportError("duplicate export `{$name}` in module `{$moduleName}`", $item, $unit);
     }
 
+    if (($definition['module'] ?? null) !== $moduleName) {
+        $definition['exportedBy'] = \array_values(\array_unique([
+            ...($definition['exportedBy'] ?? []),
+            $moduleName,
+        ]));
+    }
+
     $exports['patternSynonyms'][$name] = $definition;
 }
 
@@ -1158,6 +1165,13 @@ function addExportedType(
         }
 
         $exports['typeSynonyms'][$name] = $available['typeSynonyms'][$name];
+
+        $children = $item['children'] ?? ['mode' => 'none', 'names' => []];
+        $exportsPattern = $children['mode'] === 'every'
+            || ($children['mode'] === 'listed' && \in_array($name, $children['names'], true));
+        if ($exportsPattern && isset($available['patternSynonyms'][$name])) {
+            addExportedPatternSynonym($exports, $available, $name, $moduleName, $item, $units);
+        }
 
         return;
     }
