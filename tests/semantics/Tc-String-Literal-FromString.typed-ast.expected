@@ -2,6 +2,20 @@ program
   newtype Label
     constructor Label
       field  :: String
+  function __ev_Typeable_Label_typeRepOf :: TypeRep Label
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Label"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function __ev_IsString_Label_fromString :: String -> Label
     pat_var s
     apply
@@ -10,6 +24,20 @@ program
   newtype Tag
     constructor Tag
       field  :: String
+  function __ev_Typeable_Tag_typeRepOf :: TypeRep Tag
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Tag"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function __ev_IsString_Tag_fromString :: String -> Tag
     pat_var s
     apply

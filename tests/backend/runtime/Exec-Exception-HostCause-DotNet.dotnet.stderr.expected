@@ -1,4 +1,6 @@
-moggi: HostException: The input string 'uncaught-host' was not in a correct format.
+moggi: Uncaught exception base:Moggi.IO.Exception.HostException:
+
+The input string 'uncaught-host' was not in a correct format.
   at Main.main (tests/backend/runtime/Exec-Exception-HostCause-DotNet.mog:11:8)
 caused by: System.FormatException: The input string 'uncaught-host' was not in a correct format.
   #0 System.Number.ThrowFormatException (il:28)
@@ -9,5 +11,5 @@ caused by: System.FormatException: The input string 'uncaught-host' was not in a
   #5 Moggi.Rt.StaticFn0.Invoke (il:0)
   #6 Moggi.Rt.TopLevelFn.Invoke (il:0)
   #7 Moggi.Rt.RT.Apply (il:205)
-  #8 Moggi.Rt.RT.IoRun (il:0)
+  #8 Moggi.Rt.RT.IoRun (il:8)
   #9 Moggi.Main.Main (il:6)

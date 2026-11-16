@@ -1,0 +1,9 @@
+moggi: Uncaught exception base:Moggi.Exception.Type.ErrorCall:
+
+boom
+
+site
+
+CallStack (from HasCallStack):
+  at Control.Exception.Base.throwIO (libraries/base/src/Control/Exception/Base.mog:90:13)
+  at Main.main (tests/backend/runtime/Exec-Exception-Context-Uncaught.mog:14:8)

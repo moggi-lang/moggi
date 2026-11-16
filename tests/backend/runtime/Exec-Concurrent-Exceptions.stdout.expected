@@ -1,0 +1,15 @@
+thread-id-stable:True
+fork-handoff:42
+fork-finally-ok:right:7
+fork-finally-fail:left:child-boom
+nested-mvar:5
+throwTo-self:thread killed
+kill-self:thread killed
+async-direct:thread killed
+async-wrapped:thread killed
+mask-plain:Unmasked
+mask-inside:Unmasked
+mask-restore:Unmasked
+mask-uninterruptible:Unmasked
+main-catch:caught-in-main
+done

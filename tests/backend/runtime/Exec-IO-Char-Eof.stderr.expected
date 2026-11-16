@@ -1,4 +1,8 @@
-moggi: ErrorCall: hGetChar: end of input
+moggi: Uncaught exception base:Moggi.Exception.Type.ErrorCall:
+
+hGetChar: end of input
+
+CallStack (from HasCallStack):
   at Moggi.Err.error (libraries/base/src/Moggi/Err.mog:8:13)
   at System.IO.hGetChar (libraries/base/src/System/IO/PHP.mog:168:16)
   at System.IO.getChar (libraries/base/src/System/IO/PHP.mog:213:11)

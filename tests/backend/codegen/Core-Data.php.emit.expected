@@ -2,7 +2,14 @@
 
 namespace Main;
 
-const __MOGGI_MAP = [[36 => 3, 40 => 4], ['Main\\fromMaybe' => 0, 'Main\\name' => 1, 'Main\\age' => 2, 'Main\\makeUser' => 3, 'Main\\getAge' => 4, 'Main\\showUser' => 5, 'Main\\ageOf' => 6], [], [], [[0, 0, 2, 18], [1, 0, 6, 6], [2, 0, 6, 6], [3, 0, 8, 12], [4, 0, 10, 15], [5, 0, 12, 39], [6, 0, 14, 26]], ['Main.fromMaybe', 'Main.name', 'Main.age', 'Main.makeUser', 'Main.getAge', 'Main.showUser', 'Main.ageOf'], ['tests/backend/codegen/Core-Data.mog']];
+const __MOGGI_MAP = [[54 => 3, 58 => 4], ['Main\\fromMaybe' => 0, 'Main\\name' => 1, 'Main\\age' => 2, 'Main\\makeUser' => 3, 'Main\\getAge' => 4, 'Main\\showUser' => 5, 'Main\\ageOf' => 6], [], [], [[0, 0, 2, 18], [1, 0, 6, 6], [2, 0, 6, 6], [3, 0, 8, 12], [4, 0, 10, 15], [5, 0, 12, 39], [6, 0, 14, 26]], ['Main.fromMaybe', 'Main.name', 'Main.age', 'Main.makeUser', 'Main.getAge', 'Main.showUser', 'Main.ageOf'], ['tests/backend/codegen/Core-Data.mog']];
+
+require_once __DIR__ . '/../../../libraries/base/src/Moggi/Internal/Type/Reflection.php';
+
+use function Moggi\Internal\Type\Reflection\mkTyCon;
+use function Moggi\Internal\Type\Reflection\mkTyConApp;
+use function Moggi\Internal\Type\Reflection\trLiftedRep;
+use Moggi\Internal\Type\Reflection as MoggiTypeable;
 
 function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
 function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
@@ -11,6 +18,12 @@ function moggi_i64_add(int $a, int $b): int { $r = $a + $b; return \is_int($r) ?
 
 function User($name, $age) {
     return ['User', $name, $age];
+}
+
+function __ev_Typeable_User(): array {
+    return [
+        "typeRepOf" => fn(...$args) => typeRepOf(...$args)
+    ];
 }
 
 function fromMaybe($d, $mx) {
@@ -32,6 +45,11 @@ function age($__record) {
     };
 }
 
+function typeRepOf() {
+    $__t8 = MoggiTypeable\mkTyCon("Main", "main", "User");
+    return MoggiTypeable\mkTyConApp($__t8, [], MoggiTypeable\trLiftedRep());
+}
+
 function makeUser() {
     return User(1, 30);
 }
@@ -41,9 +59,9 @@ function getAge($user) {
 }
 
 function showUser($_p0) {
-    $__t10 = $_p0[1];
-    $__t11 = $_p0[2];
-    return (\is_int($__m64 = $__t10 + $__t11) ? $__m64 : moggi_u64_add($__t10, $__t11));
+    $__t12 = $_p0[1];
+    $__t13 = $_p0[2];
+    return (\is_int($__m64 = $__t12 + $__t13) ? $__m64 : moggi_u64_add($__t12, $__t13));
 }
 
 function ageOf($_p0) {

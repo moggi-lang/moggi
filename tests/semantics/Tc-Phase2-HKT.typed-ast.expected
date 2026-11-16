@@ -1,19 +1,188 @@
 program
   data V1 p
+  function __ev_Typeable_V1_1_typeRepOf :: __Dict_Typeable t0 -> TypeRep V1 t0
+    pat_var __ev_Typeable
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "V1"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep p
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        qualified_ref MoggiTypeable.trLiftedRep
   data :+: f g p
     constructor L1
       field  :: f p
     constructor R1
       field  :: g p
+  function __ev_Typeable_h_e127663dada43ce4_typeRepOf :: __Dict_Typeable t9 -> __Dict_Typeable t10 -> __Dict_Typeable t11 -> TypeRep :+: t9 t10 t11
+    pat_var __ev_Typeable
+    pat_var __ev_Typeable_1
+    pat_var __ev_Typeable_2
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string ":+:"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep f
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep g
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_1
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep p
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_2
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        apply
+          apply
+            qualified_ref MoggiTypeable.kindFun
+            qualified_ref MoggiTypeable.trLiftedRep
+          apply
+            apply
+              qualified_ref MoggiTypeable.kindFun
+              qualified_ref MoggiTypeable.trLiftedRep
+            qualified_ref MoggiTypeable.trLiftedRep
   data :*: f g p
     constructor Pair
       field  :: f p
       field  :: g p
+  function __ev_Typeable_h_6efcf174154c5af1_typeRepOf :: __Dict_Typeable t32 -> __Dict_Typeable t33 -> __Dict_Typeable t34 -> TypeRep :*: t32 t33 t34
+    pat_var __ev_Typeable
+    pat_var __ev_Typeable_1
+    pat_var __ev_Typeable_2
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string ":*:"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep f
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep g
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_1
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep p
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_2
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        apply
+          apply
+            qualified_ref MoggiTypeable.kindFun
+            qualified_ref MoggiTypeable.trLiftedRep
+          apply
+            apply
+              qualified_ref MoggiTypeable.kindFun
+              qualified_ref MoggiTypeable.trLiftedRep
+            qualified_ref MoggiTypeable.trLiftedRep
   data K1 i c
     constructor K1
       field  :: c
+  function __ev_Typeable_h_37546a506c304696_typeRepOf :: __Dict_Typeable t55 -> __Dict_Typeable t56 -> TypeRep K1 t55 t56
+    pat_var __ev_Typeable
+    pat_var __ev_Typeable_1
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "K1"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep i
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep c
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_1
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        apply
+          apply
+            qualified_ref MoggiTypeable.kindFun
+            qualified_ref MoggiTypeable.trLiftedRep
+          qualified_ref MoggiTypeable.trLiftedRep
   data R
     constructor R
+  function __ev_Typeable_R_typeRepOf :: TypeRep R
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "R"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   type Rec0 = K1 R
   type Id a = a
   function useRec0 :: K1 R Int -> Int

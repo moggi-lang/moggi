@@ -1,4 +1,8 @@
-moggi: ErrorCall: deep
+moggi: Uncaught exception base:Moggi.Exception.Type.ErrorCall:
+
+deep
+
+CallStack (from HasCallStack):
   at Moggi.Err.error (libraries/base/src/Moggi/Err.mog:8:13)
   at Main.descend (tests/backend/runtime/Exec-Exception-DeepTrace.mog:9:8)
   at Main.descend (tests/backend/runtime/Exec-Exception-DeepTrace.mog:10:8)

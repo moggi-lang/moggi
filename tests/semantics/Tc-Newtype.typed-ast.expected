@@ -2,9 +2,48 @@ program
   newtype Age
     constructor Age
       field  :: Int
+  function __ev_Typeable_Age_typeRepOf :: TypeRep Age
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Age"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   newtype Wrap a
     constructor MkWrap
       field  :: a
+  function __ev_Typeable_Wrap_1_typeRepOf :: __Dict_Typeable t3 -> TypeRep Wrap t3
+    pat_var __ev_Typeable
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Wrap"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        qualified_ref MoggiTypeable.trLiftedRep
   function incAge :: Age -> Age
     pat_con Age
       pat_var n

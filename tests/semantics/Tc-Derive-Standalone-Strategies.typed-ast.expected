@@ -2,7 +2,32 @@ program
   data DefFoo a
     constructor DefFoo
       field  :: a
-  function __ev_Eq_DefFoo_1_Op3d3d :: __Dict_Eq t1 -> DefFoo t1 -> DefFoo t1 -> Bool
+  function __ev_Typeable_DefFoo_1_typeRepOf :: __Dict_Typeable t0 -> TypeRep DefFoo t0
+    pat_var __ev_Typeable
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "DefFoo"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        qualified_ref MoggiTypeable.trLiftedRep
+  function __ev_Eq_DefFoo_1_Op3d3d :: __Dict_Eq t10 -> DefFoo t10 -> DefFoo t10 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -24,7 +49,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_DefFoo_1_Op2f3d :: __Dict_Eq t1 -> DefFoo t1 -> DefFoo t1 -> Bool
+  function __ev_Eq_DefFoo_1_Op2f3d :: __Dict_Eq t10 -> DefFoo t10 -> DefFoo t10 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -53,7 +78,7 @@ program
       alt
         pat_con False
         constructor_ref True
-  function __ev_Show_DefFoo_1_showsPrec :: __Dict_Show t23 -> Int -> DefFoo t23 -> String -> String
+  function __ev_Show_DefFoo_1_showsPrec :: __Dict_Show t32 -> Int -> DefFoo t32 -> String -> String
     pat_var __ev_Show
     pat_var __d
     pat_var __x
@@ -85,7 +110,7 @@ program
                     variable __f0
                   variable __r
           variable __s
-  function __ev_Show_DefFoo_1_show :: __Dict_Show t23 -> DefFoo t23 -> String
+  function __ev_Show_DefFoo_1_show :: __Dict_Show t32 -> DefFoo t32 -> String
     pat_var __ev_Show
     pat_var x
     apply
@@ -95,7 +120,7 @@ program
           evidence_ref Show DefFoo a
         variable x
       string ""
-  function __ev_Show_DefFoo_1_showList :: __Dict_Show t23 -> [DefFoo t23] -> String -> String
+  function __ev_Show_DefFoo_1_showList :: __Dict_Show t32 -> [DefFoo t32] -> String -> String
     pat_var __ev_Show
     pat_var ls
     pat_var s
@@ -111,7 +136,32 @@ program
   data StockFoo a
     constructor StockFoo
       field  :: a
-  function __ev_Eq_StockFoo_1_Op3d3d :: __Dict_Eq t53 -> StockFoo t53 -> StockFoo t53 -> Bool
+  function __ev_Typeable_StockFoo_1_typeRepOf :: __Dict_Typeable t58 -> TypeRep StockFoo t58
+    pat_var __ev_Typeable
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "StockFoo"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        qualified_ref MoggiTypeable.trLiftedRep
+  function __ev_Eq_StockFoo_1_Op3d3d :: __Dict_Eq t69 -> StockFoo t69 -> StockFoo t69 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -133,7 +183,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_StockFoo_1_Op2f3d :: __Dict_Eq t53 -> StockFoo t53 -> StockFoo t53 -> Bool
+  function __ev_Eq_StockFoo_1_Op2f3d :: __Dict_Eq t69 -> StockFoo t69 -> StockFoo t69 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -162,7 +212,7 @@ program
       alt
         pat_con False
         constructor_ref True
-  function __ev_Show_StockFoo_1_showsPrec :: __Dict_Show t76 -> Int -> StockFoo t76 -> String -> String
+  function __ev_Show_StockFoo_1_showsPrec :: __Dict_Show t92 -> Int -> StockFoo t92 -> String -> String
     pat_var __ev_Show
     pat_var __d
     pat_var __x
@@ -194,7 +244,7 @@ program
                     variable __f0
                   variable __r
           variable __s
-  function __ev_Show_StockFoo_1_show :: __Dict_Show t76 -> StockFoo t76 -> String
+  function __ev_Show_StockFoo_1_show :: __Dict_Show t92 -> StockFoo t92 -> String
     pat_var __ev_Show
     pat_var x
     apply
@@ -204,7 +254,7 @@ program
           evidence_ref Show StockFoo a
         variable x
       string ""
-  function __ev_Show_StockFoo_1_showList :: __Dict_Show t76 -> [StockFoo t76] -> String -> String
+  function __ev_Show_StockFoo_1_showList :: __Dict_Show t92 -> [StockFoo t92] -> String -> String
     pat_var __ev_Show
     pat_var ls
     pat_var s
@@ -220,6 +270,20 @@ program
   newtype Age
     constructor Age
       field  :: Int
+  function __ev_Typeable_Age_typeRepOf :: TypeRep Age
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Age"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function __ev_Eq_Age_Op3d3d :: Age -> Age -> Bool
     pat_con Age
       pat_var __n0
@@ -271,6 +335,20 @@ program
   newtype ViaInt
     constructor ViaInt
       field  :: Int
+  function __ev_Typeable_ViaInt_typeRepOf :: TypeRep ViaInt
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "ViaInt"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function __ev_Eq_ViaInt_Op3d3d :: __Dict_Eq Int -> ViaInt -> ViaInt -> Bool
     pat_var __ev_Eq
     pat_con ViaInt

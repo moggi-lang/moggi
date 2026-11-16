@@ -1,0 +1,19 @@
+trace-value:42
+stack-nonempty:True
+frames-present:True
+frame-names:True
+empty-pretty:True
+empty-srcloc::0:0 in :
+pretty-srcloc:True
+pretty-pushed:True
+pretty-order:True
+pretty-frozen:True
+show-callstack:True
+with-frozen:True
+push-pop:True
+frozen-push:True
+call-site-list:True
+frozen-pop:True
+islist-roundtrip:True
+islist-tolist:True
+pattern-message:True

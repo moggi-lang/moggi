@@ -1,0 +1,5 @@
+module Dat
+  ( T(..)
+  ) where
+
+data T a = T a

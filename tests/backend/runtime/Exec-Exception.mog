@@ -6,6 +6,7 @@ import Data.Real
 import Data.Maybe
 import Text.Show
 import Moggi.Exception.Type
+import Moggi.IO.Exception (HostException(..))
 import Moggi.Internal.Prim
 import System.IO
 import System.IO.Error
@@ -84,9 +85,7 @@ runExceptionBracket = do
 data MyException = MyException
   deriving (Show)
 
-instance Exception MyException where
-  toException e = exceptionWrap# "MyException" (displayException e) e
-  fromException se = exceptionUnwrap# "MyException" se
+instance Exception MyException
 
 boom :: IO ()
 boom = throw MyException
@@ -296,6 +295,24 @@ runExceptionTry = do
   r2 <- try ok
   showOk r2
 
+-- ---- Exec-Exception-SomeConstructor ----
+
+unwrapped :: Exception ErrorCall => SomeException -> Maybe ErrorCall
+unwrapped se = case se of
+  SomeException e -> Just e
+  _ -> Nothing
+
+runExceptionSomeConstructor :: IO ()
+runExceptionSomeConstructor = do
+  let wrapped = SomeException (ErrorCall "wrapped")
+  putStrLn ("some-show:" <> displayException wrapped)
+  putStrLn (case unwrapped wrapped of
+    Just e -> "some-unwrap:" <> displayException e
+    Nothing -> "some-unwrap-missing")
+  putStrLn (case unwrapped (toException DivideByZero) of
+    Just e -> "some-unwrap:" <> displayException e
+    Nothing -> "some-unwrap-missing")
+
 -- ---- combined entry point ----
 main :: IO ()
 main = do
@@ -309,3 +326,4 @@ main = do
   runExceptionIOError
   runExceptionNoSwallow
   runExceptionTry
+  runExceptionSomeConstructor

@@ -1,0 +1,26 @@
+mvar-read=10
+mvar-read-block=21
+mvar-empty=False
+mvar-take=10
+mvar-empty2=True
+mvar-put=11
+try-take-empty=True
+try-put=True
+try-put-full=False
+try-read=12
+try-take-unit=True
+try-read-unit=True
+mvar-value=12
+modify=11,2
+with=3
+mvar-same=True
+chan=3
+dup=5
+stream=15
+contents=[7,8,9]
+contents-drained=True
+contents-after=[10]
+qsem-ok
+qsemn-ok
+qsem-negative=user error (newQSem: Initial quantity must be non-negative)
+done

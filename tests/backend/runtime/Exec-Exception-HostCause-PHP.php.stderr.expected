@@ -1,4 +1,6 @@
-moggi: HostException: Division by zero
+moggi: Uncaught exception base:Moggi.IO.Exception.HostException:
+
+Division by zero
   at Main.main (tests/backend/runtime/Exec-Exception-HostCause-PHP.mog:11:8)
 caused by: DivisionByZeroError: Division by zero
   #0 intdiv (tests/backend/runtime/Exec-Exception-HostCause-PHP.php:15)

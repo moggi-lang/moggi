@@ -1,4 +1,6 @@
-moggi: HostException: Attempted to divide by zero.
+moggi: Uncaught exception base:Moggi.IO.Exception.HostException:
+
+Attempted to divide by zero.
   at Main.boom (tests/backend/runtime/Exec-Exception-HostFrame.mog:10:8)
   at Main.main (tests/backend/runtime/Exec-Exception-HostFrame.mog:13:8)
 caused by: System.DivideByZeroException: Attempted to divide by zero.
@@ -8,5 +10,5 @@ caused by: System.DivideByZeroException: Attempted to divide by zero.
   #3 Moggi.Rt.StaticFn0.Invoke (il:0)
   #4 Moggi.Rt.TopLevelFn.Invoke (il:0)
   #5 Moggi.Rt.RT.Apply (il:205)
-  #6 Moggi.Rt.RT.IoRun (il:0)
+  #6 Moggi.Rt.RT.IoRun (il:8)
   #7 Moggi.Main.Main (il:6)

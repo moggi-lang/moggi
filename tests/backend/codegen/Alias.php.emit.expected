@@ -2,7 +2,14 @@
 
 namespace Main;
 
-const __MOGGI_MAP = [[17 => 0], ['Main\\getId' => 0, 'Main\\emptyUsers' => 1, 'Main\\doubleId' => 2], [], [], [[0, 0, 7, 11], [1, 0, 10, 14], [2, 0, 13, 14]], ['Main.getId', 'Main.emptyUsers', 'Main.doubleId'], ['tests/backend/codegen/Alias.mog']];
+const __MOGGI_MAP = [[35 => 0], ['Main\\getId' => 0, 'Main\\emptyUsers' => 1, 'Main\\doubleId' => 2], [], [], [[0, 0, 7, 11], [1, 0, 10, 14], [2, 0, 13, 14]], ['Main.getId', 'Main.emptyUsers', 'Main.doubleId'], ['tests/backend/codegen/Alias.mog']];
+
+require_once __DIR__ . '/../../../libraries/base/src/Moggi/Internal/Type/Reflection.php';
+
+use function Moggi\Internal\Type\Reflection\mkTyCon;
+use function Moggi\Internal\Type\Reflection\mkTyConApp;
+use function Moggi\Internal\Type\Reflection\trLiftedRep;
+use Moggi\Internal\Type\Reflection as MoggiTypeable;
 
 function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
 function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
@@ -11,6 +18,17 @@ function moggi_i64_mul(int $a, int $b): int { $r = $a * $b; return \is_int($r) ?
 
 function User($id) {
     return ['User', $id];
+}
+
+function __ev_Typeable_User(): array {
+    return [
+        "typeRepOf" => fn(...$args) => typeRepOf(...$args)
+    ];
+}
+
+function typeRepOf() {
+    $__t0 = MoggiTypeable\mkTyCon("Main", "main", "User");
+    return MoggiTypeable\mkTyConApp($__t0, [], MoggiTypeable\trLiftedRep());
 }
 
 function getId($u) {

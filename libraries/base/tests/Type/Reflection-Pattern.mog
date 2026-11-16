@@ -12,6 +12,6 @@ describe t = case t of
 main :: IO ()
 main = do
   putStrLn (describe (typeRep :: TypeRep (Maybe Int)))
-  putStrLn (describe (mkFunTy (typeRep :: TypeRep Int) (typeRep :: TypeRep Bool)))
+  putStrLn (describe (Fun (typeRep :: TypeRep Int) (typeRep :: TypeRep Bool)))
   putStrLn (describe (typeRep :: TypeRep Int))
   putStrLn (describe (Fun (typeRep :: TypeRep Int) (typeRep :: TypeRep Bool)))

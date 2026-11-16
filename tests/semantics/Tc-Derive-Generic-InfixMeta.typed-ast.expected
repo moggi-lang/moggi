@@ -74,12 +74,48 @@ program
   function selName :: MetaProxy MetaSel Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy -> String
     pat_var _s
     string ""
+  function __ev_Typeable_h_0c0263f3315fd2bd_typeRepOf :: __Dict_Typeable t69 -> __Dict_Typeable t70 -> TypeRep t69 :|| t70
+    pat_var __ev_Typeable
+    pat_var __ev_Typeable_1
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string ":||"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep b
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_1
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        apply
+          apply
+            qualified_ref MoggiTypeable.kindFun
+            qualified_ref MoggiTypeable.trLiftedRep
+          qualified_ref MoggiTypeable.trLiftedRep
   data :/ a b
     constructor :/
       field  :: a
       field  :: b
     deriving (Generic)
-  function __ev_Generic_h_8f61ed4f8cae09bd_from :: t73 :/ t74 -> Rep t73 :/ t74 t81
+  function __ev_Generic_h_8f61ed4f8cae09bd_from :: t89 :/ t90 -> Rep t89 :/ t90 t97
     pat_var __x
     case
       variable __x
@@ -102,7 +138,7 @@ program
                 apply
                   constructor_ref K1
                   variable __f1
-  function __ev_Generic_h_8f61ed4f8cae09bd_to :: Rep t73 :/ t74 t136 -> t73 :/ t74
+  function __ev_Generic_h_8f61ed4f8cae09bd_to :: Rep t89 :/ t90 t152 -> t89 :/ t90
     pat_var __r
     case
       variable __r
@@ -146,6 +182,42 @@ program
   function __ev_Constructor_h_5cf7947f3a67fa14_conArity :: MetaProxy MetaCons ":/" 'InfixI 'RightAssociative 'False -> Int
     pat_var _c
     integer 2
+  function __ev_Typeable_h_d117c95103e74e42_typeRepOf :: __Dict_Typeable t156 -> __Dict_Typeable t157 -> TypeRep t156 :/ t157
+    pat_var __ev_Typeable
+    pat_var __ev_Typeable_1
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string ":\/"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep b
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_1
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        apply
+          apply
+            qualified_ref MoggiTypeable.kindFun
+            qualified_ref MoggiTypeable.trLiftedRep
+          qualified_ref MoggiTypeable.trLiftedRep
   function id :: a -> a
     pat_var x
     variable x

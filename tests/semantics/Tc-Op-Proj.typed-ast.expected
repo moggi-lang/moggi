@@ -10,6 +10,20 @@ program
   data Box
     constructor Box
       field  :: Int
+  function typeRepOf :: TypeRep Box
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Box"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function __ev_MyEq_Box_Op3d3d3d :: Box -> Box -> Bool
     pat_con Box
       pat_var a

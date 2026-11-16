@@ -1,4 +1,6 @@
-moggi: HostException: For input string: "uncaught-host"
+moggi: Uncaught exception base:Moggi.IO.Exception.HostException:
+
+For input string: "uncaught-host"
   at Main.main (tests/backend/runtime/Exec-Exception-HostCause-JVM.mog:11:8)
 caused by: java.lang.NumberFormatException: For input string: "uncaught-host"
   #0 java.lang.NumberFormatException.forInputString

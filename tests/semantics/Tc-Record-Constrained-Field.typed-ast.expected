@@ -21,6 +21,20 @@ program
           pat_wild _
           pat_var __value
         variable __value
+  function typeRepOf :: TypeRep Big
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Big"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function useBig :: Big
     record_con Big
       s =

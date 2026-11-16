@@ -1,9 +1,13 @@
 module
   data User
     constructor User id
+  function typeRepOf()
+      t0 = call Moggi.Internal.Type.Reflection::mkTyCon("Main", "main", "User")
+      t1 = call Moggi.Internal.Type.Reflection::mkTyConApp(t0, [], @Moggi.Internal.Type.Reflection::trLiftedRep)
+      ret t1
   function getId(u)
-      t0 = call __field0(u)
-      ret t0
+      t2 = call __field0(u)
+      ret t2
   function emptyUsers()
       ret []
   function doubleId(x)

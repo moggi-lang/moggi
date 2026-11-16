@@ -1,0 +1,24 @@
+import Control.Concurrent
+import System.IO
+
+main :: IO ()
+main = do
+  caps <- getNumCapabilities
+  setNumCapabilities 2
+  bound <- isCurrentThreadBound
+  tid <- myThreadId
+  capability <- threadCapability tid
+  putStrLn ("caps=" <> show caps)
+  putStrLn ("bound=" <> show bound)
+  putStrLn ("rts-bound=" <> show rtsSupportsBoundThreads)
+  case capability of
+    (n, b) -> putStrLn ("capability=" <> show n <> "," <> show b)
+  _ <- forkOS (pure ())
+  _ <- forkOn 0 (pure ())
+  _ <- forkIOWithUnmask (\unmask -> unmask (pure ()))
+  _ <- forkOnWithUnmask 0 (\unmask -> unmask (pure ()))
+  _ <- forkOSWithUnmask (\unmask -> unmask (pure ()))
+  _ <- runInBoundThread (pure ())
+  _ <- runInUnboundThread (pure ())
+  _ <- mkWeakThreadId tid
+  putStrLn "api-ok"

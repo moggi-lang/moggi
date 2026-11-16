@@ -31,7 +31,7 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
 
 $declared = distributionPhpExtensions();
 $assert(
-    $declared === ['bcmath', 'intl', 'mbstring'],
+    $declared === ['bcmath', 'intl', 'mbstring', 'parallel'],
     'the declared set is what a compiled program needs: ' . \implode(', ', $declared),
 );
 

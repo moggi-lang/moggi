@@ -1,8 +1,36 @@
 program
   data P
     constructor P
+  function __ev_Typeable_P_typeRepOf :: TypeRep P
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "P"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   data Q
     constructor Q
+  function __ev_Typeable_Q_typeRepOf :: TypeRep Q
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Q"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   class Both a b
     method both :: a -> b -> String = default
   function __ev_Both_P_Bool_both :: P -> Bool -> String
@@ -30,9 +58,37 @@ program
         integer 1
   data VP
     constructor VP
+  function __ev_Typeable_VP_typeRepOf :: TypeRep VP
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "VP"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   newtype VW
     constructor VW
       field  :: VP
+  function __ev_Typeable_VW_typeRepOf :: TypeRep VW
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "VW"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function __ev_Both_VW_Bool_both :: VW -> Bool -> String
     pat_var _p0
     pat_var _p1

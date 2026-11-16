@@ -1,6 +1,20 @@
 program
   data A
     constructor A
+  function typeRepOf :: TypeRep A
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "A"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   class Tag a
     method tag :: a -> String
   class Both a b

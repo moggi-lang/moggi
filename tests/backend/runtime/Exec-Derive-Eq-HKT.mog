@@ -1,0 +1,20 @@
+module Main where
+
+import Data.Functor.Product
+import Data.Functor.Sum
+import Data.Maybe
+import Moggi.Generics
+import Moggi.Internal.Base
+
+-- A derived `Eq (Sum f g a)` has one `Eq` dictionary per field. The second
+-- field must use the second dictionary, even when `f` and `g` are different
+-- functors; using the first makes `InR [2,3]` compare as `Maybe`.
+main :: IO ()
+main = do
+  putStrLn (show ((InL (Just (1 :: Int)) :: Sum Maybe List Int) == InL (Just 1)))
+  putStrLn (show ((InR [2, 3] :: Sum Maybe List Int) == InR [2, 3]))
+  putStrLn (show ((Pair (Just (1 :: Int)) [2] :: Product Maybe List Int) == Pair (Just 1) [2]))
+  putStrLn (show (to (from (InR [2, 3] :: Sum Maybe List Int)) == InR [2, 3]))
+  putStrLn (show (to (from (Pair (Just (1 :: Int)) [2] :: Product Maybe List Int)) == Pair (Just 1) [2]))
+  putStrLn (show (to1 (from1 (InR [2, 3] :: Sum Maybe List Int)) == InR [2, 3]))
+  putStrLn (show (to1 (from1 (Pair (Just (1 :: Int)) [2] :: Product Maybe List Int)) == Pair (Just 1) [2]))

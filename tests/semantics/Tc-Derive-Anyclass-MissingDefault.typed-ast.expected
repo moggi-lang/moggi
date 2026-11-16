@@ -15,6 +15,20 @@ program
   function half :: Foo -> Int
     pat_wild _
     integer 1
+  function typeRepOf :: TypeRep Foo
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Foo"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function main :: IO ()
     io_action
       apply

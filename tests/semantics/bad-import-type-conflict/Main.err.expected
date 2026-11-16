@@ -1,0 +1,4 @@
+tests/semantics/bad-import-type-conflict/Main.mog:6:9: type error: ambiguous occurrence `T`: it could refer to `Syn.T` or `Dat.T`
+
+  6 | main :: T Int
+    |         ^

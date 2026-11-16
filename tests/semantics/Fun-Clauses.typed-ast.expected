@@ -55,6 +55,20 @@ program
     constructor Red
     constructor Green
     constructor Blue
+  function typeRepOf :: TypeRep Color
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Color"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function describeColor :: Color -> String
     pat_var _p0
     case

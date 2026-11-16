@@ -20,7 +20,7 @@ function abort() {
 function __w_abort() {
     $__t0 = \System\IO\__w_putStrLn("before");
     $__t1 = error("boom");
-    ($__t1[1])();
+    \Moggi\ioRun($__t1);
     return null;
 }
 

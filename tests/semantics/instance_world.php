@@ -159,6 +159,14 @@ $recordsOfModule = static function (array $records, string $module): array {
     ));
 };
 
+/** The fixture's `Tag` instances, ignoring the `Typeable` records every type now has. */
+$tagRecordsOfModule = static function (array $records, string $module) use ($recordsOfModule): array {
+    return \array_values(\array_filter(
+        $recordsOfModule($records, $module),
+        static fn (array $record): bool => $record['class'] === 'Tag',
+    ));
+};
+
 /** The modules a preparation's units name, minus the compiler's synthetic ones. */
 $preparedModules = static function (array $units): array {
     $modules = [];
@@ -175,8 +183,8 @@ $preparedModules = static function (array $units): array {
 try {
     // --- 1. The full project route: every path handed over at once. -----------
     $freshCache('project');
-    $project = Modules\prepareProject($projectFiles, $work, $context($projectFiles));
-    $projectMain = $project->checked['Main'];
+    $project = Modules\prepareProject($projectFiles, $work, $context($projectFiles), releaseChecked: true);
+    $projectMain = $project->program('Main', $context($projectFiles));
     $projectWorld = $project->importContexts['Main']->instanceWorld;
 
     $assert($projectWorld !== null, 'the prepared project gave `Main` no instance world');
@@ -199,7 +207,7 @@ try {
     }
 
     // --- 2. That world really holds the instance of the unimported module. ----
-    $wide = $recordsOfModule($projectWorld->records, 'Wide');
+    $wide = $tagRecordsOfModule($projectWorld->records, 'Wide');
     $assert(\count($wide) === 1, 'the project world lost `Wide`\'s instance');
     $assert($wide[0]['class'] === 'Tag', '`Wide`\'s record is not a `Tag` instance');
     $assert(
@@ -207,7 +215,7 @@ try {
         '`Wide`\'s record has the wrong head: ' . Ast\dumpTypeInline($wide[0]['instanceHead']),
     );
     $assert(
-        \count($recordsOfModule($projectWorld->records, 'Main')) === 1,
+        \count($tagRecordsOfModule($projectWorld->records, 'Main')) === 1,
         'the project world lost `Main`\'s own instance',
     );
 
@@ -270,6 +278,11 @@ try {
             . Types\typeToString($projectGreet->scheme->type),
     );
 
+    unset($project, $focus, $focusWorld, $focusMain, $focusGreet);
+    if (\function_exists('gc_collect_cycles')) {
+        \gc_collect_cycles();
+    }
+
     // --- 4. A route that sees a smaller set says so. -------------------------
     $freshCache('narrow');
     $narrow = Modules\prepareProjectCached($mainClosure, $work, $context($mainClosure), 'Main');
@@ -294,7 +307,7 @@ try {
         'the narrower world still holds `Wide`\'s instance',
     );
     $assert(
-        \count($recordsOfModule($narrowWorld->records, 'Main')) === 1,
+        \count($tagRecordsOfModule($narrowWorld->records, 'Main')) === 1,
         'the narrower world lost `Main`\'s own instance',
     );
     $assert(
@@ -317,6 +330,11 @@ try {
         $singleProgram->instanceWorld->modules === $preparedModules($single['units']),
         'the single-file route\'s identity does not name its own module set',
     );
+
+    unset($narrow, $narrowWorld, $narrowMain, $single, $singleProgram);
+    if (\function_exists('gc_collect_cycles')) {
+        \gc_collect_cycles();
+    }
 
     // --- 6. The identity is a function of the records, not of their order. ---
     $forward = InstanceWorld::over($projectWorld->records, $projectMain->instanceWorld->modules);

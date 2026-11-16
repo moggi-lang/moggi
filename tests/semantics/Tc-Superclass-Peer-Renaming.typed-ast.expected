@@ -6,10 +6,35 @@ program
   data Box a
     constructor Box
       field  :: a
+  function typeRepOf :: __Dict_Typeable t2 -> TypeRep Box t2
+    pat_var __ev_Typeable
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Box"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        qualified_ref MoggiTypeable.trLiftedRep
   function __ev_Showish_Int_render :: Int -> String
     pat_var x
     string "int"
-  function __ev_Showish_h_e59fb72d7466dc62_render :: __Dict_Showish Maybe t2 -> Box Maybe t2 -> String
+  function __ev_Showish_h_e59fb72d7466dc62_render :: __Dict_Showish Maybe t11 -> Box Maybe t11 -> String
     pat_var __ev_Showish
     pat_var b
     case

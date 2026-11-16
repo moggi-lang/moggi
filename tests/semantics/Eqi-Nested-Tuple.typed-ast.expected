@@ -3,10 +3,46 @@ program
     constructor LTI :: OrderingI a b
     constructor EQI :: OrderingI a a
     constructor GTI :: OrderingI a b
+  function typeRepOf :: __Dict_Typeable t4 -> __Dict_Typeable t5 -> TypeRep OrderingI t4 t5
+    pat_var __ev_Typeable
+    pat_var __ev_Typeable_1
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "OrderingI"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep b
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_1
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        apply
+          apply
+            qualified_ref MoggiTypeable.kindFun
+            qualified_ref MoggiTypeable.trLiftedRep
+          qualified_ref MoggiTypeable.trLiftedRep
   class EqI a b
     method eqI :: OrderingI a b -> Bool
     method eqPairI :: Tuple2 OrderingI a b Tuple2 OrderingI a b Bool -> Bool
-  function eqI :: OrderingI t4 t4 -> Bool
+  function eqI :: OrderingI t22 t22 -> Bool
     pat_var _p0
     case
       variable _p0
@@ -19,7 +55,7 @@ program
       alt
         pat_con GTI
         constructor_ref False
-  function eqPairI :: Tuple2 OrderingI t4 t4 Tuple2 OrderingI t4 t4 Bool -> Bool
+  function eqPairI :: Tuple2 OrderingI t22 t22 Tuple2 OrderingI t22 t22 Bool -> Bool
     pat_var _p0
     case
       variable _p0

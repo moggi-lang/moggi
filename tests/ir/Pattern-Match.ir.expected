@@ -3,24 +3,28 @@ module
     constructor Red
     constructor Green
     constructor Blue
+  function typeRepOf()
+      t0 = call Moggi.Internal.Type.Reflection::mkTyCon("Ir.PatternMatch", "main", "Colour")
+      t1 = call Moggi.Internal.Type.Reflection::mkTyConApp(t0, [], @Moggi.Internal.Type.Reflection::trLiftedRep)
+      ret t1
   function rank(__ev_Num, c)
-      t0 = match c
+      t2 = match c
         arm Red
-            t1 = dict_call __ev_Num->fromInteger(intrinsic intToInteger#(1))
-            t0 = t1
+            t3 = dict_call __ev_Num->fromInteger(intrinsic intToInteger#(1))
+            t2 = t3
         arm Green
-            t2 = dict_call __ev_Num->fromInteger(intrinsic intToInteger#(2))
-            t0 = t2
+            t4 = dict_call __ev_Num->fromInteger(intrinsic intToInteger#(2))
+            t2 = t4
         arm Blue
-            t3 = dict_call __ev_Num->fromInteger(intrinsic intToInteger#(3))
-            t0 = t3
-      ret t0
+            t5 = dict_call __ev_Num->fromInteger(intrinsic intToInteger#(3))
+            t2 = t5
+      ret t2
   function first(__ev_Num, xs)
-      t4 = match xs
+      t6 = match xs
         arm []
-            t5 = dict_call __ev_Num->fromInteger(intrinsic intToInteger#(0))
-            t4 = t5
+            t7 = dict_call __ev_Num->fromInteger(intrinsic intToInteger#(0))
+            t6 = t7
         arm y : _
             let y = intrinsic listHead#(xs)
-            t4 = y
-      ret t4
+            t6 = y
+      ret t6

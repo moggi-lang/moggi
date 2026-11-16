@@ -1,0 +1,95 @@
+import Control.Concurrent
+import Control.Exception (IOException, displayException, try)
+import Data.Maybe
+import System.IO
+
+main :: IO ()
+main = do
+  mvar <- newMVar 10
+  initial <- readMVar mvar
+  putStrLn ("mvar-read=" <> show initial)
+  emptyForRead <- newEmptyMVar
+  _ <- forkIO (putMVar emptyForRead 21)
+  blockedRead <- readMVar emptyForRead
+  putStrLn ("mvar-read-block=" <> show blockedRead)
+  full <- isEmptyMVar mvar
+  putStrLn ("mvar-empty=" <> show full)
+  taken <- takeMVar mvar
+  putStrLn ("mvar-take=" <> show taken)
+  empty <- isEmptyMVar mvar
+  putStrLn ("mvar-empty2=" <> show empty)
+  putMVar mvar 11
+  putBack <- takeMVar mvar
+  putStrLn ("mvar-put=" <> show putBack)
+  missing <- tryTakeMVar mvar
+  putStrLn ("try-take-empty=" <> show (isNothing missing))
+  stored <- tryPutMVar mvar 12
+  putStrLn ("try-put=" <> show stored)
+  rejected <- tryPutMVar mvar 13
+  putStrLn ("try-put-full=" <> show rejected)
+  readOnly <- tryReadMVar mvar
+  case readOnly of
+    Just n -> putStrLn ("try-read=" <> show n)
+    Nothing -> putStrLn "try-read=Nothing"
+  unit <- newMVar ()
+  unitTaken <- tryTakeMVar unit
+  putStrLn ("try-take-unit=" <> show (isJust unitTaken))
+  unitAgain <- newMVar ()
+  unitRead <- tryReadMVar unitAgain
+  putStrLn ("try-read-unit=" <> show (isJust unitRead))
+  value <- takeMVar mvar
+  putStrLn ("mvar-value=" <> show value)
+  modified <- newMVar 1
+  result <- modifyMVar modified (\n -> pure (n + 1, n + 10))
+  afterModify <- readMVar modified
+  putStrLn ("modify=" <> show result <> "," <> show afterModify)
+  withResult <- withMVar modified (\n -> pure (n + 1))
+  putStrLn ("with=" <> show withResult)
+  nestedHole <- newEmptyMVar
+  nestedBox <- newMVar nestedHole
+  sameHole <- readMVar nestedBox
+  putStrLn ("mvar-same=" <> show (nestedHole == sameHole))
+  channel <- newChan
+  writeChan channel 1
+  writeChan channel 2
+  first <- readChan channel
+  second <- readChan channel
+  putStrLn ("chan=" <> show (first + second))
+  baseChannel <- newChan
+  duplicate <- dupChan baseChannel
+  writeChan baseChannel 5
+  duplicateValue <- readChan duplicate
+  putStrLn ("dup=" <> show duplicateValue)
+  stream <- newChan
+  writeList2Chan stream [7, 8]
+  streamFirst <- readChan stream
+  streamSecond <- readChan stream
+  putStrLn ("stream=" <> show (streamFirst + streamSecond))
+  snapshot <- newChan
+  writeList2Chan snapshot [7, 8, 9]
+  contents <- getChanContents snapshot
+  putStrLn ("contents=" <> show contents)
+  drained <- getChanContents snapshot
+  putStrLn ("contents-drained=" <> show (null drained))
+  writeChan snapshot 10
+  afterDrain <- getChanContents snapshot
+  putStrLn ("contents-after=" <> show afterDrain)
+  qsem <- newQSem 1
+  waitQSem qsem
+  signalQSem qsem
+  waitQSem qsem
+  signalQSem qsem
+  putStrLn "qsem-ok"
+  qsemn <- newQSemN 3
+  waitQSemN qsemn 2
+  signalQSemN qsemn 2
+  waitQSemN qsemn 3
+  signalQSemN qsemn 3
+  putStrLn "qsemn-ok"
+  negative <- try (newQSem (-1))
+  case negative of
+    Left e -> putStrLn ("qsem-negative=" <> displayException (e :: IOException))
+    Right _ -> putStrLn "qsem-negative=unexpected"
+  threadDelay 0
+  yield
+  putStrLn "done"

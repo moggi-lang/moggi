@@ -3,7 +3,21 @@ program
     constructor Bar
       field  :: Int
     constructor Baz
-  function from :: Foo -> Rep Foo t2
+  function typeRepOf :: TypeRep Foo
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Foo"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
+  function from :: Foo -> Rep Foo t5
     pat_var x
     case
       variable x
@@ -30,7 +44,7 @@ program
             apply
               constructor_ref M1
               constructor_ref U1
-  function to :: Rep Foo t67 -> Foo
+  function to :: Rep Foo t70 -> Foo
     pat_var r
     case
       variable r

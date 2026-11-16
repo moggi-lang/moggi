@@ -16,8 +16,10 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 require $root . '/src/compiler.php';
 
 use Moggi\IR;
+use Moggi\Optimize\Facts\Facts;
 
 use function Moggi\Optimize\Dict\specializeDictCall;
+use function Moggi\Optimize\Specialize\isConcreteCall;
 
 $failures = [];
 $check = static function (bool $condition, string $message) use (&$failures): void {
@@ -27,6 +29,15 @@ $check = static function (bool $condition, string $message) use (&$failures): vo
 };
 
 $evidence = ['__ev_Show_Int' => new IR\InstanceEvidence('__ev_Show_Int', ['show' => 'showInt'])];
+$facts = new Facts();
+$facts->publishIndex(
+    ['__ev_Show_Int' => ['module' => 'Data.Int', 'methods' => ['show' => 'showInt']]],
+    [],
+);
+$check(
+    isConcreteCall('__ev_Show_Int', [], $facts),
+    'a nullary evidence factory should be concrete even though it is a CAF',
+);
 $localFns = ['showInt' => true];
 
 $unknown = new IR\DictCall(new IR\Temp(7), 'show', [new IR\Temp(1)], 2);

@@ -1,20 +1,134 @@
 program
   data Proxy (a :: k)
     constructor Proxy
+  function __ev_Typeable_Proxy_1_typeRepOf :: __Dict_Typeable t0 -> TypeRep Proxy t0
+    pat_var __ev_Typeable
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Proxy"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        qualified_ref MoggiTypeable.trLiftedRep
   function pInt :: Proxy Int
     constructor_ref Proxy
   function pList :: Proxy List
     constructor_ref Proxy
   data Rep
     constructor Rep
+  function __ev_Typeable_Rep_typeRepOf :: TypeRep Rep
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Rep"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   data TypeRep (a :: k)
     constructor TypeRep :: Rep -> TypeRep a
+  function __ev_Typeable_TypeRep_1_typeRepOf :: __Dict_Typeable t14 -> TypeRep TypeRep t14
+    pat_var __ev_Typeable
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "TypeRep"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        qualified_ref MoggiTypeable.trLiftedRep
   data SomeTypeRep
     constructor SomeTypeRep :: TypeRep a -> SomeTypeRep
+  function __ev_Typeable_SomeTypeRep_typeRepOf :: TypeRep SomeTypeRep
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "SomeTypeRep"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   data Pair2 (a :: k) (b :: k)
     constructor Pair2
       field  :: a
       field  :: b
+  function __ev_Typeable_h_3148895eb45cc933_typeRepOf :: __Dict_Typeable t27 -> __Dict_Typeable t28 -> TypeRep Pair2 t27 t28
+    pat_var __ev_Typeable
+    pat_var __ev_Typeable_1
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Pair2"
+        list
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep a
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable
+          apply
+            qualified_ref MoggiTypeable.SomeTypeRep
+            type_asc MoggiTypeable.TypeRep b
+              apply
+                qualified_ref MoggiTypeable.typeRep
+                variable __ev_Typeable_1
+      apply
+        apply
+          qualified_ref MoggiTypeable.kindFun
+          qualified_ref MoggiTypeable.trLiftedRep
+        apply
+          apply
+            qualified_ref MoggiTypeable.kindFun
+            qualified_ref MoggiTypeable.trLiftedRep
+          qualified_ref MoggiTypeable.trLiftedRep
   function both :: Pair2 Int Bool
     apply
       apply

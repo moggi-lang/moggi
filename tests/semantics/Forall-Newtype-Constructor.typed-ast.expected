@@ -2,6 +2,20 @@ program
   newtype Box
     constructor Box :: forall a. a -> Box
       field  :: a
+  function typeRepOf :: TypeRep Box
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "Box"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function label :: Box -> String
     pat_con Box
       pat_wild _

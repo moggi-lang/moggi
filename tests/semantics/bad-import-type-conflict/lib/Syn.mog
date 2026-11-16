@@ -1,0 +1,5 @@
+module Syn
+  ( T
+  ) where
+
+type T a = [a]

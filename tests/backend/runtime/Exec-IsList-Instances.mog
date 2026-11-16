@@ -1,0 +1,27 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Main where
+
+import Control.Monad ((>>))
+import Data.Array.Byte (ByteArray)
+import Data.Int (Int)
+import Data.List.NonEmpty (NonEmpty)
+import Data.Semigroup ((<>))
+import Data.String (String)
+import Data.Version (Version, showVersion)
+import Moggi.IsList (fromList, toList)
+import System.IO (IO, putStrLn)
+import Text.Show (show)
+
+nonEmptyLine :: String
+nonEmptyLine = "ne:" <> show (toList (fromList [1, 2] :: NonEmpty Int))
+
+versionLine :: String
+versionLine = "version:" <> showVersion (fromList [1, 2, 3] :: Version)
+
+bytesLine :: String
+bytesLine = case toList (fromList [1, 2] :: ByteArray) of
+  [1, 2] -> "bytes:ok"
+  _ -> "bytes:bad"
+
+main :: IO ()
+main = putStrLn nonEmptyLine >> putStrLn versionLine >> putStrLn bytesLine

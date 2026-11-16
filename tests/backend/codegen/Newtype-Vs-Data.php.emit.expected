@@ -2,7 +2,14 @@
 
 namespace Main;
 
-const __MOGGI_MAP = [[28 => 3], ['Main\\unwrapAge' => 0, 'Main\\unwrapBox' => 1, 'Main\\wrapAge' => 2, 'Main\\wrapBox' => 3], [], [], [[0, 0, 6, 21], [1, 0, 9, 21], [2, 0, 12, 13], [3, 0, 15, 13]], ['Main.unwrapAge', 'Main.unwrapBox', 'Main.wrapAge', 'Main.wrapBox'], ['tests/backend/codegen/Newtype-Vs-Data.mog']];
+const __MOGGI_MAP = [[57 => 3], ['Main\\unwrapAge' => 0, 'Main\\unwrapBox' => 1, 'Main\\wrapAge' => 2, 'Main\\wrapBox' => 3], [], [], [[0, 0, 6, 21], [1, 0, 9, 21], [2, 0, 12, 13], [3, 0, 15, 13]], ['Main.unwrapAge', 'Main.unwrapBox', 'Main.wrapAge', 'Main.wrapBox'], ['tests/backend/codegen/Newtype-Vs-Data.mog']];
+
+require_once __DIR__ . '/../../../libraries/base/src/Moggi/Internal/Type/Reflection.php';
+
+use function Moggi\Internal\Type\Reflection\mkTyCon;
+use function Moggi\Internal\Type\Reflection\mkTyConApp;
+use function Moggi\Internal\Type\Reflection\trLiftedRep;
+use Moggi\Internal\Type\Reflection as MoggiTypeable;
 
 function Age($v0) {
     return $v0;
@@ -10,6 +17,28 @@ function Age($v0) {
 
 function Box($v0) {
     return ['Box', $v0];
+}
+
+function __ev_Typeable_Age(): array {
+    return [
+        "typeRepOf" => fn(...$args) => __ev_Typeable_Age_typeRepOf(...$args)
+    ];
+}
+
+function __ev_Typeable_Box(): array {
+    return [
+        "typeRepOf" => fn(...$args) => __ev_Typeable_Box_typeRepOf(...$args)
+    ];
+}
+
+function __ev_Typeable_Age_typeRepOf() {
+    $__t0 = MoggiTypeable\mkTyCon("Main", "main", "Age");
+    return MoggiTypeable\mkTyConApp($__t0, [], MoggiTypeable\trLiftedRep());
+}
+
+function __ev_Typeable_Box_typeRepOf() {
+    $__t2 = MoggiTypeable\mkTyCon("Main", "main", "Box");
+    return MoggiTypeable\mkTyConApp($__t2, [], MoggiTypeable\trLiftedRep());
 }
 
 function unwrapAge($_p0) {

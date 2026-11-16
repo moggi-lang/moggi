@@ -4,6 +4,20 @@ program
   data B
     constructor T
     constructor F
+  function typeRepOf :: TypeRep B
+    apply
+      apply
+        apply
+          qualified_ref MoggiTypeable.mkTyConApp
+          apply
+            apply
+              apply
+                qualified_ref MoggiTypeable.mkTyCon
+                string "Main"
+              string "main"
+            string "B"
+        list
+      qualified_ref MoggiTypeable.trLiftedRep
   function cz :: B -> B -> Int
     pat_var a
     pat_var b

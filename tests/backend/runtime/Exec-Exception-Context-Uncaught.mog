@@ -1,0 +1,14 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+import Control.Exception
+import Control.Exception.Annotation
+import Control.Exception.Context
+import Data.String (String)
+import System.IO
+
+data Marker = Marker String
+
+instance ExceptionAnnotation Marker where
+  displayExceptionAnnotation (Marker s) = s
+
+main :: IO ()
+main = throwIO (ExceptionWithContext (addExceptionAnnotation (Marker "site") emptyExceptionContext) (ErrorCall "boom"))
