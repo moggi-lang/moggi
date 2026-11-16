@@ -54,8 +54,8 @@ if (\version_compare(\PHP_VERSION, MINIMUM_PHP, '<')) {
             default => $n,
         };
     })($current);
-    if ($bytes > 0 && $bytes < 1536 * 1024 * 1024) {
-        \ini_set('memory_limit', '1536M');
+    if ($bytes > 0 && $bytes < 3072 * 1024 * 1024) {
+        \ini_set('memory_limit', '3072M');
     }
 })();
 

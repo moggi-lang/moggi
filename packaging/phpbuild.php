@@ -469,14 +469,24 @@ function buildPhpFromSource(string $runtime, string $target, array $config, stri
     $jobs = (string) \max(1, cpuCount());
     $make = findExecutable('make') ?? 'make';
     $extensions = distributionPhpExtensions();
-    runOrFail([$tree . '/configure', '--prefix=' . $work . '/install', ...extensionBuildFlags($extensions, $config)], $tree);
+    $prefix = $work . '/install';
+    runOrFail([$tree . '/configure', '--prefix=' . $prefix, ...extensionBuildFlags($extensions, $config)], $tree);
     runOrFail([$make, '-j' . $jobs], $tree);
+    // PIE installs into the prefix, and it needs the installed php-config.
+    runOrFail([$make, 'install'], $tree);
+
+    if (\in_array('parallel', $extensions, true)) {
+        installParallelExtension($prefix, $dir);
+    }
 
     if (\is_file($tree . '/LICENSE')) {
         \copy($tree . '/LICENSE', $dir . '/LICENSE');
     }
 
-    $binary = $tree . '/sapi/cli/php';
+    $binary = $prefix . '/bin/php';
+    if (! \is_file($binary)) {
+        $binary = $tree . '/sapi/cli/php';
+    }
     if (! \is_file($binary)) {
         throw new \RuntimeException("the source build produced no CLI binary at {$binary}");
     }
@@ -495,6 +505,62 @@ function buildPhpFromSource(string $runtime, string $target, array $config, stri
         : runWithLibraryPath([$dir . '/bin/php', '-n', '-r', 'echo PHP_VERSION, " ", PHP_OS_FAMILY, "-", php_uname("m");'], $dir . '/lib');
 
     return assertRuntimeVersion($runtime, $output, $config, $target);
+}
+
+/**
+ * Install ext-parallel into a just-built PHP prefix, with PIE.
+ *
+ * ext-parallel is not in php-src, so `configure` cannot enable it. PIE is the
+ * extension installer the distribution uses instead of PECL: it reads the
+ * prefix's `php-config`, compiles the extension against exactly the ZTS build
+ * we just made, and writes it into that prefix. The shared object is then
+ * copied beside the runtime, where `assertPhpExtensions()` finds it and enables
+ * it in the bundled `php.ini`.
+ */
+function installParallelExtension(string $prefix, string $runtimeDir): void
+{
+    $php = $prefix . '/bin/php';
+    $phpConfig = $prefix . '/bin/php-config';
+    if (! \is_file($php) || ! \is_file($phpConfig)) {
+        throw new \RuntimeException("the PHP install left no php/php-config in {$prefix}/bin");
+    }
+
+    $pie = findExecutable('pie') ?? findExecutable('pie.phar');
+    if ($pie === null) {
+        $configured = \getenv('MOGGI_PIE');
+        if (\is_string($configured) && $configured !== '') {
+            $pie = $configured;
+        }
+    }
+    if ($pie === null) {
+        throw new \RuntimeException(
+            'installing ext-parallel needs PIE (https://github.com/php/pie): put `pie` on PATH or set MOGGI_PIE to pie.phar',
+        );
+    }
+
+    $command = \str_ends_with($pie, '.phar') ? [$php, $pie] : [$pie];
+    runOrFail([
+        ...$command,
+        'install',
+        'pecl/parallel',
+        '--php-config=' . $phpConfig,
+        '--no-interaction',
+    ], $prefix);
+
+    $built = \glob($prefix . '/lib/php/extensions/*/parallel.so') ?: [];
+    if ($built === []) {
+        $built = \glob($prefix . '/lib/php/extensions/*/php_parallel.dll') ?: [];
+    }
+    if ($built === []) {
+        throw new \RuntimeException("PIE reported success but no parallel extension exists under {$prefix}/lib/php/extensions");
+    }
+
+    if (! \is_dir($runtimeDir . '/ext') && ! \mkdir($runtimeDir . '/ext', 0777, true) && ! \is_dir($runtimeDir . '/ext')) {
+        throw new \RuntimeException("cannot create {$runtimeDir}/ext");
+    }
+    if (! \copy($built[0], $runtimeDir . '/ext/' . \basename($built[0]))) {
+        throw new \RuntimeException('cannot copy the built parallel extension into the runtime');
+    }
 }
 
 /**

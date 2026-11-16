@@ -1,0 +1,251 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Threads and the communication abstractions built on MVars.
+--
+-- Every host gives every Moggi thread a real OS thread: the JVM uses
+-- @java.lang.Thread@, .NET a @System.Threading.Thread@, and PHP an
+-- @ext-parallel@ runtime. A thread is therefore not cheaper than a host
+-- thread, and a foreign call blocks only the thread that makes it.
+--
+-- The export list is @base@'s. The descriptor and STM waiters are present with
+-- their exact signatures, but the runtime has no descriptor readiness and no
+-- STM, so calling one reports that explicitly. Asynchronous
+-- delivery to another thread ('throwTo', 'killThread') is limited to the
+-- calling thread, because compiled code has no safe point at which a host
+-- thread could be interrupted. The masked and capability names are exact,
+-- because this machine either has no asynchronous exceptions to mask or
+-- models every thread as an OS thread.
+module Control.Concurrent (
+        -- * Concurrent Moggi
+
+        -- $conc_intro
+
+        -- * Basic concurrency operations
+
+        ThreadId,
+        myThreadId,
+
+        forkIO,
+        forkFinally,
+        forkIOWithUnmask,
+        killThread,
+        throwTo,
+
+        -- ** Threads with affinity
+        forkOn,
+        forkOnWithUnmask,
+        getNumCapabilities,
+        setNumCapabilities,
+        threadCapability,
+
+        -- * Scheduling
+
+        -- $conc_scheduling
+        yield,
+
+        -- ** Blocking
+
+        -- $blocking
+
+        -- ** Waiting
+        threadDelay,
+        threadWaitRead,
+        threadWaitWrite,
+        threadWaitReadSTM,
+        threadWaitWriteSTM,
+
+        -- * Communication abstractions
+
+        module Control.Concurrent.MVar,
+        module Control.Concurrent.Chan,
+        module Control.Concurrent.QSem,
+        module Control.Concurrent.QSemN,
+
+        -- * Bound Threads
+        -- $boundthreads
+        rtsSupportsBoundThreads,
+        forkOS,
+        forkOSWithUnmask,
+        isCurrentThreadBound,
+        runInBoundThread,
+        runInUnboundThread,
+
+        -- * Weak references to ThreadIds
+        mkWeakThreadId,
+) where
+
+import Control.Applicative
+import Control.Concurrent.Chan
+import Control.Concurrent.QSem
+import Control.Concurrent.QSemN
+import Control.Exception (AsyncException(..), ErrorCall(..), Exception, SomeException, throwIO, throwTo, try)
+import Control.Monad
+import Data.Either
+import Data.Function (id)
+import Data.Maybe (Maybe(..))
+import Data.Semigroup ((<>))
+import Control.Concurrent.MVar
+import Moggi.Internal.Base
+import Moggi.Internal.Conc.Sync (STM)
+import Moggi.Internal.System.Posix.Types (Fd)
+import Moggi.Internal.IO
+import System.IO (IO)
+import System.Mem.Weak (Weak, mkWeak)
+import Moggi.Internal.Thread (ThreadId(..))
+import Text.Show
+
+-- | The id of the calling thread.
+myThreadId :: IO ThreadId
+myThreadId = do
+  id <- myThreadId#
+  pure (ThreadId id)
+
+-- | Start a new thread running the given action, and return its id.
+--
+-- The new thread is a host thread, so exceptions in it are reported where they
+-- happen and never rethrown in the parent. The parent does not wait for it.
+forkIO :: IO () -> IO ThreadId
+forkIO action = do
+  id <- forkIO# action
+  pure (ThreadId id)
+
+-- | Start a thread and run a function when it finishes, with either the value
+-- it returned or the exception it threw.
+forkFinally :: IO a -> (Either SomeException a -> IO ()) -> IO ThreadId
+forkFinally action andThen = do
+  forked <- pure (runFinally action andThen)
+  forkIO forked
+
+-- Named so the forked action is an application rather than a block argument.
+runFinally :: IO a -> (Either SomeException a -> IO ()) -> IO ()
+runFinally action andThen = do
+  outcome <- try action
+  andThen outcome
+
+-- | Start a thread whose action receives 'id' as its unmask function.
+--
+-- There are no asynchronous exceptions, so unmasking is the identity. The
+-- argument keeps @base@'s rank-2 type, so the forked action can use the
+-- unmasker at any result type.
+forkIOWithUnmask :: ((forall a. IO a -> IO a) -> IO ()) -> IO ThreadId
+forkIOWithUnmask action = do
+  forked <- pure (action id)
+  forkIO forked
+
+-- | Stop a thread. The runtime cannot deliver an exception into another host
+-- thread, so a foreign target fails with 'ErrorCall' rather than being
+-- silently ignored.
+killThread :: ThreadId -> IO ()
+killThread target = throwTo target ThreadKilled
+
+-- | Start a thread with affinity to a capability. There is no capability
+-- scheduler, so the request is ignored and the thread is an ordinary host
+-- thread.
+forkOn :: Int -> IO () -> IO ThreadId
+forkOn _ action = forkIO action
+
+-- | 'forkOn' for an action taking an unmask function.
+forkOnWithUnmask :: Int -> ((forall a. IO a -> IO a) -> IO ()) -> IO ThreadId
+forkOnWithUnmask _ action = forkIOWithUnmask action
+
+-- | The number of capabilities the runtime schedules over. There is no GHC
+-- capability scheduler here; each Moggi thread is already a host thread, so
+-- the answer is one logical capability.
+getNumCapabilities :: IO Int
+getNumCapabilities = pure 1
+
+-- | Request a capability count. The request is accepted and has no effect:
+-- host threads are created directly rather than scheduled by an RTS.
+setNumCapabilities :: Int -> IO ()
+setNumCapabilities _ = pure ()
+
+-- | The capability a thread runs on, and whether it is bound. Every thread is
+-- a host thread here, so the pair is the single capability and 'True'.
+threadCapability :: ThreadId -> IO (Int, Bool)
+threadCapability _ = pure (0, True)
+
+-- | Suspend the calling thread for the given number of microseconds.
+threadDelay :: Int -> IO ()
+threadDelay microseconds = threadDelay# microseconds
+
+-- | Wait for a file descriptor to become readable.
+--
+-- Moggi has no descriptor-readiness integration with its host runtimes, so
+-- this entry point exists for source compatibility and reports that it is
+-- unsupported rather than blocking forever.
+threadWaitRead :: Fd -> IO ()
+threadWaitRead _ = unsupported "threadWaitRead"
+
+-- | Wait for a file descriptor to become writable; see 'threadWaitRead'.
+threadWaitWrite :: Fd -> IO ()
+threadWaitWrite _ = unsupported "threadWaitWrite"
+
+-- | The STM variant of 'threadWaitRead'. There is no STM runtime.
+threadWaitReadSTM :: Fd -> IO (STM (), IO ())
+threadWaitReadSTM _ = unsupported "threadWaitReadSTM"
+
+-- | The STM variant of 'threadWaitWrite'. There is no STM runtime.
+threadWaitWriteSTM :: Fd -> IO (STM (), IO ())
+threadWaitWriteSTM _ = unsupported "threadWaitWriteSTM"
+
+-- | Offer the processor to another runnable thread.
+yield :: IO ()
+yield = yield#
+
+-- | Whether the runtime supports bound threads. Every Moggi thread is a host
+-- OS thread, so it does.
+rtsSupportsBoundThreads :: Bool
+rtsSupportsBoundThreads = True
+
+-- | Run an action on a bound OS thread. Every forked thread already is one, so
+-- this is 'forkIO'.
+forkOS :: IO () -> IO ThreadId
+forkOS = forkIO
+
+-- | 'forkOS' for an action taking an unmask function.
+forkOSWithUnmask :: ((forall a. IO a -> IO a) -> IO ()) -> IO ThreadId
+forkOSWithUnmask = forkIOWithUnmask
+
+-- | Whether the calling thread is bound to an OS thread. It always is.
+isCurrentThreadBound :: IO Bool
+isCurrentThreadBound = pure True
+
+-- | Run an action in a bound thread. The calling thread is already bound.
+runInBoundThread :: IO a -> IO a
+runInBoundThread action = action
+
+-- | Run an action in an unbound thread. Every thread is an OS thread, so the
+-- action runs in place.
+runInUnboundThread :: IO a -> IO a
+runInUnboundThread action = action
+
+-- | A weak pointer to a thread id. The id is a value, so it does not keep a
+-- thread alive; the pointer is finalized when the id itself is unreachable.
+mkWeakThreadId :: ThreadId -> IO (Weak ThreadId)
+mkWeakThreadId tid = mkWeak tid tid Nothing
+
+-- | Fail explicitly for a name whose @base@ semantics need machinery this
+-- runtime does not have.
+unsupported :: String -> IO a
+unsupported name =
+  throwIO (ErrorCall (name <> " is not supported by the Moggi runtime"))
+
+-- $conc_intro
+--
+-- Threads are host threads. There is no green-thread scheduler, no capability
+-- balancing and no preemption by the runtime: the operating system schedules
+-- them.
+--
+-- $conc_scheduling
+--
+-- 'yield' offers the processor to another thread; 'threadDelay' sleeps the
+-- calling thread in the host.
+--
+-- $blocking
+--
+-- A blocked 'takeMVar' sleeps in the host. Descriptor and STM waiting are
+-- present for source compatibility, but report that the runtime has neither.
+--
+-- $boundthreads
+--
+-- Every thread is bound to an OS thread, so the bound-thread operations are
+-- the ordinary fork and run operations.

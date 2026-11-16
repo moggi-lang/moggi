@@ -1,0 +1,246 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | An @'MVar' t@ is a mutable synchronization variable that is either
+-- empty or contains a value of type @t@. It provides two fundamental
+-- operations: 'putMVar', which fills an empty @MVar@ and blocks if it
+-- is already full, and 'takeMVar', which retrieves and removes the
+-- value from a full @MVar@ and blocks if it is empty.
+--
+-- @MVar@s support several common concurrency patterns:
+--
+--   1. Synchronized mutable variables,
+--
+--   2. Communication channels, using 'putMVar' to send and
+--      'takeMVar' to receive, and
+--
+--   3. Binary semaphores, using @'MVar' ()@ with 'takeMVar' to wait
+--      and 'putMVar' to signal.
+--
+-- === Applicability
+--
+-- @MVar@s provide synchronization and communication between concurrent
+-- threads. They are suitable for implementing synchronization
+-- primitives and simple inter-thread communication.
+--
+-- However, individual @MVar@ operations are relatively low-level and
+-- combining multiple operations does not automatically make them
+-- atomic. Incorrect use can lead to race conditions, deadlocks, or
+-- uncaught exceptions.
+--
+-- Use a transactional synchronization mechanism when an operation
+-- requires atomic updates involving multiple shared variables.
+--
+-- The higher-level operations in this module, such as 'swapMVar',
+-- 'withMVar', 'modifyMVar_' and 'modifyMVar', are built from
+-- 'takeMVar' and 'putMVar', with appropriate exception handling.
+-- Their atomicity depends on how other threads access the same
+-- @MVar@: they do not prevent interference from operations that do
+-- not follow the same take-before-put protocol.
+--
+-- === Fairness
+--
+-- A thread blocked on an @MVar@ will not remain blocked indefinitely
+-- unless another thread holds that @MVar@ indefinitely.
+--
+-- Implementations commonly achieve this by serving blocked threads
+-- in first-in-first-out order. However, FIFO ordering is not part
+-- of the general semantics and should not be relied upon.
+--
+-- === Strictness
+--
+-- A value is evaluated before it reaches an @MVar@: Moggi has no deferred
+-- computations, so a put cannot move evaluation to the reading thread.
+--
+-- === Ordering
+--
+-- Operations on an @MVar@ are observed by other threads in the order
+-- in which they occur. This provides synchronization and ordering
+-- guarantees independent of the underlying machine's memory model.
+--
+-- === Example
+--
+-- A skip channel is a communication abstraction for intermittent
+-- streams of high-bandwidth information, such as mouse movement
+-- events. Writing never blocks, while reading returns the most recent
+-- value or blocks until a new value becomes available. Multiple
+-- readers are supported through 'dupSkipChan'.
+--
+-- A skip channel consists of two @MVar@s. The first stores the
+-- current value together with the semaphores of readers waiting
+-- to be notified when the value changes. The second is a semaphore
+-- dedicated to a particular reader. It is full when that reader
+-- has an unread update and empty otherwise.
+--
+-- @
+-- data SkipChan a = SkipChan (MVar (a, [MVar ()])) (MVar ())
+--
+-- newSkipChan :: IO (SkipChan a)
+-- newSkipChan = do
+--     sem <- newEmptyMVar
+--     main <- newMVar (undefined, [sem])
+--     return (SkipChan main sem)
+--
+-- putSkipChan :: SkipChan a -> a -> IO ()
+-- putSkipChan (SkipChan main _) v = do
+--     (_, sems) <- takeMVar main
+--     putMVar main (v, [])
+--     mapM_ (\\sem -> putMVar sem ()) sems
+--
+-- getSkipChan :: SkipChan a -> IO a
+-- getSkipChan (SkipChan main sem) = do
+--     takeMVar sem
+--     (v, sems) <- takeMVar main
+--     putMVar main (v, sem : sems)
+--     return v
+--
+-- dupSkipChan :: SkipChan a -> IO (SkipChan a)
+-- dupSkipChan (SkipChan main _) = do
+--     sem <- newEmptyMVar
+--     (v, sems) <- takeMVar main
+--     putMVar main (v, sem : sems)
+--     return (SkipChan main sem)
+-- @
+module Control.Concurrent.MVar
+  ( MVar
+  , newEmptyMVar
+  , newMVar
+  , takeMVar
+  , putMVar
+  , readMVar
+  , swapMVar
+  , tryTakeMVar
+  , tryPutMVar
+  , isEmptyMVar
+  , withMVar
+  , withMVarMasked
+  , modifyMVar_
+  , modifyMVar
+  , modifyMVarMasked_
+  , modifyMVarMasked
+  , tryReadMVar
+  , mkWeakMVar
+  , addMVarFinalizer
+  ) where
+
+import Control.Applicative
+import Control.Exception (mask, mask_, onException)
+import Control.Monad
+import Data.Maybe (Maybe, Just)
+import Data.Semigroup ()
+import Moggi.Internal.Base
+import Moggi.Internal.IO
+import Moggi.Internal.Prim
+import System.IO (IO)
+import System.Mem.Weak (Weak, mkWeak)
+
+-- | An @MVar@: a synchronising variable holding a value of type @a@.
+type MVar a = MVar# a
+
+-- | Two MVars are equal when they are the same variable. @base@ gives its
+-- primitive @MVar#@ this instance, and `Chan`'s derived `Eq` depends on it.
+instance Eq (MVar# a) where
+  (==) left right = sameMVar# left right
+
+-- | Create an MVar which is initially empty.
+newEmptyMVar :: IO (MVar a)
+newEmptyMVar = newEmptyMVar#
+
+-- | Create an MVar which contains the supplied value.
+newMVar :: a -> IO (MVar a)
+newMVar value = newMVar# value
+
+-- | Return the contents of the MVar, leaving it empty. Waits while it is empty.
+takeMVar :: MVar a -> IO a
+takeMVar mvar = takeMVar# mvar
+
+-- | Put a value into the MVar. Waits while it is full.
+putMVar :: MVar a -> a -> IO ()
+putMVar mvar value = putMVar# mvar value
+
+-- | Read the contents without emptying the MVar. Waits while it is empty.
+readMVar :: MVar a -> IO a
+readMVar mvar = readMVar# mvar
+
+-- | Take the old value, put a new one and return the old one.
+swapMVar :: MVar a -> a -> IO a
+swapMVar mvar value = mask_ (do
+  old <- takeMVar mvar
+  putMVar mvar value
+  pure old)
+
+-- | A non-blocking 'takeMVar'.
+tryTakeMVar :: MVar a -> IO (Maybe a)
+tryTakeMVar mvar = tryTakeMVar# mvar
+
+-- | A non-blocking 'putMVar'; answers whether the value went in.
+tryPutMVar :: MVar a -> a -> IO Bool
+tryPutMVar mvar value = tryPutMVar# mvar value
+
+-- | Whether the MVar is empty at this instant.
+isEmptyMVar :: MVar a -> IO Bool
+isEmptyMVar mvar = isEmptyMVar# mvar
+
+-- | Run an action on the contents, putting the value back afterwards, even
+-- when the action throws.
+withMVar :: MVar a -> (a -> IO b) -> IO b
+withMVar mvar action = mask (\restore -> do
+  value <- takeMVar mvar
+  result <- onException (restore (action value)) (putMVar mvar value)
+  putMVar mvar value
+  pure result)
+
+-- | 'withMVar' with asynchronous exceptions masked.
+withMVarMasked :: MVar a -> (a -> IO b) -> IO b
+withMVarMasked mvar action = mask_ (do
+  value <- takeMVar mvar
+  result <- onException (action value) (putMVar mvar value)
+  putMVar mvar value
+  pure result)
+
+-- | Replace the contents with the result of the action. If the action throws,
+-- the original value is put back.
+modifyMVar_ :: MVar a -> (a -> IO a) -> IO ()
+modifyMVar_ mvar action = mask (\restore -> do
+  old <- takeMVar mvar
+  new <- onException (restore (action old)) (putMVar mvar old)
+  putMVar mvar new)
+
+-- | Like 'modifyMVar_', but also return a value from the action.
+modifyMVar :: MVar a -> (a -> IO (a, b)) -> IO b
+modifyMVar mvar action = mask (\restore -> do
+  old <- takeMVar mvar
+  result <- onException (restore (action old)) (putMVar mvar old)
+  case result of
+    (new, answer) -> do
+      putMVar mvar new
+      pure answer)
+
+-- | 'modifyMVar_' with asynchronous exceptions masked.
+modifyMVarMasked_ :: MVar a -> (a -> IO a) -> IO ()
+modifyMVarMasked_ mvar action = mask_ (do
+  old <- takeMVar mvar
+  new <- onException (action old) (putMVar mvar old)
+  putMVar mvar new)
+
+-- | 'modifyMVar' with asynchronous exceptions masked.
+modifyMVarMasked :: MVar a -> (a -> IO (a, b)) -> IO b
+modifyMVarMasked mvar action = mask_ (do
+  old <- takeMVar mvar
+  result <- onException (action old) (putMVar mvar old)
+  case result of
+    (new, answer) -> do
+      putMVar mvar new
+      pure answer)
+
+-- | A non-blocking 'readMVar'.
+tryReadMVar :: MVar a -> IO (Maybe a)
+tryReadMVar mvar = tryReadMVar# mvar
+
+-- | Make a weak pointer to an MVar, with the given finalizer.
+mkWeakMVar :: MVar a -> IO () -> IO (Weak (MVar a))
+mkWeakMVar mvar finalizer = mkWeak mvar mvar (Just finalizer)
+
+-- | Attach a finalizer to an MVar, discarding the weak pointer.
+addMVarFinalizer :: MVar a -> IO () -> IO ()
+addMVarFinalizer mvar finalizer = do
+  _ <- mkWeakMVar mvar finalizer
+  pure ()

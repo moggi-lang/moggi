@@ -283,7 +283,8 @@ function assertPhpExtensions(string $binary, string $dir, string $target, array 
             continue;
         }
         $dll = $dir . '/ext/php_' . $extension . '.dll';
-        if (\is_file($dll)) {
+        $so = $dir . '/ext/' . $extension . '.so';
+        if (\is_file($dll) || \is_file($so)) {
             $enable[] = $extension;
         }
     }
@@ -342,8 +343,12 @@ function writeBundledPhpIni(string $dir, array $compiledIn, array $enable): void
         ';',
         '; Compiled in: ' . \implode(' ', $compiledIn),
     ];
+    if ($enable !== []) {
+        $lines[] = 'extension_dir="' . \str_replace('\\', '/', $dir) . '/ext"';
+    }
     foreach ($enable as $extension) {
-        $lines[] = 'extension=php_' . $extension . '.dll';
+        $dll = 'php_' . $extension . '.dll';
+        $lines[] = 'extension=' . (\is_file($dir . '/ext/' . $dll) ? $dll : $extension . '.so');
     }
     $lines[] = '';
 
