@@ -320,7 +320,11 @@ main = do
 ```
 
 ```text
-moggi: ErrorCall: boom
+moggi: Uncaught exception base:Moggi.Exception.Type.ErrorCall:
+
+boom
+
+CallStack (from HasCallStack):
   at Moggi.Err.error (libraries/base/src/Moggi/Err.mog:8:13)
   at Main.main (Main.mog:4:8)
 ```
