@@ -1,3 +1,8 @@
 ne:[1,2]
 version:1.2.3
+plain:[1,2]
+arg:7
+nested:[1,2]
+id:[5,6]
+wrapped:[7,8]
 bytes:ok

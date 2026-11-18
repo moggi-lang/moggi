@@ -34,6 +34,7 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
     $state = new LowerState();
     $dataIndex = buildDataIndex($program, $importedData);
     $newtypeIndex = buildNewtypeIndex($program, $importedData);
+    $constructorModules = buildConstructorModules($program, $importedData);
     $functions = [];
     $data = [];
     $knownFunctions = [];
@@ -132,6 +133,7 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
                 $constructorRenames,
                 $workers,
                 $workerEntries,
+                $constructorModules,
             ));
         }
     }
@@ -196,6 +198,44 @@ function buildDataIndex(Ast\Program $program, array $importedData = []): array
     return $index;
 }
 
+/**
+ * Constructor name → the module that declares it, for imported constructors.
+ *
+ * A bare constructor reference is lowered to a module-qualified symbol whenever the
+ * constructor comes from another module. The checker usually records that origin on
+ * the node, but structures materialized before the annotation (or through a view)
+ * can lose it, so lowering keeps its own table from the imported data.
+ *
+ * @return array<string, string>
+ */
+function buildConstructorModules(Ast\Program $program, array $importedData = []): array
+{
+    $modules = [];
+    foreach ($importedData as $info) {
+        $result = $info['result'] ?? null;
+        $module = \is_object($result) ? ($result->module ?? null) : null;
+        $module ??= $info['declaringModule'] ?? $info['module'] ?? null;
+        if (! \is_string($module) || $module === '') {
+            continue;
+        }
+
+        $constructors = $info['constructors'] ?? [];
+        if (! \is_array($constructors)) {
+            continue;
+        }
+        foreach ($constructors as $key => $ctor) {
+            $name = \is_array($ctor)
+                ? ($ctor['name'] ?? (\is_string($key) ? $key : null))
+                : (\is_string($ctor) ? $ctor : null);
+            if (\is_string($name) && $name !== '') {
+                $modules[$name] = $module;
+            }
+        }
+    }
+
+    return $modules;
+}
+
 /** @return array<string, true> */
 function buildNewtypeIndex(Ast\Program $program, array $importedData = []): array
 {
@@ -245,6 +285,7 @@ function lowerFunction(
     array $constructorRenames = [],
     array $workers = [],
     array $executingEntries = [],
+    array $constructorModules = [],
 ): array {
     $state->usedLocals = [];
     $state->nextLocalSuffix = 0;
@@ -258,6 +299,17 @@ function lowerFunction(
     $ctx->sourceFile = $sourceFile;
     $ctx->functionName = $fn->name;
     $ctx->constructorRenames = $constructorRenames;
+    $ctx->constructorModules = $constructorModules;
+    foreach ($externalFns as $name => $symbol) {
+        if ($name === '' || ! \ctype_upper($name[0])) {
+            continue;
+        }
+
+        $separator = \strrpos($symbol, '::');
+        if ($separator !== false && $separator > 0 && $separator + 2 < \strlen($symbol)) {
+            $ctx->constructorModules[$name] = \substr($symbol, 0, $separator);
+        }
+    }
     $ctx->workers = $workers;
     $ctx->executingEntries = $executingEntries;
     $ctx->evidenceNames = $core->evidenceBinders();
@@ -593,6 +645,7 @@ function newCtx(
         $ctx->executingEntries = $from->executingEntries;
         $ctx->ioActionStore = $from->ioActionStore;
         $ctx->constructorRenames = $from->constructorRenames;
+        $ctx->constructorModules = $from->constructorModules;
         $ctx->evidenceNames = $from->evidenceNames;
         $ctx->terms = $from->terms;
         $ctx->generatedTerms = $from->generatedTerms;

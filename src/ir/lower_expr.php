@@ -40,6 +40,37 @@ use function Moggi\Semantics\Kernel\boolTrueCtor;
 use function Moggi\Semantics\Types\peelBindingAnnotation;
 use function Moggi\Syntax\isIdentifier;
 
+/**
+ * The symbol a constructor reference calls.
+ *
+ * The checked origin is authoritative when present. Otherwise the imported-data table
+ * supplies the declaring module, which keeps a constructor materialized through a view
+ * from being called as a member of the current module.
+ */
+function constructorReference(Ast\ConstructorRef $expr, LowerCtx $ctx): string
+{
+    // The checker's origin is the one that resolved *this* reference. The
+    // imported-data map is keyed by constructor name alone, so two imported
+    // modules exporting the same constructor would make it last-wins; use the
+    // map only as a fallback for references the checker did not annotate.
+    if (\is_string($expr->resolvedOrigin) && $expr->resolvedOrigin !== '') {
+        return $expr->resolvedOrigin;
+    }
+
+    $name = $ctx->constructorRenames[$expr->name] ?? $expr->name;
+    if ($name === boolTrueCtor() || $name === boolFalseCtor()) {
+        return $name;
+    }
+
+    $module = $ctx->constructorModules[$expr->name] ?? null;
+
+    if (\is_string($module) && $module !== '' && $module !== $ctx->moduleName) {
+        return $module . '::' . $name;
+    }
+
+    return $name;
+}
+
 function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
 {
     $expr = materializeSite($expr, $ctx);
@@ -50,9 +81,7 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
         Ast\StringLit::class,
         Ast\CharLit::class => lowerLiteral($expr, $ctx),
         Ast\Variable::class => lowerVariable($expr, $ctx),
-        Ast\ConstructorRef::class => new FnRef(
-            $ctx->constructorRenames[$expr->name] ?? $expr->name,
-        ),
+        Ast\ConstructorRef::class => new FnRef(constructorReference($expr, $ctx)),
         Ast\OperatorRef::class => (static function () use ($expr, $ctx): Operand {
             $primop = primopForPublicOperator($expr->name);
             if ($primop !== null) {
@@ -1079,7 +1108,7 @@ function applyToValue(Operand $value, array $args, LowerCtx $ctx, ?SrcLoc $srcLo
 function applyCalleeName(Ast\AstNode $expr, LowerCtx $ctx): ?string
 {
     return match ($expr::class) {
-        Ast\ConstructorRef::class => $expr->name,
+        Ast\ConstructorRef::class => constructorReference($expr, $ctx),
         Ast\OperatorRef::class => (static function () use ($expr, $ctx): ?string {
             $term = siteTerm($expr, $ctx);
             if (($term instanceof CheckedVariable && $term->binder !== null)

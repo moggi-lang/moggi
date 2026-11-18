@@ -3,25 +3,52 @@ module Main where
 
 import Control.Monad ((>>))
 import Data.Array.Byte (ByteArray)
+import Data.Function (id)
 import Data.Int (Int)
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty (NonEmpty(..))
+import Data.Maybe (Maybe(..))
 import Data.Semigroup ((<>))
 import Data.String (String)
 import Data.Version (Version, showVersion)
-import Moggi.IsList (fromList, toList)
+import Moggi.IsList (IsList(..))
 import System.IO (IO, putStrLn)
 import Text.Show (show)
 
 nonEmptyLine :: String
-nonEmptyLine = "ne:" <> show (toList (fromList [1, 2] :: NonEmpty Int))
+nonEmptyLine = "ne:" <> show (toList ([1, 2] :: NonEmpty Int))
 
 versionLine :: String
-versionLine = "version:" <> showVersion (fromList [1, 2, 3] :: Version)
+versionLine = "version:" <> showVersion ([1, 2, 3] :: Version)
+
+plainLine :: String
+plainLine = "plain:" <> show ([1, 2] :: [Int])
+
+nonEmptyHead :: NonEmpty Int -> Int
+nonEmptyHead (x :| _) = x
+
+argLine :: String
+argLine = "arg:" <> show (nonEmptyHead [7, 8])
+
+nestedLine :: String
+nestedLine = case [[1, 2], [3, 4]] :: [NonEmpty Int] of
+  xs : _ -> "nested:" <> show (toList xs)
+  [] -> "nested:empty"
+
+idLine :: String
+idLine = "id:" <> show (toList (id [5, 6] :: NonEmpty Int))
+
+wrapped :: Maybe (NonEmpty Int)
+wrapped = Just [7, 8]
+
+wrappedLine :: String
+wrappedLine = case wrapped of
+  Just xs -> "wrapped:" <> show (toList xs)
+  Nothing -> "wrapped:nothing"
 
 bytesLine :: String
-bytesLine = case toList (fromList [1, 2] :: ByteArray) of
+bytesLine = case toList ([1, 2] :: ByteArray) of
   [1, 2] -> "bytes:ok"
   _ -> "bytes:bad"
 
 main :: IO ()
-main = putStrLn nonEmptyLine >> putStrLn versionLine >> putStrLn bytesLine
+main = putStrLn nonEmptyLine >> putStrLn versionLine >> putStrLn plainLine >> putStrLn argLine >> putStrLn nestedLine >> putStrLn idLine >> putStrLn wrappedLine >> putStrLn bytesLine

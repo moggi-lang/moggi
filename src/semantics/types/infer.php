@@ -24,6 +24,7 @@ use function Moggi\Semantics\Exhaustiveness\checkCaseExhaustiveness;
 use function Moggi\Semantics\IntrinsicRegistry\resolveIntrinsicName;
 use function Moggi\Semantics\Kernel\bindRole;
 use function Moggi\Semantics\Kernel\failRole;
+use function Moggi\Semantics\Kernel\listLiteralRole;
 use function Moggi\Semantics\Kernel\stringLiteralRole;
 use function Moggi\Semantics\TypeExpr\scheme;
 use function Moggi\Syntax\Ast\desugarDo;
@@ -67,6 +68,16 @@ function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env, ?Type 
                 ),
                 $expr,
             );
+            $meta = lookupConstructorMeta($state, $expr->name);
+            if ($meta !== null) {
+                $declaring = $state->data[$meta['dataName']]['declaringModule'] ?? null;
+                if (\is_string($declaring) && $declaring !== '' && $declaring !== $state->currentModule) {
+                    $expr->resolvedOrigin = resolvedSymbol(
+                        $declaring,
+                        $state->constructorRenames[$expr->name] ?? $expr->name,
+                    );
+                }
+            }
             $instantiated = instantiateScheme($state, $scheme);
             if ($instantiated['constraints'] !== []) {
                 setPendingObligations($state, $expr, $instantiated['constraints'], $instantiated['dicts']);
@@ -75,7 +86,12 @@ function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env, ?Type 
             return $instantiated['type'];
         })(),
         Ast\OperatorRef::class => inferOperatorRef($state, $expr, $env),
-        Ast\Apply::class => inferApplyAndElaborate($state, $expr, $env),
+        Ast\Apply::class => inferApplyAndElaborate(
+            $state,
+            $expr,
+            $env,
+            $expr->argument instanceof Ast\ListLit ? $expected : null,
+        ),
         Ast\Infix::class => inferInfix($state, $expr, $env),
         Ast\Tuple::class => inferTuple($state, $expr, $env, $expected),
         Ast\ListLit::class => inferList($state, $expr, $env, $expected),
@@ -504,7 +520,7 @@ function restoreDictArgGiven(TypeCheckState $state, array $saved): void
  * {@see parkApplyConstraints} and discharged by {@see elaborateApplyEvidence},
  * which every caller reaches through {@see inferApplyAndElaborate}.
  */
-function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
+function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env, ?Type $expected = null): Type
 {
 
     $argEnv = $env;
@@ -589,6 +605,13 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
         return $fnType->to;
     }
 
+    if ($expected !== null
+        && $fnType instanceof TArrow
+        && $expr->argument instanceof Ast\ListLit
+    ) {
+        unify($state, $fnType->to, $expected, $expr);
+    }
+
     if ($expr->argument instanceof Ast\Lambda
         && $fnType instanceof TArrow
         && typeCarriesDictArrows($fnType->from)
@@ -597,7 +620,9 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
         $argType = prune($state, $fnType->from);
     } else {
         $argExpected = $fnType instanceof TArrow
-            && ($expr->argument instanceof Ast\StringLit || $expr->argument instanceof Ast\Lambda)
+            && ($expr->argument instanceof Ast\StringLit
+                || $expr->argument instanceof Ast\ListLit
+                || $expr->argument instanceof Ast\Lambda)
                 ? $fnType->from
                 : null;
         $knownArgType = $expr->argument instanceof Ast\Variable
@@ -991,8 +1016,45 @@ function tupleElementExpectations(TypeCheckState $state, ?Type $expected, int $a
     return \array_values($expected->args);
 }
 
-function inferList(TypeCheckState $state, Ast\ListLit $expr, array $env, ?Type $expected = null): Type
+function inferList(TypeCheckState $state, Ast\AstNode &$expr, array $env, ?Type $expected = null): Type
 {
+    if (! $expr instanceof Ast\ListLit) {
+        throw typeFail($state, 'expected list literal', $expr);
+    }
+
+    if ($expected !== null) {
+        $expected = prune($state, $expected);
+        $method = classMethodWithRole($state, listLiteralRole());
+        $class = classWithRole($state, listLiteralRole());
+        if ($class === null && isset($state->classes['IsList'])) {
+            $class = 'IsList';
+        }
+        if ($method === null && $class !== null && isset($state->classes[$class]['methods']['fromList'])) {
+            $method = 'fromList';
+        }
+        $ordinary = $expected instanceof TVar
+            || ($expected instanceof TCon && $expected->name === 'List' && \count($expected->args) === 1);
+
+        if ($method !== null
+            && $class !== null
+            && isset($env[$method])
+            && ! $ordinary
+            && findProjectInstance($state, $class, $expected)
+        ) {
+            $call = new Ast\Apply(
+                new Ast\Variable($method, $expr->line, $expr->col, $expr->endCol),
+                $expr,
+                $expr->line,
+                $expr->col,
+                $expr->endCol,
+            );
+            $type = inferApplyAndElaborate($state, $call, $env, $expected);
+            $expr = $call;
+
+            return $type;
+        }
+    }
+
     if (\count($expr->elements) === 0) {
         return new TCon('List', [freshType($state)]);
     }

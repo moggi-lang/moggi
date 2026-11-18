@@ -938,6 +938,16 @@ function impliedRole(string $method, Type $type, string $param): ?string
         return Kernel\stringLiteralRole();
     }
 
+    if ($method === 'fromList'
+        && $type->from instanceof TCon
+        && $type->from->name === 'List'
+        && \count($type->from->args) === 1
+        && $type->to instanceof TVar
+        && $type->to->name === $param
+    ) {
+        return Kernel\listLiteralRole();
+    }
+
     if (($type->from instanceof TStr
             || ($type->from instanceof TCon
                 && $type->from->args === []

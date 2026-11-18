@@ -1,9 +1,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 -- | @base@'s 'IsList' class: types that can be built from a list of items.
 --
--- The class lives here rather than in @GHC.IsList@ because this library does
--- not use @GHC.*@ module names. The 'CallStack' instance is declared beside
--- this class, as in @base@; the 'ByteArray' instance remains beside
+-- The class lives here with its instances. The 'CallStack' instance is
+-- declared beside this class; the 'ByteArray' instance remains beside
 -- 'ByteArray' in "Data.Array.Byte".
 module Moggi.IsList
   ( IsList(..)
