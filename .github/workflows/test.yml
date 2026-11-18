@@ -62,7 +62,7 @@ jobs:
 
       - name: Set up GraalVM
         if: matrix.backend == 'jvm'
-        uses: actions/setup-java@v6.2.0
+        uses: actions/setup-java@v6.3.0
         with:
           distribution: graalvm
           java-version: '21'
@@ -74,7 +74,7 @@ jobs:
       # and a `jar` without long options.
       - name: Set up a JDK for the other backends' jvm legs
         if: matrix.backend != 'jvm'
-        uses: actions/setup-java@v6.2.0
+        uses: actions/setup-java@v6.3.0
         with:
           distribution: temurin
           java-version: '21'
