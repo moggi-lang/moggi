@@ -191,7 +191,7 @@ typeOf _ = typeRep
 -- its parts. This is the general shape of @base@'s type-application evidence:
 -- one instance below covers every application, so no type gets an instance of
 -- its own and partially applied constructors such as @Sum f@ are represented
--- the way GHC's solver represents them.
+-- directly.
 typeRepApp :: forall k1 k (f :: k1 -> k) a. (Typeable f, Typeable a) => TypeRep (f a)
 typeRepApp = App (typeRep :: TypeRep f) (typeRep :: TypeRep a)
 
@@ -257,13 +257,13 @@ headTyCon r = case r of
 -- | The built-in constructors a program cannot name itself: functions, lists
 -- and @Type@ have no declaration to take a name from.
 typeTyCon :: TyCon
-typeTyCon = TyCon (Module "GHC.Types" "base") "Type"
+typeTyCon = TyCon (Module "Moggi.Internal.Prim" "base") "Type"
 
 functionTyCon :: TyCon
-functionTyCon = TyCon (Module "GHC.Types" "base") "->"
+functionTyCon = TyCon (Module "Moggi.Internal.Prim" "base") "->"
 
 listTyCon :: TyCon
-listTyCon = TyCon (Module "GHC.Types" "base") "[]"
+listTyCon = TyCon (Module "Moggi.Internal.Prim" "base") "[]"
 
 -- | A representation with the head and its arguments apart: the constructor
 -- alone, and one 'SomeTypeRep' per argument in the order written.
@@ -692,7 +692,7 @@ doubleTyCon :: TyCon
 doubleTyCon = TyCon (Module "Data.Double" "base") "Double"
 
 unitTyCon :: TyCon
-unitTyCon = TyCon (Module "GHC.Types" "base") "()"
+unitTyCon = TyCon (Module "Data.Tuple" "base") "()"
 
 instance Typeable Int where
   typeRepOf = TypeRepValue (RepTyCon intTyCon [] RepType)
@@ -758,37 +758,37 @@ instance (Typeable m, Typeable a) => Typeable (WrappedMonad m a) where
 -- them: they have no declaration whose module could carry a synthesized
 -- instance, so each is written here.
 orderingTyCon :: TyCon
-orderingTyCon = TyCon (Module "GHC.Types" "base") "Ordering"
+orderingTyCon = TyCon (Module "Moggi.Internal.Base" "base") "Ordering"
 
 int8TyCon :: TyCon
-int8TyCon = TyCon (Module "GHC.Int" "base") "Int8"
+int8TyCon = TyCon (Module "Moggi.Internal.Base" "base") "Int8"
 
 int16TyCon :: TyCon
-int16TyCon = TyCon (Module "GHC.Int" "base") "Int16"
+int16TyCon = TyCon (Module "Moggi.Internal.Base" "base") "Int16"
 
 int32TyCon :: TyCon
-int32TyCon = TyCon (Module "GHC.Int" "base") "Int32"
+int32TyCon = TyCon (Module "Moggi.Internal.Base" "base") "Int32"
 
 int64TyCon :: TyCon
-int64TyCon = TyCon (Module "GHC.Int" "base") "Int64"
+int64TyCon = TyCon (Module "Moggi.Internal.Base" "base") "Int64"
 
 wordTyCon :: TyCon
-wordTyCon = TyCon (Module "GHC.Word" "base") "Word"
+wordTyCon = TyCon (Module "Moggi.Internal.Base" "base") "Word"
 
 word8TyCon :: TyCon
-word8TyCon = TyCon (Module "GHC.Word" "base") "Word8"
+word8TyCon = TyCon (Module "Moggi.Internal.Base" "base") "Word8"
 
 word16TyCon :: TyCon
-word16TyCon = TyCon (Module "GHC.Word" "base") "Word16"
+word16TyCon = TyCon (Module "Moggi.Internal.Base" "base") "Word16"
 
 word32TyCon :: TyCon
-word32TyCon = TyCon (Module "GHC.Word" "base") "Word32"
+word32TyCon = TyCon (Module "Moggi.Internal.Base" "base") "Word32"
 
 word64TyCon :: TyCon
-word64TyCon = TyCon (Module "GHC.Word" "base") "Word64"
+word64TyCon = TyCon (Module "Moggi.Internal.Base" "base") "Word64"
 
 integerTyCon :: TyCon
-integerTyCon = TyCon (Module "GHC.Num" "base") "Integer"
+integerTyCon = TyCon (Module "Moggi.Internal.Base" "base") "Integer"
 
 instance Typeable Ordering where
   typeRepOf = TypeRepValue (RepTyCon orderingTyCon [] RepType)
@@ -841,7 +841,7 @@ instance Typeable a => Typeable (NonEmpty a) where
 -- | @IO@ is a synonym for the kernel's action type; its representation is the
 -- action constructor applied to its result.
 ioTyCon :: TyCon
-ioTyCon = TyCon (Module "GHC.Types" "base") "IO"
+ioTyCon = TyCon (Module "System.IO" "base") "IO"
 
 -- The representation is built beside the instances: an ascription naming
 -- @TypeRep IO@ is an expression annotation mentioning IO, which the pure/IO
@@ -905,7 +905,7 @@ instance Typeable List where
 -- | A tuple's representation: the tuple constructor applied to each
 -- component's representation, with the constructor's kind.
 tupleRep :: String -> TypeRep k -> [SomeTypeRep] -> TypeRep a
-tupleRep name kind args = mkTyConApp (mkTyCon "GHC.Tuple" "base" name) args kind
+tupleRep name kind args = mkTyConApp (mkTyCon "Data.Tuple" "base" name) args kind
 
 twoTupleKind :: TypeRep k
 twoTupleKind = kindFun trLiftedRep (kindFun trLiftedRep trLiftedRep)

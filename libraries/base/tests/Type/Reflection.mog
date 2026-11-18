@@ -61,6 +61,7 @@ main = do
   putStrLn (show (typeRep :: TypeRep Word64))
   putStrLn (show (typeRep :: TypeRep Integer))
   putStrLn (show (typeRep :: TypeRep Ordering))
+  putStrLn (tyConModule (typeRepTyCon (typeRep :: TypeRep Ordering)))
   putStrLn (show (typeRep :: TypeRep (Maybe Int)))
   putStrLn (show (typeRep :: TypeRep Module))
   putStrLn (show (typeRep :: TypeRep TyCon))
