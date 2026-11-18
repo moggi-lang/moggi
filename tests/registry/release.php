@@ -21,6 +21,7 @@ require $root . '/src/compiler.php';
 use function Moggi\CLI\Commands\signRecordFile;
 use function Moggi\Registry\buildReleaseRecord;
 use function Moggi\Registry\canonicalJson;
+use function Moggi\Registry\nwtEventNpub;
 use function Moggi\Registry\checkSignedRelease;
 use function Moggi\Registry\readReleaseRecord;
 use function Moggi\Registry\releaseSource;
@@ -144,7 +145,7 @@ if ($binary === null) {
     $assert(\str_starts_with($nsec, 'nsec') && \str_starts_with($npub, 'npub'), 'the schnorr CLI generated a keypair');
 
     $signed = signRelease('x', '1.0.0', $record, $npub, $nsec);
-    $assert(($signed['signature']['npub'] ?? null) === $npub, 'signing attaches the author');
+    $assert(nwtEventNpub($signed['signature']) === $npub, 'signing attaches the author through the NWT pubkey');
     $assert(verifyRelease('x', '1.0.0', $signed, [$npub])['ok'], 'a signed record verifies');
 
     $throws(

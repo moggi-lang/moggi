@@ -3,21 +3,21 @@
 /**
  * A throwaway registry write endpoint for CLI tests.
  *
- * A `php -S` server with a router that verifies the same schnorr write signature
- * the real worker checks, records every request it saw, and answers `{ok:true}`
- * for a good signature and `403 bad-signature` otherwise. Starting and stopping
- * it here is what lets a client write verb (`bad`, `unmaintained`, a takeover
- * request) be driven end to end without a deployed registry or a network.
+ * A `php -S` server with a router that verifies the same NWT write token the
+ * real worker checks, records every request it saw, and answers `{ok:true}` for
+ * a good token and `403 bad-signature` otherwise. Starting and stopping it here
+ * is what lets a client write verb (`bad`, `unmaintained`, a takeover request)
+ * be driven end to end without a deployed registry or a network.
  */
 
 /**
  * The router script's source.
  *
  * The repo root is baked in so the router can `require` the compiler and use the
- * project's own `writeMessageHex` and `verifySignature` — the same code the
- * client signs with, so the test cannot drift from the wire format. The request
- * log's path is baked in alongside it, so the router holds it as an ordinary
- * variable and no environment is involved.
+ * project's own `nwtVerifyWrite` — the same code the client signs with, so the
+ * test cannot drift from the wire format. The request log's path is baked in
+ * alongside it, so the router holds it as an ordinary variable and no
+ * environment is involved.
  *
  * @param string $logPath the file the router appends every request to
  */
@@ -34,16 +34,10 @@ function fakeRegistryRouterSource(string $root, string $logPath): string
     $host = \strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
     $method = (string) ($_SERVER['REQUEST_METHOD'] ?? '');
     $path = \parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), \PHP_URL_PATH) ?: '/';
-    $npub = (string) ($_SERVER['HTTP_X_MOGGI_NPUB'] ?? '');
-    $signature = (string) ($_SERVER['HTTP_X_MOGGI_SIG'] ?? '');
-    $timestamp = (int) ($_SERVER['HTTP_X_MOGGI_DATE'] ?? 0);
-    $nonce = (string) ($_SERVER['HTTP_X_MOGGI_NONCE'] ?? '');
-
-    $verdict = \Moggi\Registry\verifySignature(
-        \Moggi\Registry\writeMessageHex($host, $method, $path, $timestamp, $nonce, $body),
-        $signature,
-        $npub,
-    );
+    $authorization = (string) ($_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
+    $token = \str_starts_with($authorization, 'Nostr ') ? \substr($authorization, 6) : '';
+    $verdict = \Moggi\Registry\nwtVerifyWrite($token, $host, $method, $path, $body);
+    $npub = (string) ($verdict['npub'] ?? '');
 
     \file_put_contents(
         $logPath,

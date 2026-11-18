@@ -3,9 +3,9 @@
 /**
  * `moggi bad` marks or lifts a package-level marker over the signed write
  * transport. These checks run the real CLI against a throwaway endpoint
- * that verifies registry-compatible Schnorr signatures, validating the
- * actual route, body, and identity sent by the client. Without the
- * `schnorr` binary, signing checks are skipped rather than faked.
+ * that verifies registry-compatible NWT tokens, validating the actual
+ * route, body, and identity sent by the client. Without the `schnorr`
+ * binary, signing checks are skipped rather than faked.
  */
 
 $root = __DIR__;
@@ -101,7 +101,7 @@ try {
     $assert($mark['exitCode'] === 0, 'a mark must succeed: ' . $mark['stderr']);
     $assert(\str_contains($mark['stdout'], 'marked bad'), 'the report says it was marked: ' . $mark['stdout']);
     $request = $last();
-    $assert(($request['ok'] ?? false) === true, 'the endpoint verified the signature: ' . \json_encode($request));
+    $assert(($request['ok'] ?? false) === true, 'the endpoint verified the NWT token: ' . \json_encode($request));
     $assert(($request['method'] ?? '') === 'POST' && ($request['path'] ?? '') === '/bad', 'a mark goes to POST /bad: ' . \json_encode($request));
     $assert(($request['npub'] ?? '') === $npub, 'the request is signed as the chosen npub');
     $body = \json_decode((string) ($request['body'] ?? ''), true);

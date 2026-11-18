@@ -234,6 +234,7 @@ require __DIR__ . '/registry/extensions.php';
 require __DIR__ . '/registry/pack.php';
 require __DIR__ . '/registry/search.php';
 require __DIR__ . '/registry/publish.php';
+require __DIR__ . '/registry/nwt.php';
 require __DIR__ . '/registry/tools.php';
 require __DIR__ . '/registry/add.php';
 require __DIR__ . '/registry/bind/php.php';

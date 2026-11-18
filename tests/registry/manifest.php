@@ -17,6 +17,7 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 }
 require $root . '/src/compiler.php';
 
+use function Moggi\Registry\nwtSignEvent;
 use function Moggi\Registry\releaseMessage;
 use function Moggi\Registry\schnorrBinary;
 use function Moggi\Registry\verifyRelease;
@@ -91,9 +92,36 @@ if ($binary === null) {
     $assert(\str_starts_with($nsec, 'nsec') && \str_starts_with($npub, 'npub'), 'the schnorr CLI generated a keypair');
 
     $signed = $full;
-    $signed['signature'] = ['npub' => $npub, 'sig' => $schnorr(['sign', releaseMessage('x', '1.0.0', $full)], $nsec)];
+    $signed['signature'] = nwtSignEvent(
+        $nsec,
+        $npub,
+        'Moggi release x 1.0.0',
+        [
+            ['type', 'release'],
+            ['name', 'x'],
+            ['version', '1.0.0'],
+            ['manifest', releaseMessage('x', '1.0.0', $full)],
+        ],
+    );
 
     $assert(verifyRelease('x', '1.0.0', $signed, [$npub])['ok'], 'a release signed over the extended manifest verifies');
+
+    $wrongType = $full;
+    $wrongType['signature'] = nwtSignEvent(
+        $nsec,
+        $npub,
+        'Moggi release x 1.0.0',
+        [
+            ['type', 'root'],
+            ['name', 'x'],
+            ['version', '1.0.0'],
+            ['manifest', releaseMessage('x', '1.0.0', $full)],
+        ],
+    );
+    $assert(
+        ! verifyRelease('x', '1.0.0', $wrongType, [$npub])['ok'],
+        'a NWT whose type is not release is refused',
+    );
 
     $tampered = $signed;
     $tampered['docs'] = $digest('0');
