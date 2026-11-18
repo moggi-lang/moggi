@@ -318,7 +318,7 @@ data NoMatchingContinuationPrompt = NoMatchingContinuationPrompt
 
 instance Show NoMatchingContinuationPrompt where
   showsPrec _ NoMatchingContinuationPrompt =
-    showString "GHC.Internal.Exts.control0#: no matching prompt in the current continuation"
+    showString "control0#: no matching prompt in the current continuation"
 
 -- | The superclass of asynchronous exceptions.
 --

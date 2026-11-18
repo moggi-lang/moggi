@@ -4,7 +4,7 @@
   dotnet = Data.Time.Clock.System.DotNet
 #-}
 -- |
--- System wall-clock time, in the spirit of Haskell's 'Data.Time.Clock.System'.
+-- System wall-clock time, following the 'Data.Time.Clock.System'.
 --
 -- 'SystemTime' is whole seconds plus nanoseconds since the unix epoch, as
 -- the host reports it: microsecond resolution on PHP (via @microtime@),

@@ -528,11 +528,10 @@ function coercibleAmbientHolds(TypeCheckState $state, Type $left, Type $right): 
  * that nothing else fixes (`coerce Nothing :: Maybe TTL` leaves `Nothing`'s
  * element open until the signature says `TTL`). Once the declaration's types are
  * settled, that variable is the one the obligation itself decides, so it is
- * instantiated from the other side — what GHC's solver does with
- * `Coercible alpha ty`. Only positions the two sides share are reached: a
- * variable *constructor* applied to arguments (`f Int`) is not a type
- * application whose parts can be matched, exactly as GHC's decomposition rule
- * requires matching type constructors.
+ * instantiated from the other side. Only positions the two sides share are
+ * reached: a variable *constructor* applied to arguments (`f Int`) is not a
+ * type application whose parts can be matched; decomposition requires the
+ * two type constructors to be the same.
  */
 function solveDeferredCoercion(TypeCheckState $state, Ast\PendingConstraint $constraint): bool
 {

@@ -1,5 +1,5 @@
 -- |
--- Finite maps from keys to values, in the spirit of Haskell's 'Data.Map'.
+-- Finite maps from keys to values, following the 'Data.Map'.
 --
 -- A map is a key-ordered association list (see 'insert'): lookup, insert
 -- and delete walk the list, so every operation costs what the same

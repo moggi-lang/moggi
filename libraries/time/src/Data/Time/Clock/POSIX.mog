@@ -1,5 +1,5 @@
 -- |
--- POSIX time, in the spirit of Haskell's 'Data.Time.Clock.POSIX'.
+-- POSIX time, following the 'Data.Time.Clock.POSIX'.
 --
 -- 'POSIXTime' is seconds since the unix epoch as a 'NominalDiffTime', so
 -- 'utcTimeToPOSIXSeconds' and 'posixSecondsToUTCTime' convert without

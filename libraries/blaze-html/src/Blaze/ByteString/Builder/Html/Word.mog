@@ -73,7 +73,7 @@ fromHtmlEscapedWordList ws = primMapListBounded wordHtmlEscaped ws
 fromHtmlEscapedByteString :: ByteString -> Builder
 fromHtmlEscapedByteString bs = primMapByteStringBounded wordHtmlEscaped bs
 
--- | Serialize an HTML escaped byte string. The Haskell library's lazy
+-- | Serialize an HTML escaped byte string. The upstream library's lazy
 -- bytestring is the strict one here.
 fromHtmlEscapedLazyByteString :: ByteString -> Builder
 fromHtmlEscapedLazyByteString = fromHtmlEscapedByteString

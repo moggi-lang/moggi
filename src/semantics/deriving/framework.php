@@ -111,11 +111,9 @@ final class DerivedInstance
  * One class the compiler derives structurally, and the whole deriving contract that is particular
  * to that class.
  *
- * The compiler knowing which classes it can derive is not a fact the library states, and it is not
- * one GHC pushes into the library either: `stockSideConditions` in `GHC/Tc/Deriv/Utils.hs` switches
- * on the class's identity and hands back the generator it has for it, and the identities themselves
- * are written down once, in `GHC/Builtin/Names`. This is that one statement for Moggi. Keeping the
- * policy *beside* the generator is the point: the context a project-instance stub carries, the
+ * The compiler knowing which classes it can derive is not a fact the library states. This is the
+ * one place that statement is made for Moggi. Keeping the policy *beside* the generator is the
+ * point: the context a project-instance stub carries, the
  * representation instance `Generic` contributes and the generator to run are all read off the
  * class's entry instead of being answered by three more `match`es on its name.
  */

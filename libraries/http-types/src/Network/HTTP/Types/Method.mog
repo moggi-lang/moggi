@@ -6,7 +6,7 @@
 -- data type 'StdMethod', but since you can also use custom methods, the
 -- basic type 'Method' is just a synonym for 'B.ByteString'.
 --
--- Porting notes: the 'Data.Ix.Ix', 'GHC.Generics.Generic' and 'Data.Data.Data'
+-- Porting notes: the 'Data.Ix.Ix', 'Generic' and 'Data.Data.Data'
 -- derivations are absent because base has no @Ix@ derivation, no @Generics@
 -- generic representation and no 'Data.Data'.
 module Network.HTTP.Types.Method

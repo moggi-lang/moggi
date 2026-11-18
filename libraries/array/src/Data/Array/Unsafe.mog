@@ -10,7 +10,7 @@
 -- 'unsafeFreezeSTArray'\/'unsafeThawSTArray' (see "Data.Array.ST") or
 -- 'unsafeFreezeIOArray'\/'unsafeThawIOArray' (see "Data.Array.IO").
 --
--- What is not here: Haskell's @castSTUArray@, @castIOUArray@ and
+-- What is not here: @castSTUArray@, @castIOUArray@ and
 -- @unsafeForeignPtrToStorableArray@. Moggi has no unboxed arrays and no
 -- @Foreign.Ptr@\/@Storable@ machinery for them to be built on.
 module Data.Array.Unsafe

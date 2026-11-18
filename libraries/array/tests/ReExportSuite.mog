@@ -1,4 +1,4 @@
--- Re-export surface (Haskell parity): @Data.Array@ re-exports @Data.Ix@,
+-- Re-export surface (API parity): @Data.Array@ re-exports @Data.Ix@,
 -- and @Data.Array.ST@\/@Data.Array.IO@ re-export @Data.Array.MArray@.
 -- This module imports only the re-exporting modules, so a dropped
 -- re-export fails to compile here.

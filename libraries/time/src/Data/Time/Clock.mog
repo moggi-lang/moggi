@@ -4,7 +4,7 @@
   dotnet = Data.Time.Clock.DotNet
 #-}
 -- |
--- UTC times and durations, in the spirit of Haskell's 'Data.Time.Clock'.
+-- UTC times and durations, following the 'Data.Time.Clock'.
 --
 -- 'UTCTime' is a 'Day' plus a 'DiffTime' day fraction, and both durations
 -- ('DiffTime', 'NominalDiffTime') count picoseconds in an 'Integer', so

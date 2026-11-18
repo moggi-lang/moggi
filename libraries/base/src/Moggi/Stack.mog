@@ -5,9 +5,8 @@
 -- expose the host call chain at the point where a stack is demanded. Each host
 -- frame is decoded into a function name and a 'SrcLoc', which is what makes
 -- 'getCallStack' answer real frames instead of an empty list. The implicit
--- stack still does not grow with every call site the way GHC's simulated one
--- does: 'callStack' is a snapshot, and 'pushCallStack'/'popCallStack' change
--- only the value they are given.
+-- stack still does not grow with every call site: 'callStack' is a snapshot,
+-- and 'pushCallStack'/'popCallStack' change only the value they are given.
 module Moggi.Stack
   ( -- * Call stacks
     CallStack

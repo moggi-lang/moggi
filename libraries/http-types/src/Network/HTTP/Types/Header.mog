@@ -8,7 +8,7 @@
 -- 'Data.ByteString.Builder.Internal.toByteString' instead of
 -- @toLazyByteString@ followed by @toStrict@. 'mappend' is spelled @<>@, since
 -- the 'Monoid' class here offers 'mempty' and 'mconcat' only. The
--- 'Data.Data.Data' and 'GHC.Generics.Generic' derivations are absent with
+-- 'Data.Data.Data' and 'Generic' derivations are absent with
 -- those libraries.
 module Network.HTTP.Types.Header
   ( -- * HTTP Headers

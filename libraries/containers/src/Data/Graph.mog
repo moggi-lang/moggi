@@ -1,5 +1,5 @@
 -- |
--- Directed graphs, in the spirit of Haskell's 'Data.Graph'.
+-- Directed graphs, following the 'Data.Graph'.
 --
 -- The implementation is array-based ('Array Vertex [Vertex]'), as in the
 -- reference: a graph is a table from each vertex to its successors, and the

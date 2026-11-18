@@ -1,6 +1,5 @@
 -- |
--- ISO 8601 parsing and formatting, in the spirit of Haskell's
--- 'Data.Time.Format.ISO8601'.
+-- ISO 8601 parsing and formatting, following 'Data.Time.Format.ISO8601'.
 --
 -- The profile is the extended format with a @T@ separator:
 -- @YYYY-MM-DD@, @YYYY-MM-DDTHH:MM:SS@ with an optional trimmed fractional

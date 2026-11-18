@@ -2,7 +2,7 @@
 -- | BlazeMarkup: markup combinators embedded in the language, with the value
 -- classes that let one function convert many types.
 --
--- The Haskell library carries @Text@, lazy @Text@ and a lazy text builder
+-- The upstream library carries @Text@, lazy @Text@ and a lazy text builder
 -- alongside 'String'; moggi has one text type, so the @Text@ functions take
 -- 'String' here. The lazy-@Text@, lazy-'ByteString' and text-builder variants
 -- have no counterpart type and are omitted rather than aliased.

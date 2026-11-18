@@ -1,5 +1,5 @@
 -- |
--- Gregorian dates, in the spirit of Haskell's 'Data.Time.Calendar'.
+-- Gregorian dates, following the 'Data.Time.Calendar'.
 --
 -- A 'Day' counts whole days as a Modified Julian Day number (the number of
 -- days since 1858-11-17), so date arithmetic is integer arithmetic and the

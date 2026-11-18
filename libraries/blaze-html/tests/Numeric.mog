@@ -1,6 +1,6 @@
 -- Byte-level cases for the vendored blaze-builder encoders.
 --
--- The Haskell package tests these through @Data.ByteString.Builder@'s own
+-- The upstream package tests these through @Data.ByteString.Builder@'s own
 -- tests; here the expectations are the concrete byte sequences, written out so
 -- a wrong endianness, width or bound fails on the value rather than inside a
 -- helper. Expected bytes are shown as decimal because that is what

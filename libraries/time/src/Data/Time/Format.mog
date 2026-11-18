@@ -1,6 +1,5 @@
 -- |
--- Formatting and parsing dates and times, in the spirit of Haskell's
--- 'Data.Time.Format'.
+-- Formatting and parsing dates and times, following 'Data.Time.Format'.
 --
 -- 'formatTime' renders a 'LocalTime' in a 'TimeZone' through a @%@-directive
 -- string, and 'parseTime' reads one back. Both work off 'defaultTimeLocale'

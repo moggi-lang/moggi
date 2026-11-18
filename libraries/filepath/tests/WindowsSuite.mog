@@ -1,5 +1,5 @@
 -- System.FilePath.Windows: the Windows flavour, tested deterministically on any
--- host. Every pin below was verified against GHC's `filepath` 1.5.4.0
+-- host. Every pin below was verified against `filepath` 1.5.4.0
 -- `System.FilePath.Windows` over the shared differential corpus.
 
 module WindowsSuite (windowsSuite) where
@@ -11,14 +11,14 @@ import System.FilePath.Windows
 
 windowsSuite :: IO ()
 windowsSuite = do
-  -- `show` escapes: the backslash renders doubled, as in Haskell.
+  -- `show` escapes: the backslash renders doubled, as in the reference.
   expect "pathSeparator" (show pathSeparator) "'\\\\'"
   expect "isPathSeparator backslash" (show (isPathSeparator '\\')) "True"
   expect "isPathSeparator slash" (show (isPathSeparator '/')) "True"
   expect "isSearchPathSeparator ;" (show (isSearchPathSeparator ';')) "True"
 
   expect "splitDrive C:foo" (show (splitDrive "C:foo")) "(\"C:\",\"foo\")"
-  -- A bare `\\name` is a share drive consuming the whole string (GHC: `splitDrive
+  -- A bare `\\name` is a share drive consuming the whole string (`splitDrive
   -- "\\\\shared" == ("\\\\shared","")`, mirrored in `splitDrive`'s docs).
   expect "splitDrive \\\\share" (show (splitDrive "\\\\share")) "(\"\\\\\\\\share\",\"\")"
   expect "takeDrive C:\\foo" (takeDrive "C:\\foo") "C:\\"

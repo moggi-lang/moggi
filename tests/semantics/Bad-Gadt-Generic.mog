@@ -1,6 +1,6 @@
 -- `Rep` is a representation of every `Expr a`, and `Lit` is only an `Expr Int`,
--- so there is no representation to give. Haskell refuses the derivation rather
--- than inventing one.
+-- so there is no representation to give. The type checker refuses the
+-- derivation rather than inventing one.
 module Main where
 
 import Moggi.Internal.Base

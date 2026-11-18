@@ -3,15 +3,15 @@
 -- (see "Data.Array"), so one definition builds, reads, updates and folds
 -- immutable arrays of any instance type.
 --
--- The class and its derived operations follow Haskell's @array@ package
+-- The class and its derived operations follow the @array@ package
 -- ('Data.Array.Base' minus the unboxed machinery). Two adaptations apply,
 -- because Moggi evaluates eagerly and has no unboxed values:
 --
 -- * There are no 'UArray' instances: Moggi has no unboxed values for them
 --   to be built on. 'Array' is currently the only instance.
 -- * 'foldlArray' is 'foldlArray'' and 'foldrArray'' is 'foldrArray': every
---   fold is already strict. The lazy @(Array.!): recursive 'array'@ knot
---   from the Haskell report diverges instead of tying.
+--   fold is already strict. A recursive 'array' knot diverges instead of
+--   tying.
 --
 -- 'freeze' and 'thaw' convert between mutable and immutable arrays over any
 -- 'MArray'\/'IArray' pair. They live here rather than in

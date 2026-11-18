@@ -132,7 +132,7 @@ function parseTopLevel(ParserState $state): Ast\AstNode
  * `pattern Name p1 p2 = matcher`, `pattern Name p1 p2 <- matcher` with an
  * optional `where` builder, or `pattern Name :: type`.
  *
- * A matcher that needs a view (`(f -> p)`) is written with `<-`, as in GHC.
+ * A matcher that needs a view (`(f -> p)`) is written with `<-`.
  */
 function parsePatternSynonymDecl(ParserState $state): Ast\PatternSynonymDecl
 {

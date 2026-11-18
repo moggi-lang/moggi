@@ -4,7 +4,7 @@
 --
 -- A 'Builder' is a difference list of strict chunks. Moggi's 'ByteString' is
 -- strict, so a builder is run once into a single value and the write-buffer
--- machinery of the Haskell library has nowhere to go.
+-- machinery of the upstream library has nowhere to go.
 module Blaze.ByteString.Builder.Internal
   ( Builder (..)
   , Write (..)
@@ -79,7 +79,7 @@ toLazyByteString :: Builder -> ByteString
 toLazyByteString b = toByteString b
 
 -- | Run a builder, then the bytes it is handed to. The two buffer-size
--- arguments size the Haskell buffers, which do not exist here.
+-- arguments size the upstream buffers, which do not exist here.
 toLazyByteStringWith :: Int -> Int -> Int -> Builder -> ByteString -> ByteString
 toLazyByteStringWith _ _ _ builder k = append (toByteString builder) k
 

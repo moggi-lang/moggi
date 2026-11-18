@@ -1422,7 +1422,7 @@ function exceptionUnwrap(string $tag, mixed $se): array
  *
  * One frame per line, six tab-separated fields: package, module, function,
  * file, line, column. A field the host cannot supply is written `-`, which the
- * Haskell decoder maps back to the empty string, so every kept frame can be
+ * call-stack reader maps back to the empty string, so every kept frame can be
  * turned into a `SrcLoc`. The runtime's own frames are skipped.
  */
 function callStack(): string

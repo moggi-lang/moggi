@@ -1,4 +1,4 @@
--- The parts of the surface the ported Haskell suite does not reach: the
+-- The parts of the surface the ported test suite does not reach: the
 -- document type that opens a page, and the indented renderer.
 
 module Pretty (prettySuite) where

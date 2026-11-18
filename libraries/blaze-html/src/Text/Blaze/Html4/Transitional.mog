@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 -- | The combinators for this flavour of HTML, generated from the same
--- specification the Haskell library generates them from.
+-- specification these attributes are generated from.
 module Text.Blaze.Html4.Transitional
   ( Markup
   , Tag

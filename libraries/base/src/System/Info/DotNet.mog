@@ -11,7 +11,7 @@ foreign dotnet function rawOsDescription "System.Runtime.InteropServices.Runtime
 -- into its member name so a Moggi program can read it as a string.
 foreign dotnet function rawProcessArchitecture "Moggi.Rt.Platform:Architecture" :: String
 
--- | `RuntimeInformation.OSDescription` in GHC's `System.Info.os` spelling
+-- | `RuntimeInformation.OSDescription` in the `System.Info.os` spelling
 -- (`Microsoft Windows 10.0.…`, `Linux …`, `Darwin …`), matched on prefixes;
 -- anything unrecognized answers @"unknown"@ rather than guessing.
 os :: String
@@ -26,7 +26,7 @@ normaliseOs n
   | isPrefixOf "SunOS" n = "solaris"
   | otherwise = "unknown"
 
--- | `RuntimeInformation.ProcessArchitecture` in GHC's `System.Info.arch`
+-- | `RuntimeInformation.ProcessArchitecture` in the `System.Info.arch`
 -- spelling. The CLR reports an enum member name (`X64`, `Arm64`, `X86`,
 -- `Arm`), which is folded onto the spelling the rest of the table uses.
 arch :: String

@@ -1,5 +1,5 @@
 -- |
--- A set of 'Int' values, in the spirit of Haskell's 'Data.IntSet'.
+-- A set of 'Int' values, following the 'Data.IntSet'.
 --
 -- This is a thin wrapper around 'Data.Set Int': elements are 'Int' so no
 -- 'Ord' constraint appears in the signatures, but the representation is the

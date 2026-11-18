@@ -1,6 +1,5 @@
 -- |
--- Multi-way trees and forests (rose trees), in the spirit of Haskell's
--- 'Data.Tree'.
+-- Multi-way trees and forests (rose trees), following 'Data.Tree'.
 --
 -- Deviations from the reference, all forced by the language, none by taste:
 --

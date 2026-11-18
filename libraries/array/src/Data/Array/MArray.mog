@@ -3,7 +3,7 @@
 -- (see "Data.Array.ST") and 'IOArray' (see "Data.Array.IO"), so one
 -- definition reads, writes, builds and folds arrays in either monad.
 --
--- The class and its derived operations follow Haskell's @array@ package.
+-- The class and its derived operations follow the @array@ package.
 -- Two strictness adaptations apply throughout, because Moggi evaluates
 -- eagerly and has no lazy bottom element:
 --
@@ -60,9 +60,9 @@ import Moggi.Internal.Base
 -- @IOArray@), @i@ ranges over 'Ix' indices and @e@ is the element type.
 --
 -- Minimal definition: 'getBounds', 'getNumElements', 'unsafeNewArray_',
--- 'unsafeRead', 'unsafeWrite'. Unlike Haskell, 'unsafeNewArray_' has no
--- default through a bottom element: Moggi would evaluate the initializer
--- eagerly and raise during construction instead of on first read.
+-- 'unsafeRead', 'unsafeWrite'. 'unsafeNewArray_' has no default through a
+-- bottom element: Moggi would evaluate the initializer eagerly and raise
+-- during construction instead of on first read.
 class Monad m => MArray a e m where
   {-# MINIMAL getBounds, getNumElements, unsafeNewArray_, unsafeRead, unsafeWrite #-}
 
