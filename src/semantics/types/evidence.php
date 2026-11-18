@@ -374,9 +374,12 @@ function elaborateApplyEvidence(TypeCheckState $state, Ast\Apply $expr): void
  * `inferApply` itself only parks; an apply it declines to elaborate (one whose
  * argument is already a dictionary) leaves nothing parked, and is skipped.
  */
-function inferApplyAndElaborate(TypeCheckState $state, Ast\Apply $expr, array $env): Type
+function inferApplyAndElaborate(TypeCheckState $state, Ast\Apply $expr, array $env, ?Type $expected = null): Type
 {
-    $type = inferApply($state, $expr, $env);
+    $type = inferApply($state, $expr, $env, $expected);
+    if ($expected !== null) {
+        unify($state, $type, $expected, $expr);
+    }
     if (pendingConstraintsOf($state, $expr) !== [] || pendingDictsOf($state, $expr) !== []) {
         elaborateApplyEvidence($state, $expr);
     }

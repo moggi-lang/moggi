@@ -93,6 +93,19 @@ function stringLiteralRole(): string
 }
 
 /**
+ * The method a list literal is converted with.
+ *
+ * List syntax always exists, but its result is not always `List`: when the
+ * context asks for a type whose `IsList` instance builds it from items, the
+ * literal denotes that type. A class declaring `[Item a] -> a` supplies the
+ * conversion. With no such context, the literal stays an ordinary list.
+ */
+function listLiteralRole(): string
+{
+    return 'list-literal';
+}
+
+/**
  * The class that carries representational equality.
  *
  * The library declares it with the one instance every pair the compiler's rule

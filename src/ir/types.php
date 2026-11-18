@@ -1054,6 +1054,8 @@ final class LowerCtx
         public string $functionName = '',
         /** @var array<string, string> alias → canonical constructor tag */
         public array $constructorRenames = [],
+        /** @var array<string, string> constructor name → module that declares it */
+        public array $constructorModules = [],
         /**
          * Source location of the statement currently being lowered.
          *
