@@ -52,6 +52,46 @@ function smokeTest(string $stage, string $target, array $runtimes, string $work,
     }
     $checked[] = 'version';
 
+    // The bundled PHP's ini resolves extension_dir through PHPRC. Run it from
+    // the staged installation, exactly as a user would, so a build-cache path
+    // or a missing parallel module cannot hide behind the preparer's checks.
+    if (\in_array('php', $runtimes, true)
+        && \in_array('parallel', \array_map('strtolower', distributionPhpExtensions()), true)) {
+        $phpHome = $stage . '/runtime/php';
+        $php = \str_starts_with($target, 'windows-') ? $phpHome . '/php.exe' : $phpHome . '/bin/php';
+        $phpEnv = $env;
+        $phpEnv['PHPRC'] = $phpHome;
+        $phpEnv['PHP_INI_SCAN_DIR'] = '';
+        if (\is_dir($phpHome . '/lib')) {
+            $loader = match (\PHP_OS_FAMILY) {
+                'Darwin' => 'DYLD_FALLBACK_LIBRARY_PATH',
+                'Linux' => 'LD_LIBRARY_PATH',
+                default => null,
+            };
+            if ($loader !== null) {
+                $phpEnv[$loader] = $phpHome . '/lib'
+                    . (($phpEnv[$loader] ?? '') !== '' ? ':' . $phpEnv[$loader] : '');
+            }
+        }
+        if (\PHP_OS_FAMILY === 'Windows') {
+            $phpEnv['PATH'] = $phpHome . \PATH_SEPARATOR . ($phpEnv['PATH'] ?? '');
+        }
+        $required = distributionPhpExtensions();
+        [$code, $stdout, $stderr] = runProcess([
+            $php,
+            '-r',
+            'echo PHP_ZTS ? "zts" : "nts", " ", extension_loaded("parallel") ? "parallel" : "no-parallel";'
+                . ' $missing = []; foreach (' . \var_export($required, true) . ' as $extension) { if (! extension_loaded($extension)) { $missing[] = $extension; } }'
+                . ' exit(PHP_ZTS && $missing === [] ? 0 : 1);',
+        ], $work, $phpEnv);
+        if ($code !== 0 || \trim($stdout) !== 'zts parallel') {
+            throw new \RuntimeException(
+                "the staged PHP does not satisfy the runtime contract ({$code}: " . \trim($stdout . ' ' . $stderr) . ')',
+            );
+        }
+        $checked[] = 'php zts+parallel';
+    }
+
     $schnorr = $stage . '/bin/' . targetExecutableName('schnorr', $target);
     [$code, $stdout, $stderr] = runProcess([$schnorr, 'generate'], $work, $env);
     if ($code !== 0 || ! \str_starts_with(\trim($stdout), 'nsec1')) {

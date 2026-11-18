@@ -81,6 +81,11 @@ function extractArchive(string $archive, string $format, string $destination, in
         throw new \RuntimeException("cannot create {$destination}");
     }
 
+    // An upstream archive is hash-pinned, but a compromised upstream or a
+    // poisoned cache must not be able to write outside the staging tree through
+    // `../`, an absolute name, or a symlink that points out of the archive.
+    assertArchiveEntryNames($archive, $format);
+
     if ($format === 'zip') {
         $staging = $destination . '.unzip';
         if (\is_dir($staging)) {
@@ -97,6 +102,7 @@ function extractArchive(string $archive, string $format, string $destination, in
             }
         }
         stripTopLevel($staging, $destination, $stripComponents);
+        assertExtractedTreeContained($destination);
         removeTree($staging);
 
         return;
@@ -109,6 +115,88 @@ function extractArchive(string $archive, string $format, string $destination, in
     [$code, , $err] = runProcess($args);
     if ($code !== 0) {
         throw new \RuntimeException("cannot extract {$archive}: {$err}");
+    }
+    assertExtractedTreeContained($destination);
+}
+
+/**
+ * Refuse an archive whose member names would escape the extraction directory.
+ *
+ * This is a preflight check: it reads the names before `tar`/`unzip` gets to
+ * create anything, so a traversal entry cannot win a race or leave a partial
+ * tree behind. Link targets are checked after extraction by
+ * `assertExtractedTreeContained()`.
+ */
+function assertArchiveEntryNames(string $archive, string $format): void
+{
+    $command = $format === 'zip'
+        ? ['unzip', '-Z1', $archive]
+        : ['tar', '-tf', $archive];
+    [$code, $stdout, $stderr] = runProcess($command);
+    if ($code !== 0 && $format === 'zip') {
+        // Windows and minimal images may have tar but not unzip; the extractor
+        // already has that fallback, so the lister must too.
+        [$code, $stdout, $stderr] = runProcess(['tar', '-tf', $archive]);
+    }
+    if ($code !== 0) {
+        throw new \RuntimeException("cannot list {$archive}: " . \trim($stderr));
+    }
+
+    foreach (\preg_split('/\R/', $stdout) ?: [] as $line) {
+        $name = \rtrim($line, "\r");
+        if ($name === '') {
+            continue;
+        }
+        $name = \str_replace('\\', '/', $name);
+        if (\str_contains($name, "\0")
+            || \str_starts_with($name, '/')
+            || \preg_match('#^[A-Za-z]:#', $name) === 1) {
+            throw new \RuntimeException("archive member {$name} is an absolute path");
+        }
+        foreach (\explode('/', $name) as $part) {
+            if ($part === '..') {
+                throw new \RuntimeException("archive member {$name} climbs out of the extraction directory");
+            }
+        }
+    }
+}
+
+/**
+ * Refuse a symlink in an extracted tree that resolves outside that tree.
+ *
+ * Relative links are normal in JDK and GraalVM archives; a link whose target
+ * lands outside the runtime — or a broken link — is not. Checking after
+ * extraction catches link targets, which the archive name list cannot see.
+ */
+function assertExtractedTreeContained(string $destination): void
+{
+    $root = \realpath($destination);
+    if ($root === false) {
+        throw new \RuntimeException("cannot resolve the extracted tree {$destination}");
+    }
+    $prefix = \rtrim($root, '/\\') . \DIRECTORY_SEPARATOR;
+    $items = new \RecursiveIteratorIterator(
+        new \RecursiveDirectoryIterator($destination, \FilesystemIterator::SKIP_DOTS),
+        \RecursiveIteratorIterator::SELF_FIRST,
+    );
+    foreach ($items as $item) {
+        if (! $item->isLink()) {
+            continue;
+        }
+        $path = $item->getPathname();
+        $target = \readlink($path);
+        if (! \is_string($target) || $target === '' || \str_contains($target, "\0")) {
+            throw new \RuntimeException("archive link {$path} has no usable target");
+        }
+        if (\str_starts_with($target, '/')
+            || \preg_match('#^[A-Za-z]:#', $target) === 1) {
+            throw new \RuntimeException("archive link {$path} points outside the extraction directory");
+        }
+        $resolved = \realpath(\dirname($path) . \DIRECTORY_SEPARATOR . $target);
+        if ($resolved === false
+            || ($resolved !== $root && ! \str_starts_with($resolved, $prefix))) {
+            throw new \RuntimeException("archive link {$path} points outside the extraction directory");
+        }
     }
 }
 

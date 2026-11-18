@@ -17,18 +17,28 @@
         "name": "PHP License 3.01",
         "file": "LICENSE",
         "url": "https://www.php.net/license/3_01.txt",
+        "sha256": "4618a58f990bbfb46fd055095adff7c44361062ec75f89500cb126f0fdb4e209",
         "acknowledgement": "This product includes PHP software, freely available from <https://www.php.net/software/>."
       },
       "checksumsUrl": "https://www.php.net/releases/index.php?json&version={version}",
-      "extensions": ["bcmath", "intl", "mbstring", "parallel"],
+      "extensions": [
+        "bcmath",
+        "ctype",
+        "intl",
+        "mbstring",
+        "parallel",
+        "tokenizer"
+      ],
       "configureFlags": [
         "--disable-all",
         "--enable-zts",
         "--disable-cgi",
         "--enable-cli",
         "--enable-bcmath",
+        "--enable-ctype",
         "--enable-mbstring",
         "--enable-intl",
+        "--enable-tokenizer",
         "--without-pear"
       ],
       "unix": {
@@ -40,9 +50,10 @@
       },
       "windows-x86_64": {
         "format": "zip",
-        "url": "https://downloads.php.net/~windows/releases/archives/php-{version}-nts-Win32-vs17-x64.zip",
+        "url": "https://downloads.php.net/~windows/releases/archives/php-{version}-Win32-vs17-x64.zip",
         "stripComponents": 0,
-        "binary": "php.exe"
+        "binary": "php.exe",
+        "sha256": "660f3ff6ccbdf60f9607ef54bdba85ee22a58d61fd3633b38a93d57fb7c3d184"
       },
       "unsupported": {
         "windows-aarch64": "php.net publishes no Windows ARM64 build (the Windows release page offers x64 and x86 only)"
@@ -125,7 +136,8 @@
       "license": {
         "name": "MIT",
         "file": "LICENSE",
-        "url": "https://raw.githubusercontent.com/composer/composer/{version}/LICENSE"
+        "url": "https://raw.githubusercontent.com/composer/composer/{version}/LICENSE",
+        "sha256": "7855ac293067aebe7e51afdd23b9dea54b8be24187dbecc9b9142581c37f596c"
       },
       "asset": {
         "format": "plain",
@@ -167,6 +179,7 @@
         "name": "PHP License 3.01, plus the licences of everything the runtime statically links (ICU and friends)",
         "file": "LICENSE",
         "url": "https://www.php.net/license/3_01.txt",
+        "sha256": "4618a58f990bbfb46fd055095adff7c44361062ec75f89500cb126f0fdb4e209",
         "acknowledgement": "This product includes PHP software, freely available from <https://www.php.net/software/>.",
         "dump": true
       },
@@ -174,7 +187,7 @@
         "tool": "spc",
         "php": "8.5",
         "sapi": "micro",
-        "extensions": ["bcmath", "intl", "mbstring", "parallel", "phar"],
+        "extensions": ["bcmath", "ctype", "intl", "mbstring", "parallel", "phar", "tokenizer"],
         "note": "The native compiler runs itself from the archive appended to its binary, so the micro runtime needs the phar wrapper on top of the extensions compiled programs require."
       }
     },
@@ -183,6 +196,13 @@
       "version": "2.8.5",
       "upstream": "github.com/crazywhalecc/static-php-cli",
       "checksumsUrl": "https://api.github.com/repos/crazywhalecc/static-php-cli/releases/tags/{version}",
+      "sha256ByTarget": {
+        "linux-x86_64": "523ba4279c54c7a377156c0dd3a36adf92ee64b01e9a7f5e9e2ec084b8e458e5",
+        "linux-aarch64": "675a3840dcdc4ed041fe20eaa54310ce019a9984c1c03951df9ec66df5795213",
+        "macos-x86_64": "e8b798048f62ca4960764196543b60ae703f7174aa418824cf542aeec1d2cd6a",
+        "macos-aarch64": "acf2f25d56d0cbf8e65aa82e5054fef555f7be7c5c38046c6e0819f266d83225",
+        "windows-x86_64": "425b54ab857e21409c1fd9b818899ffebabd1e2817ef0a0ed5ae8a3d9f5b463b"
+      },
       "unix": {
         "format": "tar.gz",
         "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/{version}/spc-{spcAsset}.tar.gz",

@@ -1,5 +1,5 @@
 {
-    "generated": "2026-10-25T07:58:10+00:00",
+    "generated": "2026-11-16T08:04:55+00:00",
     "assets": {
         "php/linux-x86_64": {
             "url": "https://www.php.net/distributions/php-8.5.12.tar.gz",
@@ -8,6 +8,7 @@
             "binary": "sapi/cli/php",
             "version": "8.5.12",
             "sha256": "81a0f450349e84b08eb43faa85f8a4c835684f3cc1c50471775d1317a046c525",
+            "source": "release-metadata",
             "build": true
         },
         "jvm/linux-x86_64": {
@@ -16,7 +17,8 @@
             "stripComponents": 1,
             "binary": "bin/java",
             "version": "21",
-            "sha256": "ce79869e1307ed8ee1e2baa86a412b1eb5b75d10a01006d788a6f968bcfaee94"
+            "sha256": "ce79869e1307ed8ee1e2baa86a412b1eb5b75d10a01006d788a6f968bcfaee94",
+            "source": "adoptium-api"
         },
         "graalvm/linux-x86_64": {
             "url": "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-21.0.2/graalvm-community-jdk-21.0.2_linux-x64_bin.tar.gz",
@@ -24,7 +26,8 @@
             "stripComponents": 1,
             "binary": "bin/native-image",
             "version": "21.0.2",
-            "sha256": "b048069aaa3a99b84f5b957b162cc181a32a4330cbc35402766363c5be76ae48"
+            "sha256": "b048069aaa3a99b84f5b957b162cc181a32a4330cbc35402766363c5be76ae48",
+            "source": "sidecar"
         },
         "dotnet/linux-x86_64": {
             "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-linux-x64.tar.gz",
@@ -32,7 +35,8 @@
             "stripComponents": 0,
             "binary": "dotnet",
             "version": "8.0.425",
-            "sha512": "934b8060a7190e5909ad1fd0785db542f487b3bbf6cdd14826b02095fdd0d0394298b1634085eff302928fccc33f7c1a7253e9b87df555fc36fce819bcd2e798"
+            "sha512": "934b8060a7190e5909ad1fd0785db542f487b3bbf6cdd14826b02095fdd0d0394298b1634085eff302928fccc33f7c1a7253e9b87df555fc36fce819bcd2e798",
+            "source": "release-metadata"
         },
         "php/linux-aarch64": {
             "url": "https://www.php.net/distributions/php-8.5.12.tar.gz",
@@ -41,6 +45,7 @@
             "binary": "sapi/cli/php",
             "version": "8.5.12",
             "sha256": "81a0f450349e84b08eb43faa85f8a4c835684f3cc1c50471775d1317a046c525",
+            "source": "release-metadata",
             "build": true
         },
         "dotnet/linux-aarch64": {
@@ -49,7 +54,8 @@
             "stripComponents": 0,
             "binary": "dotnet",
             "version": "8.0.425",
-            "sha512": "84a4d017d74d7aa842e981679d1b044e6be1f35b9b2b214021e30bc40871d016d29611cca373d8502ad5c890e3ad360ee698f9cf2d7a4d5a9fba102d88ba310f"
+            "sha512": "84a4d017d74d7aa842e981679d1b044e6be1f35b9b2b214021e30bc40871d016d29611cca373d8502ad5c890e3ad360ee698f9cf2d7a4d5a9fba102d88ba310f",
+            "source": "release-metadata"
         },
         "jvm/linux-aarch64": {
             "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_aarch64_linux_hotspot_21.0.12.1_1.tar.gz",
@@ -57,7 +63,8 @@
             "stripComponents": 1,
             "binary": "bin/java",
             "version": "21",
-            "sha256": "23e37e026f12f3e706f18938ff611db3032d075b09d0879a25d06718c773e223"
+            "sha256": "23e37e026f12f3e706f18938ff611db3032d075b09d0879a25d06718c773e223",
+            "source": "adoptium-api"
         },
         "graalvm/linux-aarch64": {
             "url": "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-21.0.2/graalvm-community-jdk-21.0.2_linux-aarch64_bin.tar.gz",
@@ -65,7 +72,8 @@
             "stripComponents": 1,
             "binary": "bin/native-image",
             "version": "21.0.2",
-            "sha256": "a34be691ce68f0acf4655c7c6c63a9a49ed276a11859d7224fd94fc2f657cd7a"
+            "sha256": "a34be691ce68f0acf4655c7c6c63a9a49ed276a11859d7224fd94fc2f657cd7a",
+            "source": "sidecar"
         },
         "php/macos-x86_64": {
             "url": "https://www.php.net/distributions/php-8.5.12.tar.gz",
@@ -74,6 +82,7 @@
             "binary": "sapi/cli/php",
             "version": "8.5.12",
             "sha256": "81a0f450349e84b08eb43faa85f8a4c835684f3cc1c50471775d1317a046c525",
+            "source": "release-metadata",
             "build": true
         },
         "dotnet/macos-x86_64": {
@@ -82,7 +91,8 @@
             "stripComponents": 0,
             "binary": "dotnet",
             "version": "8.0.425",
-            "sha512": "3b27552358905f1bde600dd0315a23051ef1cbd055a50eb64c675ee25a04e658c2ed735177125436c5bec38dfcd958fee338299611348299cd34a9bea8b8011f"
+            "sha512": "3b27552358905f1bde600dd0315a23051ef1cbd055a50eb64c675ee25a04e658c2ed735177125436c5bec38dfcd958fee338299611348299cd34a9bea8b8011f",
+            "source": "release-metadata"
         },
         "jvm/macos-x86_64": {
             "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_mac_hotspot_21.0.12.1_1.tar.gz",
@@ -90,7 +100,8 @@
             "stripComponents": 1,
             "binary": "bin/java",
             "version": "21",
-            "sha256": "44db0f08196daf19a47f90d13388b0c943b67663cb537f998fe29e836fa842ce"
+            "sha256": "44db0f08196daf19a47f90d13388b0c943b67663cb537f998fe29e836fa842ce",
+            "source": "adoptium-api"
         },
         "graalvm/macos-x86_64": {
             "url": "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-21.0.2/graalvm-community-jdk-21.0.2_macos-x64_bin.tar.gz",
@@ -98,7 +109,8 @@
             "stripComponents": 1,
             "binary": "bin/native-image",
             "version": "21.0.2",
-            "sha256": "7a8aa93fa45d1721908477abf4732a32637d420ffcb66ada9fb6456440b0d9e1"
+            "sha256": "7a8aa93fa45d1721908477abf4732a32637d420ffcb66ada9fb6456440b0d9e1",
+            "source": "sidecar"
         },
         "php/macos-aarch64": {
             "url": "https://www.php.net/distributions/php-8.5.12.tar.gz",
@@ -107,6 +119,7 @@
             "binary": "sapi/cli/php",
             "version": "8.5.12",
             "sha256": "81a0f450349e84b08eb43faa85f8a4c835684f3cc1c50471775d1317a046c525",
+            "source": "release-metadata",
             "build": true
         },
         "dotnet/macos-aarch64": {
@@ -115,7 +128,8 @@
             "stripComponents": 0,
             "binary": "dotnet",
             "version": "8.0.425",
-            "sha512": "d42156be70b489236479a415536013a89a9fd6eaca57d5716a7017612fcc65bdb459068973d7cffd6fe710f2799af8bee95b2046ba032762d47df176f5c4a7d6"
+            "sha512": "d42156be70b489236479a415536013a89a9fd6eaca57d5716a7017612fcc65bdb459068973d7cffd6fe710f2799af8bee95b2046ba032762d47df176f5c4a7d6",
+            "source": "release-metadata"
         },
         "jvm/macos-aarch64": {
             "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_aarch64_mac_hotspot_21.0.12.1_1.tar.gz",
@@ -123,7 +137,8 @@
             "stripComponents": 1,
             "binary": "bin/java",
             "version": "21",
-            "sha256": "3623232f33a9c3baadf304480b2535f9a3cba8a58d42ecbb438ba267315d9998"
+            "sha256": "3623232f33a9c3baadf304480b2535f9a3cba8a58d42ecbb438ba267315d9998",
+            "source": "adoptium-api"
         },
         "graalvm/macos-aarch64": {
             "url": "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-21.0.2/graalvm-community-jdk-21.0.2_macos-aarch64_bin.tar.gz",
@@ -131,7 +146,8 @@
             "stripComponents": 1,
             "binary": "bin/native-image",
             "version": "21.0.2",
-            "sha256": "515e3a93acc7e1938daba83eda4272e5495fd302d7cdd99ec7ebf408ed505ab7"
+            "sha256": "515e3a93acc7e1938daba83eda4272e5495fd302d7cdd99ec7ebf408ed505ab7",
+            "source": "sidecar"
         },
         "dotnet/windows-x86_64": {
             "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-win-x64.zip",
@@ -139,7 +155,8 @@
             "stripComponents": 0,
             "binary": "dotnet.exe",
             "version": "8.0.425",
-            "sha512": "f0b6f15bf6f1a0507205c0cb102ab99e1dee875c4682c8ed94665be1d580186a06b21455e83b3a01a0ff7f4cd887b67420f2e2fe09ed985534a4cea488ae1af9"
+            "sha512": "f0b6f15bf6f1a0507205c0cb102ab99e1dee875c4682c8ed94665be1d580186a06b21455e83b3a01a0ff7f4cd887b67420f2e2fe09ed985534a4cea488ae1af9",
+            "source": "release-metadata"
         },
         "jvm/windows-x86_64": {
             "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_windows_hotspot_21.0.12.1_1.zip",
@@ -147,7 +164,8 @@
             "stripComponents": 1,
             "binary": "bin/java.exe",
             "version": "21",
-            "sha256": "f9d6e191ab098c0d416e7d588a24420a8621cd2f4720dab2459b8b7b2d2d8b4e"
+            "sha256": "f9d6e191ab098c0d416e7d588a24420a8621cd2f4720dab2459b8b7b2d2d8b4e",
+            "source": "adoptium-api"
         },
         "graalvm/windows-x86_64": {
             "url": "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-21.0.2/graalvm-community-jdk-21.0.2_windows-x64_bin.zip",
@@ -155,15 +173,17 @@
             "stripComponents": 1,
             "binary": "bin/native-image.cmd",
             "version": "21.0.2",
-            "sha256": "e17b7bead097bf372a5c75df17815b0a2f30b777a019d25eff7706b21421f7fa"
+            "sha256": "e17b7bead097bf372a5c75df17815b0a2f30b777a019d25eff7706b21421f7fa",
+            "source": "sidecar"
         },
         "php/windows-x86_64": {
-            "url": "https://downloads.php.net/~windows/releases/archives/php-8.5.12-nts-Win32-vs17-x64.zip",
+            "url": "https://downloads.php.net/~windows/releases/archives/php-8.5.12-Win32-vs17-x64.zip",
             "format": "zip",
             "stripComponents": 0,
             "binary": "php.exe",
             "version": "8.5.12",
-            "sha256": "2ab242af38d76bdf417cde5ec048b1bcd76a5a40f39a3d15d5f046f38571c477"
+            "sha256": "660f3ff6ccbdf60f9607ef54bdba85ee22a58d61fd3633b38a93d57fb7c3d184",
+            "source": "config-pin"
         },
         "composer/linux-x86_64": {
             "url": "https://getcomposer.org/download/2.10.1/composer.phar",
@@ -171,7 +191,8 @@
             "stripComponents": 0,
             "binary": "composer.phar",
             "version": "2.10.1",
-            "sha256": "345b9c6a98da5c30dcbd4b0d99fc8710bf0ae98a3898eea18f7b2ad9dec93f06"
+            "sha256": "345b9c6a98da5c30dcbd4b0d99fc8710bf0ae98a3898eea18f7b2ad9dec93f06",
+            "source": "sidecar"
         },
         "maven/linux-x86_64": {
             "url": "https://archive.apache.org/dist/maven/maven-3/3.9.12/binaries/apache-maven-3.9.12-bin.tar.gz",
@@ -179,7 +200,8 @@
             "stripComponents": 1,
             "binary": "bin/mvn",
             "version": "3.9.12",
-            "sha512": "0a1be79f02466533fc1a80abbef8796e4f737c46c6574ede5658b110899942a94db634477dfd3745501c80aef9aac0d4f841d38574373f7e2d24cce89d694f70"
+            "sha512": "0a1be79f02466533fc1a80abbef8796e4f737c46c6574ede5658b110899942a94db634477dfd3745501c80aef9aac0d4f841d38574373f7e2d24cce89d694f70",
+            "source": "sidecar"
         },
         "composer/linux-aarch64": {
             "url": "https://getcomposer.org/download/2.10.1/composer.phar",
@@ -187,7 +209,8 @@
             "stripComponents": 0,
             "binary": "composer.phar",
             "version": "2.10.1",
-            "sha256": "345b9c6a98da5c30dcbd4b0d99fc8710bf0ae98a3898eea18f7b2ad9dec93f06"
+            "sha256": "345b9c6a98da5c30dcbd4b0d99fc8710bf0ae98a3898eea18f7b2ad9dec93f06",
+            "source": "sidecar"
         },
         "maven/linux-aarch64": {
             "url": "https://archive.apache.org/dist/maven/maven-3/3.9.12/binaries/apache-maven-3.9.12-bin.tar.gz",
@@ -195,7 +218,8 @@
             "stripComponents": 1,
             "binary": "bin/mvn",
             "version": "3.9.12",
-            "sha512": "0a1be79f02466533fc1a80abbef8796e4f737c46c6574ede5658b110899942a94db634477dfd3745501c80aef9aac0d4f841d38574373f7e2d24cce89d694f70"
+            "sha512": "0a1be79f02466533fc1a80abbef8796e4f737c46c6574ede5658b110899942a94db634477dfd3745501c80aef9aac0d4f841d38574373f7e2d24cce89d694f70",
+            "source": "sidecar"
         },
         "composer/macos-x86_64": {
             "url": "https://getcomposer.org/download/2.10.1/composer.phar",
@@ -203,7 +227,8 @@
             "stripComponents": 0,
             "binary": "composer.phar",
             "version": "2.10.1",
-            "sha256": "345b9c6a98da5c30dcbd4b0d99fc8710bf0ae98a3898eea18f7b2ad9dec93f06"
+            "sha256": "345b9c6a98da5c30dcbd4b0d99fc8710bf0ae98a3898eea18f7b2ad9dec93f06",
+            "source": "sidecar"
         },
         "maven/macos-x86_64": {
             "url": "https://archive.apache.org/dist/maven/maven-3/3.9.12/binaries/apache-maven-3.9.12-bin.tar.gz",
@@ -211,7 +236,8 @@
             "stripComponents": 1,
             "binary": "bin/mvn",
             "version": "3.9.12",
-            "sha512": "0a1be79f02466533fc1a80abbef8796e4f737c46c6574ede5658b110899942a94db634477dfd3745501c80aef9aac0d4f841d38574373f7e2d24cce89d694f70"
+            "sha512": "0a1be79f02466533fc1a80abbef8796e4f737c46c6574ede5658b110899942a94db634477dfd3745501c80aef9aac0d4f841d38574373f7e2d24cce89d694f70",
+            "source": "sidecar"
         },
         "composer/macos-aarch64": {
             "url": "https://getcomposer.org/download/2.10.1/composer.phar",
@@ -219,7 +245,8 @@
             "stripComponents": 0,
             "binary": "composer.phar",
             "version": "2.10.1",
-            "sha256": "345b9c6a98da5c30dcbd4b0d99fc8710bf0ae98a3898eea18f7b2ad9dec93f06"
+            "sha256": "345b9c6a98da5c30dcbd4b0d99fc8710bf0ae98a3898eea18f7b2ad9dec93f06",
+            "source": "sidecar"
         },
         "maven/macos-aarch64": {
             "url": "https://archive.apache.org/dist/maven/maven-3/3.9.12/binaries/apache-maven-3.9.12-bin.tar.gz",
@@ -227,7 +254,8 @@
             "stripComponents": 1,
             "binary": "bin/mvn",
             "version": "3.9.12",
-            "sha512": "0a1be79f02466533fc1a80abbef8796e4f737c46c6574ede5658b110899942a94db634477dfd3745501c80aef9aac0d4f841d38574373f7e2d24cce89d694f70"
+            "sha512": "0a1be79f02466533fc1a80abbef8796e4f737c46c6574ede5658b110899942a94db634477dfd3745501c80aef9aac0d4f841d38574373f7e2d24cce89d694f70",
+            "source": "sidecar"
         },
         "composer/windows-x86_64": {
             "url": "https://getcomposer.org/download/2.10.1/composer.phar",
@@ -235,7 +263,8 @@
             "stripComponents": 0,
             "binary": "composer.phar",
             "version": "2.10.1",
-            "sha256": "345b9c6a98da5c30dcbd4b0d99fc8710bf0ae98a3898eea18f7b2ad9dec93f06"
+            "sha256": "345b9c6a98da5c30dcbd4b0d99fc8710bf0ae98a3898eea18f7b2ad9dec93f06",
+            "source": "sidecar"
         },
         "maven/windows-x86_64": {
             "url": "https://archive.apache.org/dist/maven/maven-3/3.9.12/binaries/apache-maven-3.9.12-bin.zip",
@@ -243,7 +272,8 @@
             "stripComponents": 1,
             "binary": "bin/mvn.cmd",
             "version": "3.9.12",
-            "sha512": "0ef0d074761a55e7b982fd7f2cd6ea2da028289c73156ebd488c0513efbff8a64ac5bc0c11c3b8bbced930ce15238ecef344b0e065ae54f7cdca8c86cf39e736"
+            "sha512": "0ef0d074761a55e7b982fd7f2cd6ea2da028289c73156ebd488c0513efbff8a64ac5bc0c11c3b8bbced930ce15238ecef344b0e065ae54f7cdca8c86cf39e736",
+            "source": "sidecar"
         },
         "spc/linux-x86_64": {
             "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-linux-x86_64.tar.gz",
@@ -251,7 +281,8 @@
             "stripComponents": 0,
             "binary": "spc",
             "version": "2.8.5",
-            "sha256": "523ba4279c54c7a377156c0dd3a36adf92ee64b01e9a7f5e9e2ec084b8e458e5"
+            "sha256": "523ba4279c54c7a377156c0dd3a36adf92ee64b01e9a7f5e9e2ec084b8e458e5",
+            "source": "config-pin"
         },
         "spc/linux-aarch64": {
             "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-linux-aarch64.tar.gz",
@@ -259,7 +290,8 @@
             "stripComponents": 0,
             "binary": "spc",
             "version": "2.8.5",
-            "sha256": "675a3840dcdc4ed041fe20eaa54310ce019a9984c1c03951df9ec66df5795213"
+            "sha256": "675a3840dcdc4ed041fe20eaa54310ce019a9984c1c03951df9ec66df5795213",
+            "source": "config-pin"
         },
         "spc/macos-x86_64": {
             "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-macos-x86_64.tar.gz",
@@ -267,7 +299,8 @@
             "stripComponents": 0,
             "binary": "spc",
             "version": "2.8.5",
-            "sha256": "e8b798048f62ca4960764196543b60ae703f7174aa418824cf542aeec1d2cd6a"
+            "sha256": "e8b798048f62ca4960764196543b60ae703f7174aa418824cf542aeec1d2cd6a",
+            "source": "config-pin"
         },
         "spc/macos-aarch64": {
             "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-macos-aarch64.tar.gz",
@@ -275,7 +308,8 @@
             "stripComponents": 0,
             "binary": "spc",
             "version": "2.8.5",
-            "sha256": "acf2f25d56d0cbf8e65aa82e5054fef555f7be7c5c38046c6e0819f266d83225"
+            "sha256": "acf2f25d56d0cbf8e65aa82e5054fef555f7be7c5c38046c6e0819f266d83225",
+            "source": "config-pin"
         },
         "spc/windows-x86_64": {
             "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-windows-x64.exe",
@@ -283,7 +317,8 @@
             "stripComponents": 0,
             "binary": "spc.exe",
             "version": "2.8.5",
-            "sha256": "425b54ab857e21409c1fd9b818899ffebabd1e2817ef0a0ed5ae8a3d9f5b463b"
+            "sha256": "425b54ab857e21409c1fd9b818899ffebabd1e2817ef0a0ed5ae8a3d9f5b463b",
+            "source": "config-pin"
         },
         "zig/linux-x86_64": {
             "url": "https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz",
@@ -291,7 +326,8 @@
             "stripComponents": 1,
             "binary": "zig",
             "version": "0.15.2",
-            "sha256": "02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239"
+            "sha256": "02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239",
+            "source": "ziglang-index"
         },
         "zig/linux-aarch64": {
             "url": "https://ziglang.org/download/0.15.2/zig-aarch64-linux-0.15.2.tar.xz",
@@ -299,7 +335,8 @@
             "stripComponents": 1,
             "binary": "zig",
             "version": "0.15.2",
-            "sha256": "958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f"
+            "sha256": "958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f",
+            "source": "ziglang-index"
         }
     }
 }

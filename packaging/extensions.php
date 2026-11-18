@@ -13,12 +13,13 @@ use function Moggi\Registry\requirementSections;
  * The PHP extension contract of a distribution.
  *
  * A distribution ships its packages as sources, so the extensions a bundled PHP
- * must carry are *derived* from the descriptors it ships rather than kept in a
- * list beside the runtime's version; `dist/runtimes.json` records what the
- * runtime was built with, and `assertRuntimeExtensionsDeclared` refuses a build
- * where the two have drifted. A prepared runtime writes the set it actually
- * loads into `extensions.json`, so a client can check a package's requirements
- * against the runtime instead of guessing.
+ * must carry are *derived* from the descriptors it ships plus the extensions
+ * the compiler itself needs, rather than kept in a list beside the runtime's
+ * version. `dist/runtimes.json` records what the runtime was built with, and
+ * `assertRuntimeExtensionsDeclared` refuses a build where the two have drifted.
+ * A prepared runtime writes the set it actually loads into `extensions.json`, so
+ * a client can check a package's requirements against the runtime instead of
+ * guessing.
  */
 
 /**
@@ -33,6 +34,15 @@ const EXTENSION_MANIFEST = 'extensions.json';
 
 /** The directories a distribution bundles as installable packages. */
 const DISTRIBUTION_PACKAGE_DIRS = ['libraries'];
+
+/**
+ * Extensions the compiler itself needs, independent of package requirements.
+ *
+ * The parser uses `ctype_*`, and the PHP backend dependency scanner uses
+ * `token_get_all()`. A runtime that satisfies every package but lacks these
+ * cannot run `bin/moggi` at all, so they belong in the derived contract.
+ */
+const COMPILER_REQUIRED_EXTENSIONS = ['ctype', 'tokenizer'];
 
 /**
  * The requirement sections of every package descriptor a distribution bundles.
@@ -95,12 +105,12 @@ function packageDescriptorFiles(string $dir): array
 }
 
 /**
- * The PHP extensions a distribution's packages require.
+ * The PHP extensions a distribution's runtime must carry.
  *
- * A package declares one set — what its compiled program calls at run time — and
- * because a distribution ships its packages as sources, the set a bundled PHP
- * must carry is derived from the descriptors rather than kept in a list beside
- * the runtime's version.
+ * A package declares what its compiled program calls at run time, and the
+ * compiler has its own requirements (`ctype`, `tokenizer`). Because a
+ * distribution ships its packages as sources, the set a bundled PHP must carry
+ * is derived rather than kept in a list beside the runtime's version.
  *
  * @return list<string>
  */
@@ -114,6 +124,9 @@ function distributionPhpExtensions(): array
                 $names[normalizeExtensionName($name)] = $name;
             }
         }
+    }
+    foreach (COMPILER_REQUIRED_EXTENSIONS as $name) {
+        $names[normalizeExtensionName($name)] = $name;
     }
 
     return extensionNamesSorted($names);
@@ -183,9 +196,9 @@ function assertPhpRuntimeExtensions(array $required, array $loaded, array $compi
  * set.
  *
  * `dist/runtimes.json` records what the bundled PHP is built with; the set itself
- * comes from the packages the distribution ships, so the list there is verified
- * output. A list that no longer names exactly what the packages ask for is a hard
- * assembly failure rather than a runtime built to a stale set.
+ * comes from the packages the distribution ships plus the compiler's own needs,
+ * so the list there is verified output. A list that no longer names exactly that
+ * set is a hard assembly failure rather than a runtime built to a stale set.
  */
 function assertRuntimeExtensionsDeclared(array $config): void
 {
@@ -275,6 +288,9 @@ function assertPhpExtensions(string $binary, string $dir, string $target, array 
 {
     assertRuntimeExtensionsDeclared($config);
     $required = distributionPhpExtensions();
+    if (\in_array('parallel', \array_map('strtolower', $required), true)) {
+        assertPhpThreadSafe($binary, $dir, $target);
+    }
     $compiledIn = phpModuleList($binary, $dir, ['-n']);
 
     $enable = [];
@@ -295,6 +311,27 @@ function assertPhpExtensions(string $binary, string $dir, string $target, array 
     assertPhpRuntimeExtensions($required, $loaded, $compiledIn, $target);
 
     return $loaded;
+}
+
+/**
+ * Refuse a PHP that is not thread-safe when the distribution needs parallel.
+ *
+ * ext-parallel is a ZTS-only extension; loading it into an NTS build fails at
+ * startup, and an NTS Windows PHP is otherwise a valid-looking upstream
+ * archive. Checking the binary itself is the only check that cannot be fooled
+ * by a wrong asset URL or a stale cache.
+ */
+function assertPhpThreadSafe(string $binary, string $dir, string $target): void
+{
+    $args = [$binary, '-n', '-r', 'echo PHP_ZTS ? "1" : "0";'];
+    $output = \PHP_OS_FAMILY === 'Windows'
+        ? runtimeProcess($args)
+        : runWithLibraryPath($args, $dir . '/lib');
+    if (\trim($output) !== '1') {
+        throw new \RuntimeException(
+            "the PHP runtime for {$target} is not thread-safe, but ext-parallel requires ZTS PHP",
+        );
+    }
 }
 
 /** @param list<string> $modules */
@@ -344,7 +381,10 @@ function writeBundledPhpIni(string $dir, array $compiledIn, array $enable): void
         '; Compiled in: ' . \implode(' ', $compiledIn),
     ];
     if ($enable !== []) {
-        $lines[] = 'extension_dir="' . \str_replace('\\', '/', $dir) . '/ext"';
+        // PHPRC is what installation.php and the composer shim set before
+        // starting PHP. Resolving through it keeps the ini relocatable; writing
+        // the build-cache path here made every extension vanish after install.
+        $lines[] = 'extension_dir="${PHPRC}/ext"';
     }
     foreach ($enable as $extension) {
         $dll = 'php_' . $extension . '.dll';

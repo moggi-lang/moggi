@@ -177,7 +177,7 @@ try {
     $assert($stray === [], 'a variant with no PHP ships no archive: ' . \implode(', ', $stray));
 
     $assert(\is_file($stage . '/libraries/base/src/Data/Eq.mog'), 'the standard library sources must be shipped');
-    $assert(\is_file($stage . '/lib/base.moggi'), 'the standard library must carry its manifest');
+    $assert(\is_file($stage . '/libraries/base/base.moggi'), 'the standard library must carry its manifest');
 
     $noRuntimes = $work . '/no-runtimes';
     \mkdir($noRuntimes, 0777, true);
