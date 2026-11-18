@@ -40,13 +40,20 @@ function maxFetchBytes(): int
 {
     $override = \getenv('MOGGI_MAX_FETCH_BYTES');
     if (\is_string($override) && $override !== '') {
-        if (\preg_match('/^[0-9]+$/', $override) !== 1 || (int) $override < 1) {
+        $digits = \ltrim($override, '0');
+        $digits = $digits === '' ? '0' : $digits;
+        $value = \preg_match('/^[0-9]+$/', $digits) === 1
+            ? \filter_var($digits, \FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
+            : false;
+        // The readers ask for one byte past the cap to detect overflow, so a cap
+        // at PHP_INT_MAX would overflow that addition on strict types.
+        if ($value === false || $value >= \PHP_INT_MAX) {
             throw new \RuntimeException(
-                'MOGGI_MAX_FETCH_BYTES must be a positive number of bytes, not ' . \var_export($override, true),
+                'MOGGI_MAX_FETCH_BYTES must be a positive number of bytes below PHP_INT_MAX, not ' . \var_export($override, true),
             );
         }
 
-        return (int) $override;
+        return $value;
     }
 
     return 256 * 1024 * 1024;
@@ -89,7 +96,14 @@ function fetchBytes(string $base, string $path, bool $decode = true): ?string
     if (! \is_file($location)) {
         return null;
     }
-    $bytes = (string) \file_get_contents($location);
+    // A local mirror can hold a huge file too, and `file_get_contents()` would
+    // materialize all of it before the cap was checked. Measure first, then
+    // read no more than one byte past the cap so the refusal is still possible.
+    $size = @\filesize($location);
+    if ($size !== false) {
+        assertFetchWithinCap($size, $path);
+    }
+    $bytes = (string) \file_get_contents($location, false, null, 0, maxFetchBytes() + 1);
     assertFetchWithinCap(\strlen($bytes), $path);
     if (! $decode) {
         return $bytes;
@@ -195,7 +209,9 @@ function decodeTransport(string $bytes): string
     if (! \str_starts_with($bytes, "\x1f\x8b")) {
         return $bytes;
     }
-    $inflated = @\gzdecode($bytes);
+    // Bound the inflate itself: a small gzip bomb must not allocate without
+    // limit only to be rejected by the size check afterwards.
+    $inflated = @\gzdecode($bytes, maxFetchBytes() + 1);
 
     return $inflated === false ? $bytes : $inflated;
 }
@@ -210,18 +226,31 @@ function shardPrefix(string $name): string
 }
 
 /**
- * `index.json.sig`: a BIP-340 signature over `sha256(index.json)`, made by the
- * key named *inside* the file it signs.
+ * `index.json.sig`: a Nostr Web Token signing the root's digest.
  *
- * Thin wrapper over `verifySignature()` so the root and a release cannot be
- * checked two different ways: what differs is only the message, which for the
- * root is the file's own digest and not a canonical manifest.
+ * The event must name `index.json` and carry the sha256 of the exact bytes
+ * read, so the signature covers the root rather than only an event that
+ * happens to verify.
  *
  * @return array{ok: bool, note: string}
  */
 function verifyRootSignature(string $rootBytes, string $signature, string $npub): array
 {
-    return verifySignature(\hash('sha256', $rootBytes), $signature, $npub);
+    $verdict = nwtVerify($signature, $npub);
+    if (! $verdict['ok']) {
+        return ['ok' => false, 'note' => $verdict['note']];
+    }
+
+    $event = $verdict['event'];
+    if (nwtTag($event, 'file') !== 'index.json') {
+        return ['ok' => false, 'note' => 'the NWT does not sign index.json'];
+    }
+    $digest = nwtTag($event, 'sha256');
+    if ($digest === null || ! \hash_equals(\hash('sha256', $rootBytes), $digest)) {
+        return ['ok' => false, 'note' => 'the NWT root digest does not match index.json'];
+    }
+
+    return ['ok' => true, 'note' => $verdict['note']];
 }
 
 /**
@@ -487,8 +516,12 @@ function rememberedRootVersion(string $base): ?int
         return null;
     }
     $text = \trim((string) \file_get_contents($path));
+    if (\preg_match('/^[0-9]+$/', $text) !== 1) {
+        return null;
+    }
+    $version = \filter_var(\ltrim($text, '0') ?: '0', \FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
 
-    return \preg_match('/^[0-9]+$/', $text) === 1 ? (int) $text : null;
+    return $version === false ? null : $version;
 }
 
 /** Raise the remembered root version to one, never lowering it. */
@@ -504,10 +537,21 @@ function rememberRootVersion(string $base, int $version): void
 /** An RFC 3339 timestamp as unix seconds, or null when the text is not one. */
 function registryTimestamp(string $text): ?int
 {
-    if (\preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$/', \trim($text)) !== 1) {
+    $text = \trim($text);
+    $pattern = '/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(Z|[+-](\d{2}):(\d{2}))$/';
+    if (\preg_match($pattern, $text, $match) !== 1) {
         return null;
     }
-    $seconds = \strtotime(\trim($text));
+    if (! \checkdate((int) $match[2], (int) $match[3], (int) $match[1])
+        || (int) $match[4] > 23
+        || (int) $match[5] > 59
+        || (int) $match[6] > 59) {
+        return null;
+    }
+    if ($match[7] !== 'Z' && ((int) $match[8] > 23 || (int) $match[9] > 59)) {
+        return null;
+    }
+    $seconds = \strtotime($text);
 
     return $seconds === false ? null : $seconds;
 }
@@ -546,10 +590,14 @@ function rootIntegrityProblem(string $base, array $root, int $now): string
     }
 
     $version = $root['version'] ?? null;
-    if (! \is_int($version) && ! (\is_string($version) && \preg_match('/^[0-9]+$/', $version) === 1)) {
+    $versionText = \is_int($version) ? (string) $version : (\is_string($version) ? \trim($version) : '');
+    if (\preg_match('/^[0-9]+$/', $versionText) !== 1) {
         return "the registry at {$base} declares no root version (`version`), so a replayed root cannot be detected";
     }
-    $version = (int) $version;
+    $version = \filter_var(\ltrim($versionText, '0') ?: '0', \FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
+    if ($version === false) {
+        return "the registry at {$base} declares a root version that is too large to compare (`{$versionText}`)";
+    }
 
     if ($version < 1) {
         return "the registry at {$base} has a root version below 1 ({$version})";
@@ -612,14 +660,23 @@ function registryIdentityProblem(string $base, string $npub, ?string $pin): stri
  * Read a registry's signed root and open its catalog.
  *
  * The root and its signature are read here; the shards are left to the
- * `Catalog`, which fetches each one only when a name needs it. A root that lists
- * no `registry_npub` is still returned, with a signature verdict that says so —
- * the caller decides whether an unverifiable registry is fatal.
+ * `Catalog`, which fetches each one only when a name needs it. By default this
+ * is also the policy boundary: a catalog is returned only after its signature,
+ * registry identity, freshness and rollback checks pass. A caller that is
+ * deliberately inspecting an unverified tree can pass `$enforcePolicy = false`,
+ * but production callers get the safe path without having to remember a second
+ * function.
  *
  * @param ?callable(string, string): ?string $fetch overrides how bytes are read;
  *   the default reads a local directory or an http(s) URL
  */
-function loadCatalog(string $base, ?callable $fetch = null, ?FetchLog $log = null, bool $useCache = true): Catalog
+function loadCatalog(
+    string $base,
+    ?callable $fetch = null,
+    ?FetchLog $log = null,
+    bool $useCache = true,
+    bool $enforcePolicy = true,
+): Catalog
 {
     $log ??= new FetchLog();
     $get = static function (string $path) use ($base, $fetch, $log): ?string {
@@ -642,6 +699,9 @@ function loadCatalog(string $base, ?callable $fetch = null, ?FetchLog $log = nul
     } catch (\JsonException $error) {
         throw new \RuntimeException("no registry at {$base}: index.json is not valid JSON ({$error->getMessage()})");
     }
+    if (! \is_array($root)) {
+        throw new \RuntimeException("no registry at {$base}: index.json is not a JSON object");
+    }
 
     $npub = $root['registry_npub'] ?? null;
     $signatureBytes = null;
@@ -653,7 +713,7 @@ function loadCatalog(string $base, ?callable $fetch = null, ?FetchLog $log = nul
             && ($cached = cachedBytes($signaturePath)) !== null
         ) {
             $signature = verifyRootSignature($rootBytes, $cached, $npub);
-            if ($signature['ok'] || ! \str_contains($signature['note'], 'does not verify')) {
+            if ($signature['ok']) {
                 $signatureBytes = $cached;
                 $log->skipped('index.json.sig');
             }
@@ -672,7 +732,35 @@ function loadCatalog(string $base, ?callable $fetch = null, ?FetchLog $log = nul
         }
     }
 
-    return new Catalog($base, $root, $signature, $fetch === null ? null : \Closure::fromCallable($fetch), $log, $useCache);
+    $catalog = new Catalog($base, $root, $signature, $fetch === null ? null : \Closure::fromCallable($fetch), $log, $useCache);
+    if (! $enforcePolicy) {
+        return $catalog;
+    }
+
+    if (! $signature['ok']) {
+        throw new \RuntimeException("refusing to use {$base}: {$signature['note']}");
+    }
+
+    // Freshness and rollback come before trust-on-first-use. Otherwise a
+    // hostile registry could answer first contact with a correctly signed but
+    // expired root and have its key remembered even though the root was
+    // refused — poisoning every later load of this base.
+    $integrity = rootIntegrityProblem($base, $root, \time());
+    if ($integrity !== '') {
+        throw new \RuntimeException("refusing to use {$base}: {$integrity}");
+    }
+
+    $problem = registryIdentityProblem(
+        $base,
+        (string) $catalog->npub(),
+        (\getenv('MOGGI_REGISTRY_NPUB') ?: null) ?: null,
+    );
+    if ($problem !== '') {
+        throw new \RuntimeException($problem);
+    }
+    rememberRootVersion($base, (int) $root['version']);
+
+    return $catalog;
 }
 
 /**

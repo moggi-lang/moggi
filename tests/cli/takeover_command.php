@@ -3,9 +3,9 @@
 /**
  * `moggi takeover` files a public takeover request over the signed write
  * transport and lets an admin decide one. These checks drive the real CLI
- * against a throwaway endpoint that verifies registry-compatible Schnorr
- * signatures, validating the actual route, body, and identity. Without the
- * `schnorr` binary, signing checks are skipped rather than faked.
+ * against a throwaway endpoint that verifies registry-compatible NWT tokens,
+ * validating the actual route, body, and identity. Without the `schnorr`
+ * binary, signing checks are skipped rather than faked.
  */
 
 $root = __DIR__;
@@ -102,7 +102,7 @@ try {
     $assert(\str_contains($file['stdout'], 'takeover request filed'), 'the report says it was filed: ' . $file['stdout']);
     $assert(\str_contains($file['stdout'], 'requests/takeover/demo.json'), 'the report names the public record: ' . $file['stdout']);
     $request = $last();
-    $assert(($request['ok'] ?? false) === true, 'the endpoint verified the signature: ' . \json_encode($request));
+    $assert(($request['ok'] ?? false) === true, 'the endpoint verified the NWT token: ' . \json_encode($request));
     $assert(($request['method'] ?? '') === 'POST' && ($request['path'] ?? '') === '/takeover-request', 'a request goes to POST /takeover-request: ' . \json_encode($request));
     $assert(($request['npub'] ?? '') === $npub, 'the request is signed as the chosen npub');
     $body = \json_decode((string) ($request['body'] ?? ''), true);

@@ -450,9 +450,8 @@ function distributionReadme(string $variant, string $target, array $runtimes, st
 
         Examples live in `examples/`; each one is a complete program. The
         standard library is the `libraries/` tree: ordinary Moggi sources, covered by
-        this installation's LICENSE, there to be read. `bin/schnorr` is a
-        standalone BIP-340 CLI that ships with the toolchain; nothing in Moggi
-        uses it yet.
+        this installation's LICENSE, there to be read. `bin/schnorr` is the
+        standalone BIP-340 CLI the registry client uses to verify NWT signatures.
 
 
         TEXT;

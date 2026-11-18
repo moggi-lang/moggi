@@ -2,7 +2,7 @@
 
 /**
  * Reads and writes use separate origins: the static tree is served by the
- * read host, while signed writes go to the API host. Since signatures bind
+ * read host, while signed writes go to the API host. Since NWT audiences bind
  * the host, writes cannot be redirected from the read origin. Each verb's
  * default origin is therefore a correctness requirement, not a convenience.
  */

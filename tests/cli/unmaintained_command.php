@@ -3,9 +3,9 @@
 /**
  * `moggi unmaintained` declares or clears a package-level marker over the
  * signed write transport. These checks drive the real CLI against a
- * throwaway endpoint that verifies registry-compatible Schnorr signatures,
- * validating the actual route, body, and identity. Without the `schnorr`
- * binary, signing checks are skipped rather than faked.
+ * throwaway endpoint that verifies registry-compatible NWT tokens, validating
+ * the actual route, body, and identity. Without the `schnorr` binary, signing
+ * checks are skipped rather than faked.
  */
 
 $root = __DIR__;
@@ -95,7 +95,7 @@ try {
     $assert($withNote['exitCode'] === 0, 'declaring unmaintained must succeed: ' . $withNote['stderr']);
     $assert(\str_contains($withNote['stdout'], 'marked unmaintained'), 'the report says it was marked: ' . $withNote['stdout']);
     $request = $last();
-    $assert(($request['ok'] ?? false) === true, 'the endpoint verified the signature: ' . \json_encode($request));
+    $assert(($request['ok'] ?? false) === true, 'the endpoint verified the NWT token: ' . \json_encode($request));
     $assert(($request['path'] ?? '') === '/unmaintained', 'the write goes to POST /unmaintained: ' . \json_encode($request));
     $assert(($request['npub'] ?? '') === $npub, 'the request is signed as the chosen npub');
     $body = \json_decode((string) ($request['body'] ?? ''), true);

@@ -34,6 +34,8 @@ use function Moggi\Registry\descriptorProblems;
 use function Moggi\Registry\descriptorWithCoordinate;
 use function Moggi\Registry\descriptorWithFfiBinding;
 use function Moggi\Registry\hostToolCoordinates;
+use function Moggi\Registry\nwtEventJson;
+use function Moggi\Registry\nwtRootEvent;
 use function Moggi\Registry\parseAddCoordinate;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\withAddConstraint;
@@ -364,7 +366,7 @@ try {
         'versions' => $versions,
     ];
 
-    $writeRegistry = static function (string $dir, string $npub, string $nsec, array $packages) use ($schnorr): void {
+    $writeRegistry = static function (string $dir, string $npub, string $nsec, array $packages): void {
         \mkdir($dir . '/catalog', 0777, true);
         $prefix = \substr((string) \array_key_first($packages), 0, 2);
         $bytes = \json_encode(['format' => 1, 'prefix' => $prefix, 'packages' => $packages], \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES) . "\n";
@@ -381,7 +383,7 @@ try {
         ];
         $index = \json_encode($root, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES) . "\n";
         \file_put_contents($dir . '/index.json', $index);
-        \file_put_contents($dir . '/index.json.sig', $schnorr(['sign', \hash('sha256', $index)], $nsec) . "\n");
+        \file_put_contents($dir . '/index.json.sig', nwtEventJson(nwtRootEvent($index, $nsec, $npub)) . "\n");
     };
 
     // `json` travels with the compiler, so a bare `add json` answers from the

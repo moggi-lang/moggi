@@ -36,7 +36,6 @@ use function Moggi\Registry\rememberedRegistryNpub;
 use function Moggi\Registry\requestHost;
 use function Moggi\Registry\schnorrBinary;
 use function Moggi\Registry\verifySignature;
-use function Moggi\Registry\writeMessageHex;
 
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
@@ -190,6 +189,12 @@ try {
         'MOGGI_MAX_FETCH_BYTES',
         'a malformed cap must be refused',
     );
+    \putenv('MOGGI_MAX_FETCH_BYTES=999999999999999999999999');
+    $refuses(
+        static fn () => \Moggi\Registry\maxFetchBytes(),
+        'MOGGI_MAX_FETCH_BYTES',
+        'a cap too large to add one must be refused',
+    );
     \putenv('MOGGI_MAX_FETCH_BYTES');
 
     // --- the catalog validates a name before it becomes a path ---------------
@@ -219,24 +224,12 @@ try {
         'a dependency named `Bad` must be refused: ' . \var_export(descriptorProblems($file), true),
     );
 
-    // --- the write signature is bound to the host ----------------------------
+    // --- the write token is bound to the host --------------------------------
     $assert(requestHost('https://reg.example.org/publish') === 'reg.example.org', 'a default https port is not shown');
     $assert(requestHost('http://reg.example.org:80/publish') === 'reg.example.org', 'a default http port is not shown');
     $assert(requestHost('https://reg.example.org:443/publish') === 'reg.example.org', 'a default https port is not shown');
     $assert(requestHost('http://reg.example.org:8080/publish') === 'reg.example.org:8080', 'a non-default port is shown');
     $assert(requestHost('https://REG.Example.ORG/publish') === 'reg.example.org', 'a host is lowercased');
-
-    $golden = '5130f2677bd716694704132fa0c52a7364e8a96af5a4eb459ba407304d4a21c7';
-    $message = writeMessageHex('reg.example.org', 'POST', '/publish', 1700000000, 'nonce', 'body');
-    $assert($message === $golden, "the write message changed shape: {$message}");
-    $assert(
-        writeMessageHex('other.example.org', 'POST', '/publish', 1700000000, 'nonce', 'body') !== $message,
-        'a different host must change the message',
-    );
-    $assert(
-        writeMessageHex('reg.example.org', 'PUT', '/publish', 1700000000, 'nonce', 'body') !== $message,
-        'a different method must change the message',
-    );
 
     // --- .moggiignore selects what is packed --------------------------------
     $ignored = $work . '/ignored';

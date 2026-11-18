@@ -4,8 +4,8 @@
  * Exercise `moggi outdated` and `moggi why` through the real CLI against
  * a signed registry directory and lock, covering outdated locks, versions
  * rejected by descriptors, unpublished catalog versions, and transitive
- * dependencies. The registry uses the checkout's `schnorr` binary;
- * without it, signing checks are skipped rather than faked.
+ * dependencies. The registry uses the checkout's `schnorr` binary to sign its
+ * NWT root; without it, signing checks are skipped rather than faked.
  */
 
 $root = __DIR__;
@@ -102,7 +102,7 @@ try {
         ];
     };
 
-    $writeRegistry = static function (string $dir, string $npub, string $nsec, int $version, array $packages) use ($schnorr): void {
+    $writeRegistry = static function (string $dir, string $npub, string $nsec, int $version, array $packages): void {
         if (\is_dir($dir)) {
             removeDirectory($dir);
         }
@@ -133,7 +133,7 @@ try {
         ];
         $bytes = \json_encode($root, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES) . "\n";
         \file_put_contents($dir . '/index.json', $bytes);
-        \file_put_contents($dir . '/index.json.sig', $schnorr(['sign', \hash('sha256', $bytes)], $nsec) . "\n");
+        \file_put_contents($dir . '/index.json.sig', \Moggi\Registry\nwtEventJson(\Moggi\Registry\nwtRootEvent($bytes, $nsec, $npub)) . "\n");
     };
 
     $registry = $work . '/registry';

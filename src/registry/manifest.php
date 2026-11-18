@@ -3,15 +3,14 @@
 namespace Moggi\Registry;
 
 /**
- * What a release signature covers, and whether it verifies.
+ * What a release's NWT covers, and whether it verifies.
  *
- * The signed message is the sha256 of a canonical
- * manifest — provenance, artifact and version, keys sorted, no insignificant
- * whitespace, UTF-8. Every implementation has to build those bytes identically
- * or nothing verifies, so the client builds them in one place: here. The
- * signing tool and the worker do the same in their own language, and a
- * difference shows up as a signature that fails to verify rather than as a
- * package that installs anyway.
+ * The event's `manifest` claim is the sha256 of a canonical manifest —
+ * provenance, artifact and version, keys sorted, no insignificant whitespace,
+ * UTF-8. Every implementation has to build those bytes identically or nothing
+ * verifies, so the client builds them in one place: here. The signing tool and
+ * the worker do the same in their own language, and a difference shows up as a
+ * signature that fails to verify rather than as a package that installs anyway.
  *
  * BIP-340 caps a message at 128 bytes, which is why a digest is signed rather
  * than the manifest text itself.
@@ -295,19 +294,38 @@ function verifyRelease(string $name, string $version, array $release, array $aut
     if ($signature instanceof \stdClass) {
         $signature = (array) $signature;
     }
-    $signer = \is_array($signature) ? ($signature['npub'] ?? null) : null;
-    $sig = \is_array($signature) ? ($signature['sig'] ?? null) : null;
+    if (! \is_array($signature)) {
+        return ['ok' => false, 'note' => 'the release has no NWT signature', 'signer' => null];
+    }
 
-    if (! \is_string($signer) || ! \is_string($sig)) {
-        return ['ok' => false, 'note' => 'the release has no signature', 'signer' => null];
+    $signer = nwtEventNpub($signature);
+    if ($signer === null) {
+        return ['ok' => false, 'note' => 'the release signature is not a NWT event', 'signer' => null];
+    }
+
+    $verdict = nwtVerify($signature, $signer);
+    if (! $verdict['ok']) {
+        return ['ok' => false, 'note' => $verdict['note'], 'signer' => $signer];
     }
     if (! \in_array($signer, $authors, true)) {
         return ['ok' => false, 'note' => 'the signer is not on the package\'s allowed list', 'signer' => $signer];
     }
+    // Domain separation: a valid NWT signed by an author is not automatically a
+    // release. The worker already requires this tag; the client must too, or a
+    // token minted for another purpose could be replayed as a release whose
+    // name/version/manifest happen to line up.
+    if (nwtTag($signature, 'type') !== 'release') {
+        return ['ok' => false, 'note' => 'the signature is not a release NWT', 'signer' => $signer];
+    }
+    if (nwtTag($signature, 'name') !== $name || nwtTag($signature, 'version') !== $version) {
+        return ['ok' => false, 'note' => 'the NWT names a different release', 'signer' => $signer];
+    }
+    $manifest = nwtTag($signature, 'manifest');
+    if ($manifest === null || ! \hash_equals(releaseMessage($name, $version, $release), $manifest)) {
+        return ['ok' => false, 'note' => 'the NWT manifest claim does not match the release', 'signer' => $signer];
+    }
 
-    $verdict = verifySignature(releaseMessage($name, $version, $release), $sig, $signer);
-
-    return ['ok' => $verdict['ok'], 'note' => $verdict['note'], 'signer' => $signer];
+    return ['ok' => true, 'note' => $verdict['note'], 'signer' => $signer];
 }
 
 /**
@@ -402,12 +420,12 @@ function buildReleaseRecord(
 /**
  * Sign an unsigned release record with an author's nsec.
  *
- * The signature covers the canonical manifest (`releaseMessage`), and the
- * record is verified straight back against the declared author before it is
- * returned — the same check `verifyRelease` will run at the other end — so a
- * key that is not the author's fails here, next to the key, rather than at the
- * registry after a round trip. An already-signed record is refused rather than
- * re-signed: a second signature would silently replace the first.
+ * The NWT's `manifest` claim covers the canonical manifest (`releaseMessage`),
+ * and the record is verified straight back against the declared author before
+ * it is returned — the same check `verifyRelease` will run at the other end —
+ * so a key that is not the author's fails here, next to the key, rather than at
+ * the registry after a round trip. An already-signed record is refused rather
+ * than re-signed: a second signature would silently replace the first.
  *
  * @param array<string, mixed> $release
  * @return array<string, mixed>
@@ -419,9 +437,19 @@ function signRelease(string $name, string $version, array $release, string $auth
     }
 
     $signed = $release;
-    $signed['signature'] = ['npub' => $author, 'sig' => signMessage(releaseMessage($name, $version, $release), $nsec)];
+    $signed['signature'] = nwtSignEvent(
+        $nsec,
+        $author,
+        "Moggi release {$name} {$version}",
+        [
+            ['type', 'release'],
+            ['name', $name],
+            ['version', $version],
+            ['manifest', releaseMessage($name, $version, $release)],
+        ],
+    );
 
-    $verdict = verifySignature(releaseMessage($name, $version, $signed), (string) $signed['signature']['sig'], $author);
+    $verdict = verifyRelease($name, $version, $signed, [$author]);
     if (! $verdict['ok']) {
         throw new \RuntimeException("the key does not match author {$author}: {$verdict['note']}");
     }

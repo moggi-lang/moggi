@@ -4,8 +4,8 @@
  * Packages marked bad by the registry are refused by the real CLI:
  * `install` and `build` report the registry's reason, `--allow-bad`
  * explicitly permits them, and `show` / `search` display the marker.
- * The registry uses the checkout's `schnorr` binary; without it, signing
- * checks are skipped rather than faked.
+ * The registry uses the checkout's `schnorr` binary to sign its NWT root;
+ * without it, signing checks are skipped rather than faked.
  */
 
 $root = __DIR__;
@@ -73,7 +73,7 @@ try {
     [$nsec, $npub] = \preg_split('/\s+/', $schnorr(['generate'])) ?: ['', ''];
     $assert(\str_starts_with($nsec, 'nsec') && \str_starts_with($npub, 'npub'), 'the schnorr CLI generated a keypair');
 
-    $writeRegistry = static function (string $dir, string $npub, string $nsec, array $packages) use ($schnorr): void {
+    $writeRegistry = static function (string $dir, string $npub, string $nsec, array $packages): void {
         if (\is_dir($dir)) {
             removeDirectory($dir);
         }
@@ -104,7 +104,7 @@ try {
         ];
         $bytes = \json_encode($root, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES) . "\n";
         \file_put_contents($dir . '/index.json', $bytes);
-        \file_put_contents($dir . '/index.json.sig', $schnorr(['sign', \hash('sha256', $bytes)], $nsec) . "\n");
+        \file_put_contents($dir . '/index.json.sig', \Moggi\Registry\nwtEventJson(\Moggi\Registry\nwtRootEvent($bytes, $nsec, $npub)) . "\n");
     };
 
     $registry = $work . '/registry';

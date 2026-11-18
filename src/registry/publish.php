@@ -2,20 +2,21 @@
 
 namespace Moggi\Registry;
 
+use function Moggi\Compiler\findExecutable;
+
 /**
  * The write half of a registry client: signing, and the HTTP that carries it.
  *
- * There is no login. Every write is authenticated by a BIP-340 signature from the
- * author's npub, over a canonical string that binds the method, the path, a
- * timestamp, a nonce and the exact body bytes. The nonce
- * makes each signature single-use; the timestamp bounds how long it is worth
- * trying. The worker and the browser front end build the same bytes, so a
- * difference shows up as a signature that fails to verify rather than as a write
- * that lands under the wrong identity.
+ * There is no login. Every write is authenticated by a Nostr Web Token: a
+ * signed kind-27519 event whose claims bind the audience, method, path, body
+ * digest and a nonce. The token travels as `Authorization: Nostr <base64url>`.
  *
- * Signing goes through the project's own `schnorr` CLI — the same binary `verify`
- * uses — so there is one implementation of BIP-340 in the tree, not two. The nsec
- * is written to that process's stdin, never to an argument: argv is world-readable.
+ * The event id makes the token self-identifying, and the nonce makes each one
+ * unique; the expiry bounds how long it is worth trying. The worker verifies
+ * the event and the request claims with the same rules. Signing goes through
+ * the project's own `schnorr` CLI, so there is one BIP-340 implementation in
+ * the tree, not two. The nsec is written to that process's stdin, never to an
+ * argument: argv is world-readable.
  */
 
 /** The key must be an nsec of the shape an nsec has. */
@@ -36,9 +37,7 @@ function signMessage(string $messageHex, string $nsec): string
 {
     $binary = schnorrBinary();
     if ($binary === null) {
-        throw new \RuntimeException(
-            'no `schnorr` binary on the PATH — install a distribution that ships it, or put it there',
-        );
+        throw new \RuntimeException(schnorrMissingNote());
     }
 
     $process = \proc_open(
@@ -69,15 +68,15 @@ function signMessage(string $messageHex, string $nsec): string
  * The host a URL is written to, spelled the way a URL parser spells it: the
  * hostname lowercased, and the port only when it is not the scheme's default.
  *
- * The worker builds the signed string from `new URL(request.url).host`, so the
- * two have to agree character for character or every write fails. This is that
- * same rule, in PHP.
+ * The worker builds the NWT's `aud` claim from `new URL(request.url).host`, so
+ * the two have to agree character for character or every write fails. This is
+ * that same rule, in PHP.
  */
 function requestHost(string $url): string
 {
     $host = \strtolower((string) (\parse_url($url, \PHP_URL_HOST) ?? ''));
     $port = \parse_url($url, \PHP_URL_PORT);
-    $scheme = \parse_url($url, \PHP_URL_SCHEME);
+    $scheme = \strtolower((string) \parse_url($url, \PHP_URL_SCHEME));
     if (\is_int($port)
         && ! (($scheme === 'http' && $port === 80) || ($scheme === 'https' && $port === 443))) {
         return $host . ':' . $port;
@@ -87,46 +86,19 @@ function requestHost(string $url): string
 }
 
 /**
- * The canonical bytes a request signature covers, as the worker's `auth.ts`
- * builds them.
- *
- * The host is part of the message so a signature made for one registry cannot be
- * replayed against another origin that accepts the same routes — a mirror, a
- * look-alike host, a proxy — inside the timestamp window. The path alone does not
- * bind the destination; the host does.
- */
-function writeMessageHex(string $host, string $method, string $path, int $timestamp, string $nonce, string $body): string
-{
-    return \hash('sha256', "moggi-write\n{$host}\n{$method}\n{$path}\n{$timestamp}\n{$nonce}\n" . \hash('sha256', $body));
-}
-
-/**
  * The headers that authenticate one request.
  *
- * The signature is checked against the declared npub before it is sent: signing
- * with a key that is not the author's would otherwise only fail at the registry,
- * after a round trip and a confusing error.
+ * The NWT's audience is the host, so a token made for one registry cannot be
+ * replayed against a mirror or a look-alike origin. The method, path and body
+ * digest are claims too; the registry checks all of them.
  *
  * @return list<string>
  */
 function writeAuthHeaders(string $host, string $method, string $path, string $body, string $nsec, string $npub): array
 {
-    $timestamp = \time();
-    $nonce = \bin2hex(\random_bytes(16));
-    $message = writeMessageHex($host, $method, $path, $timestamp, $nonce, $body);
-    $signature = signMessage($message, $nsec);
+    $event = nwtWriteEvent($host, $method, $path, $body, $nsec, $npub);
 
-    $verdict = verifySignature($message, $signature, $npub);
-    if (! $verdict['ok']) {
-        throw new \RuntimeException("the key does not match author {$npub}: {$verdict['note']}");
-    }
-
-    return [
-        'x-moggi-npub: ' . $npub,
-        'x-moggi-sig: ' . $signature,
-        'x-moggi-date: ' . $timestamp,
-        'x-moggi-nonce: ' . $nonce,
-    ];
+    return ['Authorization: ' . NWT_AUTH_SCHEME . ' ' . nwtToken($event)];
 }
 
 /**
@@ -171,20 +143,75 @@ function reportsPosixModeBits(): bool
     return \PHP_OS_FAMILY !== 'Windows';
 }
 
+/** Whether standard input is a terminal this client can prompt on. */
+function stdinIsTerminal(): bool
+{
+    if (\function_exists('stream_isatty')) {
+        return \stream_isatty(\STDIN);
+    }
+    if (\function_exists('posix_isatty')) {
+        return \posix_isatty(\STDIN);
+    }
+
+    return false;
+}
+
+/**
+ * Read one line from a Windows console without echoing it.
+ *
+ * PHP has no hidden-input primitive, so PowerShell reads the keys itself and
+ * writes only the completed line to its standard output. `Read-Host` is not used
+ * because its prompt can share that stream with the secret.
+ */
+function readHiddenLineWindows(): string
+{
+    $powershell = findExecutable('powershell') ?? findExecutable('pwsh');
+    if ($powershell === null) {
+        throw new \RuntimeException('no PowerShell to hide the key prompt on Windows');
+    }
+
+    $script = '$s = New-Object System.Text.StringBuilder; '
+        . 'while ($true) { $k = [Console]::ReadKey($true); '
+        . 'if ($k.Key -eq "Enter") { break } '
+        . 'if ($k.Key -eq "Backspace") { if ($s.Length -gt 0) { [void]$s.Remove($s.Length - 1, 1) } continue } '
+        . 'if ($k.Key -eq "Escape" -or ($k.Key -eq "C" -and $k.Modifiers -eq "Control")) { exit 1 } '
+        . 'if (-not [char]::IsControl($k.KeyChar)) { [void]$s.Append($k.KeyChar) } } '
+        . '[Console]::Out.Write($s.ToString())';
+
+    $process = \proc_open(
+        [$powershell, '-NoProfile', '-Command', $script],
+        [0 => \STDIN, 1 => ['pipe', 'w'], 2 => \STDERR],
+        $pipes,
+    );
+    if (! \is_resource($process) || ! isset($pipes[1])) {
+        throw new \RuntimeException('cannot start PowerShell to read the key');
+    }
+    $line = \trim((string) \stream_get_contents($pipes[1]));
+    \fclose($pipes[1]);
+    $code = \proc_close($process);
+    if ($code !== 0 || $line === '') {
+        throw new \RuntimeException('the interactive key prompt was cancelled or returned nothing');
+    }
+
+    return $line;
+}
+
 /**
  * The nsec to sign with, from `--nsec-file`, `MOGGI_NSEC_FILE`, or a no-echo
  * prompt on a terminal.
  *
  * A file has to be mode 0600: a secret key that group or other can read is not
- * secret, and failing here costs a `chmod` rather than the key. A run with no
- * terminal and no file fails loudly instead of hanging on a read — a CI job that
- * silently waits for a prompt is worse than one that stops.
+ * secret, and failing here costs a `chmod` rather than the key. Windows ACLs are
+ * not mode bits this client can verify, so file input is refused there and the
+ * interactive prompt is the only path. A run with no terminal and no file fails
+ * loudly instead of hanging on a read — a CI job that silently waits for a
+ * prompt is worse than one that stops.
  */
 function readNsecKey(?string $file): string
 {
     $path = $file ?? ((\getenv('MOGGI_NSEC_FILE') ?: null) ?: null);
     if ($path === null) {
-        if (! \function_exists('posix_isatty') || ! \posix_isatty(\STDIN)) {
+        if (! stdinIsTerminal()) {
             throw new \RuntimeException(
                 'no key: pass --nsec-file FILE (or set MOGGI_NSEC_FILE), or run on a terminal to be prompted',
             );
@@ -196,12 +223,17 @@ function readNsecKey(?string $file): string
     if (! \is_file($path)) {
         throw new \RuntimeException("no such key file: {$path}");
     }
+    if (! reportsPosixModeBits()) {
+        throw new \RuntimeException(
+            'a key file on Windows has an ACL this client cannot verify; use the interactive prompt instead',
+        );
+    }
     \clearstatcache(true, $path);
     $mode = \fileperms($path);
     if ($mode === false) {
         throw new \RuntimeException("cannot read the permissions of {$path} — refusing a key whose mode is unknown");
     }
-    if (reportsPosixModeBits() && ($mode & 0o077) !== 0) {
+    if (($mode & 0o077) !== 0) {
         throw new \RuntimeException(
             \sprintf('%s is mode %04o — a secret key file must not be readable by group or other (chmod 600)', $path, $mode & 0o777),
         );
@@ -214,15 +246,17 @@ function readNsecKey(?string $file): string
 function promptNsec(): string
 {
     \fwrite(\STDERR, 'nsec (input hidden): ');
-    $hidden = \stripos(\PHP_OS_FAMILY, 'Windows') === false;
-    if ($hidden) {
-        @\shell_exec('stty -echo 2>/dev/null');
-    }
-    $line = \fgets(\STDIN);
-    if ($hidden) {
-        @\shell_exec('stty echo 2>/dev/null');
+    if (\PHP_OS_FAMILY === 'Windows') {
+        $line = readHiddenLineWindows();
         \fwrite(\STDERR, "\n");
+
+        return assertNsec($line, 'stdin');
     }
+
+    @\shell_exec('stty -echo 2>/dev/null');
+    $line = \fgets(\STDIN);
+    @\shell_exec('stty echo 2>/dev/null');
+    \fwrite(\STDERR, "\n");
 
     return assertNsec(\trim((string) $line), 'stdin');
 }
@@ -239,10 +273,10 @@ function assertNsec(string $nsec, string $where): string
 /**
  * POST one signed JSON body to a registry route, and return the response.
  *
- * The bytes are signed and sent unchanged, and the path in the signature is the
- * route the body is sent to, so a body cannot be moved to another route. A
- * non-2xx is returned rather than thrown: the registry's errors are structured,
- * and the caller decides how to report them.
+ * The bytes are sent unchanged, and the NWT binds the route and body digest, so
+ * a body cannot be moved to another route. A non-2xx is returned rather than
+ * thrown: the registry's errors are structured, and the caller decides how to
+ * report them.
  *
  * @return array{status: int, reason: string, body: string}
  */

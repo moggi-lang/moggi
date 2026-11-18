@@ -20,7 +20,7 @@ variables the **test harness** sets.
 | `MOGGI_REGISTRY` | the canonical registry | The registry a *read* command uses when `--registry` is not given. |
 | `MOGGI_REGISTRY_WRITE` | the registry's write origin | The registry a *write* command — `publish`, `bad`, `unmaintained`, `takeover` — uses when `--registry` is not given; falls back to `MOGGI_REGISTRY`. |
 | `MOGGI_REGISTRY_NPUB` | unset (trust on first use) | Pin the registry's signing key. |
-| `MOGGI_NSEC_FILE` | unset (prompt) | Path to the secret key `publish` signs with when `--nsec-file` is not given. |
+| `MOGGI_NSEC_FILE` | unset (prompt) | Path to the secret key `publish` signs with when `--nsec-file` is not given. On Windows a key file is refused because its ACL cannot be checked; use the interactive prompt. |
 | `MOGGI_USER_CACHE` | `$XDG_CACHE_HOME/moggi`, else `$HOME/.cache/moggi` | The user-level cache: downloaded archives, plus the remembered key and accepted root version of each registry. |
 
 ### `MOGGI_MICRO_SFX`
@@ -42,7 +42,7 @@ which is how a mirror, a checkout and the canonical registry are one code path.
 
 The registry's **reads and writes are two origins**. The tree is static and is
 served from the registry itself; the API that accepts a signed write answers on a
-host of its own, because every request signature binds the host it was made for
+host of its own, because every NWT's `aud` claim binds the host it was made for
 — so a client pointed at the read origin would have every write refused as
 `bad-signature`, never quietly redirected. `MOGGI_REGISTRY_WRITE` selects that
 origin for `publish`, `bad`, `unmaintained` and `takeover`. A write with neither
@@ -59,7 +59,7 @@ always an error rather than a silent trust refresh.
 A signed root carries `version` and `expires` (RFC 3339), and the client refuses
 a root that is past its expiry or below the highest version it has already
 accepted for that base. That is what makes a **frozen** or **replayed** root
-visible: a signature over an old root verifies exactly as well as one over the
+visible: an NWT over an old root verifies exactly as well as one over the
 current root, so freshness has to be signed and checked rather than assumed.
 There is no waiver: a stale or replayed root is always refused.
 

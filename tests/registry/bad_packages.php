@@ -119,7 +119,7 @@ $exShard = $shard('ex', [
 ], \JSON_PRETTY_PRINT) . "\n");
 
 try {
-    $catalog = loadCatalog($work, null, null, false);
+    $catalog = loadCatalog($work, null, null, false, false);
     $json = $catalog->entry('json');
     $assert($json !== null, 'the marked package is listed');
     $assert(badPackageMarker((array) $json)['reason'] === 'RCE in the decoder', 'the shard `bad` reaches the client');
@@ -140,7 +140,7 @@ try {
     $refused = false;
 
     try {
-        loadCatalog($work . '/broken', null, null, false)->packages();
+        loadCatalog($work . '/broken', null, null, false, false)->packages();
     } catch (\RuntimeException $error) {
         $refused = \str_contains($error->getMessage(), 'inconsistent');
     }

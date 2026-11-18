@@ -23,10 +23,7 @@ use function Moggi\Registry\lockPath;
 use function Moggi\Registry\pinBundledDemands;
 use function Moggi\Registry\prettyJson;
 use function Moggi\Registry\providedPackages;
-use function Moggi\Registry\registryIdentityProblem;
-use function Moggi\Registry\rememberRootVersion;
 use function Moggi\Registry\resolveDependencies;
-use function Moggi\Registry\rootIntegrityProblem;
 use function Moggi\Registry\writeLock;
 
 /**
@@ -69,41 +66,12 @@ function writeRegistryDefault(): string
 }
 
 /**
- * Load a catalog for a command, refusing a root signature that does not verify.
- *
- * A signature that cannot be checked is not a signature that passed: a missing
- * `schnorr` binary refuses the catalog exactly as a bad signature does. It used
- * to warn and carry on, which made "the verifier is not installed" and "the
- * registry is authentic" indistinguishable to every command that resolves a
- * dependency. A shard that does not match the root is raised when the name that
- * lives in it is asked for, since shards are read on demand.
+ * Load a catalog for a command. `loadCatalog()` is the policy boundary now; this
+ * wrapper keeps the command-facing name and makes the intent explicit.
  */
 function loadVerifiedCatalog(string $registry, bool $useCache, FetchLog $log): Catalog
 {
-    $catalog = loadCatalog($registry, null, $log, $useCache);
-    $signature = $catalog->signature();
-
-    if (! $signature['ok']) {
-        throw new \RuntimeException("refusing to use {$registry}: {$signature['note']}");
-    }
-
-    $problem = registryIdentityProblem(
-        $registry,
-        (string) $catalog->npub(),
-        (\getenv('MOGGI_REGISTRY_NPUB') ?: null) ?: null,
-    );
-    if ($problem !== '') {
-        throw new \RuntimeException($problem);
-    }
-
-    $root = $catalog->root();
-    $integrity = rootIntegrityProblem($registry, $root, \time());
-    if ($integrity !== '') {
-        throw new \RuntimeException("refusing to use {$registry}: {$integrity}");
-    }
-    rememberRootVersion($registry, (int) $root['version']);
-
-    return $catalog;
+    return loadCatalog($registry, null, $log, $useCache);
 }
 
 /**
