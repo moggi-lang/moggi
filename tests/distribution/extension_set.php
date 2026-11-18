@@ -1,9 +1,9 @@
 <?php declare(strict_types=1);
 
 /**
- * The bundled PHP extension set is derived from the shipped packages, not
- * duplicated beside the runtime version. Since the compiler is native, only
- * program requirements are declared in one list.
+ * The bundled PHP extension set is derived from the shipped packages plus the
+ * extensions the compiler itself needs, not duplicated beside the runtime
+ * version.
  *
  * Checks cover derivation from `base.moggi`, rejection of a pinned list that
  * has drifted, and rejection of runtimes missing a declared extension.
@@ -31,8 +31,8 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
 
 $declared = distributionPhpExtensions();
 $assert(
-    $declared === ['bcmath', 'intl', 'mbstring', 'parallel'],
-    'the declared set is what a compiled program needs: ' . \implode(', ', $declared),
+    $declared === ['bcmath', 'ctype', 'intl', 'mbstring', 'parallel', 'tokenizer'],
+    'the declared set is what a compiled program and the compiler need: ' . \implode(', ', $declared),
 );
 
 $config = loadRuntimeConfig();

@@ -40,6 +40,7 @@ jobs:
         with:
           php-version: '8.5'
           extensions: bcmath, mbstring, zip, phar, ctype, intl
+          tools: pie
           ini-values: memory_limit=1G
           coverage: none
 
@@ -99,6 +100,7 @@ jobs:
         with:
           php-version: '8.5'
           extensions: bcmath, mbstring, zip, phar, ctype, intl
+          tools: pie
           ini-values: memory_limit=1G
           coverage: none
 
@@ -354,6 +356,16 @@ jobs:
           "$GITHUB_WORKSPACE/release/run/moggi-php/bin/moggi" run \
             "$GITHUB_WORKSPACE/release/run/moggi-php/examples/factorial"
 
+      - name: The bundled PHP must satisfy the compiler runtime contract after unpacking
+        run: |
+          php_home="$GITHUB_WORKSPACE/release/run/moggi-php/runtime/php"
+          # PHPRC is how the packaged ini finds its own extension directory, so
+          # exercise it instead of overriding extension_dir from the command line.
+          PHPRC="$php_home" PHP_INI_SCAN_DIR= \
+            LD_LIBRARY_PATH="$php_home/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+              "$php_home/bin/php" \
+              -r 'exit(PHP_ZTS && extension_loaded("parallel") && extension_loaded("ctype") && extension_loaded("tokenizer") ? 0 : 1);'
+
   verify-native:
     needs: publish
     strategy:
@@ -387,3 +399,21 @@ jobs:
           fi
           ls release/run
           ( cd /tmp && "$GITHUB_WORKSPACE/release/run/moggi-php/bin/moggi${exe}" version )
+
+      - name: The bundled PHP must satisfy the compiler runtime contract after unpacking
+        shell: bash
+        run: |
+          php_home="$GITHUB_WORKSPACE/release/run/moggi-php/runtime/php"
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            # The ini is relocatable only if PHPRC resolves; do not hide that by
+            # overriding extension_dir on the command line. Windows PHP needs a
+            # Windows-form path for PHPRC.
+            PHPRC="$(cygpath -w "$php_home")" PHP_INI_SCAN_DIR= \
+              "$php_home/php.exe" \
+              -r 'exit(PHP_ZTS && extension_loaded("parallel") && extension_loaded("ctype") && extension_loaded("tokenizer") ? 0 : 1);'
+          else
+            PHPRC="$php_home" PHP_INI_SCAN_DIR= \
+              DYLD_FALLBACK_LIBRARY_PATH="$php_home/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}" \
+                "$php_home/bin/php" \
+                -r 'exit(PHP_ZTS && extension_loaded("parallel") && extension_loaded("ctype") && extension_loaded("tokenizer") ? 0 : 1);'
+          fi

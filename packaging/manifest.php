@@ -74,7 +74,7 @@ function loadRuntimeConfig(): array
     return $config;
 }
 
-/** @return array<string, array{url: string, sha256: string, size?: int, version?: string}> */
+/** @return array<string, array{url: string, sha256?: string, sha512?: string, source?: string, size?: int, version?: string}> */
 function loadRuntimeLock(): array
 {
     $path = distRoot() . '/runtimes.lock.json';

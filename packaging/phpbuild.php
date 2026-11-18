@@ -58,6 +58,7 @@ function derivedRuntimeKey(string $runtime, string $target, array $config): stri
     $tool = (string) ($recipe['tool'] ?? '');
     $toolSpec = $tool !== '' ? ($config['runtimes'][$tool] ?? []) : [];
     $toolEntry = $tool !== '' ? (loadRuntimeLock()[$tool . '/' . $target] ?? []) : [];
+    $extensions = microExtensions($runtime, $config);
 
     return 'sha256:' . \hash('sha256', (string) \json_encode([
         'runtime' => $runtime,
@@ -69,7 +70,8 @@ function derivedRuntimeKey(string $runtime, string $target, array $config): stri
         ],
         'php' => (string) ($recipe['php'] ?? ''),
         'sapi' => (string) ($recipe['sapi'] ?? ''),
-        'extensions' => microExtensions($runtime, $config),
+        'extensions' => $extensions,
+        'zts' => \in_array('parallel', \array_map('strtolower', $extensions), true),
         'toolchain' => microToolchainEnv($target),
         'zig' => zigToolchainPin($target, $config),
         'host' => \PHP_OS_FAMILY . '-' . \php_uname('m'),
@@ -214,6 +216,7 @@ function buildMicroWithSpc(string $runtime, string $target, array $config, strin
     }
 
     $version = microSfxVersion($dir . '/micro.sfx');
+    assertMicroRuntime($dir . '/micro.sfx', $target, $extensions);
 
     return [
         'version' => $version,
@@ -433,7 +436,7 @@ function installZigToolchain(string $target, array $config, string $work): void
  */
 function craftFile(string $php, string $sapi, array $extensions): string
 {
-    return \implode("\n", [
+    $lines = [
         '# Written by packaging/runtimes.php for one distribution build.',
         '# static-php-cli compiles the micro PHP runtime from it; see',
         '# dist/runtimes.json for the recipe it is generated from.',
@@ -441,8 +444,62 @@ function craftFile(string $php, string $sapi, array $extensions): string
         'extensions: "' . \implode(',', $extensions) . '"',
         'sapi:',
         '  - ' . $sapi,
-        '',
-    ]);
+    ];
+    if (\in_array('parallel', \array_map('strtolower', $extensions), true)) {
+        // static-php-cli defaults to NTS; ext-parallel is ZTS-only and will not
+        // build or load in the default runtime.
+        $lines[] = 'build-options:';
+        $lines[] = '  enable-zts: true';
+    }
+    $lines[] = '';
+
+    return \implode("\n", $lines);
+}
+
+/**
+ * Refuse a micro runtime that does not satisfy the runtime contract.
+ *
+ * The micro runtime is what a `--native` executable runs, so it has to satisfy
+ * the same extension contract as the bundled CLI PHP. static-php-cli will build
+ * an NTS runtime happily when only the extension list is checked, and an NTS
+ * runtime cannot load `parallel`. The probe also checks every declared
+ * extension, so a missing `ctype` or `tokenizer` cannot reach a release.
+ *
+ * @param list<string> $extensions
+ */
+function assertMicroRuntime(string $binary, string $target, array $extensions): void
+{
+    if (! \in_array('parallel', \array_map('strtolower', $extensions), true)) {
+        return;
+    }
+
+    // micro.sfx has no command line of its own: it runs the PHP code appended
+    // to it. Build a throwaway probe executable, run it, and remove it.
+    $probe = \sys_get_temp_dir() . '/moggi-micro-probe-' . \bin2hex(\random_bytes(6))
+        . (\PHP_OS_FAMILY === 'Windows' ? '.exe' : '');
+    try {
+        if (! \copy($binary, $probe)) {
+            throw new \RuntimeException("cannot copy {$binary} to a micro runtime probe");
+        }
+        $payload = '<?php echo PHP_ZTS ? "zts" : "nts", " ", extension_loaded("parallel") ? "parallel" : "no-parallel";'
+            . ' $missing = []; foreach (' . \var_export($extensions, true) . ' as $extension) { if (! extension_loaded($extension)) { $missing[] = $extension; } }'
+            . ' if ($missing !== []) { echo " missing:", implode(",", $missing); exit(1); }';
+        if (\file_put_contents($probe, $payload, \FILE_APPEND) === false) {
+            throw new \RuntimeException('cannot append the micro runtime probe payload');
+        }
+        @\chmod($probe, 0755);
+
+        [$code, $stdout, $stderr] = runProcess([$probe]);
+        $verdict = \trim($stdout);
+        if ($code !== 0 || $verdict !== 'zts parallel') {
+            throw new \RuntimeException(
+                "the micro PHP runtime for {$target} does not satisfy the ZTS extension contract ({$verdict})\n"
+                . \substr(\trim($stderr), -1000),
+            );
+        }
+    } finally {
+        @\unlink($probe);
+    }
 }
 
 function buildPhpFromSource(string $runtime, string $target, array $config, string $archive, string $dir, array $entry): string
@@ -467,7 +524,26 @@ function buildPhpFromSource(string $runtime, string $target, array $config, stri
     assertChildCwd($tree);
 
     $jobs = (string) \max(1, cpuCount());
-    $make = findExecutable('make') ?? 'make';
+    $make = findExecutable('make') ?? findExecutable('gmake');
+    if ($make === null) {
+        throw new \RuntimeException('no make to build the bundled PHP with');
+    }
+    $resolvedMake = \realpath($make);
+    if ($resolvedMake === false || ! \is_file($resolvedMake)) {
+        throw new \RuntimeException("the make used to build PHP is not a file: {$make}");
+    }
+    if (! \str_starts_with($target, 'windows-')) {
+        if (! \is_executable($resolvedMake)) {
+            throw new \RuntimeException("the make used to build PHP is not executable: {$resolvedMake}");
+        }
+        $mode = \fileperms($resolvedMake);
+        if ($mode === false || ($mode & 0o022) !== 0) {
+            throw new \RuntimeException(
+                "the make used to build PHP is writable by group or other; refusing to build with it: {$resolvedMake}",
+            );
+        }
+    }
+    $make = $resolvedMake;
     $extensions = distributionPhpExtensions();
     $prefix = $work . '/install';
     runOrFail([$tree . '/configure', '--prefix=' . $prefix, ...extensionBuildFlags($extensions, $config)], $tree);
@@ -508,21 +584,33 @@ function buildPhpFromSource(string $runtime, string $target, array $config, stri
 }
 
 /**
- * Install ext-parallel into a just-built PHP prefix, with PIE.
+ * The ext-parallel release the distribution pins.
+ *
+ * PIE otherwise resolves the newest compatible release when the runtime is
+ * built, which makes the same PHP tarball produce different archives on
+ * different days. The version is part of the distribution contract too:
+ * `parallel` is a ZTS-only extension, so both the PHP build and the extension
+ * have to be the intended pair.
+ */
+const PARALLEL_PACKAGE = 'pecl/parallel:1.2.15';
+
+/**
+ * Install ext-parallel into a PHP prefix or a downloaded Windows runtime.
  *
  * ext-parallel is not in php-src, so `configure` cannot enable it. PIE is the
  * extension installer the distribution uses instead of PECL: it reads the
- * prefix's `php-config`, compiles the extension against exactly the ZTS build
- * we just made, and writes it into that prefix. The shared object is then
- * copied beside the runtime, where `assertPhpExtensions()` finds it and enables
- * it in the bundled `php.ini`.
+ * target's `php-config` (or `php.exe` on Windows), compiles or downloads the
+ * extension against exactly that runtime, and places it in the extension
+ * directory. The shared object is copied beside the runtime, where
+ * `assertPhpExtensions()` finds it and enables it in the bundled `php.ini`.
  */
 function installParallelExtension(string $prefix, string $runtimeDir): void
 {
-    $php = $prefix . '/bin/php';
+    $windows = \PHP_OS_FAMILY === 'Windows';
+    $php = $windows ? $prefix . '/php.exe' : $prefix . '/bin/php';
     $phpConfig = $prefix . '/bin/php-config';
-    if (! \is_file($php) || ! \is_file($phpConfig)) {
-        throw new \RuntimeException("the PHP install left no php/php-config in {$prefix}/bin");
+    if (! \is_file($php) || (! $windows && ! \is_file($phpConfig))) {
+        throw new \RuntimeException("the PHP install left no usable php in {$prefix}");
     }
 
     $pie = findExecutable('pie') ?? findExecutable('pie.phar');
@@ -538,27 +626,40 @@ function installParallelExtension(string $prefix, string $runtimeDir): void
         );
     }
 
-    $command = \str_ends_with($pie, '.phar') ? [$php, $pie] : [$pie];
+    $target = $windows
+        ? ['--with-php-path=' . $php]
+        : ['--with-php-config=' . $phpConfig];
+    // A PHAR runs under the build-script PHP, not the target runtime: the
+    // target is named explicitly above and does not need phar support itself.
+    $command = \str_ends_with($pie, '.phar') ? [\PHP_BINARY, $pie] : [$pie];
     runOrFail([
         ...$command,
         'install',
-        'pecl/parallel',
-        '--php-config=' . $phpConfig,
+        PARALLEL_PACKAGE,
+        ...$target,
+        '--skip-enable-extension',
         '--no-interaction',
+        ...($windows ? [] : ['--auto-install-build-tools']),
     ], $prefix);
 
     $built = \glob($prefix . '/lib/php/extensions/*/parallel.so') ?: [];
     if ($built === []) {
-        $built = \glob($prefix . '/lib/php/extensions/*/php_parallel.dll') ?: [];
+        $built = \glob($prefix . '/ext/php_parallel.dll') ?: [];
     }
     if ($built === []) {
-        throw new \RuntimeException("PIE reported success but no parallel extension exists under {$prefix}/lib/php/extensions");
+        $built = \glob($prefix . '/ext/parallel.so') ?: [];
+    }
+    if ($built === []) {
+        throw new \RuntimeException("PIE reported success but no parallel extension exists under {$prefix}");
     }
 
-    if (! \is_dir($runtimeDir . '/ext') && ! \mkdir($runtimeDir . '/ext', 0777, true) && ! \is_dir($runtimeDir . '/ext')) {
-        throw new \RuntimeException("cannot create {$runtimeDir}/ext");
+    $extDir = $runtimeDir . '/ext';
+    if (! \is_dir($extDir) && ! \mkdir($extDir, 0777, true) && ! \is_dir($extDir)) {
+        throw new \RuntimeException("cannot create {$extDir}");
     }
-    if (! \copy($built[0], $runtimeDir . '/ext/' . \basename($built[0]))) {
+    $destination = $extDir . '/' . \basename($built[0]);
+    if (\realpath(\dirname($built[0])) !== \realpath($extDir)
+        && ! \copy($built[0], $destination)) {
         throw new \RuntimeException('cannot copy the built parallel extension into the runtime');
     }
 }

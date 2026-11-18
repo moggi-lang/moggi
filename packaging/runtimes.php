@@ -104,13 +104,20 @@ function writeComposerShim(string $dir): void
         # beside it, so a distribution needs nothing installed; a build that ships
         # this runtime without PHP falls back to the `php` on PATH.
         here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-        php="$here/../../php/bin/php"
+        php_home="$here/../../php"
+        php="$php_home/bin/php"
         if [ -x "$php" ]; then
+            # php.ini resolves extension_dir through PHPRC, so a direct run of
+            # this shim has to set it too, not only the compiler process.
+            if [ -f "$php_home/php.ini" ]; then
+                PHPRC="$php_home"; export PHPRC
+                PHP_INI_SCAN_DIR=""; export PHP_INI_SCAN_DIR
+            fi
             # A PHP built from source carries its libraries (libzip, oniguruma,
             # ICU) in `php/lib`, so the loader has to be told before it runs —
             # the compiler does this for its own children, and a direct run of
             # this shim has to do it for itself.
-            lib="$here/../../php/lib"
+            lib="$php_home/lib"
             if [ -d "$lib" ]; then
                 LD_LIBRARY_PATH="$lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"; export LD_LIBRARY_PATH
                 DYLD_FALLBACK_LIBRARY_PATH="$lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"; export DYLD_FALLBACK_LIBRARY_PATH
@@ -128,8 +135,11 @@ function writeComposerShim(string $dir): void
         rem this runtime without PHP falls back to the `php` on PATH.
         setlocal
         set "COMPOSER_HOME_DIR=%~dp0.."
-        set "COMPOSER_PHP=%COMPOSER_HOME_DIR%\..\php\php.exe"
+        set "COMPOSER_PHP_HOME=%COMPOSER_HOME_DIR%\..\php"
+        set "COMPOSER_PHP=%COMPOSER_PHP_HOME%\php.exe"
         if not exist "%COMPOSER_PHP%" set "COMPOSER_PHP=php"
+        if exist "%COMPOSER_PHP_HOME%\php.ini" set "PHPRC=%COMPOSER_PHP_HOME%"
+        if exist "%COMPOSER_PHP_HOME%\php.ini" set "PHP_INI_SCAN_DIR="
         "%COMPOSER_PHP%" "%COMPOSER_HOME_DIR%\composer.phar" %*
         BAT;
 
@@ -191,6 +201,10 @@ function runtimeIsPrepared(string $runtime, string $target, array $config): bool
     }
     $recorded = \json_decode((string) \file_get_contents($marker), true);
     if (! \is_array($recorded) || ! \is_string($recorded['binary'] ?? null) || ! \is_file($dir . '/' . $recorded['binary'])) {
+        return false;
+    }
+    if (! \is_string($recorded['tree'] ?? null)
+        || ! \hash_equals($recorded['tree'], preparedTreeDigest($dir))) {
         return false;
     }
 
@@ -299,6 +313,12 @@ function prepareRuntime(string $runtime, string $target, array $config, bool $fo
     }
 
     if ($runtime === 'php') {
+        // The Windows PHP is an upstream archive, not a source build, so its
+        // parallel DLL is installed into the extracted runtime with PIE. On
+        // Unix the source build already did this against its prefix.
+        if (! $built && \PHP_OS_FAMILY === 'Windows' && \in_array('parallel', distributionPhpExtensions(), true)) {
+            installParallelExtension($dir, $dir);
+        }
         $loaded = assertPhpExtensions($built ? $dir . '/bin/php' : $dir . '/' . $entry['binary'], $dir, $target, $config);
         writeRuntimeExtensionManifest($dir, $runtime, $loaded);
     }
@@ -338,10 +358,59 @@ function installRawAsset(string $archive, string $dir, string $binary): void
 /** @param array<string, mixed> $fields */
 function writePreparedMarker(string $dir, array $fields): void
 {
-    \file_put_contents(
+    $fields['tree'] = preparedTreeDigest($dir);
+    if (\file_put_contents(
         $dir . '/.prepared',
         \json_encode($fields, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES) . "\n",
+    ) === false) {
+        throw new \RuntimeException("cannot write {$dir}/.prepared");
+    }
+}
+
+/**
+ * A digest of every file in a prepared runtime, not only its launcher.
+ *
+ * A cache is reusable only while the whole prepared tree is the one this build
+ * produced: swapping the binary is the obvious attack, but a modified library,
+ * extension or license file is just as much a substitution. `.prepared` is
+ * excluded because it records the digest.
+ */
+function preparedTreeDigest(string $dir): string
+{
+    $root = \realpath($dir);
+    if ($root === false) {
+        throw new \RuntimeException("cannot resolve the prepared runtime {$dir}");
+    }
+    $paths = [];
+    $items = new \RecursiveIteratorIterator(
+        new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+        \RecursiveIteratorIterator::SELF_FIRST,
     );
+    foreach ($items as $item) {
+        $relative = \substr($item->getPathname(), \strlen($root) + 1);
+        if ($relative === '.prepared') {
+            continue;
+        }
+        $paths[] = \str_replace('\\', '/', $relative);
+    }
+    \sort($paths, \SORT_STRING);
+
+    $context = \hash_init('sha256');
+    foreach ($paths as $relative) {
+        $path = $root . '/' . $relative;
+        if (\is_link($path)) {
+            $kind = 'link';
+            $value = (string) \readlink($path);
+        } elseif (\is_file($path)) {
+            $kind = 'file';
+            $value = sha256File($path);
+        } else {
+            continue;
+        }
+        \hash_update($context, $kind . "\0" . $relative . "\0" . $value . "\0");
+    }
+
+    return 'sha256:' . \hash_final($context);
 }
 
 function stageRuntimeLicense(string $runtime, string $dir, array $config, string $target): void
@@ -366,9 +435,17 @@ function stageRuntimeLicense(string $runtime, string $dir, array $config, string
     if (! \is_dir($downloads) && ! \mkdir($downloads, 0777, true) && ! \is_dir($downloads)) {
         throw new \RuntimeException("cannot create {$downloads}");
     }
+    $expected = \strtolower((string) ($license['sha256'] ?? ''));
+    if (\preg_match('/^[0-9a-f]{64}$/', $expected) !== 1) {
+        throw new \RuntimeException("{$runtime}: the downloaded {$file} has no reviewed sha256");
+    }
+
     $cached = $downloads . '/license-' . $runtime . '-' . \basename((string) \parse_url($url, \PHP_URL_PATH));
-    if (! \is_file($cached)) {
+    if (! \is_file($cached) || sha256File($cached) !== $expected) {
         httpGet($url, $cached);
+    }
+    if (sha256File($cached) !== $expected) {
+        throw new \RuntimeException("{$runtime}: the {$file} from {$url} does not match its pinned sha256");
     }
     if (! \copy($cached, $dir . '/' . $file)) {
         throw new \RuntimeException("cannot copy the {$runtime} licence into place");

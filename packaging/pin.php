@@ -112,6 +112,15 @@ function expectedAssetToken(string $runtime, string $target, array $config): ?st
  */
 function assertAssetMatchesTarget(string $runtime, string $url, string $target, array $config): void
 {
+    if ($runtime === 'php' && ($config['targets'][$target]['phpPlatform'] ?? '') === 'windows') {
+        $path = (string) \parse_url($url, \PHP_URL_PATH);
+        if (\str_contains(\strtolower($path), 'nts')) {
+            throw new \RuntimeException(
+                "php: {$path} is a non-thread-safe Windows build, but the distribution requires ZTS for ext-parallel",
+            );
+        }
+    }
+
     $token = expectedAssetToken($runtime, $target, $config);
     if ($token === null || $token === '') {
         return;
@@ -275,22 +284,26 @@ function upstreamChecksum(string $runtime, string $url, array $asset, string $ta
 
 function resolveChecksum(string $runtime, string $url, array $asset, string $target, array $config): array
 {
+    // A reviewed, committed hash is the strongest available pin when upstream
+    // has no machine-readable digest. It is independent of the download and
+    // works even when the metadata API is rate-limited.
+    $configured = \strtolower((string) (
+        $asset['sha256']
+        ?? ($config['runtimes'][$runtime]['sha256ByTarget'][$target] ?? '')
+    ));
+    if (\preg_match('/^[0-9a-f]{64}$/', $configured) === 1) {
+        return ['sha256' => $configured, 'source' => 'config-pin'];
+    }
+
     $published = upstreamChecksum($runtime, $url, $asset, $target, $config);
     if ($published !== null) {
         return $published;
     }
 
-    $cacheDir = distCacheRoot() . '/downloads';
-    if (! \is_dir($cacheDir)) {
-        \mkdir($cacheDir, 0777, true);
-    }
-    $cached = $cacheDir . '/' . $runtime . '-' . $target . '-' . \basename(\parse_url($url, \PHP_URL_PATH) ?: 'asset');
-    if (! \is_file($cached)) {
-        \fwrite(STDOUT, "  downloading {$url} to hash it\n");
-        httpGet($url, $cached);
-    }
-
-    return ['sha256' => sha256File($cached), 'source' => 'downloaded', 'size' => (int) \filesize($cached)];
+    throw new \RuntimeException(
+        "{$runtime}: no independent checksum is published for {$url}; "
+        . 'add the reviewed sha256 to the asset definition rather than hashing the download',
+    );
 }
 
 function httpGetContent(string $url): string
@@ -422,6 +435,7 @@ function main(array $argv): int
                 if (isset($checksum['sha512'])) {
                     $entry['sha512'] = $checksum['sha512'];
                 }
+                $entry['source'] = (string) ($checksum['source'] ?? 'upstream');
                 if (isset($asset['build'])) {
                     $entry['build'] = (bool) $asset['build'];
                 }

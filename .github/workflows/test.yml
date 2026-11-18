@@ -57,19 +57,19 @@ jobs:
         if: runner.os == 'Linux'
         env:
           COMPOSER_ALLOW_SUPERUSER: '1'
-        run: sudo env "PATH=$PATH" COMPOSER_ALLOW_SUPERUSER=1 "$(command -v pie)" install pecl/parallel --no-interaction --auto-install-build-tools
+        run: sudo env "PATH=$PATH" COMPOSER_ALLOW_SUPERUSER=1 "$(command -v pie)" install pecl/parallel:1.2.15 --no-interaction --auto-install-build-tools
 
       - name: Install ext-parallel with PIE (macOS)
         if: runner.os == 'macOS'
         env:
           COMPOSER_ALLOW_SUPERUSER: '1'
-        run: pie install pecl/parallel --no-interaction --auto-install-build-tools
+        run: pie install pecl/parallel:1.2.15 --no-interaction --auto-install-build-tools
 
       - name: Install ext-parallel with PIE (Windows)
         if: runner.os == 'Windows'
         env:
           COMPOSER_ALLOW_SUPERUSER: '1'
-        run: pie install pecl/parallel --no-interaction
+        run: pie install pecl/parallel:1.2.15 --no-interaction
 
       - name: Verify ZTS and ext-parallel
         run: |
