@@ -1,6 +1,5 @@
 -- |
--- Dates and times: the common API in one import, in the spirit of Haskell's
--- 'Data.Time'.
+-- Dates and times: the common API in one import, following 'Data.Time'.
 --
 -- Import this module for the everyday core — 'Day' and Gregorian conversion,
 -- 'UTCTime' and durations, civil times and zones, formatting and the POSIX

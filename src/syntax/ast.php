@@ -42,7 +42,7 @@ function lambdaParamFor(AstNode $pattern): LambdaParam
 /**
  * A lambda as a function of variables.
  *
- * Haskell defines `\p1 … pn -> e` by desugaring it to
+ * A pattern lambda `\p1 … pn -> e` desugars to
  * `\x1 … xn -> case x1 of p1 -> … case xn of pn -> e`, and the IR binds a
  * lambda's parameters as slots, so the source form is turned into that one
  * here, in the sugar stage: every later pass sees only variable parameters.

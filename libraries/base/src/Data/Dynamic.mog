@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
------------------------------------------------------------------------------
--- |
+------------------------------------------------------------------------------
+--
 -- Module      :  Data.Dynamic
 -- Copyright   :  (c) The University of Glasgow 2001
 -- License     :  BSD-style (see the file libraries/base/LICENSE)
@@ -9,15 +9,13 @@
 -- Stability   :  stable
 -- Portability :  portable
 --
--- The Dynamic interface provides basic support for dynamic types.
+-- | The Dynamic interface provides basic support for dynamic types.
+------------------------------------------------------------------------------
 --
 -- Operations for injecting values of arbitrary type into
 -- a dynamically typed value, Dynamic, are provided, together
 -- with operations for converting dynamic values into a concrete
 -- (monomorphic) type.
---
------------------------------------------------------------------------------
-
 module Data.Dynamic
   ( -- * The @Dynamic@ type
     Dynamic(..)
@@ -89,8 +87,8 @@ instance Exception Dynamic where
 toDyn :: Typeable a => a -> Dynamic
 toDyn v = Dynamic typeRep v
 
--- | Converts a 'Dynamic' object back into an ordinary Haskell value of
--- the correct type.  See also 'fromDynamic'.
+-- | Converts a 'Dynamic' object back into an ordinary value of the correct
+-- type.  See also 'fromDynamic'.
 fromDyn :: Typeable a
         => Dynamic      -- ^ the dynamically-typed object
         -> a            -- ^ a default value
@@ -101,8 +99,8 @@ fromDyn (Dynamic t v) def = case eqTypeRep t (typeOf def) of
   Just HRefl -> v
   Nothing    -> def
 
--- | Converts a 'Dynamic' object back into an ordinary Haskell value of
--- the correct type.  See also 'fromDyn'.
+-- | Converts a 'Dynamic' object back into an ordinary value of the correct
+-- type.  See also 'fromDyn'.
 fromDynamic
         :: forall a. Typeable a
         => Dynamic      -- ^ the dynamically-typed object
@@ -117,9 +115,9 @@ fromDynamic (Dynamic t v) = case eqTypeRep t rep of
 
 -- (f::(a->b)) `dynApply` (x::a) = (f a)::b
 --
--- `Fun`'s signature is what gives @a ~ (ta -> tr)@ in GHC. A pattern synonym
--- here is expanded into its matcher before the checker sees it, so the equality
--- the signature states is proved from the matched representation instead.
+-- `Fun`'s signature is what gives @a ~ (ta -> tr)@. A pattern synonym here
+-- is expanded into its matcher before the checker sees it, so the equality the
+-- signature states is proved from the matched representation instead.
 dynApply :: Dynamic -> Dynamic -> Maybe Dynamic
 dynApply (Dynamic t1 f) (Dynamic t2 x) = case t1 of
   Fun ta tr -> case eqTypeRep t1 (mkFunTy ta tr) of

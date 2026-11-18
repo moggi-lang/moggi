@@ -1,6 +1,6 @@
 -- The http-types package's test entry point.
 --
--- One module covers the package's behaviour, porting the upstream Haskell specs
+-- One module covers the package's behaviour, porting the upstream specs
 -- (`HeaderSpec`, `MethodSpec`, `StatusSpec`, `URISpec`, `VersionSpec`) case for
 -- case where they are deterministic. QuickCheck properties become fixed
 -- samples, and the `Settings`/pattern-synonym matches become constructor

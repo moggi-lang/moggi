@@ -1,5 +1,5 @@
 -- |
--- Civil times and time zones, in the spirit of Haskell's 'Data.Time.LocalTime'.
+-- Civil times and time zones, following the 'Data.Time.LocalTime'.
 --
 -- A 'LocalTime' is a 'Day' plus a 'TimeOfDay' with no zone attached; a
 -- 'ZonedTime' pairs one with a 'TimeZone'. Conversion to UTC
@@ -8,7 +8,7 @@
 --
 -- Against the reference: constructors are positional (Moggi record fields
 -- define no selectors, so the record spelling buys nothing) with manual
--- accessor functions of the Haskell field names; 'TimeZone' has no
+-- accessor functions of the field names; 'TimeZone' has no
 -- 'TimeZoneSeries'\/'TimeZoneName' machinery and there is no
 -- 'getTimeZone'\/'getCurrentTimeZone' IO (the hosts report no portable zone
 -- database through the current bindings) — build zones with 'utc',

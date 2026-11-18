@@ -404,7 +404,7 @@ utcToUnix t = integerToInt (unixDays + daySecs)
 
 -- | @".exe"@: the extension the shell's search appends. Harmless on Unix
 -- (the name itself is still tried first) and required on Windows, where
--- extension-less files are never commands — the Haskell contract, per OS
+-- extension-less files are never commands — the portable contract, per OS
 -- rather than per backend, since one module serves both hosts here.
 exeExtension :: String
 exeExtension = ".exe"

@@ -1,8 +1,8 @@
--- The cases of the Haskell blaze-html test-suite (tests/Text/Blaze/Html/
+-- The cases of the blaze-html test-suite (tests/Text/Blaze/Html/
 -- Tests.hs), each rendered through every renderer the library offers and
 -- compared with the same expected markup.
 --
--- The Haskell suite asserts a lazy UTF-8 ByteString against three renderings of
+-- The upstream suite asserts a lazy UTF-8 ByteString against three renderings of
 -- one tree: its String renderer re-encoded, its text renderer re-encoded, and
 -- its Utf8 renderer. Moggi's text type is 'String', so the text and string
 -- renderings coincide, but both are still exercised; the Utf8 renderer is
@@ -79,7 +79,7 @@ htmlSuite = do
   check "case 5" "&quot;&#39;&quot;" "\"'\""
   check "case 6" "<img src=\"&amp;\">" (img ! src "&")
   check "case 7" "<u>hello</u>" (H.u "hello")
-  check "case 8" "<3 Haskell" (preEscapedToMarkup ("<3 Haskell" :: String))
+  check "case 8" "<3 Moggi" (preEscapedToMarkup ("<3 Moggi" :: String))
   check "case 9" "<script />" (preEscapedToMarkup ("<script />" :: String))
   check "case 10" "<p class=\"'&!;\">bad</p>" ((p ! class_ (preEscapedToValue ("'&!;" :: String))) "bad")
   check "case 11" "<span id=\"&amp;\">λ</span>" ((H.span ! id "&") "λ")

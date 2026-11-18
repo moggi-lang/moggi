@@ -1,4 +1,5 @@
--- |
+------------------------------------------------------------------------------
+--
 -- Module      :  Data.Sequence
 -- Copyright   :  (c) Ross Paterson 2005
 --                (c) Louis Wasserman 2009
@@ -8,7 +9,7 @@
 -- Maintainer  :  libraries@haskell.org
 -- Portability :  portable
 --
--- = Finite sequences
+-- | = Finite sequences
 --
 -- The @'Seq' a@ type represents a finite sequence of values of
 -- type @a@.
@@ -31,7 +32,7 @@
 -- do lists. Notably, they offer
 --
 --     * Constant-time access to both the front and the rear with
---     '<|', '|>', 'viewl', 'viewr'. For recent GHC versions, this can
+--     '<|', '|>', 'viewl', 'viewr'. This can
 --     be done more conveniently using the bidirectional patterns 'Empty',
 --     ':<|', and ':|>'. See the detailed explanation in the \"Pattern synonyms\"
 --     section.
@@ -60,8 +61,7 @@
 --     @ (1 :<| undefined) ``index`` 0 = undefined @
 --
 -- Sequences may also be compared to immutable
--- [arrays](https://hackage.haskell.org/package/array)
--- or [vectors](https://hackage.haskell.org/package/vector).
+-- array or vectors.
 -- Like these structures, sequences support fast indexing,
 -- although not as fast. But editing an immutable array or vector,
 -- or combining it with another, generally requires copying the

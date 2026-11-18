@@ -7,7 +7,7 @@ import Data.Functor (Functor(map))
 foreign php const rawOsFamily "PHP:PHP_OS_FAMILY" :: String
 foreign php function rawMachineType "php_uname" :: String -> String
 
--- | `PHP_OS_FAMILY` in GHC's `System.Info.os` spelling. The family names are
+-- | `PHP_OS_FAMILY` in the `System.Info.os` spelling. The family names are
 -- coarse (`BSD` covers every BSD), so the rarer members map to the common
 -- one; anything unrecognized answers @"unknown"@ rather than guessing.
 os :: String
@@ -19,7 +19,7 @@ os = case rawOsFamily of
   "Solaris" -> "solaris"
   _ -> "unknown"
 
--- | `php_uname('m')` in GHC's `System.Info.arch` spelling: the kernel's own
+-- | `php_uname('m')` in the `System.Info.arch` spelling: the kernel's own
 -- machine name (`arm64` on Apple silicon, `amd64` on some BSDs) is folded onto
 -- the spelling the rest of the table uses.
 arch :: String

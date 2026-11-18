@@ -123,7 +123,7 @@ function parseTypeNoConstraint(ParserState $state, bool $anyOperator = false): A
 /**
  * Skip a `-- ^` doc comment written inside a multi-line type.
  *
- * Haskell writes argument documentation where the argument ends, which in a
+ * Argument documentation is written where the argument ends, which in a
  * signature is in front of the next arrow:
  *
  * > fromDyn :: Typeable a
@@ -458,8 +458,8 @@ function isForallStart(ParserState $state): bool
  * `forall a b. body`, `forall (a :: k). body`.
  *
  * `forall` is not a keyword: it is a `VarId` that starts a quantifier only here,
- * in type syntax, so a program may still name a value `forall` (Haskell does the
- * same). The binder list is non-empty and each binder is either a bare variable
+ * in type syntax, so a program may still name a value `forall`. The binder
+ * list is non-empty and each binder is either a bare variable
  * or a kind-annotated one in parentheses; a single `.` ends the list.
  */
 function parseForall(ParserState $state): Ast\TypeNode

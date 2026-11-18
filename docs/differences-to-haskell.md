@@ -1,10 +1,10 @@
 ---
-title: "Differences to Haskell / GHC `base`"
+title: "Differences to Haskell `base`"
 ---
 
-# Differences to Haskell / GHC `base`
+# Differences to Haskell `base`
 
-Moggi looks like Haskell and ports the API of GHC's `base` library, but it is a
+Moggi looks like Haskell and ports the API of Haskell's `base` library, but it is a
 strict language that compiles to three hosts (PHP, the JVM, .NET) — not to
 native code through the C ABI. This page tells you, as a Haskell programmer,
 what will surprise you. Everything not mentioned here is meant to behave like
@@ -77,8 +77,10 @@ source-compatibility target and keeps one spelling per operation:
 - `Monad` has no `return`. Use `pure`, which `base` itself says `return` should
   equal. `Monoid` likewise has no `mappend`: `(<>)` is the only spelling, as
   `base` recommends.
-- `IsList` is `Moggi.IsList`; there is no `GHC.IsList`, and `OverloadedLists`
-  syntax is not implemented.
+- List literals are context-directed. When the expected type has an `IsList`
+  instance, `[1, 2]` is built with `fromList`; with no such expectation it is
+  an ordinary `[a]`. There is no language extension to enable: the class lives
+  in `Moggi.IsList` and the syntax is always available.
 - `Alternative`'s `some` and `many` are class methods with defaults (as in
   `base`), so an instance with a faster repetition strategy can override them.
 
@@ -133,8 +135,8 @@ matter are:
   not available.
 - `HasCallStack` works. `error`, `throw`, `throwIO`, and `ioError` report the
   host stack at the raise site; `errorWithoutStackTrace` omits it. The API is
-  in `Moggi.Stack`/`Moggi.Stack.Types`, and the stack is a snapshot, not GHC's
-  solver-grown stack (`whoCreated` has no allocation stack).
+  in `Moggi.Stack`/`Moggi.Stack.Types`, and the stack is a snapshot rather than
+  a solver-grown allocation stack (`whoCreated` has no allocation stack).
 - `mapException` is the identity because its argument is already evaluated.
 - Host failures are `HostException` from `Moggi.IO.Exception`;
   `Control.Exception` does not re-export it. `System.IO` still translates file
@@ -191,8 +193,8 @@ re-export shims; Moggi does not mirror that tree. Implementations live in the
 module you import: numbers in `Data.Int`/`Data.Word`/`Data.Integer`/
 `Data.Double`/`Data.Num`/`Data.Real`, `Show` and `Read` directly in
 `Text.Show`/`Text.Read`. `Data.Tuple` additionally carries the tuple types
-`base` puts in `GHC.Tuple` (`Solo`, `Tuple0`–`Tuple64`, `Unit`), so there is no
-user-facing `GHC.*` layer at all.
+`base` puts in its internal tuple module (`Solo`, `Tuple0`–`Tuple64`, `Unit`),
+so there is no separate internal layer to learn.
 
 Because there is one file per module and no build file, each library lives
 where you import it — there is no separate `.cabal` package tree to learn.
@@ -271,4 +273,4 @@ These look like deviations when diffing against `base`, and are not:
   `Data.List`.
 - `Data.Bits`'s class split (`Bits`, `FiniteBits`) and the two's-complement
   behaviour for negative `Integer` values.
-- `Int` being 64-bit — GHC on a 64-bit platform is the same.
+- `Int` being 64-bit, which is the width it has on a 64-bit platform.

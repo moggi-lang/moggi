@@ -9,7 +9,7 @@
 -- pointer writes. 'renderStatusCode' and 'renderFullStatus' produce the same
 -- bytes by packing the digits instead. The @StatusCode@ pattern synonym is
 -- not provided either; match on the 'Status' constructor. The 'Data.Data.Data'
--- and 'GHC.Generics.Generic' derivations are absent with those libraries.
+-- and 'Generic' derivations are absent with those libraries.
 module Network.HTTP.Types.Status
   ( -- * HTTP Status
     Status(..)

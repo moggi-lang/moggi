@@ -29,7 +29,7 @@ import Data.Num
 import Data.String (String)
 import Data.Version (Version(Version))
 
--- | The operating system, in GHC's `System.Info.os` spelling: @"mingw32"@ on
+-- | The operating system, in the `System.Info.os` spelling: @"mingw32"@ on
 -- Windows, @"darwin"@ on macOS, @"linux"@ on Linux, @"freebsd"@ on FreeBSD,
 -- @"solaris"@ on Solaris, and @"unknown"@ anywhere else the hosts report a
 -- name from outside that table.

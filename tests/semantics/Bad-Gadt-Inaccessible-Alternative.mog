@@ -1,5 +1,5 @@
 -- `Truth :: Expr Bool` cannot be a case of `Expr Int`: the pattern is
--- inaccessible, and GHC rejects it rather than accept dead code.
+-- inaccessible, and the type checker rejects it rather than accept dead code.
 module Main where
 
 import Moggi.Internal.Base

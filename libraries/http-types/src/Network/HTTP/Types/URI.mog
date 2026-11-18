@@ -52,7 +52,7 @@ module Network.HTTP.Types.URI
 
     -- for example @\'+\'@ or @\':\'@ in
     --
-    -- @q=a+language:haskell+created:2009-01-01..2009-02-01&sort=stars@
+    -- @q=a+language:moggi+created:2009-01-01..2009-02-01&sort=stars@
   , PartialEscapeQuery
   , PartialEscapeQueryItem
   , EscapeItem(..)

@@ -1,5 +1,5 @@
 -- `Lit` returns `Expr Int`, not `Expr a`, so no `map` over an arbitrary `a` can
--- be built from it. Haskell refuses this derivation, and so do we.
+-- be built from it. The type checker refuses this derivation.
 module Main where
 
 import Moggi.Internal.Base

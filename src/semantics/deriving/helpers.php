@@ -59,8 +59,8 @@ function constructorDeriveFields(Ast\ConstructorDecl $ctor): array
  * shape a functorial derivation needs (`C :: f a -> T a`).
  *
  * `C :: Int -> T Int` does not: mapping a constructor that fixes its index
- * cannot produce a `T a` for an arbitrary `a`, which is why Haskell refuses
- * `deriving Functor` there.
+ * cannot produce a `T a` for an arbitrary `a`, so `deriving Functor` is
+ * rejected there.
  */
 function constructorReturnsParams(Ast\ConstructorDecl $ctor, Ast\DataDecl $decl): bool
 {

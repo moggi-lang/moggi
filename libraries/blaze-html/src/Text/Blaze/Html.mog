@@ -69,7 +69,7 @@ import Text.Blaze
   , (!?)
   )
 
--- | HTML is markup: the Haskell library names the same type at this level.
+-- | HTML is markup: the upstream library names the same type at this level.
 type Html = Markup
 
 -- | Convert a value to HTML.

@@ -3,8 +3,8 @@
 -- functions that generate custom elements. Users normally reach markup through
 -- "Text.Blaze" and the element modules instead.
 --
--- Two things differ from the Haskell library because moggi has fewer types than
--- GHC has: @Text@ is 'String', so the text and string flavours of every
+-- Two things differ from the upstream library because moggi has fewer types:
+-- @Text@ is 'String', so the text and string flavours of every
 -- function coincide, and a lazy @Text@ builder has no counterpart, so the
 -- builder flavours are gone.
 module Text.Blaze.Internal

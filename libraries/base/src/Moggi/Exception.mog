@@ -5,7 +5,7 @@
 -- `SomeException` is the compiler-provided tagged value, with @base@'s
 -- constructor available as the 'SomeException' pattern. `Moggi.Stack` provides
 -- `CallStack` and `SrcLoc`; the call stack is a runtime snapshot rather than
--- GHC's compile-time implicit stack.
+-- a compile-time implicit stack.
 module Moggi.Exception
   ( Exception(..)
   , SomeException

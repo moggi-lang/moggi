@@ -147,9 +147,8 @@ forkOn _ action = forkIO action
 forkOnWithUnmask :: Int -> ((forall a. IO a -> IO a) -> IO ()) -> IO ThreadId
 forkOnWithUnmask _ action = forkIOWithUnmask action
 
--- | The number of capabilities the runtime schedules over. There is no GHC
--- capability scheduler here; each Moggi thread is already a host thread, so
--- the answer is one logical capability.
+-- | The number of capabilities the runtime schedules over. Each Moggi thread
+-- is already a host thread, so the answer is one logical capability.
 getNumCapabilities :: IO Int
 getNumCapabilities = pure 1
 

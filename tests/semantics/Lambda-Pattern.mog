@@ -4,8 +4,8 @@ import Moggi.Internal.Base
 import Text.Show
 
 -- A lambda parameter may be a pattern. The compiler desugars `\p -> e` into
--- `\v -> case v of p -> e`, exactly as GHC does, so `\[] -> 0` is accepted and
--- means what it means in Haskell.
+-- `\v -> case v of p -> e`, so `\[] -> 0` is accepted and yields 0 only for an
+-- empty list.
 nil :: [Int] -> Int
 nil = \[] -> 0
 

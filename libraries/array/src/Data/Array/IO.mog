@@ -66,8 +66,8 @@ unsafeFreezeIOArray marr = unsafeFreezeIOArray# marr
 unsafeThawIOArray :: Array i e -> IO (IOArray i e)
 unsafeThawIOArray arr = unsafeThawIOArray# arr
 
--- No 'Eq' instance, though Haskell has one (pointer equality): Moggi's IO
--- confinement forbids 'IOArray' in a pure signature ('IO values are
--- forbidden outside an IO-returning function'), and '(==)' is pure. The
+-- No 'Eq' instance: pointer equality is unavailable to pure code, and
+-- Moggi's IO confinement forbids 'IOArray' in a pure signature ('IO values
+-- are forbidden outside an IO-returning function'). The
 -- underlying primop 'sameIOArray#' ('Moggi.Internal.Prim') is still
 -- available for identity checks inside 'IO'-returning functions.

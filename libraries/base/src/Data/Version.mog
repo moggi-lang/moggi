@@ -117,7 +117,7 @@ makeVersion :: [Int] -> Version
 makeVersion b = Version b []
 
 -- | Parse what 'showVersion' writes: @"1.2.3-tag1-tag2"@.
--- This is 'read' under its 'Haskell' name.
+-- This is 'read' under its standard name.
 parseVersion :: String -> Version
 parseVersion s = read s
 

@@ -68,8 +68,7 @@ unsafeThawSTArray :: Array i e -> ST s (STArray s i e)
 unsafeThawSTArray arr = unsafeThawArray# arr
 
 -- | Pointer equality: two 'STArray's are equal exactly when they are the
--- same mutable array, as in Haskell (which compares with
--- @sameMutableArray#@). Equal contents in two separately allocated arrays
--- are '/='.
+-- same mutable array, compared with @sameMutableArray#@. Equal contents in
+-- two separately allocated arrays are '/='.
 instance Eq (STArray s i e) where
   (==) a b = sameSTArray# a b

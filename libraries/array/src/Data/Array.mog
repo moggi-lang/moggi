@@ -3,13 +3,12 @@
 -- index range to values, built all at once and read with '(!)'.
 --
 -- Arrays are strict in Moggi (expressions evaluate eagerly), which settles
--- two of Haskell's lazy corners: an association list that misses an index
--- leaves an /erroring/ slot — reading it raises @"(Array.!): undefined array
--- element"@ — and a recursive @array@ (one whose values read the array being
--- built) diverges instead of tying the knot. Everything else follows the
--- Haskell 2010 report and GHC's @array@ package: out-of-range indices raise,
--- duplicate associations keep the last value, and empty bounds @(l, u)@ with
--- @l > u@ build a legal empty array.
+-- two lazy corners: an association list that misses an index leaves an
+-- /erroring/ slot — reading it raises @"(Array.!): undefined array element"@
+-- — and a recursive @array@ (one whose values read the array being built)
+-- diverges instead of tying the knot. Everything else follows the @array@
+-- package: out-of-range indices raise, duplicate associations keep the last
+-- value, and empty bounds @(l, u)@ with @l > u@ build a legal empty array.
 --
 -- Construction runs through 'ST' internally ('runSTArray' style), so
 -- building is still one allocation plus one freeze no matter how many
@@ -57,7 +56,7 @@ infixl 9 !
 -- | An immutable table from indices @i@ to values @e@. The bounds the array
 -- was built with are part of the value ('bounds' recovers them); the
 -- backing store remembers them too, so indexing checks both the semantic
--- range and the store size, as in GHC. The primops speak this type
+-- range and the store size. The primops speak this type
 -- directly, so there is no wrapping to do: this declaration names the
 -- type, its kind, and its confinement (pure — 'Array#' never appears in
 -- 'ST' or 'IO' confinement checks).
@@ -72,8 +71,8 @@ numElements :: Array i e -> Int
 numElements arr = arraySize# arr
 
 -- | Build an array from bounds and associations. Indices outside the bounds
--- make the whole array an error (like GHC, the check runs up front);
--- duplicate indices keep the last value; missing indices error when read.
+-- make the whole array an error (the check runs up front); duplicate indices
+-- keep the last value; missing indices error when read.
 array :: Ix i => (i, i) -> [(i, e)] -> Array i e
 array bnds ies = runST (do
   let n = safeRangeSize bnds
@@ -169,19 +168,19 @@ instance Ix i => Functor (Array i) where
   map = amap
 
 -- | Equality first compares sizes (two empty arrays are equal whatever
--- their bounds, as in GHC), then bounds, then slot by slot. 'Eq i' comes
+-- their bounds), then bounds, then slot by slot. 'Eq i' comes
 -- along with 'Ix i' through its 'Ord' superclass.
 instance (Ix i, Eq e) => Eq (Array i e) where
   arr1 == arr2 = case numElements arr1 == 0 of
     True -> numElements arr2 == 0
     False -> bounds arr1 == bounds arr2 && elems arr1 == elems arr2
 
--- | Ordering compares the association lists, as in GHC.
+-- | Ordering compares the association lists.
 instance (Ix i, Ord e) => Ord (Array i e) where
   compare arr1 arr2 = compare (assocs arr1) (assocs arr2)
 
--- | Shows as @array (l, u) [(i, e), ...]@, the same shape Haskell's
--- 'showsIArray' writes. There is no 'Read' instance yet: Moggi's 'Read'
+-- | Shows as @array (l, u) [(i, e), ...]@, the shape 'showsIArray' writes.
+-- There is no 'Read' instance yet: Moggi's 'Read'
 -- class ('Text.Read') is a single-method @String -> a@ without instances
 -- for pairs and lists, so @read@ could not name the bounds or the
 -- associations. The instance belongs here once base grows those.

@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 -- | The combinators for this flavour of HTML, generated from the same
--- specification the Haskell library generates them from.
+-- specification these attributes are generated from.
 -- Note: upstream's @pattern@ attribute is spelled @pattern_@ here, because
 -- @pattern@ is a keyword in moggi and cannot name a function.
 module Text.Blaze.Html5.Attributes

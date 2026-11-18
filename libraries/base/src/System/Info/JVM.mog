@@ -7,7 +7,7 @@ import Data.String (isPrefixOf)
 
 foreign jvm function rawGetProperty "java.lang.System:getProperty" :: String -> String
 
--- | `os.name` in GHC's `System.Info.os` spelling. The property carries
+-- | `os.name` in the `System.Info.os` spelling. The property carries
 -- versions and vendor spellings (`Windows 11`, `Mac OS X`, `macOS`), so this
 -- matches on prefixes; anything unrecognized answers @"unknown"@ rather than
 -- guessing.
@@ -25,7 +25,7 @@ normaliseOs n
   | isPrefixOf "SunOS" n = "solaris"
   | otherwise = "unknown"
 
--- | `os.arch` in GHC's `System.Info.arch` spelling. The JVM reports the
+-- | `os.arch` in the `System.Info.arch` spelling. The JVM reports the
 -- hardware's own name (`amd64`, `aarch64`, `x86`), which is folded onto the
 -- spelling the rest of the table uses.
 arch :: String
