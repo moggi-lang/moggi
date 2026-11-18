@@ -39,7 +39,7 @@ import Moggi.Internal.Type.Reflection (Typeable(..), kindFun, mkTyCon, mkTyConAp
 -- representation, the way @base@'s solver builds it, which is what the
 -- @Data (Ratio a)@ instance's 'Typeable' superclass needs.
 instance Typeable Ratio where
-  typeRepOf = mkTyConApp (mkTyCon "GHC.Real" "base" "Ratio") [] (kindFun trLiftedRep trLiftedRep)
+  typeRepOf = mkTyConApp (mkTyCon "Data.Ratio" "base" "Ratio") [] (kindFun trLiftedRep trLiftedRep)
 
 -- Ratios print as @n % d@, at the precedence the constructor's fixity gives
 -- them, so a compound ratio is parenthesised.

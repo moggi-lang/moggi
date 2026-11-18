@@ -1,5 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
------------------------------------------------------------------------------
+------------------------------------------------------------------------------
 --
 -- Module      :  Data.Data
 -- Copyright   :  (c) The University of Glasgow, CWI 2001--2004
@@ -9,15 +9,9 @@
 -- Stability   :  stable
 -- Portability :  non-portable (local universal quantification)
 --
--- This module provides the 'Data' class with its primitives for
--- generic programming, along with instances for many datatypes. It
--- corresponds to a merge between the previous "Data.Generics.Basics"
--- and almost all of "Data.Generics.Instances".
---
--- \"Scrap your boilerplate\" --- Generic programming in Haskell.
---
------------------------------------------------------------------------------
-
+-- | This module provides the 'Data' class with its primitives for
+-- generic programming, along with instances for many datatypes.
+------------------------------------------------------------------------------
 module Data.Data
   ( -- * Module Data.Typeable re-exported for convenience
     module Data.Typeable
@@ -128,12 +122,12 @@ of type @r@, then the result type within generic folding is @r -> r@.
 So the result of folding is a function to which we finally pass the
 right unit.
 
-With the @-XDeriveDataTypeable@ option, GHC can generate instances of the
-'Data' class automatically.  For example, given the declaration
+With @DeriveDataTypeable@, the compiler can generate instances of the 'Data'
+class automatically.  For example, given the declaration
 
 > data T a b = C1 a b | C2 deriving (Typeable, Data)
 
-GHC will generate an instance that is equivalent to
+the generated instance is equivalent to
 
 > instance (Data a, Data b) => Data (T a b) where
 >     gfoldl k z (C1 a b) = z C1 `k` a `k` b
@@ -578,8 +572,8 @@ mkCharType = mkPrimType CharRep
 mkPrimType :: DataRep -> String -> DataType
 mkPrimType dr str = DataType str (\_ -> dr)
 
--- Makes a constructor for primitive types. GHC leaves the fields and fixity as
--- bottom; a strict value cannot carry them, so an unavailable field is empty.
+-- Makes a constructor for primitive types. The fields and fixity stay empty;
+-- a strict value cannot carry them, so an unavailable field is empty.
 mkPrimCon :: DataType -> String -> ConstrRep -> Constr
 mkPrimCon dt str cr = Constr cr str [] Prefix dt
 
@@ -852,7 +846,7 @@ ratioConstr :: Constr
 ratioConstr = mkConstrTag ratioDataType ":%" 1 [] Infix
 
 ratioDataType :: DataType
-ratioDataType = mkAlgDataType "GHC.Real.Ratio" (\_ -> [ratioConstr])
+ratioDataType = mkAlgDataType "Data.Ratio.Ratio" (\_ -> [ratioConstr])
 
 -- The instance uses the (%) smart constructor instead of the internal (:%)
 -- constructor to preserve the invariant that a Ratio is in normal form.
@@ -924,7 +918,7 @@ instance Data String where
 ------------------------------------------------------------------------------
 
 nonEmptyType :: DataType
-nonEmptyType = mkAlgDataType "GHC.Base.NonEmpty" (\_ -> [nonEmptyConstr])
+nonEmptyType = mkAlgDataType "Moggi.Internal.Base.NonEmpty" (\_ -> [nonEmptyConstr])
 
 nonEmptyConstr :: Constr
 nonEmptyConstr = mkConstrTag nonEmptyType ":|" 1 [] Infix
@@ -1030,7 +1024,7 @@ instance Data Void where
 ------------------------------------------------------------------------------
 
 unitType :: DataType
-unitType = mkAlgDataType "GHC.Tuple.()" (\_ -> [unitConstr])
+unitType = mkAlgDataType "Data.Tuple.()" (\_ -> [unitConstr])
 
 unitConstr :: Constr
 unitConstr = mkConstrTag unitType "()" 1 [] Prefix
@@ -1046,7 +1040,7 @@ instance Data () where
 ------------------------------------------------------------------------------
 
 soloType :: DataType
-soloType = mkAlgDataType "GHC.Tuple.Solo" (\_ -> [soloConstr])
+soloType = mkAlgDataType "Data.Tuple.Solo" (\_ -> [soloConstr])
 
 soloConstr :: Constr
 soloConstr = mkConstrTag soloType "MkSolo" 1 [] Prefix
@@ -1102,7 +1096,7 @@ instance Data a => Data (Solo a) where
 ------------------------------------------------------------------------------
 
 tuple2Type :: DataType
-tuple2Type = mkAlgDataType "GHC.Tuple.(,)" (\_ -> [tuple2Constr])
+tuple2Type = mkAlgDataType "Data.Tuple.(,)" (\_ -> [tuple2Constr])
 tuple2Constr :: Constr
 tuple2Constr = mkConstrTag tuple2Type "(,)" 1 [] Prefix
 
@@ -1118,7 +1112,7 @@ instance (Data a, Data b) => Data (Tuple2 a b) where
 ------------------------------------------------------------------------------
 
 tuple3Type :: DataType
-tuple3Type = mkAlgDataType "GHC.Tuple.(,,)" (\_ -> [tuple3Constr])
+tuple3Type = mkAlgDataType "Data.Tuple.(,,)" (\_ -> [tuple3Constr])
 tuple3Constr :: Constr
 tuple3Constr = mkConstrTag tuple3Type "(,,)" 1 [] Prefix
 
@@ -1133,7 +1127,7 @@ instance (Data a, Data b, Data c) => Data (Tuple3 a b c) where
 ------------------------------------------------------------------------------
 
 tuple4Type :: DataType
-tuple4Type = mkAlgDataType "GHC.Tuple.(,,,)" (\_ -> [tuple4Constr])
+tuple4Type = mkAlgDataType "Data.Tuple.(,,,)" (\_ -> [tuple4Constr])
 tuple4Constr :: Constr
 tuple4Constr = mkConstrTag tuple4Type "(,,,)" 1 [] Prefix
 
@@ -1148,7 +1142,7 @@ instance (Data a, Data b, Data c, Data d) => Data (Tuple4 a b c d) where
 ------------------------------------------------------------------------------
 
 tuple5Type :: DataType
-tuple5Type = mkAlgDataType "GHC.Tuple.(,,,,)" (\_ -> [tuple5Constr])
+tuple5Type = mkAlgDataType "Data.Tuple.(,,,,)" (\_ -> [tuple5Constr])
 tuple5Constr :: Constr
 tuple5Constr = mkConstrTag tuple5Type "(,,,,)" 1 [] Prefix
 
@@ -1163,7 +1157,7 @@ instance (Data a, Data b, Data c, Data d, Data e) => Data (Tuple5 a b c d e) whe
 ------------------------------------------------------------------------------
 
 tuple6Type :: DataType
-tuple6Type = mkAlgDataType "GHC.Tuple.(,,,,,)" (\_ -> [tuple6Constr])
+tuple6Type = mkAlgDataType "Data.Tuple.(,,,,,)" (\_ -> [tuple6Constr])
 tuple6Constr :: Constr
 tuple6Constr = mkConstrTag tuple6Type "(,,,,,)" 1 [] Prefix
 
@@ -1180,7 +1174,7 @@ instance (Data a, Data b, Data c, Data d, Data e, Data f)
 ------------------------------------------------------------------------------
 
 tuple7Type :: DataType
-tuple7Type = mkAlgDataType "GHC.Tuple.(,,,,,,)" (\_ -> [tuple7Constr])
+tuple7Type = mkAlgDataType "Data.Tuple.(,,,,,,)" (\_ -> [tuple7Constr])
 tuple7Constr :: Constr
 tuple7Constr = mkConstrTag tuple7Type "(,,,,,,)" 1 [] Prefix
 

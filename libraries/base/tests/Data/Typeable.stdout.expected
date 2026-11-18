@@ -24,7 +24,7 @@ Nothing
 Just (Just (Just 1))
 Just (Just (Right True))
 Int -> Bool
-[] Int
+[Int]
 (Int, Bool)
 (,)
 2

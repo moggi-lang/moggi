@@ -1,7 +1,7 @@
 Colour
 Box Colour
 Box (Box Colour)
-[] (Box Int)
+[Box Int]
 Colour -> Bool
 Proxy Colour
 (Int, Bool)
