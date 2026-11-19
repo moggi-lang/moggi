@@ -260,17 +260,8 @@ function prepareProject(
             );
             $checked[$moduleName] = $memoized->program;
             $units[$moduleName]['checkedProgram'] = $memoized->program;
-            $importContexts[$moduleName] = buildPreparedModuleContext(
-                $units,
-                $moduleName,
-                $path,
-                $rootPrefix,
-                $projectClasses,
-                $classScopes,
-                $classScopeFns,
-                $instanceWorld,
-                $context,
-            );
+            publishModuleExports($units, $moduleName, $context);
+            addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns, $context->backendId);
 
             continue;
         }
@@ -302,34 +293,16 @@ function prepareProject(
                     $checked[$moduleName] = $fromDisk->program;
                     $units[$moduleName]['checkedProgram'] = $fromDisk->program;
                 }
-                $importContexts[$moduleName] = buildPreparedModuleContext(
-                    $units,
-                    $moduleName,
-                    $path,
-                    $rootPrefix,
-                    $projectClasses,
-                    $classScopes,
-                    $classScopeFns,
-                    $instanceWorld,
-                    $context,
-                );
+                publishModuleExports($units, $moduleName, $context);
+                addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns, $context->backendId);
 
                 continue;
             }
         }
 
         if ($shallow && $interfacesReady) {
-            $importContexts[$moduleName] = buildPreparedModuleContext(
-                $units,
-                $moduleName,
-                $path,
-                $rootPrefix,
-                $projectClasses,
-                $classScopes,
-                $classScopeFns,
-                $instanceWorld,
-                $context,
-            );
+            publishModuleExports($units, $moduleName, $context);
+            addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns, $context->backendId);
 
             continue;
         }
@@ -451,18 +424,23 @@ function prepareProject(
         }
 
         $outputRelative = mogPathToOutputRelative($units[$moduleName]['path'], $rootPrefix, $context->backend->extension());
-        $importContexts[$moduleName] = buildImportContext(
-            $units[$moduleName]['program']->imports,
-            $units,
-            $moduleName,
-            $outputRelative,
-            $rootPrefix,
-            $context->backendId,
-            $instanceWorld,
-        )->withProjectScopes(
-            $projectClasses,
-            $classScopes,
-            $moduleName,
+        $importContexts[$moduleName] = mergeClassScopeRefs(
+            buildImportContext(
+                $units[$moduleName]['program']->imports,
+                $units,
+                $moduleName,
+                $outputRelative,
+                $rootPrefix,
+                $context->backendId,
+                $instanceWorld,
+            )->withProjectScopes(
+                $projectClasses,
+                $classScopes,
+                $moduleName,
+            ),
+            $classScopeFns,
+            moduleLocalValueNames($units, $moduleName),
+            moduleLocalDataNames($units, $moduleName),
         );
     }
 
@@ -473,50 +451,6 @@ function prepareProject(
     clearInternedTypeNodes();
 
     return new PreparedProject($rootPrefix, $units, $checked, $importContexts);
-}
-
-/**
- * Build one module's import context from its (hydrated or just-checked)
- * interface: publish exports, fold class scopes, and plan imports.
- *
- * @param array<string, array<string, mixed>> $units
- * @param array<string, mixed> $projectClasses
- * @param array<string, mixed> $classScopes
- * @param array<string, mixed> $classScopeFns
- */
-function buildPreparedModuleContext(
-    array &$units,
-    string $moduleName,
-    string $path,
-    string $rootPrefix,
-    array $projectClasses,
-    array &$classScopes,
-    array &$classScopeFns,
-    InstanceWorld $instanceWorld,
-    CompilationContext $context,
-): ImportContext {
-    publishModuleExports($units, $moduleName, $context);
-    addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns, $context->backendId);
-    $outputRelative = mogPathToOutputRelative($path, $rootPrefix, $context->backend->extension());
-
-    return mergeClassScopeRefs(
-        buildImportContext(
-            $units[$moduleName]['program']->imports,
-            $units,
-            $moduleName,
-            $outputRelative,
-            $rootPrefix,
-            $context->backendId,
-            $instanceWorld,
-        )->withProjectScopes(
-            $projectClasses,
-            $classScopes,
-            $moduleName,
-        ),
-        $classScopeFns,
-        moduleLocalValueNames($units, $moduleName),
-        moduleLocalDataNames($units, $moduleName),
-    );
 }
 
 /**

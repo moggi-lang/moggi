@@ -57,7 +57,13 @@ $assert(lookupGeneratedFrame(12, 'MapProbeD\boom') === null, 'frames: an unrelat
 
 $site = \Moggi\throwSite(7, 'Main.boom', 'App.mog', 3, 9);
 $exception = new \Moggi\MoggiException(
-    \Moggi\exceptionWrap(\Moggi\EX_TAG_ERROR_CALL, 'boom', ['ErrorCall', 'boom']),
+    \Moggi\exceptionWrap(
+        \Moggi\EX_TAG_ERROR_CALL,
+        'boom',
+        'boom',
+        'base:Moggi.Exception.Type.ErrorCall',
+        ['ErrorCall', 'boom'],
+    ),
     null,
     $site,
 );

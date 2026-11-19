@@ -9,20 +9,21 @@
 // recursive groups, records, and the runtime shapes -- so a disagreement on any of
 // them fails here with the fixture's name on it.
 //
-// The fixtures share one process: the walker runs on every elaboration, and the
-// first compile has already elaborated the standard library the rest reuse, so
-// nothing is checked twice while the whole library is still walked on a cold
-// elaboration. The cache stays off -- a cache hit answers without running the
-// checker at all, which would leave the walker nothing to walk.
+// The cache is seeded with the library alone, so every fixture is elaborated here.
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 
-\putenv('MOGGI_NO_CACHE=1');
-
 require $root . '/src/compiler.php';
+require $root . '/tests/suite/support/workspace.php';
+
+// Seeded with the library only, so no fixture can be answered by a cached product.
+$cache = \Moggi\Cache\cacheScratchDir() . '/pending-dicts-walker';
+removeDirectory($cache);
+seedCacheDir($cache);
+\putenv('MOGGI_CACHE_DIR=' . $cache);
 
 $multiline = static fn (string $text): string => \trim(\str_replace("\n", "\n  ", $text));
 

@@ -68,16 +68,6 @@ function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env, ?Type 
                 ),
                 $expr,
             );
-            $meta = lookupConstructorMeta($state, $expr->name);
-            if ($meta !== null) {
-                $declaring = $state->data[$meta['dataName']]['declaringModule'] ?? null;
-                if (\is_string($declaring) && $declaring !== '' && $declaring !== $state->currentModule) {
-                    $expr->resolvedOrigin = resolvedSymbol(
-                        $declaring,
-                        $state->constructorRenames[$expr->name] ?? $expr->name,
-                    );
-                }
-            }
             $instantiated = instantiateScheme($state, $scheme);
             if ($instantiated['constraints'] !== []) {
                 setPendingObligations($state, $expr, $instantiated['constraints'], $instantiated['dicts']);

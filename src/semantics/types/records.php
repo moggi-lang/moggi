@@ -204,19 +204,11 @@ function fieldCandidates(TypeCheckState $state, string $fieldName): array
 function lookupConstructorMeta(TypeCheckState $state, string $ctorName): ?array
 {
     foreach ($state->data as $dataName => $data) {
-        $constructors = $data['constructors'] ?? [];
-        if (isset($constructors[$ctorName])) {
-            return ['dataName' => $dataName, ...$constructors[$ctorName]];
+        if (! isset($data['constructors'][$ctorName])) {
+            continue;
         }
 
-        foreach ($constructors as $key => $ctor) {
-            $name = \is_array($ctor)
-                ? ($ctor['name'] ?? (\is_string($key) ? $key : null))
-                : (\is_string($ctor) ? $ctor : null);
-            if ($name === $ctorName) {
-                return ['dataName' => $dataName, ...(\is_array($ctor) ? $ctor : [])];
-            }
-        }
+        return ['dataName' => $dataName, ...$data['constructors'][$ctorName]];
     }
 
     return null;

@@ -16,9 +16,14 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 
-\putenv('MOGGI_NO_CACHE=1');
-
 require $root . '/src/compiler.php';
+require $root . '/tests/suite/support/workspace.php';
+
+// Seeded with the library only, so no fixture can be answered by a cached product.
+$cache = \Moggi\Cache\cacheScratchDir() . '/dict-arity';
+removeDirectory($cache);
+seedCacheDir($cache);
+\putenv('MOGGI_CACHE_DIR=' . $cache);
 
 $multiline = static fn (string $text): string => \trim(\str_replace("\n", "\n  ", $text));
 

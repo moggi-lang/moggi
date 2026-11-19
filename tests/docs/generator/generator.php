@@ -249,9 +249,7 @@ $classProgram = parseModule($classDocSource, 'HasDocs.mog');
 $classDecl = $classProgram->items[0];
 assertEq('Between methods.', $classDecl->methods[1]->doc ?? null, 'class method doc from parser');
 
-\Moggi\Cache\setCacheEnabled(false);
 $libProject = Docs\loadDocProject($root . '/libraries/base/src', Docs\docsContext('php', []));
-\Moggi\Cache\setCacheEnabled(true);
 $libIndex = Docs\buildIndex(
     $libProject['modules'],
     $libProject['prepared']->checked,
@@ -387,9 +385,7 @@ assertTrue(isset($libIndex->byModule['Prelude']), 'Prelude module page is indexe
 assertTrue(\count($libIndex->byModule['Prelude']) > 10, 'Prelude lists re-exported symbols');
 assertTrue(isset($libIndex->byModule['Data.String']), 'facade modules stay indexed');
 
-\Moggi\Cache\setCacheEnabled(false);
 $bsProject = Docs\loadDocProject($root . '/libraries/bytestring/src', Docs\docsContext('php', []));
-\Moggi\Cache\setCacheEnabled(true);
 $bsIndex = Docs\buildIndex(
     $bsProject['modules'],
     $bsProject['prepared']->checked,

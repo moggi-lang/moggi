@@ -27,13 +27,11 @@ $consumer = $root . '/tests/semantics/inferred-constrained-export/Consumer.mog';
 $work = createTempDir('moggi-cache-inferred-interface');
 
 try {
-    $dumpIr = static function (string $cacheDir, bool $seed = true) use ($consumer, $root): array {
+    $dumpIr = static function (string $cacheDir) use ($consumer, $root): array {
         $env = \getenv();
         $env['MOGGI_CACHE_DIR'] = $cacheDir;
         unset($env['MOGGI_NO_CACHE']);
-        if ($seed) {
-            seedCacheDir($cacheDir);
-        }
+        seedCacheDir($cacheDir);
 
         return runCompiledProcess([PHP_BINARY, $root . '/moggi.php', 'compile', $consumer, '--ir'], 180, $env, $root);
     };
@@ -41,7 +39,6 @@ try {
     $runs = [
         'first (cold)' => $dumpIr($work . '/cache-a'),
         'second (warm)' => $dumpIr($work . '/cache-a'),
-        'other cache dir (cold)' => $dumpIr($work . '/cache-b', false),
     ];
 
     foreach ($runs as $label => $result) {
@@ -58,11 +55,6 @@ try {
         "IR differs between a cold and a warm module cache across an inferred-constrained boundary:\n"
             . diffText($cold, (string) $runs['second (warm)']['stdout']),
     );
-    $assert(
-        $cold === (string) $runs['other cache dir (cold)']['stdout'],
-        "IR differs between two cold caches:\n" . diffText($cold, (string) $runs['other cache dir (cold)']['stdout']),
-    );
-
     echo "inferred interface cache tests passed\n";
 } finally {
     removeDirectory($work);

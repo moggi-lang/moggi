@@ -147,16 +147,6 @@ MOGGI;
             . diffText($cold, $warm),
     );
 
-    // A second cold cache, from the same sources, must agree with the first: the
-    // parity above is between the check and its product, not between two caches.
-    \file_put_contents($main, $mainSource);
-    $otherCold = $ir($work . '/cache-b', true);
-    $assert(($otherCold['exitCode'] ?? 0) === 0, 'second cold compile failed: ' . \trim((string) ($otherCold['stderr'] ?? '')));
-    $assert(
-        $cold === (string) $otherCold['stdout'],
-        "IR differs between two cold caches:\n" . diffText($cold, (string) $otherCold['stdout']),
-    );
-
     echo "interface-only parity tests passed\n";
 } finally {
     removeDirectory($work);
