@@ -345,6 +345,95 @@ function warmSharedCache(array $backends): void
 
 
 /**
+ * Elaborate the standard library for the targets the harness does not run, too.
+ *
+ * A case compiles fixtures for jvm and dotnet, and the first compile for a target in a fresh cache
+ * elaborates that target's whole dependency closure and writes ~200 MB of products. Every worker
+ * that reaches such a case at the same time pays it again, so it is paid once here instead.
+ */
+function warmBackendModuleProducts(): void
+{
+    if (! \Moggi\Cache\cacheEnabled()) {
+        return;
+    }
+
+    $missing = [];
+    foreach (['jvm', 'dotnet'] as $backend) {
+        $tree = \Moggi\Cache\cacheBaseDir() . '/compile/' . $backend . '/libraries';
+        if (\Moggi\Paths\globPaths($tree . '/*') === []) {
+            $missing[] = $backend;
+        }
+    }
+
+    if ($missing === []) {
+        return;
+    }
+
+    $dir = \Moggi\Cache\cacheScratchDir() . '/warmup-backends-' . \getmypid();
+    if (! \is_dir($dir) && ! @\mkdir($dir, 0777, true) && ! \is_dir($dir)) {
+        return;
+    }
+
+    $source = $dir . '/Warmup.mog';
+    if (@\file_put_contents($source, "module Warmup where\n\nx = 1\n") === false) {
+        return;
+    }
+
+    $multiBackend = \count($missing) > 1;
+    foreach ($missing as $backend) {
+        suiteEcho(renderLibWarmupStart($backend, $multiBackend));
+    }
+
+    $warm = static function (string $backend) use ($source): void {
+        try {
+            $libDir = \Moggi\Modules\bundledStdlibLibPath();
+            $libDirs = $libDir === null ? [] : [$libDir];
+            [$files, $projectDir] = \Moggi\Modules\projectSourceClosure([$source], $libDirs, $backend);
+            $context = \Moggi\Pipeline\CompilationContext::for(
+                $backend,
+                \Moggi\Pipeline\CompilePurpose::Executable,
+                ['Warmup'],
+                [$projectDir, ...$libDirs],
+                $files,
+            );
+            \Moggi\Modules\compileProjectBoth($files, $projectDir, $context, false, false);
+        } catch (\Throwable) {
+        }
+    };
+
+    $startedAt = \microtime(true);
+
+    if ($multiBackend && \function_exists('pcntl_fork')) {
+        $children = [];
+        foreach ($missing as $backend) {
+            $pid = \pcntl_fork();
+            if ($pid === 0) {
+                $warm($backend);
+                exit(0);
+            }
+            if ($pid > 0) {
+                $children[] = $pid;
+            }
+        }
+        foreach ($children as $pid) {
+            \pcntl_waitpid($pid, $status);
+        }
+    } else {
+        foreach ($missing as $backend) {
+            $warm($backend);
+        }
+    }
+
+    $elapsed = \microtime(true) - $startedAt;
+    foreach ($missing as $backend) {
+        suiteEcho(renderLibWarmupDone($backend, true, $elapsed, $multiBackend));
+    }
+
+    @\unlink($source);
+    @\rmdir($dir);
+}
+
+/**
  * The backends whose staged library tree this run reads.
  *
  * The harness executes fixtures against the staged tree for PHP only (`execTreeRoot()`); the
@@ -414,6 +503,7 @@ function runSelection(array $cases, array $backends, array $pathFilters): int
             $backends,
             selectionRunsProgram($cases, $pathFilters, $testArgs['groups']),
         ));
+        warmBackendModuleProducts();
     }
 
     $lastBackend = null;

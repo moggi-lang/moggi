@@ -1075,6 +1075,10 @@ function buildImportContext(
     InstanceWorld $instanceWorld,
 ): ImportContext {
     $classes = classSuperclassTable($units);
+    /** @var \WeakMap<InstanceWorld, array<string, array<string, ImportSymbol>>> $shared */
+    static $shared = null;
+    $shared ??= new \WeakMap();
+    $memo = $shared[$instanceWorld] ?? [];
     $planPhpImports = $backendId === 'php';
     $outputExtension = backendById($backendId)->extension();
     /** @var array<string, ImportSymbol> $symbols the one table: every fact about every imported spelling */
@@ -1161,6 +1165,15 @@ function buildImportContext(
             );
         }
 
+        $symbolTable = null;
+        $exportsKey = exportsCacheKey($target, $targetName);
+        if ($exportsKey !== null) {
+            $importMemoKey = $exportsKey . "\0" . importSpecKey($import, $localPrefix) . "\0" . $backendId;
+            $memo[$importMemoKey] ??= importedSymbolTable($selected, $units, $targetName, $localPrefix);
+            $symbolTable = $memo[$importMemoKey];
+            $shared[$instanceWorld] = $memo;
+        }
+
         foreach ($selected['data'] as $name => $info) {
             if ((! isset($info['declaringModule']) || $info['declaringModule'] === '')
                 && isset($info['result'])
@@ -1186,6 +1199,18 @@ function buildImportContext(
                 ? $selected['origins'][$name]
                 : null;
             $existing = $symbols[$name] ?? null;
+            $memorized = $symbolTable[$name] ?? null;
+            if ($existing === null && $memorized !== null && ! $import->qualifiedOnly) {
+                $symbols[$name] = $memorized;
+                if (! $scheme->classMethod && $origin !== null && $planPhpImports) {
+                    recordOriginOutputPath($moduleOutputPaths, $origin, $currentModule, $units, $rootPrefix, $outputExtension);
+                }
+                if ($import->implicit) {
+                    $implicitNames[$name] = true;
+                }
+
+                continue;
+            }
 
             $reExported = ! $scheme->classMethod && $origin !== null && $origin['module'] !== $targetName;
             $qualifiedSymbol = $origin === null ? null : resolvedSymbol($origin['module'], $origin['phpName']);
@@ -1336,27 +1361,16 @@ function buildImportContext(
             continue;
         }
 
-        $cacheKey = $unitName . "\0" . $unit['namespace'] . "\0" . \hash(
-            'xxh3',
-            (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''),
-        );
-        $meta = unitEvidenceMeta($unit, $unitName, $unit['namespace'], $cacheKey);
-        $unitArities = unitEvidenceArities($unit, $unitName, $unit['namespace'], $cacheKey, $classes);
-        foreach ($meta['origins'] as $evName => $origin) {
+        $cacheKey = unitEvidenceMemoKey($unit, $unitName, $unit['namespace']);
+        foreach (
+            evidenceSymbolTable($unit, $unitName, $unit['namespace'], $cacheKey, $classes, $backendId)
+            as $evName => [$evidenceSymbol, $origin]
+        ) {
             if (isset($symbols[$evName])) {
                 continue;
             }
 
-            $symbols[$evName] = ($symbols[$evName] ?? new ImportSymbol())->withSymbol(
-                resolvedSymbol($origin['module'], $origin['phpName']),
-                $origin['module'],
-                evidenceCallableLayout(
-                    $unitArities[$evName]
-                        ?? throw new \LogicException(
-                            "evidence `{$evName}` was published by module `{$unitName}` without a runtime arity",
-                        ),
-                ),
-            );
+            $symbols[$evName] = $evidenceSymbol;
             if ($planPhpImports) {
                 recordOriginOutputPath(
                     $moduleOutputPaths,
@@ -1388,6 +1402,149 @@ function buildImportContext(
             $namespaceModules,
         ),
     );
+}
+
+/**
+ * Identity of one import as the table it contributes sees it: the spec the selected names are read
+ * under, which is everything that decides what an imported spelling means. The target module and the
+ * exports it reads are the other half, and are the key the export product is memoised under.
+ */
+function importSpecKey(Ast\ImportDecl $import, string $localPrefix): string
+{
+    return \implode("\0", [
+        $import->kind,
+        $localPrefix,
+        $import->qualifiedOnly ? '1' : '0',
+        $import->implicit ? '1' : '0',
+        \implode(',', $import->hiding),
+    ]);
+}
+
+/**
+ * The symbols one import gives every name it selects, built once per import spec per compilation.
+ *
+ * A module's spelling of an imported name is a function of the import spec and the target's exports
+ * -- the type, the prefix it was reached through, the declaring module and layout behind it -- and of
+ * nothing about the importing module, so every module that imports a target the same way reads the
+ * same table instead of rebuilding one symbol per name for itself.
+ *
+ * @param array<string, mixed> $selected
+ * @param array<string, array<string, mixed>> $units
+ * @return array<string, ImportSymbol>
+ */
+function importedSymbolTable(
+    array $selected,
+    array $units,
+    string $targetName,
+    string $localPrefix,
+): array {
+    $table = [];
+    foreach ($selected['env'] as $name => $scheme) {
+        $origin = (! $scheme->classMethod && isset($selected['origins'][$name]))
+            ? $selected['origins'][$name]
+            : null;
+        $reExported = ! $scheme->classMethod && $origin !== null && $origin['module'] !== $targetName;
+        $qualifiedSymbol = $origin === null ? null : resolvedSymbol($origin['module'], $origin['phpName']);
+        $symbol = (new ImportSymbol())->withQualified(
+            $localPrefix,
+            new ImportQualified(
+                module: $targetName,
+                scheme: $scheme,
+                originModule: $reExported ? $origin['module'] : null,
+                originName: $reExported ? $origin['phpName'] : null,
+                symbol: $qualifiedSymbol,
+                layout: $qualifiedSymbol === null
+                    ? null
+                    : publishedCallableLayout($units, $origin['module'], $origin['phpName']),
+            ),
+        );
+        if (! $scheme->classMethod && isset($selected['intrinsicWrappers'][$name])) {
+            $symbol = $symbol->withIntrinsicWrapper($selected['intrinsicWrappers'][$name]);
+        }
+        $symbol = $symbol->withScheme($scheme);
+        if ($scheme->classMethod || $origin === null) {
+            $table[$name] = $symbol;
+
+            continue;
+        }
+
+        $symbol = $symbol->withSymbol(
+            $qualifiedSymbol,
+            $origin['module'],
+            publishedCallableLayout($units, $origin['module'], $origin['phpName']),
+        );
+        if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
+            $symbol = $symbol->withActionReturn();
+        }
+        $worker = importedWorkerSymbol($units, $origin);
+        if ($worker !== null) {
+            $symbol = $symbol->withWorker($worker);
+        }
+
+        $table[$name] = $symbol;
+    }
+
+    return $table;
+}
+
+/**
+ * How many unit evidence tables the process keeps: enough for the standard library closure and the
+ * workspace modules of the projects compiled against it, so an editing session's trail stays bounded.
+ */
+const EVIDENCE_SYMBOL_TABLES_KEPT = 128;
+
+/**
+ * The symbols one unit's evidence factories publish, built once and shared by every module in the
+ * compilation that imports that unit.
+ *
+ * Every importing module asks for this for every unit in the build, and the answer is a function of
+ * the unit's evidence metadata, its arities, the target and the class declarations those arities
+ * expand against -- never of the importer. The key is therefore the unit's source identity, the
+ * target and the class fingerprint, the same inputs {@see withExpandedInstanceArities()} keys on.
+ *
+ * @param array<string, mixed> $unit
+ * @param array<string, array{params: list<string>, superclasses: list<Ast\TypeNode>}> $classes
+ * @return array<string, array{0: ImportSymbol, 1: array{module: string, namespace: string, phpName: string}}>
+ */
+function evidenceSymbolTable(
+    array $unit,
+    string $unitName,
+    string $namespace,
+    string $cacheKey,
+    array $classes,
+    string $backendId,
+): array {
+    static $memo = [];
+
+    $key = $cacheKey . "\0" . $backendId . "\0" . classesFingerprint($classes);
+    if (isset($memo[$key])) {
+        return $memo[$key];
+    }
+
+    $meta = unitEvidenceMeta($unit, $unitName, $namespace, $cacheKey);
+    $unitArities = unitEvidenceArities($unit, $unitName, $namespace, $cacheKey, $classes);
+    $table = [];
+    foreach ($meta['origins'] as $evName => $origin) {
+        $table[$evName] = [
+            (new ImportSymbol())->withSymbol(
+                resolvedSymbol($origin['module'], $origin['phpName']),
+                $origin['module'],
+                evidenceCallableLayout(
+                    $unitArities[$evName]
+                        ?? throw new \LogicException(
+                            "evidence `{$evName}` was published by module `{$unitName}` without a runtime arity",
+                        ),
+                ),
+            ),
+            $origin,
+        ];
+    }
+
+    if (\count($memo) >= EVIDENCE_SYMBOL_TABLES_KEPT) {
+        $memo = [];
+    }
+
+    return $memo[$key] = $table;
 }
 
 /**

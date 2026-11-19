@@ -44,24 +44,7 @@ function removeDirectory(string $path): void
     @\rmdir($path);
 }
 
-/**
- * A cache directory of the case's own that already knows the standard library.
- *
- * Every compile elaborates the whole standard library before it reaches the program, which is what
- * the cache exists to avoid — but a case that wants a cache to itself (its own module, its own
- * project) would pay that elaboration again from an empty directory, seconds each time. The
- * library modules' cached products (`compile/<backend>/libraries/`) and the `stdlib-index` artifact
- * the linker reads are hard-linked out of the run's cache, which the harness keeps warm, while
- * everything derived from the *case's* sources stays absent: the program under test is still
- * compiled from scratch, and the case still sees a cache that has never built it.
- *
- * Hard links are safe here because every cache write replaces its file atomically (temp + rename)
- * instead of editing one in place, so a seeded directory cannot reach back into the run's cache.
- */
-/**
- * The compiler's cache root, read without loading the compiler: a case that only spawns `moggi.php`
- * must still be able to seed, which it could not while this asked the compiler what its cache was.
- */
+/** The compiler's cache root, read without loading the compiler, so a case that only spawns `moggi.php` can still seed. */
 function testCacheBaseDir(): string
 {
     $override = \getenv('MOGGI_CACHE_DIR');
@@ -73,6 +56,10 @@ function testCacheBaseDir(): string
     return ($cwd === false ? '.' : $cwd) . '/.moggi';
 }
 
+/**
+ * Give a case's private cache the standard library's products (hard-linked from the run's cache),
+ * so the case pays only for its own modules. Nothing derived from the case's sources is copied.
+ */
 function seedCacheDir(string $dir): void
 {
     $off = \getenv('MOGGI_NO_CACHE');

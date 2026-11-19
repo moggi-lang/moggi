@@ -357,6 +357,8 @@ try {
     //    the source (so no binder is on the node) and reads the checked core the first one cached.
     $cache = $work . '/.cache';
     $out = $work . '/out';
+    // Cold means `Main` is compiled from source; the library comes from the run's products.
+    seedCacheDir($cache);
     // `VAR=value command` is shell syntax, not a Windows command line: the child inherits this
     // process's environment instead, which every host spells the same way.
     \putenv('MOGGI_CACHE_DIR=' . $cache);
