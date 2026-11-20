@@ -345,7 +345,7 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
 
     $typeSig = null;
     $kindLabel = null;
-    $definedIn = null; // [file, 1-based line] for local declaration nodes
+    $definedIn = null;
     if ($node instanceof Ast\FunctionDecl) {
         $signature = $node->inferredSignatureType ?? $node->type;
         if ($signature !== null) {

@@ -7,8 +7,8 @@ module
       t2 = call isDigit('\u{37}')
       ret t2
   function altMaybeDemo()
-      t3 = call Just(1)
-      t4 = call Just(2)
+      t3 = call Data.Maybe::Just(1)
+      t4 = call Data.Maybe::Just(2)
       t6 = call __ev_Alternative_Maybe()
       t5 = dict_call t6-><|>(t3, t4)
       ret t5

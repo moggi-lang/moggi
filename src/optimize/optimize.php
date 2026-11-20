@@ -39,6 +39,7 @@ use function Moggi\Optimize\Partial\foldPartialApply;
 use function Moggi\Optimize\Partial\normalizeKnownApplies;
 use function Moggi\Optimize\Partial\publishedCaptures;
 use function Moggi\Optimize\Partial\specializePartialReturnFunction;
+use function Moggi\Optimize\Support\moduleConstructors;
 use function Moggi\Optimize\Tco\eliminateTailRecursion;
 
 /**
@@ -69,6 +70,7 @@ function optimize(Module $module, ?Facts $owner = null): Module
         $evidenceByName = indexEvidenceByName($instanceEvidence);
         $facts->publishModuleEvidence($moduleName, $instanceEvidence);
         $facts->publishFunctions($functions);
+        $facts->publishConstructors(moduleConstructors($module));
         $analysis = new Analysis();
 
         $functions = PassCheckpoints\runOnFunctions(

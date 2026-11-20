@@ -34,10 +34,11 @@
 {
   .maxstack 64
   .line 12, 12 : 10, 10 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  call object Moggi.Moggi.Exception.Type::'__ev_Typeable_SomeException'()
   call object Moggi.Moggi.Exception.Type::'__ev_Show_SomeException'()
   call object Moggi.Moggi.Exception.Type::'__ev_Exception_SomeException'()
   ldarg.0
-  call object Moggi.Control.Exception.Base::'__w_try'(object, object, object)
+  call object Moggi.Control.Exception.Base::'__w_try'(object, object, object, object)
   ret
   ldnull
   ret
@@ -256,10 +257,11 @@
   newobj instance void Moggi.Rt.IO::.ctor(object)
   stloc.1
   .line 12, 12 : 10, 10 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  call object Moggi.Moggi.Exception.Type::'__ev_Typeable_SomeException'()
   call object Moggi.Moggi.Exception.Type::'__ev_Show_SomeException'()
   call object Moggi.Moggi.Exception.Type::'__ev_Exception_SomeException'()
   ldloc.1
-  call object Moggi.Control.Exception.Base::'__w_try'(object, object, object)
+  call object Moggi.Control.Exception.Base::'__w_try'(object, object, object, object)
   stloc.2
   ldloc.2
   stloc.3
@@ -317,10 +319,11 @@ match_end_V3:
   newobj instance void Moggi.Rt.IO::.ctor(object)
   stloc.s 9
   .line 12, 12 : 10, 10 'tests/backend/runtime/Eta-Reduced-IO-Binding.mog'
+  call object Moggi.Moggi.Exception.Type::'__ev_Typeable_SomeException'()
   call object Moggi.Moggi.Exception.Type::'__ev_Show_SomeException'()
   call object Moggi.Moggi.Exception.Type::'__ev_Exception_SomeException'()
   ldloc.s 9
-  call object Moggi.Control.Exception.Base::'__w_try'(object, object, object)
+  call object Moggi.Control.Exception.Base::'__w_try'(object, object, object, object)
   stloc.s 10
   ldloc.s 10
   stloc.s 11

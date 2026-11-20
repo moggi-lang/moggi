@@ -4,7 +4,7 @@ module
   function flag()
       ret intrinsic boolNot#(@False)
   function m()
-      t1 = call Just(3)
+      t1 = call Data.Maybe::Just(3)
       ret t1
   function xs()
       ret [1, 2]

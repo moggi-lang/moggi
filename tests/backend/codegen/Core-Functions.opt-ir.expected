@@ -42,7 +42,7 @@ module
   function step3()
       ret 6
   function justHi()
-      t10 = call Just("hi")
+      t10 = call Data.Maybe::Just("hi")
       ret t10
   function always(x, _p1)
       ret x

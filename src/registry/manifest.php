@@ -310,10 +310,6 @@ function verifyRelease(string $name, string $version, array $release, array $aut
     if (! \in_array($signer, $authors, true)) {
         return ['ok' => false, 'note' => 'the signer is not on the package\'s allowed list', 'signer' => $signer];
     }
-    // Domain separation: a valid NWT signed by an author is not automatically a
-    // release. The worker already requires this tag; the client must too, or a
-    // token minted for another purpose could be replayed as a release whose
-    // name/version/manifest happen to line up.
     if (nwtTag($signature, 'type') !== 'release') {
         return ['ok' => false, 'note' => 'the signature is not a release NWT', 'signer' => $signer];
     }

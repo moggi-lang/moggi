@@ -1296,18 +1296,6 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
             throw typeFail($state, 'type arity mismatch on `' . $left->name . '`', $at);
         }
 
-        /*
-         * Neither side reduced, so both applications are stuck on their head.
-         *
-         * The head decides which instance's equation the family applies, so two
-         * applications are the same type only when the head is *the same head* --
-         * compared by identity, never unified: learning `a = Foo` from
-         * `Rep a x ~ Rep Foo y` is the injectivity the family does not have.
-         *
-         * At that fixed head the family is an ordinary function of what is left,
-         * so `Rep a b ~ Rep a c` is `b ~ c` and those arguments unify as any
-         * other type's do.
-         */
         $headArgs = \count($state->associatedFamilies[$left->name]['params']);
         for ($i = 0; $i < $headArgs && $i < \count($left->args); ++$i) {
             if (! typesMatchForAmbient($state, $left->args[$i], $right->args[$i])) {

@@ -73,7 +73,6 @@ function analyze(string $uri, string $content, array $libDirs = [], ?Compilation
         try {
             setStdlibLibPath($dir);
         } catch (\Throwable) {
-            // Ignore invalid extra lib dirs; keep analyzing with discovery defaults.
         }
     }
 

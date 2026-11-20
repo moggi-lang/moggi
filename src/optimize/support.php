@@ -4,12 +4,40 @@ namespace Moggi\Optimize\Support;
 
 
 use Moggi\IR;
+use Moggi\Syntax\Ast;
 
+use function Moggi\IR\buildConstructorModules;
 use function Moggi\IR\Visit\mapOperandChildren;
 use function Moggi\IR\Visit\operandChildren;
 use function Moggi\IR\Visit\stmtDirectOperands;
 use function Moggi\IR\Visit\stmtNestedBlocks;
 use function Moggi\IR\Visit\walkBlock;
+
+function moduleConstructors(IR\Module $module): array
+{
+    if ($module->moduleName === '') {
+        return [];
+    }
+
+    $constructors = [];
+    foreach ($module->data as $decl) {
+        foreach ($decl->constructors as $ctor) {
+            $constructors[$module->moduleName . '::' . $ctor->name] = true;
+        }
+    }
+
+    return $constructors;
+}
+
+function visibleConstructors(IR\Module $module, Ast\Program $program, array $importedData): array
+{
+    $constructors = moduleConstructors($module);
+    foreach (buildConstructorModules($program, $importedData) as $name => $declaring) {
+        $constructors[$declaring . '::' . $name] = true;
+    }
+
+    return $constructors;
+}
 
 function operandEqual(IR\Operand $left, IR\Operand $right): bool
 {

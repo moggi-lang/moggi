@@ -27,6 +27,7 @@ use function Moggi\Optimize\Interproc\remapTempsInItems;
 use function Moggi\Optimize\Interproc\substituteStmt;
 use function Moggi\Optimize\Support\callArgsAreLeaves;
 use function Moggi\Optimize\Support\dropUnreadTemps;
+use function Moggi\Optimize\Support\moduleConstructors;
 use function Moggi\Optimize\optimize;
 use function Moggi\Semantics\IntrinsicRegistry\primopForPublicOperator;
 use function Moggi\Semantics\Kernel\isBoolCtor;
@@ -470,8 +471,29 @@ function cafRetToCtorTree(array $items, Facts $facts, string $moduleName = '', a
     }
 
     $tree = $ctors[$last->value->id] ?? null;
+    if (! ($tree instanceof CtorTree) || ctorTreeHasFreeTemps($tree)) {
+        return null;
+    }
 
-    return $tree instanceof CtorTree ? qualifyCtorTreeFns($tree, $moduleName, $externals) : null;
+    return qualifyCtorTreeFns($tree, $moduleName, $externals);
+}
+
+function ctorTreeHasFreeTemps(CtorTree $tree): bool
+{
+    foreach ($tree->args as $arg) {
+        if ($arg instanceof CtorTree) {
+            if (ctorTreeHasFreeTemps($arg)) {
+                return true;
+            }
+
+            continue;
+        }
+        if (operandHasFreeTemps($arg)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -1402,6 +1424,7 @@ function publishProgramFacts(array $modules, array $externalFnsByModule, Facts $
         foreach ($module->functions as $function) {
             $functions[] = $function;
         }
+        $facts->publishConstructors(moduleConstructors($module));
     }
     $facts->publishFunctions($functions);
 }

@@ -1541,14 +1541,6 @@ function projectInstanceCandidates(TypeCheckState $state, string $className, Typ
         return $state->projectInstancesByClass[$className] ?? [];
     }
 
-    /*
-     * A head that is a bare variable is indexed under `*` because it matches
-     * every head, so a lookup by a concrete head has to consult that bucket too
-     * -- otherwise `instance C a` would be recorded and never found. It goes
-     * last: a specific instance answers first, and an overlap between the two
-     * is several matches, which the caller reports as ambiguous rather than
-     * silently resolving.
-     */
     $universal = $state->projectInstancesByClassHead[$className]['*'] ?? [];
 
     $module = null;

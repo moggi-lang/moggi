@@ -21,7 +21,7 @@ function svcSignatureHelp(AnalysisService $svc, string $uri, array $pos): ?array
     $comp = lspPosToCompiler($analysis->source, $pos);
 
     $chain = findNodeChainAt($analysis->program, $comp['line'], $comp['col']);
-    $applications = []; // innermost-first list of [functionNode, consumedArgs]
+    $applications = [];
     foreach ($chain as $node) {
         if ($node instanceof Ast\Apply) {
             $fn = $node;
