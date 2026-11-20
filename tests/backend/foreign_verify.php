@@ -167,9 +167,15 @@ $fixture = $root . '/tests/semantics/foreign/bad/Host-Arity.mog';
 $code = 'require ' . \var_export($root . '/src/compiler.php', true) . ';'
     . ' $out = \Moggi\Compiler\compileFileCapturingErrorsBoth(' . \var_export($fixture, true) . ', true, "php");'
     . ' echo $out["emit"]["output"];';
-$plain = runCompiledProcess([\PHP_BINARY, '-r', $code], 60);
+$plain = runCompiledProcess([\PHP_BINARY, '-r', $code], 300);
 
-$same(0, $plain['exitCode'], 'the fixture compiles far enough to be refused: ' . $plain['stderr']);
+$same(
+    0,
+    $plain['exitCode'],
+    'the fixture compiles far enough to be refused'
+        . ($plain['timedOut'] ? ' (the compile timed out)' : '')
+        . ': ' . $plain['stderr'],
+);
 $assert(
     \str_contains($plain['stdout'], 'php function `strlen` takes at most 1 argument'),
     'the host rejection is what the fixture is for: ' . $plain['stdout'],

@@ -1233,7 +1233,7 @@ function synthesizeTypeableInstances(array &$units): void
             continue;
         }
 
-        $package = \str_contains((string) ($unit['path'] ?? ''), '/libraries/') ? 'base' : 'main';
+        $package = \str_contains('/' . \str_replace('\\', '/', (string) ($unit['path'] ?? '')), '/libraries/') ? 'base' : 'main';
         $instances = [];
         foreach ($program->items as $item) {
             if (! $item instanceof Ast\DataDecl) {

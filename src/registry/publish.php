@@ -200,10 +200,10 @@ function readHiddenLineWindows(): string
  * The nsec to sign with, from `--nsec-file`, `MOGGI_NSEC_FILE`, or a no-echo
  * prompt on a terminal.
  *
- * A file has to be mode 0600: a secret key that group or other can read is not
- * secret, and failing here costs a `chmod` rather than the key. Windows ACLs are
- * not mode bits this client can verify, so file input is refused there and the
- * interactive prompt is the only path. A run with no terminal and no file fails
+ * A file has to be private: mode 0600, or on Windows an ACL that grants nobody
+ * but its owner, `SYSTEM` and `Administrators` — a secret key that group or
+ * other can read is not secret, and failing here costs a `chmod` rather than the
+ * key. A run with no terminal and no file fails
  * loudly instead of hanging on a read — a CI job that silently waits for a
  * prompt is worse than one that stops.
  */
@@ -223,23 +223,114 @@ function readNsecKey(?string $file): string
     if (! \is_file($path)) {
         throw new \RuntimeException("no such key file: {$path}");
     }
-    if (! reportsPosixModeBits()) {
-        throw new \RuntimeException(
-            'a key file on Windows has an ACL this client cannot verify; use the interactive prompt instead',
-        );
-    }
-    \clearstatcache(true, $path);
-    $mode = \fileperms($path);
-    if ($mode === false) {
-        throw new \RuntimeException("cannot read the permissions of {$path} — refusing a key whose mode is unknown");
-    }
-    if (($mode & 0o077) !== 0) {
-        throw new \RuntimeException(
-            \sprintf('%s is mode %04o — a secret key file must not be readable by group or other (chmod 600)', $path, $mode & 0o777),
-        );
+    if (reportsPosixModeBits()) {
+        \clearstatcache(true, $path);
+        $mode = \fileperms($path);
+        if ($mode === false) {
+            throw new \RuntimeException("cannot read the permissions of {$path} — refusing a key whose mode is unknown");
+        }
+        if (($mode & 0o077) !== 0) {
+            throw new \RuntimeException(
+                \sprintf('%s is mode %04o — a secret key file must not be readable by group or other (chmod 600)', $path, $mode & 0o777),
+            );
+        }
+    } else {
+        assertWindowsKeyFileIsPrivate($path);
     }
 
     return assertNsec(\trim((string) \file_get_contents($path)), $path);
+}
+
+/**
+ * Whether a listing of `Allow` ACEs leaves a key file private.
+ *
+ * The listing is PowerShell's: a leading `user <sid>` line, then one SID per
+ * rule. The owner is allowed to read its own key; every other principal has to
+ * be `SYSTEM` or `Administrators`, which is what a POSIX mode calls the root
+ * account. Anything else — `Everyone`, `Users`, `Authenticated Users`, a named
+ * second account — is the `other` or `group` bit in disguise.
+ *
+ * SIDs, not names: `Get-Acl` renders `Users` in the machine's own language, so an
+ * English spelling would match nothing on a German install. A listing this
+ * function cannot read is not private either — the refusal is the safe answer.
+ */
+function windowsKeyAclIsPrivate(string $listing): bool
+{
+    $userSid = null;
+    $allowed = ['S-1-5-18', 'S-1-5-32-544', 'S-1-3-4', 'S-1-3-0'];
+    foreach (\preg_split('/\r?\n/', $listing) ?: [] as $line) {
+        $line = \trim($line);
+        if ($line === '') {
+            continue;
+        }
+        if (\str_starts_with($line, 'user ')) {
+            $userSid = \trim(\substr($line, 5));
+
+            continue;
+        }
+        if ($userSid === null || \preg_match('/^S-\d+(?:-\d+)+$/', $line) !== 1) {
+            return false;
+        }
+        if ($line !== $userSid && ! \in_array($line, $allowed, true)) {
+            return false;
+        }
+    }
+
+    return $userSid !== null && \preg_match('/^S-\d+(?:-\d+)+$/', $userSid) === 1;
+}
+
+/**
+ * Refuse a Windows key file whose ACL is not private.
+ *
+ * PHP cannot see an ACL, so PowerShell reads it and translates every rule to a
+ * SID before printing it — the translation has to happen there, because the
+ * display names are localized. A missing PowerShell or an unreadable ACL fails
+ * the check rather than passing it: the whole point is that a key is read only
+ * from a file a `chmod 600` would have left alone.
+ */
+function assertWindowsKeyFileIsPrivate(string $path): void
+{
+    $refusal = static fn (string $why): \RuntimeException => new \RuntimeException(
+        "{$path} is not private: {$why} — a secret key file must be readable only by you (fix its ACL, or use the interactive prompt)",
+    );
+
+    $powershell = findExecutable('powershell') ?? findExecutable('pwsh');
+    if ($powershell === null) {
+        throw $refusal('there is no PowerShell to read its ACL');
+    }
+
+    $literal = "'" . \str_replace("'", "''", $path) . "'";
+    $script = '$acl = Get-Acl -LiteralPath ' . $literal . ';'
+        . ' $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value;'
+        . ' [Console]::Out.WriteLine("user " + $me);'
+        . ' foreach ($rule in $acl.Access) {'
+        . '   if ($rule.AccessControlType -ne "Allow") { continue }'
+        . '   try { $sid = $rule.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value }'
+        . '   catch { $sid = $rule.IdentityReference.Value }'
+        . '   [Console]::Out.WriteLine($sid)'
+        . ' }';
+
+    $process = \proc_open(
+        [$powershell, '-NoProfile', '-NonInteractive', '-Command', $script],
+        [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+        $pipes,
+    );
+    if (! \is_resource($process) || ! isset($pipes[1], $pipes[2])) {
+        throw $refusal('PowerShell could not be started to read it');
+    }
+    \fclose($pipes[0]);
+    $listing = (string) \stream_get_contents($pipes[1]);
+    $error = \trim((string) \stream_get_contents($pipes[2]));
+    \fclose($pipes[1]);
+    \fclose($pipes[2]);
+    $code = \proc_close($process);
+
+    if ($code !== 0) {
+        throw $refusal($error !== '' ? $error : 'PowerShell could not read its ACL');
+    }
+    if (! windowsKeyAclIsPrivate($listing)) {
+        throw $refusal('its ACL grants access to someone besides you, SYSTEM and Administrators');
+    }
 }
 
 /** Prompt for the key without echoing it. */

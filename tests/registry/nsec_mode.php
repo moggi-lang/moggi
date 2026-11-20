@@ -10,8 +10,9 @@
  * must reach key validation (the gate let it through), and the same file at 0644
  * must fail on its mode and nothing else.
  *
- * Windows reports `0666` for every file, so the check is skipped there and this
- * case skips with it — the platform's own ACLs are what protects the key.
+ * Windows reports `0666` for every file, so the mode check is skipped there and
+ * this case skips with it — `readNsecKey` reads the file's ACL instead, and
+ * `nsec_acl` pins that decision.
  */
 
 $root = __DIR__;
