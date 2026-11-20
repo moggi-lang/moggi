@@ -97,6 +97,11 @@ function ensureSchnorrSources(string $repo, bool $windows = false): void
  * that is not on PATH; otherwise the usual names are resolved once, to an
  * absolute path, with the same mode check as a secret key file.
  *
+ * On Windows the path is handed on with forward slashes: `make` expands
+ * `$(CC)` through a shell, where a backslash is an escape, so
+ * `$(shell $(CC) -dumpmachine)` would name a different command and the
+ * Makefile could not recognize the target it is building for.
+ *
  * @param list<string> $candidates
  */
 function schnorrBuildTool(string $variable, array $candidates, string $what, bool $windows): string
@@ -133,7 +138,7 @@ function schnorrBuildTool(string $variable, array $candidates, string $what, boo
         }
     }
 
-    return $path;
+    return $windows ? \str_replace('\\', '/', $path) : $path;
 }
 
 /** The C compiler the Makefile is driven with. */

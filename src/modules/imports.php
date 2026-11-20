@@ -1366,11 +1366,18 @@ function buildImportContext(
             evidenceSymbolTable($unit, $unitName, $unit['namespace'], $cacheKey, $classes, $backendId)
             as $evName => [$evidenceSymbol, $origin]
         ) {
-            if (isset($symbols[$evName])) {
-                continue;
+            $symbol = $evidenceSymbol->symbol
+                ?? throw new \LogicException("evidence `{$evName}` was published without a symbol");
+            $layout = $evidenceSymbol->layout
+                ?? throw new \LogicException("evidence `{$evName}` was published without a runtime arity");
+            $existing = $symbols[$evName] ?? new ImportSymbol();
+            if ($existing->symbol === null || $existing->layout === null) {
+                $symbols[$evName] = $existing->withSymbol(
+                    $symbol,
+                    $evidenceSymbol->originModule,
+                    $layout,
+                );
             }
-
-            $symbols[$evName] = $evidenceSymbol;
             if ($planPhpImports) {
                 recordOriginOutputPath(
                     $moduleOutputPaths,
@@ -1516,7 +1523,9 @@ function evidenceSymbolTable(
 ): array {
     static $memo = [];
 
-    $key = $cacheKey . "\0" . $backendId . "\0" . classesFingerprint($classes);
+    $key = $cacheKey . "\0" . $backendId . "\0" . classesFingerprint($classes)
+        . "\0" . (isset($unit['checkedProgram']) ? 'checked' : 'parsed')
+        . "\0" . \hash('xxh3', \serialize($unit['facts']['evidence'] ?? null));
     if (isset($memo[$key])) {
         return $memo[$key];
     }

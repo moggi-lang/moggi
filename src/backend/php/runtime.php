@@ -581,7 +581,6 @@ function concurrentFork(array $action): int
                 try {
                     $runtime->kill();
                 } catch (\Throwable) {
-                    // A runtime that already finished needs no shutdown.
                 }
             }
         });

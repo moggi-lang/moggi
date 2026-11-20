@@ -742,10 +742,6 @@ function assertRecordContextUnsatisfiable(
                 return;
             }
         }
-        /*
-         * The lookup answers with nothing it found, which is falsy whether that is `null` or an
-         * empty list -- asking `!== null` would read "no instance" as "an instance".
-         */
         if (findProjectInstance($state, $constraint->class, $args[0])) {
             continue;
         }

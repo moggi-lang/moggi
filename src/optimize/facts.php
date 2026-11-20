@@ -59,6 +59,7 @@ final class Facts
         public array $inlineTargetBoundNames = [],
         /** @var array<string, true> the entries a reference runs instead of closing over */
         public array $nullary = [],
+        public array $constructors = [],
     ) {
     }
 
@@ -76,6 +77,7 @@ final class Facts
         $this->evidence += $child->evidence;
         $this->nullary += $child->nullary;
         $this->nullaryCtorCafs += $child->nullaryCtorCafs;
+        $this->constructors += $child->constructors;
     }
 
     /**
@@ -102,6 +104,7 @@ final class Facts
             inlineProtectedNames: [],
             inlineTargetBoundNames: [],
             nullary: $this->nullary,
+            constructors: $this->constructors,
         );
     }
 
@@ -280,6 +283,16 @@ final class Facts
                 $this->nullary[leafName($function->name)] = true;
             }
         }
+    }
+
+    public function publishConstructors(array $constructors): void
+    {
+        $this->constructors += $constructors;
+    }
+
+    public function isConstructor(string $name): bool
+    {
+        return isset($this->constructors[$name]);
     }
 
     /**

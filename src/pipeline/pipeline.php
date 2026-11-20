@@ -14,6 +14,9 @@ use function Moggi\Modules\standaloneImportContext;
 use function Moggi\Optimize\optimize;
 use function Moggi\Optimize\PassCheckpoints\enabled;
 use function Moggi\Optimize\Partial\legalizeCallables;
+use function Moggi\Optimize\Support\visibleConstructors;
+
+use Moggi\Optimize\Facts\Facts;
 use function Moggi\Semantics\Effects\checkAndNormalize;
 
 use Moggi\IR\Module;
@@ -93,7 +96,9 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
     }
 
     if ($request->optimize) {
-        $irOpt = optimize($ir);
+        $facts = new Facts();
+        $facts->publishConstructors(visibleConstructors($ir, $checked, $interface->data()));
+        $irOpt = optimize($ir, $facts);
     } else {
         $irOpt = new Module(
             legalizeCallables($ir->functions),

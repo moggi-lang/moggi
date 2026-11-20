@@ -520,6 +520,10 @@ final class Model
     public function ofCall(string $callee): Effect
     {
         if (! isset($this->index[$callee])) {
+            if ($this->facts->isConstructor($callee)) {
+                return Effect::constructor();
+            }
+
             return isQualifiedSymbol($callee)
                 ? new Effect(false, true, true, true)
                 : Effect::none();

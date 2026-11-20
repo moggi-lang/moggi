@@ -660,7 +660,7 @@ function metaConsFixityType(Ast\ConstructorDecl $ctor): Ast\TypeNode
     $assoc = match ($ctor->fixityAssoc) {
         'infixr' => 'RightAssociative',
         'infix' => 'NotAssociative',
-        default => 'LeftAssociative', // infixl, or default infixl 9
+        default => 'LeftAssociative',
     };
 
     return new Ast\TypeApp(

@@ -373,9 +373,6 @@ function nwtVerifyWrite(
     if ($payload === null || ! \hash_equals(\hash('sha256', $body), $payload)) {
         return ['ok' => false, 'note' => 'the NWT payload does not match the request body'];
     }
-    // A bearer token with no expiry would be replayable forever. The signer
-    // always includes one; requiring it here means an older or alternative
-    // signer cannot quietly opt out of the replay window.
     if (nwtTag($event, 'exp') === null) {
         return ['ok' => false, 'note' => 'the NWT carries no expiry'];
     }

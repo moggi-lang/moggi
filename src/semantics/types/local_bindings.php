@@ -279,13 +279,6 @@ function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value
     $constraints = solveConstraints($state, $userConstraints)->dicts;
     applyConstraintVarKinds($state, $constraints);
 
-    /*
-     * The annotation's variables are the group's own, and they are rigid for the
-     * same reason they are at the top level: a clause that proves `b ~ Int` may
-     * not decide `b` for the next clause. The constraints are skolemized with the
-     * body type because their arguments name the same variables, and evidence
-     * resolution matches an ambient dictionary to a wanted one by those names.
-     */
     $bodyExpected = astType($state, $bodyTypeAst);
     $skolemSubst = skolemizeSignatureVars($state, $bodyExpected, $constraints);
     $skolemBack = [];

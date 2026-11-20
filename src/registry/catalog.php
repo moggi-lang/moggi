@@ -45,8 +45,6 @@ function maxFetchBytes(): int
         $value = \preg_match('/^[0-9]+$/', $digits) === 1
             ? \filter_var($digits, \FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
             : false;
-        // The readers ask for one byte past the cap to detect overflow, so a cap
-        // at PHP_INT_MAX would overflow that addition on strict types.
         if ($value === false || $value >= \PHP_INT_MAX) {
             throw new \RuntimeException(
                 'MOGGI_MAX_FETCH_BYTES must be a positive number of bytes below PHP_INT_MAX, not ' . \var_export($override, true),
@@ -96,9 +94,6 @@ function fetchBytes(string $base, string $path, bool $decode = true): ?string
     if (! \is_file($location)) {
         return null;
     }
-    // A local mirror can hold a huge file too, and `file_get_contents()` would
-    // materialize all of it before the cap was checked. Measure first, then
-    // read no more than one byte past the cap so the refusal is still possible.
     $size = @\filesize($location);
     if ($size !== false) {
         assertFetchWithinCap($size, $path);
@@ -209,8 +204,6 @@ function decodeTransport(string $bytes): string
     if (! \str_starts_with($bytes, "\x1f\x8b")) {
         return $bytes;
     }
-    // Bound the inflate itself: a small gzip bomb must not allocate without
-    // limit only to be rejected by the size check afterwards.
     $inflated = @\gzdecode($bytes, maxFetchBytes() + 1);
 
     return $inflated === false ? $bytes : $inflated;
@@ -741,10 +734,6 @@ function loadCatalog(
         throw new \RuntimeException("refusing to use {$base}: {$signature['note']}");
     }
 
-    // Freshness and rollback come before trust-on-first-use. Otherwise a
-    // hostile registry could answer first contact with a correctly signed but
-    // expired root and have its key remembered even though the root was
-    // refused — poisoning every later load of this base.
     $integrity = rootIntegrityProblem($base, $root, \time());
     if ($integrity !== '') {
         throw new \RuntimeException("refusing to use {$base}: {$integrity}");

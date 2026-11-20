@@ -606,7 +606,7 @@ function keywordCompletionItems(): array
 {
     $kw = 14;
     $snip = 15;
-    $fmt = 2; // InsertTextFormat.Snippet
+    $fmt = 2;
 
     return [
         [

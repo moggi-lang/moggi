@@ -31,11 +31,11 @@ module
       t8 = call monadBind(@__ev_Functor_List, @__ev_Applicative_List, @__ev_Monad_List, [1, 2], @λ2)
       ret t8
   function eitherBindOk()
-      t9 = call Right(2)
+      t9 = call Data.Either::Right(2)
       t11 = call monadBind(@__ev_Functor_Either_1, @__ev_Applicative_Either_1, @__ev_Monad_Either_1, t9, @λ3)
       ret t11
   function eitherShort()
-      t12 = call Left("err")
+      t12 = call Data.Either::Left("err")
       t14 = call monadBind(@__ev_Functor_Either_1, @__ev_Applicative_Either_1, @__ev_Monad_Either_1, t12, @λ4)
       ret t14
   function listDo(__ev_Functor, __ev_Applicative_1, __ev_Monad_2, xs, f)
@@ -54,21 +54,21 @@ module
       t24 = dict_call __ev_Monad_2->>>=(m, partial λ9(__ev_Applicative_1))
       ret t24
   function maybeDemo()
-      t25 = call Just(41)
+      t25 = call Data.Maybe::Just(41)
       t26 = call maybeDo(@__ev_Functor_Maybe, @__ev_Applicative_Maybe, @__ev_Monad_Maybe, t25)
       ret t26
   function maybeNothing()
-      t27 = call maybeDo(@__ev_Functor_Maybe, @__ev_Applicative_Maybe, @__ev_Monad_Maybe, @Nothing)
+      t27 = call maybeDo(@__ev_Functor_Maybe, @__ev_Applicative_Maybe, @__ev_Monad_Maybe, @Data.Maybe::Nothing)
       ret t27
   function eitherDo(__ev_Functor, __ev_Applicative_1, __ev_Monad_2, m)
       t29 = dict_call __ev_Monad_2->>>=(m, partial λ10(__ev_Applicative_1))
       ret t29
   function eitherDoOk()
-      t30 = call Right(3)
+      t30 = call Data.Either::Right(3)
       t31 = call eitherDo(@__ev_Functor_Either_1, @__ev_Applicative_Either_1, @__ev_Monad_Either_1, t30)
       ret t31
   function eitherErr()
-      t32 = call Left("nope")
+      t32 = call Data.Either::Left("nope")
       t33 = call eitherDo(@__ev_Functor_Either_1, @__ev_Applicative_Either_1, @__ev_Monad_Either_1, t32)
       ret t33
   function listDiscard(__ev_Functor, __ev_Applicative_1, __ev_Monad_2, a, b)
@@ -90,10 +90,10 @@ module
   function λ2(x)
       ret [x, intrinsic intMul#(x, 10)]
   function λ3(x)
-      t10 = call Right(intrinsic intAdd#(x, 1))
+      t10 = call Data.Either::Right(intrinsic intAdd#(x, 1))
       ret t10
   function λ4(x)
-      t13 = call Right(x)
+      t13 = call Data.Either::Right(x)
       ret t13
   function λ6(y)
       t16 = dict_call __ev_Applicative_1->pure(y)

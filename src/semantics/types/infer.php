@@ -68,6 +68,16 @@ function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env, ?Type 
                 ),
                 $expr,
             );
+            $meta = lookupConstructorMeta($state, $expr->name);
+            if ($meta !== null) {
+                $declaring = $state->data[$meta['dataName']]['declaringModule'] ?? null;
+                if (\is_string($declaring) && $declaring !== '' && $declaring !== $state->currentModule) {
+                    $expr->resolvedOrigin = resolvedSymbol(
+                        $declaring,
+                        $state->constructorRenames[$expr->name] ?? $expr->name,
+                    );
+                }
+            }
             $instantiated = instantiateScheme($state, $scheme);
             if ($instantiated['constraints'] !== []) {
                 setPendingObligations($state, $expr, $instantiated['constraints'], $instantiated['dicts']);
@@ -1079,14 +1089,6 @@ function listElementExpectation(TypeCheckState $state, ?Type $expected): ?Type
 
 function inferLambda(TypeCheckState $state, Ast\Lambda $expr, array $env, ?Type $expected = null): Type
 {
-    /*
-     * A lambda in a checked position takes its parameter types, and the type
-     * its body is checked against, from the type the context asks for: that is
-     * how `\e -> case e of …` sees the scrutinee as the signature's rigid type
-     * instead of a fresh variable a GADT alternative may pin. When the expected
-     * type does not cover every parameter (a partial application, or a flexible
-     * variable), the lambda falls back to inferring its own.
-     */
     $expectedParams = [];
     $expectedBody = null;
     if ($expected !== null) {
@@ -1446,18 +1448,6 @@ function inferRecordCon(TypeCheckState $state, Ast\RecordCon $expr, array $env):
         unify($state, inferExpr($state, $fieldExpr, $env, $fieldTypes[$i]), $fieldTypes[$i], $fieldExpr);
     }
 
-    /*
-     * The context is an obligation this construction carries, not something to solve before it
-     * returns. `Circle { radius = 2 }` has a `Num n` constraint on a variable the surrounding
-     * expression still decides -- `circle :: Region Int` fixes it only after this node has been
-     * inferred -- so resolving it here asks the solver to find an instance for a fresh variable
-     * and reports one that does not exist. Parking it hands the context to the body's evidence
-     * pass once the type is known, exactly as a constructor reference does.
-     *
-     * The obligations are the instantiated constraints, not the scheme's dictionary parameters: the
-     * latter still name the constructor's own variables, so an evidence pass could not tell a
-     * context that is not yet known from one nothing can ever satisfy.
-     */
     if ($instantiated['constraints'] !== []) {
         setPendingObligations($state, $expr, $instantiated['constraints']);
     }
