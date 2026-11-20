@@ -85,9 +85,26 @@ try {
         );
     }
 
+    // `icacls` lives in System32. That is on PATH for a normal shell but not always for a CI
+    // service process, and silently skipping the grant made this test assert on the ACL of a file
+    // whose ACL was never changed. Resolve it from the Windows directory too, and say so instead of
+    // passing when the tool is genuinely absent.
     $icacls = findExecutable('icacls');
-    $grant = $icacls === null ? null : runCompiledProcess([$icacls, $key, '/grant', '*S-1-1-0:R'], 30);
-    if ($grant !== null && $grant['exitCode'] !== 0) {
+    if ($icacls === null) {
+        $systemRoot = \getenv('SystemRoot') ?: \getenv('windir');
+        $candidate = \is_string($systemRoot) && $systemRoot !== ''
+            ? \rtrim($systemRoot, '\\/') . '\\System32\\icacls.exe'
+            : '';
+        $icacls = $candidate !== '' && \is_file($candidate) ? $candidate : null;
+    }
+    if ($icacls === null) {
+        echo "nsec ACL tests passed ({$checks} checks; `icacls` is unavailable, so the ACL read itself was not exercised)\n";
+
+        return;
+    }
+
+    $grant = runCompiledProcess([$icacls, $key, '/grant', '*S-1-1-0:R'], 30);
+    if ($grant['exitCode'] !== 0) {
         throw new \RuntimeException(
             'the test could not grant `Everyone` read access: ' . $grant['stdout'] . $grant['stderr'],
         );

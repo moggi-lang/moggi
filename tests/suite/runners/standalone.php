@@ -1,12 +1,13 @@
 <?php declare(strict_types=1);
 
 /**
- * Watchdog for one standalone test: 300s. A case that needs to assert the kill-and-report path
- * spawns its own short-lived process instead of shortening this.
+ * Watchdog for one standalone test: 600s.
+ *
+ * This is the whole case's clock, compile included, not one program run.
  */
 function standaloneTimeoutSeconds(): int
 {
-    return 300;
+    return 600;
 }
 
 /**

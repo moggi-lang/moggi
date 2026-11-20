@@ -916,6 +916,24 @@ function parsedCallableFacts(Ast\Program $program, array $exports, array $eviden
     foreach (programConstructorArities($program) as $name => $arity) {
         $entries[$name] ??= ['evidence' => 0, 'params' => $arity, 'arity' => $arity];
     }
+
+    foreach ($program->items as $item) {
+        if (! $item instanceof Ast\DataDecl) {
+            continue;
+        }
+        foreach ($item->constructors as $constructor) {
+            if (! $constructor->isRecord()) {
+                continue;
+            }
+            foreach ($constructor->fields as $field) {
+                $name = $field->name ?? '';
+                if (! \is_string($name) || $name === '') {
+                    continue;
+                }
+                $entries[$name] ??= ['evidence' => 0, 'params' => 1, 'arity' => 1];
+            }
+        }
+    }
     foreach ($evidenceArities as $name => $arity) {
         $entries[$name] ??= evidenceCallableLayout($arity);
     }
