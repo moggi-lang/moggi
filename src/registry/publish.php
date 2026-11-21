@@ -200,10 +200,10 @@ function readHiddenLineWindows(): string
  * The nsec to sign with, from `--nsec-file`, `MOGGI_NSEC_FILE`, or a no-echo
  * prompt on a terminal.
  *
- * A file has to be private: mode 0600, or on Windows an ACL that grants nobody
- * but its owner, `SYSTEM` and `Administrators` — a secret key that group or
- * other can read is not secret, and failing here costs a `chmod` rather than the
- * key. A run with no terminal and no file fails
+ * A file has to be private: mode 0600 — a secret key that group or other can read
+ * is not secret, and failing here costs a `chmod` rather than the key. Windows has
+ * no mode bits PHP can read and no ACL API, so there is nothing to check there. A
+ * run with no terminal and no file fails
  * loudly instead of hanging on a read — a CI job that silently waits for a
  * prompt is worse than one that stops.
  */
@@ -234,182 +234,9 @@ function readNsecKey(?string $file): string
                 \sprintf('%s is mode %04o — a secret key file must not be readable by group or other (chmod 600)', $path, $mode & 0o777),
             );
         }
-    } else {
-        assertWindowsKeyFileIsPrivate($path);
     }
 
     return assertNsec(\trim((string) \file_get_contents($path)), $path);
-}
-
-/**
- * Whether an SDDL access control list leaves a key file private.
- *
- * SDDL is the form `Get-Acl` prints in one line and in SIDs: `O:` owner, `G:`
- * group, `D:` DACL, and `(A;;FA;;;S-1-5-21-…)` one allow rule for that
- * principal. The localized `Access` list this check used to read had two
- * problems a machine nobody is sitting at made expensive: the names are
- * translated per install, and a listing that never arrived was the same empty
- * string as a file with no rules at all. One line of SDDL has neither.
- *
- * The owner is allowed to read its own key; every other principal has to be
- * `SYSTEM` or `Administrators`, which is what a POSIX mode calls the root
- * account, plus `OWNER RIGHTS` — the right the owner already holds. Anything
- * else — `Everyone`, `Users`, `Authenticated Users`, a named second account — is
- * the `other` or `group` bit in disguise.
- */
-function windowsKeyAclIsPrivate(string $sddl): bool
-{
-    return windowsKeyAclRefusalReason($sddl) === '';
-}
-
-/**
- * Why an SDDL list is not private, or `''` when it is.
- *
- * Three cases a mode cannot spell out are worth separating for whoever reads the
- * refusal: a `null` DACL, which Windows reads as `Everyone` with full control; a
- * rule for somebody else; and a list this client could not read at all. An empty
- * DACL is none of them — it grants nobody anything, which is private.
- */
-function windowsKeyAclRefusalReason(string $sddl): string
-{
-    $acl = windowsAclSddl($sddl);
-    if ($acl === null) {
-        return 'its ACL could not be read';
-    }
-    if ($acl['nullDacl']) {
-        return 'its DACL grants everyone full control';
-    }
-
-    $allowed = ['S-1-5-18', 'S-1-5-32-544', 'S-1-3-4', 'S-1-3-0', $acl['owner']];
-    foreach ($acl['allow'] as $sid) {
-        if (! \in_array($sid, $allowed, true)) {
-            return 'its ACL grants access to someone besides you, SYSTEM and Administrators';
-        }
-    }
-
-    return '';
-}
-
-/**
- * The owner and the allow principals of an SDDL string, or `null` when it cannot
- * be read.
- *
- * `O:` names the owner, `D:` starts the DACL, and each `(…)` is one rule: its
- * type first (`A` for allow, `D` for deny, `OA` for an object allow), its flags
- * and rights, and the SID last. Deny and audit rules are skipped — a deny takes
- * access away, which is the direction this check wants.
- *
- * @return array{owner: string, allow: list<string>, nullDacl: bool}|null
- */
-function windowsAclSddl(string $sddl): ?array
-{
-    $sddl = \trim($sddl);
-    if (\preg_match('/^O:([A-Z]{2}|S-\d+(?:-\d+)+)/', $sddl, $owner) !== 1) {
-        return null;
-    }
-    $ownerSid = windowsAclSid($owner[1]);
-    if ($ownerSid === null) {
-        return null;
-    }
-
-    $daclAt = \strpos($sddl, 'D:');
-    if ($daclAt === false) {
-        return null;
-    }
-    $dacl = \substr($sddl, $daclAt + 2);
-    if (\str_starts_with($dacl, 'NO_ACCESS_CONTROL')) {
-        return ['owner' => $ownerSid, 'allow' => [], 'nullDacl' => true];
-    }
-
-    $allow = [];
-    \preg_match_all('/\(([^)]*)\)/', $dacl, $rules);
-    foreach ($rules[1] as $rule) {
-        $fields = \explode(';', $rule);
-        $type = $fields[0] ?? '';
-        if ($type !== 'A' && $type !== 'OA') {
-            continue;
-        }
-        $sid = windowsAclSid($fields[\count($fields) - 1] ?? '');
-        if ($sid === null) {
-            return null;
-        }
-        $allow[] = $sid;
-    }
-
-    return ['owner' => $ownerSid, 'allow' => $allow, 'nullDacl' => false];
-}
-
-/**
- * The SID an SDDL principal stands for, or `null` when it is not one this client knows.
- *
- * SDDL writes a well-known principal as a two-letter code — `SY` for SYSTEM, `BA` for
- * Administrators, `WD` for `Everyone`, `OW` for `OWNER RIGHTS` — and everything else as the SID
- * itself. Both spellings have to become the same value, or a rule for `WD` would read as a
- * principal this check has never heard of and `Everyone` would pass as private.
- */
-function windowsAclSid(string $principal): ?string
-{
-    if (\preg_match('/^S-\d+(?:-\d+)+$/', $principal) === 1) {
-        return $principal;
-    }
-
-    return match ($principal) {
-        'SY' => 'S-1-5-18',
-        'BA' => 'S-1-5-32-544',
-        'BU' => 'S-1-5-32-545',
-        'WD' => 'S-1-1-0',
-        'AU' => 'S-1-5-11',
-        'OW' => 'S-1-3-4',
-        'CO' => 'S-1-3-0',
-        default => null,
-    };
-}
-
-/**
- * Refuse a Windows key file whose ACL is not private.
- *
- * PHP cannot see an ACL, so PowerShell prints it as SDDL: one line, SIDs only,
- * so nothing depends on the install's language and nothing can be lost between
- * several writes to a redirected pipe. A missing PowerShell or an unreadable ACL
- * fails the check rather than passing it: the whole point is that a key is read
- * only from a file a `chmod 600` would have left alone.
- */
-function assertWindowsKeyFileIsPrivate(string $path): void
-{
-    $refusal = static fn (string $why): \RuntimeException => new \RuntimeException(
-        "{$path} is not private: {$why} — a secret key file must be readable only by you (fix its ACL, or use the interactive prompt)",
-    );
-
-    $powershell = findExecutable('powershell') ?? findExecutable('pwsh');
-    if ($powershell === null) {
-        throw $refusal('there is no PowerShell to read its ACL');
-    }
-
-    $literal = "'" . \str_replace("'", "''", $path) . "'";
-    $script = 'try { (Get-Acl -LiteralPath ' . $literal . ').Sddl }'
-        . ' catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }';
-
-    $process = \proc_open(
-        [$powershell, '-NoProfile', '-NonInteractive', '-Command', $script],
-        [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
-        $pipes,
-    );
-    if (! \is_resource($process) || ! isset($pipes[1], $pipes[2])) {
-        throw $refusal('PowerShell could not be started to read it');
-    }
-    \fclose($pipes[0]);
-    $sddl = (string) \stream_get_contents($pipes[1]);
-    $error = \trim((string) \stream_get_contents($pipes[2]));
-    \fclose($pipes[1]);
-    \fclose($pipes[2]);
-    $code = \proc_close($process);
-
-    if ($code !== 0) {
-        throw $refusal($error !== '' ? $error : 'PowerShell could not read its ACL');
-    }
-    if (! windowsKeyAclIsPrivate($sddl)) {
-        throw $refusal(windowsKeyAclRefusalReason($sddl));
-    }
 }
 
 /** Prompt for the key without echoing it. */
