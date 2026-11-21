@@ -4,12 +4,12 @@
  * A key file is read only while nobody but its owner (and the machine's root)
  * can read it — on Windows, where there are no mode bits to inspect.
  *
- * The decision is a function of the ACL listing rather than of the filesystem, so
+ * The decision is a function of the ACL text rather than of the filesystem, so
  * the policy is pinned here on every platform: `Everyone`, `Users` and
- * `Authenticated Users` are the Windows spelling of `other` and `group`, a rule
- * whose SID cannot be resolved is not private, and a listing with no owner line
- * is not something to trust. The round trip at the end is the part that needs a
- * real machine.
+ * `Authenticated Users` are the Windows spelling of `other` and `group`, a
+ * `null` DACL grants the machine everything, an empty one grants nobody, and a
+ * string this client cannot read is not something to trust. The round trip at
+ * the end is the part that needs a real machine.
  */
 
 $root = __DIR__;
@@ -26,9 +26,9 @@ use function Moggi\Registry\readNsecKey;
 use function Moggi\Registry\windowsKeyAclIsPrivate;
 
 $checks = 0;
-$is = static function (bool $expected, string $listing, string $what) use (&$checks): void {
+$is = static function (bool $expected, string $sddl, string $what) use (&$checks): void {
     ++$checks;
-    $actual = windowsKeyAclIsPrivate($listing);
+    $actual = windowsKeyAclIsPrivate($sddl);
     if ($actual === $expected) {
         return;
     }
@@ -38,25 +38,29 @@ $is = static function (bool $expected, string $listing, string $what) use (&$che
         $what,
         $expected ? 'private' : 'not private',
         $actual ? 'private' : 'not private',
-        $listing === '' ? 'an empty listing' : \json_encode($listing),
+        $sddl === '' ? 'an empty listing' : \json_encode($sddl),
     ));
 };
 
 $me = 'S-1-5-21-11-22-33-1001';
-$private = "user {$me}\n{$me}\nS-1-5-18\nS-1-5-32-544";
+$head = "O:{$me}G:{$me}";
+$private = $head . 'D:PAI(A;;FA;;;' . $me . ')(A;;FA;;;SY)(A;;FA;;;BA)';
 
 $is(true, $private, 'the owner, SYSTEM and Administrators is private');
-$is(true, "user {$me}\n{$me}", 'a file only its owner and root may touch is private');
-$is(true, "user {$me}\r\n{$me}\r\nS-1-5-18", 'CRLF line endings from PowerShell are read');
-$is(true, "user {$me}\n{$me}\nS-1-3-4", 'OWNER RIGHTS is the owner');
-$is(false, $private . "\nS-1-1-0", 'Everyone is `other`');
-$is(false, $private . "\nS-1-5-32-545", 'Users is `group`');
-$is(false, $private . "\nS-1-5-11", 'Authenticated Users is `group`');
-$is(false, "user {$me}\n{$me}\nS-1-5-21-11-22-33-1002", 'a second account is a stranger');
-$is(false, "user {$me}\nunresolved", 'a rule whose SID cannot be resolved is not private');
+$is(true, $head . "D:(A;;FA;;;{$me})(A;;FA;;;OW)", 'OWNER RIGHTS written as a code is the owner');
+$is(false, $head . 'D:(A;;FA;;;BA)(A;;FA;;;WD)', 'a code for Everyone is still Everyone');
+$is(true, $head . "D:(A;;FA;;;{$me})", 'a file only its owner may touch is private');
+$is(true, $head . "D:(A;;FA;;;{$me})(A;;FA;;;S-1-3-4)", 'OWNER RIGHTS is the owner');
+$is(true, $head . 'D:', 'an empty DACL grants nobody anything, which is private');
+$is(true, $head . "D:(D;;FA;;;WD)(A;;FA;;;{$me})", 'a deny rule for others is not access');
+$is(false, $head . 'D:NO_ACCESS_CONTROL', 'a null DACL is Everyone, full control');
+$is(false, $head . 'D:(A;;FA;;;WD)', 'Everyone is `other`');
+$is(false, $head . 'D:(A;;FA;;;BU)', 'Users is `group`');
+$is(false, $head . 'D:(A;;FA;;;AU)', 'Authenticated Users is `group`');
+$is(false, $head . 'D:(A;;FA;;;S-1-5-21-11-22-33-1002)', 'a second account is a stranger');
+$is(false, $head . "D:(A;;FA;;;{$me})(A;;FA;;;WD)", 'one rule for Everyone is enough to refuse');
 $is(false, '', 'an empty listing is not private');
-$is(false, "{$me}\nS-1-5-18", 'a listing without an owner line is not trusted');
-$is(false, "user {$me}", 'a listing with no rule at all is not trusted');
+$is(false, "{$me}D:(A;;FA;;;{$me})", 'a listing without an owner is not trusted');
 
 if (\PHP_OS_FAMILY !== 'Windows') {
     echo "nsec ACL tests passed ({$checks} checks; the ACL read itself needs Windows)\n";

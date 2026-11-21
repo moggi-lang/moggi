@@ -12,8 +12,8 @@ require_once __DIR__ . '/process.php';
  * file and `chmod()` moves a read-only attribute, so a key written into a temporary directory keeps
  * whatever that directory grants, which on a CI runner is not necessarily its owner alone. The
  * client reads an ACL there, so the test has to write one: `icacls` removes the inherited rules and
- * grants the file to `S-1-3-4` (`OWNER RIGHTS`) — the Windows spelling of "the owner, nobody else",
- * and the same set `chmod 600` leaves behind.
+ * grants the file to the account running the test — the Windows spelling of "the owner, nobody
+ * else", and the same set `chmod 600` leaves behind.
  *
  * Failing to restrict the file is a test failure, not a skip: a case that signs with a key it could
  * not protect would otherwise assert on a file whose ACL was never changed.
@@ -45,7 +45,7 @@ function writePrivateKeyFile(string $path, string $contents): void
     }
 
     $restricted = runCompiledProcess(
-        [$icacls, platformPath($path), '/inheritance:r', '/grant:r', '*S-1-3-4:F'],
+        [$icacls, platformPath($path), '/inheritance:r', '/grant:r', privateKeyGrantee()],
         30,
     );
     if ($restricted['exitCode'] !== 0) {
@@ -54,4 +54,22 @@ function writePrivateKeyFile(string $path, string $contents): void
                 . \trim($restricted['stdout'] . $restricted['stderr']),
         );
     }
+}
+
+/**
+ * The account `icacls` should hand a test key to: this one.
+ *
+ * `OWNER RIGHTS` (`S-1-3-4`) is the faithful spelling of "the owner, nobody else", and it is what
+ * the client itself accepts, but it is a well-known SID some `icacls` builds decline to resolve —
+ * and a grant that quietly changes nothing leaves the file readable by the whole temporary
+ * directory. The account the test already runs as is always resolvable.
+ */
+function privateKeyGrantee(): string
+{
+    $user = \getenv('USERNAME');
+    if (\is_string($user) && \trim($user) !== '') {
+        return \trim($user) . ':F';
+    }
+
+    return '*S-1-3-4:F';
 }
