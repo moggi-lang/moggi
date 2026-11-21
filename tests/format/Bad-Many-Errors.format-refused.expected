@@ -1,0 +1,4 @@
+tests/format/Bad-Many-Errors.mog:3:9: parse error: expected expression, found ')'
+
+  3 | first = )
+    |         ^

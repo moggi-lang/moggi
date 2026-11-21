@@ -1,0 +1,104 @@
+-- | This module does not typecheck on purpose: formatting must not need the types.
+module Demo.Expressions where
+
+pick m = case m of
+  Just x -> x
+  Nothing -> 0
+
+pair a b = case (a, b) of
+  (Just x, Just y) -> (x, y)
+  (_, Nothing) -> (0, 0)
+
+main = do
+  let xs = [1, 2, 3]
+  print (sum xs)
+  pure ()
+
+readTwo = do
+  a <- getLine
+  b <- getLine
+  pure (a, b)
+
+one = 1.0
+
+ratio = 1.50
+
+neg = -42
+
+big = 1000000
+
+text = "tab\there \"quoted\" \\ done"
+
+ch = '\n'
+
+xs = [1 .. 10]
+
+describe xs =
+  "items: "
+    ++ show (length xs)
+    ++ ", first: "
+    ++ show (head xs)
+    ++ ", last: "
+    ++ show (last xs)
+    ++ "."
+
+total xs = sum xs + length xs
+
+data Time = Time { day :: Int, fraction :: Double }
+
+mk d f = Time { day = d, fraction = f }
+
+getDay t = case t of
+  Time { day = d, fraction = _ } -> d
+
+missingImport = printf "%d" 1
+
+wrongArity = (\x -> x) 1 2
+
+unbound = notInScope + alsoMissing
+
+sign x = if x < 0 then "negative" else "positive"
+
+grading score =
+  if score >= 90
+    then "an A, the top grade"
+    else if score >= 80
+      then "a B, a good grade"
+      else "a C"
+
+tally x = case x of
+  n ->
+    "value: "
+      ++ show n
+      ++ " (checked)"
+      ++ " and recorded"
+      ++ " and kept"
+      ++ " and archived"
+      ++ " and filed"
+
+rate x
+  | x > 0 =
+    "positive: "
+      ++ show x
+      ++ " units"
+      ++ " measured"
+      ++ " and logged"
+      ++ " and filed"
+      ++ " and verified once more"
+  | otherwise = "zero"
+
+pairs xs ys = [(x, y) | x <- xs, y <- ys, x /= y]
+
+grid = [[y | y <- ys] | x <- xs, x /= 0]
+
+diag = [x | (x, _) <- pairs]
+
+wideComp xs =
+  [ transform x
+  | x <- xs
+  , predicate x
+  , anotherPredicate x
+  , yetAnotherPredicate xs
+  , x /= 0
+  , isReady xs
+  ]

@@ -28,6 +28,7 @@ usage:
     moggi bind    <backend>:<coordinate> --tree DIR [--out DIR] [--print] [--json]
     moggi build   [<dir|<name>.moggi>] [--exe NAME] [--backend B] [-o PATH]
     moggi check   [<dir|<name>.moggi>] [--json]
+    moggi format  <source.mog|dir> [--dry-run | --check]
     moggi verify  [<dir|<name>.moggi>] [--registry URL|DIR] [--json]
     moggi pack    [<dir>] [-o FILE] [--list] [--json]
     moggi publish [<dir|<name>.moggi>] [--registry URL] [--as NPUB] [--nsec-file FILE]
@@ -89,6 +90,10 @@ commands:
                  source-dirs and modules [lib] and [executable] promise, the
                  dependencies against the lock, the identity and version of the
                  package itself. Errors exit 1
+    format       rewrite a source in the canonical layout, in place: A file that does
+                 not parse, is reported and left untouched.
+                 --dry-run reports what would change and writes nothing
+                 --check reports every file that is not already canonical
     verify       check every package in the lock against the registry: the
                  release record against the catalog's digest, the signature
                  against the package's allowed authors (no download, no

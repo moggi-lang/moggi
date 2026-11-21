@@ -1,0 +1,76 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# BACKEND
+  php = Demo.Module.PHP
+  jvm = Demo.Module.JVM
+  dotnet = Demo.Module.DotNet
+#-}
+
+-- A file header: a comment above the module keyword belongs to the file, and must not be
+-- pulled into the export list below it.
+-- | A demo module: pragma, doc, export list, every import shape.
+module Demo.Module
+  ( alpha
+  , beta
+  , Gamma(..)
+  , type (&&)
+  ) where
+
+import Data.Bool
+import Data.Semigroup ()
+import Data.Either (Either(Left, Right), either, lefts, rights)
+import Data.Ord hiding (Down, comparing)
+import Data.Map (adjust, alter, alterF, delete, difference, differenceWith, elems, intersectionWith)
+import Data.Set
+  ( adjust
+  , alter
+  , delete
+  , difference
+  , disjoint
+  , fromAscList
+  , intersection
+  , splitMember
+  )
+import Data.Char (isDigit, toLower, toUpper) qualified as Char
+import Data.List hiding
+  ( map
+  , filter
+  , null
+  , length
+  , lookup
+  , take
+  , drop
+  , reverse
+  , sort
+  , sortBy
+  , sortOn
+  , zip
+  , zipWith
+  , unzip
+  , tails
+  , head
+  , last
+  , tail
+  , init
+  , singleton
+  , intercalate
+  )
+import Data.Maybe
+  ( Maybe(Just, Nothing)
+  , maybe
+  , fromMaybe
+  , isJust
+  , isNothing
+  , catMaybes
+  , mapMaybe
+  , listToMaybe
+  , maybeToList
+  , fromJust
+  )
+
+alpha :: Int
+alpha = 1
+
+beta :: Int
+beta = 2
+
+data Gamma = Gamma

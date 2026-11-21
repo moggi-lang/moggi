@@ -170,7 +170,8 @@ function parseOnce(
     $exports = null;
     $moduleBackend = null;
     $implicitMain = false;
-    if (isAt($state, TokenKind::KwModule)) {
+    $moduleToken = isAt($state, TokenKind::KwModule) ? peek($state) : null;
+    if ($moduleToken !== null) {
         [$module, $exports, $moduleBackend] = parseModuleDecl($state);
     } else {
         $implicit = implicitMainModuleHeader();
@@ -187,12 +188,14 @@ function parseOnce(
     } else {
         while (true) {
             $importDoc = null;
+            $beforeDocs = $state->pos;
             if ($imports === []) {
                 skipModuleHeaderDocs($state);
             } else {
                 $importDoc = consumeLeadingDoc($state);
             }
             if (! isAt($state, TokenKind::KwImport)) {
+                $state->pos = $beforeDocs;
                 break;
             }
             $import = parseImportDecl($state);
@@ -207,6 +210,7 @@ function parseOnce(
 
     $items = [];
     $fixityDocs = [];
+    $fixityDecls = [];
     $state->backendMap = $backendMap;
 
     while (! isAt($state, TokenKind::Eof)) {
@@ -223,12 +227,18 @@ function parseOnce(
             $decl = parseFixityDecl($state);
             $trailingDoc = consumeTrailingDoc($state);
             $doc = mergeDoc($leadingDoc, $trailingDoc);
+            $precedence = (int) ($decl['precedence'] ?? 9);
+            $fixityDecls[] = [
+                'operators' => $decl['operators'],
+                'assoc' => $decl['assoc'],
+                'precedence' => $precedence,
+            ];
             if ($doc !== null && $doc !== '') {
                 $fixityDocs[] = [
                     'doc' => $doc,
                     'operators' => $decl['operators'],
                     'assoc' => $decl['assoc'],
-                    'precedence' => (int) ($decl['precedence'] ?? 9),
+                    'precedence' => $precedence,
                 ];
             }
 
@@ -257,7 +267,11 @@ function parseOnce(
         $language,
         $moduleDoc,
         $fixityDocs,
+        $fixityDecls,
     );
+    if ($moduleToken !== null) {
+        $program->setLocation($moduleToken->line, $moduleToken->col, $moduleToken->col);
+    }
 
     return [$program, $state->patternSynonyms];
 }
@@ -529,6 +543,7 @@ function desugarMultiClauseFunction(array $fn, array $context): Ast\FunctionDecl
     );
 
     $decl = new Ast\FunctionDecl($fn['name'], $fn['type'], $params, desugarClauseDispatch($clauses, $slots));
+    $decl->clauses = $clauses;
     locateDeclaration($decl, $fn);
 
     return $decl;

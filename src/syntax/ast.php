@@ -114,21 +114,47 @@ function desugarLambdaPatterns(array $params, AstNode $body, ?AstNode $onFail = 
 
 function desugarEnumFromTo(AstNode $from, AstNode $to): AstNode
 {
-    return new Apply(new Apply(new Variable('enumFromTo'), $from), $to);
+    $node = new Apply(new Apply(new Variable('enumFromTo'), $from), $to);
+    $node->enumForm = ['kind' => 'to', 'from' => $from, 'to' => $to];
+
+    return $node;
 }
 
 function desugarEnumFromThenTo(AstNode $from, AstNode $then, AstNode $to): AstNode
 {
-    return new Apply(
+    $node = new Apply(
         new Apply(new Apply(new Variable('enumFromThenTo'), $from), $then),
         $to,
     );
+    $node->enumForm = ['kind' => 'then-to', 'from' => $from, 'then' => $then, 'to' => $to];
+
+    return $node;
 }
 
 /**
- * @param list<array{tag: string, pattern?: array<string, mixed>, expr?: array<string, mixed>}> $qualifiers
+ * A list comprehension, in the `concatMap`/`case` shape the checker and backends consume.
+ *
+ * The qualifiers are recorded on the result so the formatter can print the comprehension the
+ * author wrote; without them `[x | x <- xs]` would come back as `concatMap (\x -> [x]) xs`.
+ *
+ * @param list<QualGen|QualGuard> $qualifiers
  */
 function desugarListComp(AstNode $expr, array $qualifiers): AstNode
+{
+    $node = desugarListCompShape($expr, $qualifiers);
+    if ($qualifiers !== []) {
+        $node->setListComp(['expr' => $expr, 'qualifiers' => \array_values($qualifiers)]);
+    }
+
+    return $node;
+}
+
+/**
+ * The desugaring itself; {@see desugarListComp()} records the sugar on what this returns.
+ *
+ * @param list<QualGen|QualGuard> $qualifiers
+ */
+function desugarListCompShape(AstNode $expr, array $qualifiers): AstNode
 {
     if ($qualifiers === []) {
         return new ListLit([$expr]);
@@ -138,7 +164,7 @@ function desugarListComp(AstNode $expr, array $qualifiers): AstNode
     $rest = \array_slice($qualifiers, 1);
 
     if ($qual instanceof QualGen) {
-        $inner = desugarListComp($expr, $rest);
+        $inner = desugarListCompShape($expr, $rest);
 
         return new Apply(
             new Apply(
@@ -149,7 +175,7 @@ function desugarListComp(AstNode $expr, array $qualifiers): AstNode
         );
     }
 
-    $inner = desugarListComp($expr, $rest);
+    $inner = desugarListCompShape($expr, $rest);
 
     if (! $qual instanceof QualGuard) {
         throw new \InvalidArgumentException('list comprehension qualifier must be a guard');
@@ -278,14 +304,36 @@ function dump(AstNode $node, int $indent = 0): string
                 : ''),
         RoleDecl::class => $pad . 'type role ' . $node->name
             . (\count($node->roles) > 0 ? ' ' . \implode(' ', $node->roles) : '') . "\n",
-        TypeSynonymDecl::class => $pad . 'type ' . $node->name
-            . (\count($node->params) > 0 ? ' ' . \implode(' ', $node->params) : '')
-            . ' = ' . dumpTypeInline($node->type) . "\n",
+        TypeSynonymDecl::class => $node->isFamily
+            ? (function () use ($pad, $node): string {
+                $params = \array_map(
+                    static fn ($param): string => dumpDataParam($param),
+                    $node->familyParams,
+                );
+
+                return $pad . 'type family ' . $node->name
+                    . ($params === [] ? '' : ' ' . \implode(' ', $params))
+                    . ($node->familyResultKind !== null ? ' :: ' . dumpKindInline($node->familyResultKind) : '')
+                    . ($node->familyEquations === []
+                        ? "\n"
+                        : "\n" . \implode('', \array_map(
+                            static fn (array $equation): string => $pad . '  '
+                                . dumpTypeInline($equation['lhs']) . ' = '
+                                . dumpTypeInline($equation['rhs']) . "\n",
+                            $node->familyEquations,
+                        )));
+            })()
+            : $pad . 'type ' . $node->name
+                . (\count($node->params) > 0 ? ' ' . \implode(' ', $node->params) : '')
+                . ' = ' . dumpTypeInline($node->type) . "\n",
         ClassDecl::class => $pad . 'class ' . $node->name
             . (\count($node->params) > 0 ? ' ' . \implode(' ', \array_map(
                 static fn (ClassParam $param): string => $param->name,
                 $node->params,
             )) : '') . "\n"
+            . ($node->minimalPragma === null ? '' : $pad . '  minimal@'
+                . $node->minimalPragmaAfter['types'] . ',' . $node->minimalPragmaAfter['methods']
+                . ' ' . $node->minimalPragma . "\n")
             . \implode('', \array_map(
                 static function (AssociatedTypeDecl $assoc) use ($pad): string {
                     $params = $assoc->params === [] ? '' : ' ' . \implode(' ', $assoc->params);

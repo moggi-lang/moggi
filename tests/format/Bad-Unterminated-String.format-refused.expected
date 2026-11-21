@@ -1,0 +1,4 @@
+tests/format/Bad-Unterminated-String.mog:3:5: lex error: unterminated string literal
+
+  3 | s = "abc
+    |     ^

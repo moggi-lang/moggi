@@ -65,7 +65,7 @@ function parseType(ParserState $state, bool $anyOperator = false): Ast\TypeNode
     }
 
     $first = parseTypeInfix($state, $anyOperator);
-    skipDocInsideType($state);
+    attachDocInsideType($state, $first);
 
     if (isAt($state, TokenKind::Comma)) {
         $before = $state->pos;
@@ -109,7 +109,7 @@ function parseTypeNoConstraint(ParserState $state, bool $anyOperator = false): A
     }
 
     $first = parseTypeInfix($state, $anyOperator);
-    skipDocInsideType($state);
+    attachDocInsideType($state, $first);
 
     if (isAt($state, TokenKind::Op, 0, '->')) {
         advance($state);
@@ -121,7 +121,7 @@ function parseTypeNoConstraint(ParserState $state, bool $anyOperator = false): A
 }
 
 /**
- * Skip a `-- ^` doc comment written inside a multi-line type.
+ * Take a `-- ^` doc comment written inside a multi-line type, when the type continues.
  *
  * Argument documentation is written where the argument ends, which in a
  * signature is in front of the next arrow:
@@ -130,25 +130,29 @@ function parseTypeNoConstraint(ParserState $state, bool $anyOperator = false): A
  * >         => Dynamic      -- ^ the dynamically-typed object
  * >         -> a            -- ^ a default value
  *
- * The comment belongs to the declaration, but it cannot interrupt the type: it
- * is skipped here when the type continues with `->` or `=>`. A `-- ^` that ends
- * the type (a record field, or the last argument of a signature) is left for
- * the declaration parser to attach.
+ * The comment documents the argument, so it belongs to the type it follows and
+ * not to the declaration: it is taken here when the type continues with `->` or
+ * `=>`, which leaves the tree able to print it back where it was written. A
+ * `-- ^` that ends the type (a record field, or the last argument of a
+ * signature) is left for the declaration parser to attach.
  */
-function skipDocInsideType(ParserState $state): void
+function attachDocInsideType(ParserState $state, Ast\TypeNode $previous): void
 {
+    $saved = $state->pos;
+    $parts = [];
     while (isAt($state, TokenKind::DocTrailing) || isAt($state, TokenKind::DocBlock)) {
-        $saved = $state->pos;
-        advance($state);
+        $parts[] = advance($state)->lexeme;
+    }
 
-        if (isAt($state, TokenKind::Op) && (peek($state)->lexeme === '->' || peek($state)->lexeme === '=>')) {
-            return;
-        }
-
+    $continues = isAt($state, TokenKind::Op)
+        && (peek($state)->lexeme === '->' || peek($state)->lexeme === '=>');
+    if ($parts === [] || ! $continues) {
         $state->pos = $saved;
 
         return;
     }
+
+    $previous->doc = mergeDoc($previous->doc, \implode("\n", $parts));
 }
 
 /**
@@ -378,7 +382,10 @@ function parseTypeHead(ParserState $state): Ast\TypeNode
                 return new Ast\TypeConstrained($elements, parseType($state));
             }
 
-            return new Ast\TypeApp(new Ast\TypeCon('Tuple' . \count($elements)), $elements);
+            $tuple = new Ast\TypeApp(new Ast\TypeCon('Tuple' . \count($elements)), $elements);
+            $tuple->tupleSugar = true;
+
+            return $tuple;
         }
 
         if (isAt($state, TokenKind::RParen)) {

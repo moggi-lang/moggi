@@ -1,0 +1,1 @@
+tests/format/Bad-Comment-Without-Home.mog:6:3: format error: cannot place a comment here, and dropping it is not an option
