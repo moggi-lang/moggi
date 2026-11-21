@@ -32,6 +32,7 @@ the pages beyond the path — [kinds](types/kinds.md),
 | [ffi.md](ffi.md) | calling PHP, the JVM or .NET |
 | [host-packages.md](host-packages.md) | using Composer, Maven and NuGet libraries from Moggi |
 | [diagnostics.md](diagnostics.md) | compiler messages, uncaught-exception reports, source maps |
+| [formatting.md](formatting.md) | canonical layout, `moggi format` |
 | [pipeline.md](pipeline.md) | inspecting a build: tokens, AST, IR, cache, unpacked output |
 | [api-docs.md](api-docs.md) | doc comments, `moogle` search by name or type, `mogdoc` HTML and live server |
 | [differences](differences-to-haskell.md) | every observable behaviour that deliberately differs from Haskell |

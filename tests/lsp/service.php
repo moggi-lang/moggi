@@ -64,8 +64,9 @@ $assert($overlay2 === $overlay, 'same overlay path');
 $assert(($fps['file:///tmp/a.mog'] ?? '') === $fp1, 'fingerprint unchanged skips rewrite');
 $assert(\filemtime($overlay2) === $mtime1, 'mtime unchanged when fingerprint matches');
 
-$formatted = formatMoggiSource("a  \n\n\n\nb\n");
-$assert(! \str_contains($formatted, 'a  '), 'trim trailing ws');
+$formatted = formatMoggiSource("module Main where\n\nvalue = 1  \n\n\n\nother = 2\n");
+$assert(\is_string($formatted), 'format a valid module');
+$assert(! \str_contains($formatted, 'value = 1  '), 'trim trailing ws');
 $assert(! \preg_match('/\n{4,}/', $formatted), 'collapse 3+ blank lines to at most 2');
 
 $prog = new Ast\Program([
@@ -139,6 +140,28 @@ $assert($r2 !== null, 'ensureAnalyzed forces sync');
 $svc->warm();
 $assert($svc->warmed === true, 'warmed flag');
 
+$opsPath = $tmp . '/Ops.mog';
+$importPath = $tmp . '/Imported.mog';
+$opsSource = "module Ops where\n\ninfixr 5 <+>\n\n(<+>) :: Int -> Int -> Int\n(<+>) a b = a + b\n";
+$importSource = "module Imported where\n\nimport Ops\n\nvalue=a <+> b <+> c\nmixed = a <+> b * c\n";
+\file_put_contents($opsPath, $opsSource);
+\file_put_contents($importPath, $importSource);
+$fixSvc = new AnalysisService();
+$importUri = pathToUri($importPath);
+$fixSvc->openDocument($importUri, $importSource, 1);
+$fixSvc->setWorkspaceRoot($tmp);
+$fixAnalysis = $fixSvc->ensureAnalyzed($importUri);
+$assert($fixAnalysis !== null, 'analyze a document with imported fixity');
+$assert(($fixAnalysis->importedFixity['<+>']['assoc'] ?? null) === 'infixr', 'LSP analysis resolves imported fixity');
+$fixEdits = svcFormatDocument($fixSvc, $importUri);
+$assert(\count($fixEdits) === 1, 'imported-fixity format produces one edit: ' . \json_encode($fixEdits));
+$fixText = (string) ($fixEdits[0]['newText'] ?? '');
+$assert(\str_contains($fixText, "value = a <+> b <+> c\n"), 'LSP formatter keeps an imported right-associative chain: ' . $fixText);
+$assert(\str_contains($fixText, "mixed = a <+> (b * c)\n"), 'LSP formatter uses imported precedence: ' . $fixText);
+$assert(! \str_contains($fixText, '(a <+> b) * c'), 'LSP formatter did not use default fixity for an imported operator: ' . $fixText);
+
+@\unlink($opsPath);
+@\unlink($importPath);
 @\unlink($path);
 @\rmdir($tmp);
 

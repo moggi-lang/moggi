@@ -1,0 +1,4 @@
+tests/format/Bad-Incomplete-Expression.mog:3:6: parse error: expected expression, found end of file
+
+  3 | f x =
+    |      ^

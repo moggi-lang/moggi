@@ -1,0 +1,35 @@
+module Demo.Types where
+
+data Person = Person
+  { name :: String
+  , age :: Int
+  , city :: Maybe String
+  , zip :: Maybe String
+  }
+  deriving (Eq, Show)
+
+data Shape
+  = Circle { radius :: Double }
+  | Square { side :: Double }
+  | Triangle { base :: Double, height :: Double }
+  | Point
+  deriving (Show)
+
+newtype Score = Score Int
+  deriving (Eq, Ord)
+
+data Box a = Box [a]
+
+class Container f where
+  empty :: f a
+  insert :: a -> f a -> f a
+
+instance Ord a => Container (Box a) where
+  empty = Box []
+  insert x (Box xs) = Box (x : xs)
+
+class Sized f where
+  size :: f a -> Int
+  size s = go s
+    where
+      go _ = 0

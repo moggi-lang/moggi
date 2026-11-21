@@ -5,7 +5,7 @@ namespace Moggi\LSP\TextDocument;
 use Moggi\LSP\Analysis\AnalysisService;
 
 use function Moggi\LSP\Formatter\formatMoggiSource;
-use function Moggi\LSP\Protocol\splitLines;
+use function Moggi\LSP\Formatter\wholeDocumentRange;
 
 function svcOnTypeFormatting(AnalysisService $svc, string $uri, array $position, string $ch, array $options): array
 {
@@ -16,16 +16,12 @@ function svcOnTypeFormatting(AnalysisService $svc, string $uri, array $position,
     if ($analysis === null) {
         return [];
     }
-    $formatted = formatMoggiSource($analysis->source);
-    if ($formatted === $analysis->source) {
+    $formatted = formatMoggiSource($analysis->source, $analysis->importedFixity);
+    if ($formatted === null || $formatted === $analysis->source) {
         return [];
     }
-    $range = [
-        'start' => ['line' => 0, 'character' => 0],
-        'end' => ['line' => \count(splitLines($analysis->source)) - 1, 'character' => 0],
-    ];
 
     return [
-        ['range' => $range, 'newText' => $formatted],
+        ['range' => wholeDocumentRange($analysis->source), 'newText' => $formatted],
     ];
 }
