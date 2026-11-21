@@ -11,8 +11,7 @@
  * must fail on its mode and nothing else.
  *
  * Windows reports `0666` for every file, so the mode check is skipped there and
- * this case skips with it — `readNsecKey` reads the file's ACL instead, and
- * `nsec_acl` pins that decision.
+ * this case skips with it.
  */
 
 $root = __DIR__;
