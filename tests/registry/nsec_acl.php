@@ -19,6 +19,7 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 require $root . '/src/compiler.php';
 require $root . '/tests/suite/support/process.php';
 require $root . '/tests/suite/support/workspace.php';
+require $root . '/tests/suite/support/keyfile.php';
 
 use function Moggi\Compiler\findExecutable;
 use function Moggi\Registry\readNsecKey;
@@ -55,6 +56,7 @@ $is(false, "user {$me}\n{$me}\nS-1-5-21-11-22-33-1002", 'a second account is a s
 $is(false, "user {$me}\nunresolved", 'a rule whose SID cannot be resolved is not private');
 $is(false, '', 'an empty listing is not private');
 $is(false, "{$me}\nS-1-5-18", 'a listing without an owner line is not trusted');
+$is(false, "user {$me}", 'a listing with no rule at all is not trusted');
 
 if (\PHP_OS_FAMILY !== 'Windows') {
     echo "nsec ACL tests passed ({$checks} checks; the ACL read itself needs Windows)\n";
@@ -75,7 +77,7 @@ $refusal = static function (string $path): string {
 };
 
 try {
-    \file_put_contents($key, "nsec1invalid\n");
+    writePrivateKeyFile($key, "nsec1invalid\n");
 
     $message = $refusal($key);
     if (! \str_contains($message, 'does not hold an nsec')) {

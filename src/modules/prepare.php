@@ -278,7 +278,8 @@ function prepareProject(
                 ),
                 $context->backendId,
             );
-            if ($interfaceInHand && \is_array($cachedCheck) && isset($cachedCheck['program'])) {
+
+            if ($interfacesReady && \is_array($cachedCheck) && isset($cachedCheck['program'])) {
                 $fromDisk = new CheckedModule(
                     $cachedCheck['program'],
                     $cachedCheck['exportedInferredSchemes'] ?? [],
@@ -376,6 +377,13 @@ function prepareProject(
         if ($contentKey !== null) {
             Cache\modulePut(
                 $units[$moduleName]['cacheRelPath'],
+                'facts',
+                $context->moduleKey($moduleName, $contentKey),
+                $units[$moduleName]['facts'],
+                $context->backendId,
+            );
+            Cache\modulePut(
+                $units[$moduleName]['cacheRelPath'],
                 'checked',
                 $context->moduleProductKey(
                     $moduleName,
@@ -386,13 +394,6 @@ function prepareProject(
                     'program' => $checkedFull,
                     'exportedInferredSchemes' => $exportedInferredSchemes,
                 ],
-                $context->backendId,
-            );
-            Cache\modulePut(
-                $units[$moduleName]['cacheRelPath'],
-                'facts',
-                $context->moduleKey($moduleName, $contentKey),
-                $units[$moduleName]['facts'],
                 $context->backendId,
             );
         }
@@ -864,6 +865,13 @@ function prepareProjectExtendingFocus(
     if ($contentKey !== null) {
         Cache\modulePut(
             $units[$focusModule]['cacheRelPath'],
+            'facts',
+            $context->moduleKey($focusModule, $contentKey),
+            $units[$focusModule]['facts'],
+            $context->backendId,
+        );
+        Cache\modulePut(
+            $units[$focusModule]['cacheRelPath'],
             'checked',
             $context->moduleProductKey(
                 $focusModule,
@@ -874,13 +882,6 @@ function prepareProjectExtendingFocus(
                 'program' => $checkedFull,
                 'exportedInferredSchemes' => $checkedFull->exportedInferredSchemes,
             ],
-            $context->backendId,
-        );
-        Cache\modulePut(
-            $units[$focusModule]['cacheRelPath'],
-            'facts',
-            $context->moduleKey($focusModule, $contentKey),
-            $units[$focusModule]['facts'],
             $context->backendId,
         );
     }
