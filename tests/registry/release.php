@@ -17,6 +17,7 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
+require $root . '/tests/suite/support/keyfile.php';
 
 use function Moggi\CLI\Commands\signRecordFile;
 use function Moggi\Registry\buildReleaseRecord;
@@ -200,8 +201,7 @@ if ($binary === null) {
 
     // --- the `sign` command's core: file in, signed record out ----------------
     $keyFile = $tmp . '/author.nsec';
-    \file_put_contents($keyFile, $nsec . "\n");
-    \chmod($keyFile, 0600);
+    writePrivateKeyFile($keyFile, $nsec . "\n");
     $unsignedFile = $tmp . '/unsigned.record.json';
     writeReleaseRecord($unsignedFile, $record);
     $fromFile = signRecordFile($unsignedFile, $npub, $keyFile);
@@ -220,8 +220,7 @@ if ($binary === null) {
 
     [$otherNsec] = \preg_split('/\s+/', $schnorr(['generate'])) ?: [''];
     $otherKeyFile = $tmp . '/other.nsec';
-    \file_put_contents($otherKeyFile, $otherNsec . "\n");
-    \chmod($otherKeyFile, 0600);
+    writePrivateKeyFile($otherKeyFile, $otherNsec . "\n");
     $throws(
         static fn () => signRecordFile($unsignedFile, $npub, $otherKeyFile),
         'a key that is not the declared author fails next to the key',

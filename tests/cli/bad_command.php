@@ -15,6 +15,7 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 require $root . '/tests/suite/support/process.php';
 require $root . '/tests/suite/support/workspace.php';
 require $root . '/tests/suite/support/registry-write-server.php';
+require $root . '/tests/suite/support/keyfile.php';
 
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
@@ -42,8 +43,7 @@ $generated = runCompiledProcess([$binary, 'generate'], 30);
 [$nsec, $npub] = \preg_split('/\s+/', \trim($generated['stdout'])) ?: ['', ''];
 $assert(\str_starts_with($nsec, 'nsec') && \str_starts_with($npub, 'npub'), 'the schnorr CLI generated a keypair: ' . $generated['stderr']);
 $keyFile = $work . '/key.nsec';
-\file_put_contents($keyFile, $nsec . "\n");
-\chmod($keyFile, 0600);
+writePrivateKeyFile($keyFile, $nsec . "\n");
 
 $env = \getenv();
 $env['MOGGI_CACHE_DIR'] = $work . '/cache';

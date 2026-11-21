@@ -252,11 +252,14 @@ function readNsecKey(?string $file): string
  *
  * SIDs, not names: `Get-Acl` renders `Users` in the machine's own language, so an
  * English spelling would match nothing on a German install. A listing this
- * function cannot read is not private either — the refusal is the safe answer.
+ * function cannot read is not private either — the refusal is the safe answer,
+ * and that includes a listing with no rule at all: a file whose DACL names no
+ * principal is a file whose DACL Windows reads as `Everyone`, full control.
  */
 function windowsKeyAclIsPrivate(string $listing): bool
 {
     $userSid = null;
+    $rules = 0;
     $allowed = ['S-1-5-18', 'S-1-5-32-544', 'S-1-3-4', 'S-1-3-0'];
     foreach (\preg_split('/\r?\n/', $listing) ?: [] as $line) {
         $line = \trim($line);
@@ -274,9 +277,30 @@ function windowsKeyAclIsPrivate(string $listing): bool
         if ($line !== $userSid && ! \in_array($line, $allowed, true)) {
             return false;
         }
+        ++$rules;
     }
 
-    return $userSid !== null && \preg_match('/^S-\d+(?:-\d+)+$/', $userSid) === 1;
+    return $rules > 0 && $userSid !== null && \preg_match('/^S-\d+(?:-\d+)+$/', $userSid) === 1;
+}
+
+/**
+ * Why a listing is not private, in the words the refusal uses.
+ *
+ * Two cases read the same to `windowsKeyAclIsPrivate()` and need not read the same
+ * to a person: a rule granting somebody else, and a listing that names no rule at
+ * all. The second is what a null DACL prints, so it is the one worth calling out
+ * by name when a key file is refused on a machine nobody is sitting at.
+ */
+function windowsKeyAclRefusalReason(string $listing): string
+{
+    foreach (\preg_split('/\r?\n/', $listing) ?: [] as $line) {
+        $line = \trim($line);
+        if ($line !== '' && ! \str_starts_with($line, 'user ')) {
+            return 'its ACL grants access to someone besides you, SYSTEM and Administrators';
+        }
+    }
+
+    return 'its ACL lists no access rule this client can read';
 }
 
 /**
@@ -329,7 +353,7 @@ function assertWindowsKeyFileIsPrivate(string $path): void
         throw $refusal($error !== '' ? $error : 'PowerShell could not read its ACL');
     }
     if (! windowsKeyAclIsPrivate($listing)) {
-        throw $refusal('its ACL grants access to someone besides you, SYSTEM and Administrators');
+        throw $refusal(windowsKeyAclRefusalReason($listing));
     }
 }
 
