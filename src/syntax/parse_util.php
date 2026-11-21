@@ -627,6 +627,9 @@ function attachDoc(AstNode $node, ?string $leading, ?string $trailing = null): A
     if ($doc !== null) {
         $node->doc = $doc;
     }
+    if ($trailing !== null && $trailing !== '' && ($leading === null || $leading === '')) {
+        $node->docIsTrailing = true;
+    }
 
     return $node;
 }

@@ -13,6 +13,7 @@ use Moggi\Syntax\Lexer\TokenKind;
 use Moggi\Syntax\Parser\ParseError;
 
 use function Moggi\Docs\declarationTypeSignature;
+use function Moggi\Format\formatImportedFixityByFile;
 use function Moggi\LSP\Protocol\locToRange;
 use function Moggi\LSP\Protocol\uriToPath;
 use function Moggi\Modules\bundledStdlibLibPath;
@@ -44,6 +45,8 @@ class AnalysisResult
         public readonly string $uri,
         /** True when `$program` is the checked tree; false for the parsed fallback. */
         public readonly bool $checked = false,
+        /** Fixities the imports bring into scope, as the compiler resolved them. */
+        public readonly array $importedFixity = [],
     ) {
     }
 }
@@ -82,6 +85,8 @@ function analyze(string $uri, string $content, array $libDirs = [], ?Compilation
         $diagnostics = [];
         $parsedProgram = null;
         $checkedProgram = null;
+        $prepared = null;
+        $importedFixity = [];
         $source = $content;
 
         try {
@@ -105,6 +110,11 @@ function analyze(string $uri, string $content, array $libDirs = [], ?Compilation
             [$files, $root] = moduleFileClosureCached($filename, $context->backendId);
             $files = [...$files, ...stdlibSourcesMissingFrom($files, bundledStdlibLibPath(), $context->backendId)];
             $prepared = prepareProjectCached($files, $root, $context->withSources($files), $parsedProgram->module ?? null);
+            $analysisModule = $parsedProgram->module ?? 'Main';
+            $unit = $prepared->units[$analysisModule] ?? null;
+            if (\is_array($unit) && \is_array($unit['importedFixity'] ?? null)) {
+                $importedFixity = $unit['importedFixity'];
+            }
             if ($parsedProgram->module !== null && isset($prepared->checked[$parsedProgram->module])) {
                 $checkedProgram = $prepared->checked[$parsedProgram->module];
             } elseif (isset($prepared->checked['Main'])) {
@@ -120,6 +130,13 @@ function analyze(string $uri, string $content, array $libDirs = [], ?Compilation
                 'source' => 'moggi',
                 'code' => 'internal',
             ];
+        }
+
+        if ($prepared === null && isset($files)) {
+            try {
+                $importedFixity = formatImportedFixityByFile($files, false)[$filename] ?? [];
+            } catch (\Throwable) {
+            }
         }
 
         $declarations = locateTopLevelDecls($parsedProgram, $source, $uri, $checkedProgram);
@@ -143,6 +160,7 @@ function analyze(string $uri, string $content, array $libDirs = [], ?Compilation
             $source,
             $uri,
             checked: $checkedProgram !== null,
+            importedFixity: $importedFixity,
         );
     });
 }

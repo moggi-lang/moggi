@@ -19,10 +19,58 @@ use Moggi\Syntax\Parser\ParseError;
 
 use function Moggi\Test\IrFixture\moduleFromArray;
 
+/**
+ * The canonical source the formatter makes of a fixture, at the suite's fixed width.
+ *
+ * A formatter that cannot place a comment, or cannot print a node, has formatted nothing: the
+ * refusal is the test failing, never a fallback to the input, and never a golden that encodes the
+ * refusal.
+ */
+function formatFromSource(string $path): string
+{
+    if (! \function_exists('Moggi\\Format\\formatSource')) {
+        throw new TestFailure('the formatter (`Moggi\\Format`) is not implemented yet');
+    }
+
+    $source = (string) \file_get_contents($path);
+    try {
+        return \Moggi\Format\formatSource($source, testRelativePath($path), true);
+    } catch (\Throwable $e) {
+        throw new TestFailure('the formatter refused ' . testRelativePath($path) . ":\n" . diagnosticText($e));
+    }
+}
+
+/**
+ * What the formatter says when it refuses a fixture, compared as the golden.
+ *
+ * A refusal is a diagnostic, not an output: the golden holds the reason the formatter gave, so the
+ * message is pinned like any other diagnostic. A fixture whose text is half-written (`Bad-*`) passes
+ * only by being refused, and the message is the lexer's or parser's own — the formatter does not
+ * invent wording for a tree it never got.
+ */
+function formatRefusalFromSource(string $path): string
+{
+    if (! \function_exists('Moggi\\Format\\formatSource')) {
+        throw new TestFailure('the formatter (`Moggi\\Format`) is not implemented yet');
+    }
+
+    $source = (string) \file_get_contents($path);
+    try {
+        $formatted = \Moggi\Format\formatSource($source, testRelativePath($path), true);
+    } catch (\Throwable $e) {
+        return normalizeDiagnosticPaths(diagnosticText($e), MOGGI_PROJECT_ROOT);
+    }
+
+    throw new TestFailure(
+        'expected the formatter to refuse this fixture, but it formatted it:\n' . $formatted,
+    );
+}
+
 /** A compiler diagnostic as the goldens store it: what the stage printed, verbatim. */
 function diagnosticText(\Throwable $e): string
 {
-    if ($e instanceof LexError || $e instanceof ParseError || $e instanceof TypeError) {
+    if ($e instanceof LexError || $e instanceof ParseError || $e instanceof TypeError
+        || $e instanceof \Moggi\Format\FormatError) {
         return $e->display();
     }
 

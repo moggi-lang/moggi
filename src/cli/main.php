@@ -9,6 +9,7 @@ use function Moggi\CLI\Commands\runBuildCommand;
 use function Moggi\CLI\Commands\runCache;
 use function Moggi\CLI\Commands\runCheckCommand;
 use function Moggi\CLI\Commands\runCompileCommand;
+use function Moggi\CLI\Commands\runFormatCommand;
 use function Moggi\CLI\Commands\runInstallCommand;
 use function Moggi\CLI\Commands\runLsp;
 use function Moggi\CLI\Commands\runMogdoc;
@@ -70,6 +71,7 @@ function commands(): array
         'bind' => runBindCommand(...),
         'build' => runBuildCommand(...),
         'check' => runCheckCommand(...),
+        'format' => runFormatCommand(...),
         'verify' => runVerifyCommand(...),
         'pack' => runPackCommand(...),
         'publish' => runPublishCommand(...),

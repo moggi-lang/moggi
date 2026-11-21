@@ -1,0 +1,4 @@
+tests/format/Bad-Incomplete-Data.mog:3:13: parse error: expected type, found end of file
+
+  3 | data Shape =
+    |             ^

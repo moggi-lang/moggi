@@ -347,7 +347,10 @@ function parseIf(ParserState $state): Ast\AstNode
         new Ast\Alt(spanned(new Ast\PatCon(boolFalseCtor(), []), $else), $otherwise),
     ];
 
-    return spannedRange(new Ast\CaseExpr($cond, $alts), $start, $cond);
+    $case = new Ast\CaseExpr($cond, $alts);
+    $case->ifParts = ['cond' => $cond, 'then' => $then, 'else' => $otherwise];
+
+    return spannedRange($case, $start, $cond);
 }
 
 /**
@@ -517,8 +520,9 @@ function parseDoStmt(ParserState $state): Ast\AstNode
     if (isAt($state, TokenKind::KwLet)) {
         advance($state);
         $bindings = parseDoBindings($state);
+        $firstLine = isset($bindings[0]) ? $bindings[0]->line : 0;
 
-        return new Ast\DoLet($bindings);
+        return new Ast\DoLet($bindings, $firstLine, 1);
     }
 
     if (bindsWithArrow($state)) {
@@ -526,12 +530,12 @@ function parseDoStmt(ParserState $state): Ast\AstNode
         advance($state);
         $expr = withDoExprStartLine($state, static fn (): Ast\AstNode => parseExprWithWhere($state));
 
-        return new Ast\DoBind($pattern, $expr);
+        return new Ast\DoBind($pattern, $expr, $pattern->line ?? 0, $pattern->col ?? 1);
     }
 
     $expr = withDoExprStartLine($state, static fn (): Ast\AstNode => parseExprWithWhere($state));
 
-    return new Ast\DoExprStmt($expr);
+    return new Ast\DoExprStmt($expr, $expr->line, $expr->col ?? 1);
 }
 
 /**
@@ -1015,7 +1019,10 @@ function parseAtom(ParserState $state): Ast\AstNode
         }
 
         if ($operand instanceof Ast\DoubleLit) {
-            return spanned(new Ast\DoubleLit(-$operand->value), $token);
+            $negated = new Ast\DoubleLit(-$operand->value);
+            $negated->lexeme = $operand->lexeme === null ? null : '-' . $operand->lexeme;
+
+            return spanned($negated, $token);
         }
 
         return spanned(new Ast\Apply(new Ast\Variable('negate'), $operand), $token);
@@ -1050,7 +1057,10 @@ function parseAtom(ParserState $state): Ast\AstNode
     if ($token->kind === TokenKind::Float) {
         advance($state);
 
-        return spanned(new Ast\DoubleLit((float) $token->lexeme), $token);
+        $literal = new Ast\DoubleLit((float) $token->lexeme);
+        $literal->lexeme = $token->lexeme;
+
+        return spanned($literal, $token);
     }
 
     if ($token->kind === TokenKind::StringLit) {
@@ -1319,11 +1329,10 @@ function parseParen(ParserState $state): Ast\AstNode
     if ($section) {
         $param = spanned(new Ast\PatVar('__section'), $start);
 
-        return spannedRange(
-            new Ast\Lambda([new Ast\LambdaParam($param, null)], $first),
-            $start,
-            $first,
-        );
+        $lambda = new Ast\Lambda([new Ast\LambdaParam($param, null)], $first);
+        $lambda->section = true;
+
+        return spannedRange($lambda, $start, $first);
     }
 
     return $first;

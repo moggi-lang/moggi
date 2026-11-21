@@ -1,0 +1,4 @@
+tests/format/Bad-Unclosed-Block-Comment.mog:3:1: lex error: unterminated block comment
+
+  3 | {- a note the author is still writing
+    | ^^

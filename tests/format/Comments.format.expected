@@ -1,0 +1,41 @@
+-- | Doc for the module.
+module Demo.Comments where
+
+-- a plain comment before a decl
+value = 1 -- trailing note
+
+{- block
+   comment -}
+other = {- inline block -} 2
+
+-- | Another doc comment
+-- spanning two lines.
+third = 3
+
+main = do
+  -- first step
+  let x = 1
+  -- second step
+  print x
+
+pick m = case m of
+  -- the good one
+  Just v -> v
+  Nothing -> 0
+
+data Colour
+  = Red
+  | Green
+  -- ^ the two colours
+
+data Flags = Flags
+  { -- | print more
+    verbose :: Bool
+  , quiet :: Bool
+  }
+
+commented xs =
+  [ x -- element note
+  | x <- xs
+  , x > 0 -- qualifier note
+  ]

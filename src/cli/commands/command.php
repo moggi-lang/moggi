@@ -21,11 +21,12 @@ final class CommandSpec
     /**
      * @param string $name the subcommand word, as `main()` spells it
      * @param string $help the command's help, without the trailing newline
-     * @param list<array{name: string, value?: bool, repeat?: bool}> $options
+     * @param list<array{name: string, value?: bool, repeat?: bool, optionalValue?: bool}> $options
      *   the flags the command accepts; `value: true` means `--name VALUE`, a
-     *   missing `value` means a boolean, and `repeat: true` collects a list. The
-     *   name is the key it lands under, so a kebab flag a command reads as
-     *   `nsec-file` is declared `nsec-file`.
+     *   missing `value` means a boolean, `optionalValue: true` means `--name`
+     *   alone or `--name VALUE`, and `repeat: true` collects a list. The name is
+     *   the key it lands under, so a kebab flag a command reads as `nsec-file` is
+     *   declared `nsec-file`.
      * @param bool $verb whether the command takes a leading verb
      *   (`moggi takeover request …`), read from the word before the positionals.
      * @param int $positionals how many positionals the command accepts.
@@ -70,9 +71,12 @@ function parseArgs(array $argv, CommandSpec $spec, int $start = 2): array
 {
     $booleans = [];
     $valued = [];
+    $optional = [];
     $repeatable = [];
     foreach ($spec->options as $option) {
-        if (($option['value'] ?? false) === true) {
+        if (($option['optionalValue'] ?? false) === true) {
+            $optional[] = $option['name'];
+        } elseif (($option['value'] ?? false) === true) {
             $valued[] = $option['name'];
             if (($option['repeat'] ?? false) === true) {
                 $repeatable[] = $option['name'];
@@ -97,6 +101,9 @@ function parseArgs(array $argv, CommandSpec $spec, int $start = 2): array
     }
     foreach ($valued as $flag) {
         $options[$flag] = \in_array($flag, $repeatable, true) ? [] : null;
+    }
+    foreach ($optional as $flag) {
+        $options[$flag] = null;
     }
     if ($spec->verb) {
         $options['verb'] = $argv[$start - 1] ?? '';
@@ -128,6 +135,14 @@ function parseArgs(array $argv, CommandSpec $spec, int $start = 2): array
             default => $name,
         };
 
+        if ($flag && \in_array($short, $optional, true)) {
+            if ($value === null && isset($argv[$i + 1]) && \ctype_digit($argv[$i + 1])) {
+                $value = $argv[++$i];
+            }
+            $options[$short] = $value ?? true;
+
+            continue;
+        }
         if ($flag && ($short === 'registry' || $short === 'output' || \in_array($short, $valued, true))) {
             $value ??= $argv[++$i] ?? throw new \InvalidArgumentException("{$argument} needs a value");
             if (\in_array($short, $repeatable, true)) {

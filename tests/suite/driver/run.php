@@ -1,5 +1,8 @@
 <?php declare(strict_types=1);
 
+use function Moggi\Platform\detectedCpuCount;
+use function Moggi\Platform\workerLimitForMemory;
+
 /**
  * Suite driver: discovery → selection → execution → reporting.
  *
@@ -207,6 +210,16 @@ function runSuite(): int
         return 2;
     }
 
+    if ($testArgs['paths'] === [] && $testArgs['shard'] === null && ! $testArgs['list']
+        && \in_array('php', $backends, true)) {
+        $gate = libraryFormatGate();
+        if ($gate !== null) {
+            \fwrite(STDERR, $gate);
+
+            return 1;
+        }
+    }
+
     \Moggi\Cache\ensureCache();
 
     $cases = discoverTestCases();
@@ -242,6 +255,25 @@ function runSuite(): int
     resolveAutoJobs($selectedTotal);
 
     return runSelection($cases, $backends, $pathFilters);
+}
+
+/**
+ * The library formatting gate, before any case runs.
+ *
+ * The suite's `format` fixtures each pin one construct; this is the whole library, which is the
+ * corpus the formatter exists for. It runs once per full run, not once per backend or worker, and a
+ * module the formatter refuses, destabilises or changes the meaning of fails the run with its name.
+ * A path- or group-filtered run skips it: the selection is not claiming to cover the library.
+ */
+function libraryFormatGate(): ?string
+{
+    try {
+        $failure = firstLibraryFormatFailure();
+    } catch (\Throwable $e) {
+        return 'format gate: ' . ($e instanceof \Moggi\Format\FormatError ? $e->display() : $e->getMessage()) . "\n";
+    }
+
+    return $failure === null ? null : 'format gate: ' . $failure;
 }
 
 /**

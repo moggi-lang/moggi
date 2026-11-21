@@ -1,0 +1,4 @@
+tests/format/Bad-Lex-Before-Parse.mog:5:10: lex error: unterminated string literal
+
+  5 | second = "unterminated
+    |          ^

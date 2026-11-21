@@ -1,0 +1,4 @@
+tests/format/Bad-Trailing-Operator.mog:3:10: parse error: expected expression, found end of file
+
+  3 | f x = x +
+    |          ^

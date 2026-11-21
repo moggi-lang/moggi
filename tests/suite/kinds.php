@@ -27,6 +27,8 @@ use Moggi\Pipeline\PipelineStage;
  *   opt-ir      optimized IR            emit       generated source
  *   stdout      the program's stdout   stderr      its stderr (uncaught error and trace)
  *   err         the compiler rejects the input: message, srcLoc, caret
+ *   format      the canonical source the formatter produces from the fixture
+ *   format-refused  the formatter rejects the input: the diagnostic it refuses with
  *
  * `pre` marks the kinds produced before codegen: no backend can change what the stage computes. Its
  * dump can still name a library bound for that backend (`System.IO.PHP` against `System.IO.JVM`),
@@ -45,7 +47,21 @@ function testTreeKinds(): array
         'stdout' => ['pre' => false],
         'stderr' => ['pre' => false],
         'err' => ['pre' => true],
+        'format' => ['pre' => true],
+        'format-refused' => ['pre' => true],
     ];
+}
+
+/**
+ * Kinds a fixture owns but no compiler stage produces: the formatter's own output and its refusals.
+ * They are compared beside the fixture like a snapshot, and `--snapshot` never writes them — a
+ * format golden is hand-reviewed, not blessed from whatever the formatter happens to print.
+ *
+ * @return list<string>
+ */
+function formatterKinds(): array
+{
+    return ['format', 'format-refused'];
 }
 
 /** The kinds that snapshots produce, in stage order. */
@@ -153,7 +169,7 @@ function runFixtureCase(TestCase $case, string $backend, string $projectRoot): a
         return runErrorFixture($case, $errorGolden, $backend);
     }
 
-    foreach (snapshotKinds() as $kind) {
+    foreach ([...snapshotKinds(), ...formatterKinds()] as $kind) {
         $golden = $case->goldenBeside($case->base(), $kind, $backend);
         if ($golden === null) {
             continue;
@@ -213,6 +229,8 @@ function testKindSnapshot(string $kind, string $input, string $backend): string
         'ir' => irLoweringDump($input),
         'opt-ir' => $isIrFixture ? optimizedIrDump($input) : optimizedIrFromSource($input, $backend),
         'emit' => $isIrFixture ? emitPhpArtifact($input) : emitFromSource($input, $backend),
+        'format' => formatFromSource($input),
+        'format-refused' => formatRefusalFromSource($input),
         default => throw new TestFailure("`{$kind}` is not a snapshot kind"),
     };
 }

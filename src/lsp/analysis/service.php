@@ -20,6 +20,7 @@ use Moggi\Syntax\Parser\ParseError;
 use function Moggi\Cache\moduleGet;
 use function Moggi\Docs\dumpTypeForDocs;
 use function Moggi\Docs\loadOrBuildIndex;
+use function Moggi\Format\formatImportedFixityByFile;
 use function Moggi\LSP\applyContentChanges;
 use function Moggi\LSP\Index\buildDeclsFromProgram;
 use function Moggi\LSP\Index\buildOccurrenceIndex;
@@ -574,6 +575,7 @@ final class AnalysisService
         $parsed = null;
         $checked = null;
         $prepared = null;
+        $importedFixity = [];
 
         try {
             $tokens = lex($content, $filename);
@@ -653,6 +655,10 @@ final class AnalysisService
             $prepared = prepareProjectCached($files, $projRoot, $this->context, $parsed->module ?? null);
             $this->project = $prepared;
             $mod = $parsed->module ?? 'Main';
+            $unit = $prepared->units[$mod] ?? null;
+            if (\is_array($unit) && \is_array($unit['importedFixity'] ?? null)) {
+                $importedFixity = $unit['importedFixity'];
+            }
             $importNames = [];
             foreach ($parsed->imports as $imp) {
                 $importNames[\implode('.', $imp->path)] = true;
@@ -729,6 +735,13 @@ final class AnalysisService
             ];
         }
 
+        if ($prepared === null && isset($files)) {
+            try {
+                $importedFixity = formatImportedFixityByFile($files, false)[$filename] ?? [];
+            } catch (\Throwable) {
+            }
+        }
+
         $program = $checked ?? $parsed;
         $declarations = locateTopLevelDecls($parsed, $content, $uri, $checked);
         $symbols = buildDocumentSymbols($declarations, $uri, $content);
@@ -756,6 +769,7 @@ final class AnalysisService
             $content,
             $uri,
             checked: $checked !== null,
+            importedFixity: $importedFixity,
         );
     }
 

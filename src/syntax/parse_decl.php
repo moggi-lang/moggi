@@ -162,10 +162,12 @@ function parsePatternSynonymDecl(ParserState $state): Ast\PatternSynonymDecl
         $params[] = advance($state)->lexeme;
     }
 
+    $bidirectional = false;
     if (isAt($state, TokenKind::Op, 0, '<-')) {
         advance($state);
     } else {
         expectOp($state, '=');
+        $bidirectional = true;
     }
 
     $decl = new Ast\PatternSynonymDecl(
@@ -178,6 +180,7 @@ function parsePatternSynonymDecl(ParserState $state): Ast\PatternSynonymDecl
         $endCol,
         parsePatternSynonymBuilder($state, $name->lexeme, $params, $keyword->line, $keyword->col),
     );
+    $decl->bidirectional = $bidirectional;
     registerPatternSynonym($state, $decl);
 
     return $decl;
@@ -1629,13 +1632,18 @@ function parseClassDecl(ParserState $state): Ast\ClassDecl
     $associatedTypes = [];
     $defaults = [];
     $minimalGroups = [];
+    $minimalPragma = null;
+    $minimalPragmaAfter = ['types' => 0, 'methods' => 0];
     while ($hasBody && ! isAt($state, TokenKind::Eof) && ! isFollowingClassBodyBoundary($state)) {
         if (peek($state)->col <= $bodyCol) {
             break;
         }
 
         if (isAt($state, TokenKind::Pragma)) {
-            $minimalGroups = parseMinimalPragma($state, advance($state));
+            $pragma = advance($state);
+            $minimalGroups = parseMinimalPragma($state, $pragma);
+            $minimalPragma = \trim($pragma->lexeme);
+            $minimalPragmaAfter = ['types' => \count($associatedTypes), 'methods' => \count($methods)];
 
             continue;
         }
@@ -1714,6 +1722,8 @@ function parseClassDecl(ParserState $state): Ast\ClassDecl
         $headEndCol,
         associatedTypes: $associatedTypes,
         minimalGroups: $minimalGroups,
+        minimalPragma: $minimalPragma,
+        minimalPragmaAfter: $minimalPragmaAfter,
     );
 }
 

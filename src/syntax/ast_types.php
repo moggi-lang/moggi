@@ -126,11 +126,37 @@ abstract class AstNode implements AstWalkable
     public ?string $doc = null;
 
     /**
+     * Whether the doc came from a `-- ^` after the declaration rather than a `-- |` before it.
+     *
+     * The text alone does not say: a `-- ^` documents the construct it follows (`data Colour`'s last
+     * constructor), so the formatter has to print it there and not above the declaration.
+     */
+    public bool $docIsTrailing = false;
+
+    /**
      * The file this item was written in, when that is not the unit's own file: a
      * module with a backend half is one unit whose declarations come from two
      * files, and a diagnostic or a frame has to name the one it is written in.
      */
     public ?string $sourceFile = null;
+
+    /**
+     * The list comprehension this node was desugared from, when the source wrote one.
+     *
+     * `[e | p <- xs, g]` is sugar for a `concatMap`/`case` tree, which is the only shape the checker
+     * and the backends see. Printing that tree back would turn every comprehension into a call to a
+     * function the module may not even have in scope, so the parser keeps the parts here for the
+     * formatter: `['expr' => e, 'qualifiers' => [QualGen|QualGuard, …]]`, null for a list written as
+     * a list. The marker repeats children the desugared node already holds, so `childValues()` skips
+     * it: walking it would infer the same qualifier twice.
+     *
+     * It is private because not every walk goes through `childValues()`: the strict-IO pass and the
+     * LSP's source walks iterate `get_object_vars()`, and a public copy of the same children made
+     * each qualifier count twice. Only the formatter reads it, through `listComp()`.
+     *
+     * @var null|array{expr: AstNode, qualifiers: list<AstNode>}
+     */
+    private ?array $listComp = null;
 
     public function __construct(
         public int $line = 0,
@@ -187,7 +213,22 @@ abstract class AstNode implements AstWalkable
      */
     public function childValues(): array
     {
-        return \array_values(\get_object_vars($this));
+        $values = \get_object_vars($this);
+        unset($values['listComp']);
+
+        return \array_values($values);
+    }
+
+    /** The comprehension this node was desugared from, or null for a node the source did not write as one. */
+    public function listComp(): ?array
+    {
+        return $this->listComp;
+    }
+
+    /** @param array{expr: AstNode, qualifiers: list<AstNode>} $comp */
+    public function setListComp(array $comp): void
+    {
+        $this->listComp = $comp;
     }
 
     /** Module part of a resolved `Module::name` symbol, or null. */
@@ -477,6 +518,16 @@ final class Program extends AstNode
         public ?string $moduleDoc = null,
         /** @var list<array{doc: string, operators: list<string>, assoc: string, prec: int}> */
         public array $fixityDocs = [],
+        /**
+         * Every fixity declaration the source wrote, for the formatter.
+         *
+         * `fixityDocs` keeps only the ones carrying a doc comment, because the docs index is what
+         * reads them. The printer needs all of them: reprinting a module must not drop its
+         * `infixl`/`infixr`/`infix` lines.
+         *
+         * @var list<array{operators: list<string>, assoc: string, precedence: int}>
+         */
+        public array $fixityDecls = [],
         int $line = 0,
         int $col = 0,
         int $endCol = 0,
@@ -672,6 +723,9 @@ final class PatternSynonymDecl extends AstNode
     ) {
         parent::__construct($line, $col, $endCol);
     }
+
+    /** Whether the source wrote `=` (bidirectional) rather than `<-` (unidirectional). */
+    public bool $bidirectional = false;
 
     public function nameRefs(): array
     {
@@ -923,6 +977,19 @@ final class FunctionDecl extends AstNode
      * uses this to tell a user-written signature from an inferred one.
      */
     public bool $typeInferred = false;
+
+    /**
+     * The clauses the source wrote, kept for the formatter.
+     *
+     * A multi-clause function (`f 0 = …` / `f n = …`) is merged into one declaration whose body is
+     * a `case` over the parameters, because that is the shape the checker and the backends work
+     * with. Printing that `case` back would rewrite two clauses into one definition, so the parser
+     * records the original clauses here: a list of `['params' => list<AstNode>, 'body' => AstNode]`,
+     * or null when the declaration had a single clause and needs no such record.
+     *
+     * @var null|list<array{params: array<int, AstNode>, body: AstNode}>
+     */
+    public ?array $clauses = null;
 }
 
 /**
@@ -947,6 +1014,10 @@ final class ClassDecl extends AstNode
      *   an instance has to implement every method of at least one group. Empty
      *   when the class has no pragma, and then every method without a default
      *   is what an instance must implement.
+     * @param ?string $minimalPragma the pragma as written, minus its delimiters;
+     *   the printer writes it back and the checker reads `minimalGroups`
+     * @param array{types: int, methods: int} $minimalPragmaAfter how many associated
+     *   types and methods preceded the pragma, so the printer can put it back there
      */
     public function __construct(
         public string $name,
@@ -958,6 +1029,9 @@ final class ClassDecl extends AstNode
         int $endCol = 0,
         public array $associatedTypes = [],
         public array $minimalGroups = [],
+        public ?string $minimalPragma = null,
+        /** @var array{types: int, methods: int} */
+        public array $minimalPragmaAfter = ['types' => 0, 'methods' => 0],
     ) {
         parent::__construct($line, $col, $endCol);
     }
@@ -1116,6 +1190,14 @@ final class IntegerLit extends AstNode
 
 final class DoubleLit extends AstNode
 {
+    /**
+     * The literal as the source spelled it (`1.50`, `1e-3`).
+     *
+     * `$value` cannot round-trip: `1.50` and `1.5` are the same float, so printing the value would
+     * reformat a literal the author wrote. The formatter prints this instead when it is present.
+     */
+    public ?string $lexeme = null;
+
     public function __construct(public float $value, int $line = 0, int $col = 0, int $endCol = 0)
     {
         parent::__construct($line, $col, $endCol);
@@ -1219,6 +1301,18 @@ final class Apply extends AstNode
 
     public ?string $intrinsicId = null;
 
+    /**
+     * The enum range this application was built from, when the source wrote `[a .. b]`.
+     *
+     * A range is sugar for `enumFromTo a b` (or `enumFromThenTo`), which is the only shape the
+     * checker sees. Printing that back would turn `[1 .. 10]` into `enumFromTo 1 10`, so the sugar
+     * records its parts here for the formatter: `['kind' => 'to', 'from' => …, 'to' => …]` or
+     * `['kind' => 'then-to', 'from' => …, 'then' => …, 'to' => …]`.
+     *
+     * @var null|array{kind: string, from: AstNode, then?: AstNode, to: AstNode}
+     */
+    public ?array $enumForm = null;
+
     public function __construct(
         public AstNode $function,
         public AstNode $argument,
@@ -1227,6 +1321,15 @@ final class Apply extends AstNode
         int $endCol = 0,
     ) {
         parent::__construct($line, $col, $endCol);
+    }
+
+    /**
+     * The real children: `enumForm` records sugar and repeats these two nodes, so walking it would
+     * infer the same operand twice and publish a term type naming an already-solved variable.
+     */
+    public function childValues(): array
+    {
+        return [$this->function, $this->argument];
     }
 }
 
@@ -1285,6 +1388,14 @@ final class Lambda extends AstNode
     ) {
         parent::__construct($line, $col, $endCol);
     }
+
+    /**
+     * Whether this lambda is how the parser spells an operator section.
+     *
+     * `(* 2)` becomes `\__section -> __section * 2` so precedence inside the section is the
+     * parser's. The formatter rebuilds the section from the flag rather than printing the lambda.
+     */
+    public bool $section = false;
 }
 
 final class Let extends AstNode
@@ -1326,6 +1437,18 @@ final class CaseExpr extends AstNode
     public bool $exhaustive = false;
 
     /**
+     * The `if`/`then`/`else` this case was built from, when the source wrote one.
+     *
+     * `if` is sugar for a two-alternative case over its condition, and that is the only shape the
+     * checker and backends want. A formatter has to print back what the author wrote, so the parser
+     * keeps the three parts here: `['cond' => …, 'then' => …, 'else' => …]`, and null for a `case`
+     * the source spelled as a `case`.
+     *
+     * @var null|array{cond: AstNode, then: AstNode, else: AstNode}
+     */
+    public ?array $ifParts = null;
+
+    /**
      * Whether the checker proves this `case` total. A generated record selector
      * takes its receiver apart by the constructor the field belongs to and is
      * partial when the type has other constructors, so its case opts out: the
@@ -1343,6 +1466,16 @@ final class CaseExpr extends AstNode
         int $endCol = 0,
     ) {
         parent::__construct($line, $col, $endCol);
+    }
+
+    /**
+     * The real children: `ifParts` repeats the condition and both branches (which `alts` already
+     * holds), so walking it would infer those subtrees twice and publish a term type naming an
+     * already-solved variable.
+     */
+    public function childValues(): array
+    {
+        return [$this->scrutinee, $this->alts];
     }
 }
 
@@ -1974,6 +2107,14 @@ final class TypeApp extends AstNode implements TypeNode
     ) {
         parent::__construct($line, $col, $endCol);
     }
+
+    /**
+     * Whether the source wrote a tuple type `(a, b)`.
+     *
+     * It parses as `Tuple2 a b`, which is what the checker wants; a type written as
+     * `Tuple2 a b` must keep printing that way, so the sugar is recorded rather than inferred.
+     */
+    public bool $tupleSugar = false;
 }
 
 final class TypeArrow extends AstNode implements TypeNode

@@ -1,0 +1,69 @@
+module Demo.Declarations where
+
+infixl 9 `indexOf`
+infixr 5 `cons`, :<
+infix 4 ==?
+
+foreign php function strlen "strlen" :: String -> Int
+
+foreign php function substr "substr" :: String -> Int -> Int -> String
+
+transformWithConfiguration
+  :: forall a b.
+     (Show a, Eq b, Ord a)
+  => (a -> b)
+  -> [a]
+  -> Maybe b
+  -> Either String (b, [a])
+transformWithConfiguration f xs fallback = undefined
+
+short :: Int -> Int
+short x = x
+
+(<|) :: a -> [a] -> [a]
+(<|) x xs = x : xs
+
+cons :: a -> [a] -> [a]
+cons x xs = xs
+
+indexOf xs i = xs ! i
+
+inc = map (+ 1)
+
+halve = map (2 *)
+
+f 0 = 0
+f n = 1 + f (n - 1)
+
+g x y = f x + y
+
+h = g 1 2
+
+classify n
+  | n < 0 = "negative"
+  | n == 0 = "zero"
+  | otherwise = "positive"
+
+clamp lo hi x
+  | x < lo = lo
+  | x > hi = hi
+  | otherwise = x
+
+area r = go r * 2
+  where
+    go x =
+      let y = x * x
+          z = y + 1
+      in z
+
+one n = let m = n + 1 in m * 2
+
+data Nat = Z | S Nat
+
+pattern Zero :: Nat
+
+pattern Zero = Z
+
+pattern Succ n <- S n
+  where
+    Succ n = S n

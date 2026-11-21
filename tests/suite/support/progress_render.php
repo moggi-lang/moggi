@@ -1,5 +1,8 @@
 <?php declare(strict_types=1);
 
+use function Moggi\Platform\platformFirstNumber;
+use function Moggi\Platform\platformShellOutput;
+
 require_once __DIR__ . '/platform.php';
 require_once __DIR__ . '/report.php';
 
