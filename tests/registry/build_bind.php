@@ -47,7 +47,9 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
 };
 
 $work = createTempDir('moggi-build-bind');
-\putenv('MOGGI_CACHE_DIR=' . $work . '/cache');
+$cacheDir = $work . '/cache';
+seedCacheDir($cacheDir);
+\putenv('MOGGI_CACHE_DIR=' . $cacheDir);
 
 $descriptorPath = $work . '/acme.moggi';
 \file_put_contents($descriptorPath, <<<'MOGGI'
@@ -151,8 +153,7 @@ main = do
   putStrLn greeterVersion
 MOG . "\n");
 $env = \getenv();
-$env['MOGGI_CACHE_DIR'] = $work . '/cache';
-seedCacheDir($env['MOGGI_CACHE_DIR']);
+$env['MOGGI_CACHE_DIR'] = $cacheDir;
 $moggi = static fn (array $args, int $timeout = 120): array => runCompiledProcess(
     [PHP_BINARY, $root . '/moggi.php', ...$args],
     $timeout,
