@@ -412,6 +412,7 @@ function mergeFunctionClauses(array $items, string $source = '', string $filenam
                 $pending['clauses'][] = ['params' => $item->params, 'body' => $item->body];
             }
             $pending['declarationSpan'] ??= declarationSpan($item);
+            $pending['infix'] = $pending['infix'] || $item->infixDefinition;
             if ($pending['type'] === null && $item->type !== null) {
                 $pending['type'] = $item->type;
             }
@@ -437,6 +438,7 @@ function mergeFunctionClauses(array $items, string $source = '', string $filenam
             'type' => $item->type,
             'doc' => $item->doc,
             'declarationSpan' => declarationSpan($item),
+            'infix' => $item->infixDefinition,
             'clauses' => [['params' => $item->params, 'body' => $item->body]],
         ];
     }
@@ -465,6 +467,7 @@ function finalizeFunctionDecl(array $fn, array $context): Ast\FunctionDecl
             $decl = new Ast\FunctionDecl($fn['name'], $type, [], $body, true);
             locateDeclaration($decl, $fn);
             $decl->doc = $fn['doc'] ?? null;
+            $decl->infixDefinition = $fn['infix'] ?? false;
 
             return $decl;
         }
@@ -472,6 +475,7 @@ function finalizeFunctionDecl(array $fn, array $context): Ast\FunctionDecl
         $decl = new Ast\FunctionDecl($fn['name'], $fn['type'], $fn['clauses'][0]['params'], $body);
         locateDeclaration($decl, $fn);
         $decl->doc = $fn['doc'] ?? null;
+        $decl->infixDefinition = $fn['infix'] ?? false;
 
         return $decl;
     }
@@ -544,6 +548,7 @@ function desugarMultiClauseFunction(array $fn, array $context): Ast\FunctionDecl
 
     $decl = new Ast\FunctionDecl($fn['name'], $fn['type'], $params, desugarClauseDispatch($clauses, $slots));
     $decl->clauses = $clauses;
+    $decl->infixDefinition = $fn['infix'] ?? false;
     locateDeclaration($decl, $fn);
 
     return $decl;

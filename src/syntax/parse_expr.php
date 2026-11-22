@@ -749,7 +749,11 @@ function parseInfix(ParserState $state, int $minPrec): Ast\AstNode
 
             $nextMin = $assoc === 'infixr' ? $prec : $prec + 1;
             $right = parseInfix($state, $nextMin);
-            $left = spannedRange(new Ast\Infix($op, $left, $right), $left, $right);
+            $left = spannedRange(
+                new Ast\Infix($op, $left, $right, breakAfterOperator: $right->line > $opToken->line),
+                $left,
+                $right,
+            );
 
             continue;
         }
@@ -776,7 +780,11 @@ function parseInfix(ParserState $state, int $minPrec): Ast\AstNode
             $right = parseInfix($state, $nextMin);
 
             $left = $backticked['module'] === null
-                ? spannedRange(new Ast\Infix($op, $left, $right), $left, $right)
+                ? spannedRange(
+                    new Ast\Infix($op, $left, $right, breakAfterOperator: $right->line > $start->line),
+                    $left,
+                    $right,
+                )
                 : spannedRange(
                     new Ast\Apply(
                         new Ast\Apply(

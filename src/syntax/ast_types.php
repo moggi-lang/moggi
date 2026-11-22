@@ -299,6 +299,7 @@ final class ClassMethodSig
         public ?string $doc = null,
         public array $params = [],
         public ?AstNode $body = null,
+        public bool $infixDefinition = false,
     ) {
     }
 
@@ -990,6 +991,15 @@ final class FunctionDecl extends AstNode
      * @var null|list<array{params: array<int, AstNode>, body: AstNode}>
      */
     public ?array $clauses = null;
+
+    /**
+     * True when the source wrote the binding between its two operands (`xs <+> ys = …`).
+     *
+     * The tree keeps only the name and the parameters, which is the same shape a prefix definition
+     * (`(<+>) xs ys = …`) produces. The formatter needs the spelling to give it back, so the parser
+     * records which one the source used. Kept after clause merging: it belongs to the declaration.
+     */
+    public bool $infixDefinition = false;
 }
 
 /**
@@ -1353,6 +1363,7 @@ final class Infix extends AstNode
         int $line = 0,
         int $col = 0,
         int $endCol = 0,
+        public bool $breakAfterOperator = false,
     ) {
         parent::__construct($line, $col, $endCol);
     }
