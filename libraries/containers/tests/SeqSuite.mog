@@ -22,9 +22,9 @@ seqSuite = do
   expect "chunksOf splits" (show (Q.toList (Q.chunksOf 2 (Q.fromList [1, 2, 3]))))
     "[MkSeq [1,2],MkSeq [3]]"
   expect "viewl EmptyL" (show (Q.viewl (Q.empty :: Q.Seq Int))) "EmptyL"
-  expect "viewl splits head" (show (Q.viewl (Q.fromList [1, 2]))) "(:<) 1 (MkSeq [2])"
+  expect "viewl splits head" (show (Q.viewl (Q.fromList [1, 2]))) "1 :< MkSeq [2]"
   expect "viewr EmptyR" (show (Q.viewr (Q.empty :: Q.Seq Int))) "EmptyR"
-  expect "viewr splits last" (show (Q.viewr (Q.fromList [1, 2]))) "(:>) (MkSeq [1]) 2"
+  expect "viewr splits last" (show (Q.viewr (Q.fromList [1, 2]))) "MkSeq [1] :> 2"
   expect "lookup hits" (show (Q.lookup 1 (Q.fromList [10, 20, 30]))) "Just 20"
   expect "lookup misses" (show (Q.lookup 5 (Q.fromList [10, 20]))) "Nothing"
   expect "lookup negative misses" (show (Q.lookup (-1) (Q.fromList [10]))) "Nothing"
