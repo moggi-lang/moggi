@@ -1,10 +1,12 @@
--- Data.Ratio: a ratio is always in lowest terms with a positive denominator,
--- and the arithmetic keeps it there.
+module Main (main) where
+
 import Data.Ratio
 import Data.Real (Rational, RealFrac(..))
 import Text.Read (read)
 import Text.Show
 
+-- Data.Ratio: a ratio is always in lowest terms with a positive denominator,
+-- and the arithmetic keeps it there.
 sevenHalves :: Rational
 sevenHalves = 7 % 2
 
@@ -14,14 +16,20 @@ fiveHalves = 5 % 2
 main :: IO ()
 main = do
   putStrLn (show (2 % 4))
-  putStrLn (show ((-2) % 4))
-  putStrLn (show (2 % (-4)))
+  putStrLn (show (-2 % 4))
+  putStrLn (show (2 % -4))
   putStrLn (show (numerator (2 % 4), denominator (2 % 4)))
   putStrLn (show (1 % 3 + 1 % 6))
-  putStrLn (show ((1 % 3) * (3 % 4)))
+  putStrLn (show (1 % 3 * (3 % 4)))
   putStrLn (show (recip (2 % 3)))
   putStrLn (show (approxRational 0.5 0.01))
-  putStrLn (show ((1 % 2) < (2 % 3), (1 % 2) == (2 % 4)))
+  putStrLn (show (1 % 2 < 2 % 3, 1 % 2 == 2 % 4))
   putStrLn (show ([1 % 2 .. 5 % 2] :: [Rational]))
-  putStrLn (show (floor sevenHalves :: Int, ceiling sevenHalves :: Int, round fiveHalves :: Int, round sevenHalves :: Int))
-  putStrLn (show (read "3 % 4" :: Rational))
+  putStrLn
+    (show
+      ( (floor sevenHalves) :: Int
+      , (ceiling sevenHalves) :: Int
+      , (round fiveHalves) :: Int
+      , (round sevenHalves) :: Int
+      ))
+  putStrLn (show ((read "3 % 4") :: Rational))

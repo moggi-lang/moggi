@@ -1,3 +1,5 @@
+module Main (main) where
+
 import Data.Coerce (Coercible, coerce)
 import Data.Bool (Bool(..))
 import Data.Eq
@@ -10,12 +12,12 @@ import Text.Show
 -- way round), a constructor applied at coercible, equal and phantom arguments,
 -- and the trivial `a` to `a`. A function coerces when its domain and codomain
 -- do, which is what makes `shifted` typecheck at the newtype.
-
 newtype Age = Age Int
 
 deriving instance Show Age
 
-data Tagged tag value = Tagged value deriving (Show)
+data Tagged tag value = Tagged value
+  deriving (Show)
 
 ageToInt :: Age -> Int
 ageToInt = coerce
@@ -30,7 +32,7 @@ throughMaybe :: Maybe Age -> Maybe Int
 throughMaybe = coerce
 
 shifted :: Age -> Age
-shifted = coerce (\n -> n + 1 :: Int)
+shifted = coerce (\n -> n + (1 :: Int))
 
 phantomSwap :: Tagged Bool Int -> Tagged Char Int
 phantomSwap = coerce

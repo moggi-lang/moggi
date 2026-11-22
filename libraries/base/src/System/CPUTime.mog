@@ -3,8 +3,8 @@
   jvm = System.CPUTime.JVM
   dotnet = System.CPUTime.DotNet
 #-}
--- |
--- Processor time: how much CPU the process has used, which is not the same
+
+-- | Processor time: how much CPU the process has used, which is not the same
 -- quantity as elapsed wall-clock time. A program that waits on input burns
 -- almost none of it, and a program that computes for a second may use several
 -- seconds of it on a multi-core machine.
@@ -17,10 +17,7 @@
 -- 'System.Diagnostics.Process.TotalProcessorTime' has, in 100 ns ticks. Every
 -- one of them is genuine CPU accounting, never wall-clock time standing in for
 -- it, and none of them is more precise than the host can be.
-module System.CPUTime
-  ( getCPUTime
-  , cpuTimePrecision
-  ) where
+module System.CPUTime (getCPUTime, cpuTimePrecision) where
 
 import Data.Integer
 import Data.Real

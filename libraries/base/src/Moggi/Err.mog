@@ -1,5 +1,10 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-module Moggi.Err (error, errorWithoutStackTrace, undefined) where
+
+module Moggi.Err
+  ( error
+  , errorWithoutStackTrace
+  , undefined
+  ) where
 
 import Moggi.Internal.Base
 import Moggi.Internal.Prim

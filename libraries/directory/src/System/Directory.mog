@@ -3,8 +3,8 @@
   jvm = System.Directory.JVM
   dotnet = System.Directory.DotNet
 #-}
--- |
--- System-independent directory manipulation: creating, listing, removing,
+
+-- | System-independent directory manipulation: creating, listing, removing,
 -- renaming, and querying files and directories, permissions, timestamps,
 -- symbolic links, XDG directories, and executable search.
 --
@@ -151,8 +151,8 @@ setCurrentDirectory :: FilePath -> IO ()
 -- | Runs an action in a directory, restoring the original afterwards, even
 -- when the action fails.
 withCurrentDirectory :: FilePath -> IO a -> IO a
-withCurrentDirectory dir action =
-  bracket getCurrentDirectory setCurrentDirectory (\_ -> do
+withCurrentDirectory dir action = bracket getCurrentDirectory setCurrentDirectory (\_ ->
+  do
     setCurrentDirectory dir
     action)
 
@@ -217,7 +217,7 @@ xdgList var defaults = do
 getAppUserDataDirectory :: FilePath -> IO FilePath
 getAppUserDataDirectory app = do
   home <- getHomeDirectory
-  pure (home </> ("." <> app))
+  pure (home </> "." <> app)
 
 -- | The current user's document directory: @$HOME@ on Unix.
 getUserDocumentsDirectory :: IO FilePath
@@ -335,9 +335,10 @@ findExecutablesInDirectories dirs binary = case exeExtension of
 
 findDirBinary :: String -> String -> FilePath -> IO [FilePath]
 findDirBinary binary ext dir =
-  findFilesWith isExecutableFile [dir] binary >>= (\plain ->
-    findFilesWith isExecutableFile [dir] (binary <> ext) >>= (\withExt ->
-      pure (plain <> withExt)))
+  findFilesWith isExecutableFile [dir] binary
+    >>= (\plain ->
+      findFilesWith isExecutableFile [dir] (binary <> ext)
+        >>= (\withExt -> pure (plain <> withExt)))
 
 isExecutableFile :: FilePath -> IO Bool
 isExecutableFile p = do

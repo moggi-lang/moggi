@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Enumerations: the 'Enum' class ('succ', 'pred', 'toEnum', 'fromEnum' and
 -- the 'enumFrom' family, which is what @[x ..]@ desugars to) and 'enumerate'.
 module Data.Enum
@@ -44,18 +45,15 @@ class Enum a where
   -- It is implementation-dependent what 'fromEnum' returns when applied to a
   -- value that is too large to fit in an 'Int'.
   fromEnum :: a -> Int
-
   -- | Used in the translation of @[x ..]@: the infinite list from @x@.
   -- The default maps 'toEnum' over the 'Int' range, so only 'Int' itself
   -- (and types that cannot go through 'fromEnum', like 'Integer') override it.
   enumFrom :: a -> [a]
   enumFrom x = enumMapToEnum toEnum (enumFrom (fromEnum x))
-
   -- | Used in the translation of @[x, y ..]@: @x@, @y@, then stepping by
   -- their distance.
   enumFromThen :: a -> a -> [a]
   enumFromThen x y = enumMapToEnum toEnum (enumFromThen (fromEnum x) (fromEnum y))
-
   -- | Used in the translation of @[lo .. hi]@ with @[lo .. hi] = enumFromTo lo
   -- hi@.
   --
@@ -65,7 +63,6 @@ class Enum a where
   -- []
   enumFromTo :: a -> a -> [a]
   enumFromTo lo hi = enumMapToEnum toEnum (enumFromTo (fromEnum lo) (fromEnum hi))
-
   -- | Used in the translation of @[lo, nxt .. hi]@ with
   -- @[lo, nxt .. hi] = enumFromThenTo lo nxt hi@.
   --
@@ -82,7 +79,7 @@ class Enum a where
 enumMapToEnum :: (a -> b) -> [a] -> [b]
 enumMapToEnum f xs = case xs of
   [] -> []
-  x : rest -> (f x) : (enumMapToEnum f rest)
+  x : rest -> f x : enumMapToEnum f rest
 
 -- | Every value of a bounded enumeration, from 'minBound' to 'maxBound'.
 --

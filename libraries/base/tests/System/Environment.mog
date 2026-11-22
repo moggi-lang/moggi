@@ -1,6 +1,5 @@
--- System.Environment: the three answers an environment lookup can give (a
--- value, the empty value, no entry), the whole environment, and the argument
--- and program-name stack that withArgs and withProgName push.
+module Main (main) where
+
 import Control.Exception (SomeException, catch)
 import Data.Bool
 import Data.String (String, length, unpack)
@@ -8,6 +7,9 @@ import Moggi.IO.Exception (IOErrorType(InvalidArgument))
 import System.Environment
 import System.IO.Error (catchIOError, ioeGetErrorType)
 
+-- System.Environment: the three answers an environment lookup can give (a
+-- value, the empty value, no entry), the whole environment, and the argument
+-- and program-name stack that withArgs and withProgName push.
 absent :: String
 absent = "MOGGI_TEST_ABSENT_VARIABLE"
 
@@ -49,10 +51,10 @@ printKeyCount name = do
   putStrLn (show (countKey name entries))
 
 envFailure :: String -> IO String
-envFailure name = catchIOError
-  (do _ <- getEnv name
-      pure "no-error")
-  (\e -> pure (case ioeGetErrorType e == InvalidArgument of
+envFailure name = catchIOError (do
+  _ <- getEnv name
+  pure "no-error") (\e ->
+  pure (case ioeGetErrorType e == InvalidArgument of
     True -> "wrong-error"
     False -> "does-not-exist"))
 
@@ -60,10 +62,10 @@ ignoreAll :: SomeException -> IO ()
 ignoreAll _ = pure ()
 
 nameRejection :: IO a -> IO String
-nameRejection action = catchIOError
-  (do _ <- action
-      pure "accepted")
-  (\e -> pure (case ioeGetErrorType e == InvalidArgument of
+nameRejection action = catchIOError (do
+  _ <- action
+  pure "accepted") (\e ->
+  pure (case ioeGetErrorType e == InvalidArgument of
     True -> "rejected"
     False -> "wrong-error"))
 

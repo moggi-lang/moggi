@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- |
--- Weak pointers.
+
+-- | Weak pointers.
 --
 -- A weak pointer refers to a key without keeping it alive. The pointer can be
 -- dereferenced while the key is reachable, and it carries a value that is kept
@@ -91,7 +91,8 @@ addFinalizer key finalizer = do
 -- being kept alive by the stored value. This is the form to use when the value
 -- may itself refer to the key.
 mkWeakPair :: k -> v -> Maybe (IO ()) -> IO (Weak (k, v))
-mkWeakPair key value finalizer = mkWeakPair# key value (wrapFinalizer (fromMaybe (pure ()) finalizer))
+mkWeakPair key value finalizer =
+  mkWeakPair# key value (wrapFinalizer (fromMaybe (pure ()) finalizer))
 
 -- The global handler receives exceptions thrown by finalizers.
 --

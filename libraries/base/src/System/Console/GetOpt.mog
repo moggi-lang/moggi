@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module System.Console.GetOpt
   ( -- * GetOpt
     getOpt
@@ -23,16 +24,10 @@ import Data.String (String, length, lines, pack, singleton, take, unlines, unpac
 import Data.Tuple (fst, snd)
 
 -- | What to do with arguments that are not options.
-data ArgOrder a
-  = RequireOrder
-  | Permute
-  | ReturnInOrder (String -> a)
+data ArgOrder a = RequireOrder | Permute | ReturnInOrder (String -> a)
 
 -- | Whether an option takes an argument, and what to build from it.
-data ArgDescr a
-  = NoArg a
-  | ReqArg (String -> a) String
-  | OptArg (Maybe String -> a) String
+data ArgDescr a = NoArg a | ReqArg (String -> a) String | OptArg (Maybe String -> a) String
 
 -- | One option: its short characters, its long names (without the @--@), how it
 -- takes an argument, and the line of help text for it.
@@ -52,12 +47,7 @@ instance Functor ArgDescr where
   map f (OptArg g s) = OptArg (\x -> f (g x)) s
 
 -- | How one command-line argument was read.
-data OptKind a
-  = Opt a
-  | UnreqOpt String
-  | NonOpt String
-  | EndOfOpts
-  | OptErr String
+data OptKind a = Opt a | UnreqOpt String | NonOpt String | EndOfOpts | OptErr String
 
 -- | The options, the non-options, and the error messages, in the order they
 -- were found. Unrecognized options are reported as errors here.
@@ -136,18 +126,25 @@ isPrefixChars prefix s = case prefix of
       True -> isPrefixChars cs ds
       False -> False
 
-long :: [OptDescr a] -> [ArgDescr a] -> String -> [Char] -> [Char] -> [String] -> (OptKind a, [String])
+long
+  :: [OptDescr a]
+  -> [ArgDescr a]
+  -> String
+  -> [Char]
+  -> [Char]
+  -> [String]
+  -> (OptKind a, [String])
 long options ads optStr rawChars argChars rs = case ads of
   _ : _ : _ -> (OptErr (errAmbig options optStr), rs)
-  [NoArg a] -> case argChars of
+  NoArg a : [] -> case argChars of
     [] -> (Opt a, rs)
     _ -> (OptErr (errNoArg optStr), rs)
-  [ReqArg f d] -> case argChars of
+  ReqArg f d : [] -> case argChars of
     [] -> case rs of
       [] -> (OptErr (errReq d optStr), [])
       r : rest -> (Opt (f r), rest)
     _ -> (Opt (f (pack (dropOne argChars))), rs)
-  [OptArg f _] -> case argChars of
+  OptArg f _ : [] -> case argChars of
     [] -> (Opt (f Nothing), rs)
     _ -> (Opt (f (Just (pack (dropOne argChars)))), rs)
   _ -> (UnreqOpt ("--" <> pack rawChars), rs)
@@ -195,7 +192,11 @@ usageInfo header optDescr = unlines (header : table)
     docs = map rowDoc rows
     shortWidth = maxWidth shorts
     longWidth = maxWidth longs
-    table = zipWith3 (\s l d -> "  " <> flushLeft shortWidth s <> "  " <> flushLeft longWidth l <> "  " <> d) shorts longs docs
+    table =
+      zipWith3 (\s l d -> "  " <> flushLeft shortWidth s <> "  " <> flushLeft longWidth l <> "  " <> d)
+        shorts
+        longs
+        docs
 
 rowShort :: (String, String, String) -> String
 rowShort (s, _, _) = s
@@ -209,9 +210,10 @@ rowDoc (_, _, d) = d
 maxWidth :: [String] -> Int
 maxWidth xs = case xs of
   [] -> 0
-  x : rest -> foldl (\w y -> case length y > w of
-    True -> length y
-    False -> w) (length x) rest
+  x : rest -> foldl (\w y ->
+    case length y > w of
+      True -> length y
+      False -> w) (length x) rest
 
 flushLeft :: Int -> String -> String
 flushLeft n s = take n (s <> pack (replicate (n - length s) ' '))
@@ -226,7 +228,7 @@ fmtOpt (Option sos los ad descr) = case lines descr of
 
 sepBy :: Char -> [String] -> String
 sepBy _ [] = ""
-sepBy _ [x] = x
+sepBy _ (x : []) = x
 sepBy ch (x : xs) = x <> pack [ch, ' '] <> sepBy ch xs
 
 fmtShort :: ArgDescr a -> Char -> String

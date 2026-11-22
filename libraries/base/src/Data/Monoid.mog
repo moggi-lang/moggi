@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | A type @a@ is a 'Monoid' if it provides an associative function ('<>')
 -- that lets you combine any two values of type @a@ into one, and a neutral
 -- element (`mempty`) such that
@@ -37,26 +38,26 @@
 -- >>> mconcat [] :: Product Int
 -- Product {getProduct = 1}
 module Data.Monoid
-    (-- *  'Monoid' typeclass
-     Monoid(..),
-     (<>),
-     Dual(..),
-     Endo(..),
-     -- *  'Bool' wrappers
-     All(..),
-     Any(..),
-     -- *  'Num' wrappers
-     Sum(..),
-     Product(..),
-     -- *  'Maybe' wrappers
-     -- $MaybeExamples
-     First(..),
-     Last(..),
-     -- *  'Alternative' wrapper
-     Alt(..),
-     -- *  'Applicative' wrapper
-     Ap(..)
-     ) where
+  ( -- *  'Monoid' typeclass
+    Monoid(..)
+  , (<>)
+  , Dual(..)
+  , Endo(..)
+    -- *  'Bool' wrappers
+  , All(..)
+  , Any(..)
+    -- *  'Num' wrappers
+  , Sum(..)
+  , Product(..)
+    -- *  'Maybe' wrappers
+    -- $MaybeExamples
+  , First(..)
+  , Last(..)
+    -- *  'Alternative' wrapper
+  , Alt(..)
+    -- *  'Applicative' wrapper
+  , Ap(..)
+  ) where
 
 import Control.Applicative
 import Control.Monad
@@ -85,7 +86,6 @@ import Moggi.Internal.Data.Semigroup
 -- First / Last: Maybe monoids. 'First' returns the leftmost non-'Nothing'
 -- value, 'Last' the rightmost one. Different from the semigroup kernel's
 -- 'First'/'Last', which keep the first/last value unconditionally.
-
 -- | Maybe monoid returning the leftmost non-'Nothing' value.
 newtype First a = First { getFirst :: Maybe a }
   deriving (Eq, Ord)
@@ -103,8 +103,9 @@ instance Monoid (First a) where
   mempty = First Nothing
 
 instance Show a => Show (First a) where
-  showsPrec d x = showParen (d > 10)
-    (\r -> showString "First {getFirst = " (showsPrec 0 (getFirst x) (showString "}" r)))
+  showsPrec d x =
+    showParen (d > 10)
+      (\r -> showString "First {getFirst = " (showsPrec 0 (getFirst x) (showString "}" r)))
 
 mapMaybeF :: (a -> b) -> Maybe a -> Maybe b
 mapMaybeF f mx = case mx of
@@ -134,14 +135,13 @@ instance Semigroup a => Monoid (Maybe a) where
   mempty = Nothing
 
 instance Show a => Show (Last a) where
-  showsPrec d x = showParen (d > 10)
-    (\r -> showString "Last {getLast = " (showsPrec 0 (getLast x) (showString "}" r)))
+  showsPrec d x =
+    showParen (d > 10) (\r -> showString "Last {getLast = " (showsPrec 0 (getLast x) (showString "}" r)))
 
 instance Functor Last where
   map f x = Last (mapMaybeF f (getLast x))
 
 -- Alt
-
 -- | A monoid on an 'Alternative' value under its @('<|>')@, with 'empty' as
 -- the neutral element.
 newtype Alt f a = Alt { getAlt :: f a }
@@ -167,11 +167,10 @@ instance Ord (f a) => Ord (Alt f a) where
   compare a b = compare (getAlt a) (getAlt b)
 
 instance Show (f a) => Show (Alt f a) where
-  showsPrec d x = showParen (d > 10)
-    (\r -> showString "Alt {getAlt = " (showsPrec 0 (getAlt x) (showString "}" r)))
+  showsPrec d x =
+    showParen (d > 10) (\r -> showString "Alt {getAlt = " (showsPrec 0 (getAlt x) (showString "}" r)))
 
 -- Ap
-
 -- | A 'Monoid' from an 'Applicative' action returning a 'Monoid': combine
 -- with '(<>)' inside the action, 'mempty' is the action returning 'mempty'.
 -- Newtype deriving covers only Functor/Foldable/Traversable for `(* -> *)`
@@ -195,8 +194,8 @@ instance Ord (f a) => Ord (Ap f a) where
       Ap y -> compare x y
 
 instance Show (f a) => Show (Ap f a) where
-  showsPrec d m = showParen (d > 10)
-    (\r -> showString "Ap {getAp = " (showsPrec 0 (getAp m) (showString "}" r)))
+  showsPrec d m =
+    showParen (d > 10) (\r -> showString "Ap {getAp = " (showsPrec 0 (getAp m) (showString "}" r)))
 
 instance Enum (f a) => Enum (Ap f a) where
   succ m = case m of
@@ -225,10 +224,11 @@ instance Alternative f => Alternative (Ap f) where
 
 instance Monad f => Monad (Ap f) where
   (>>=) m f = case m of
-    Ap x -> Ap (x >>= (\a -> case f a of
-      Ap y -> y))
+    Ap x -> Ap (x >>= (\a ->
+      case f a of
+        Ap y -> y))
 
-instance MonadPlus f => MonadPlus (Ap f)
+instance MonadPlus f => MonadPlus (Ap f) where
 
 instance (Applicative f, Semigroup a) => Semigroup (Ap f a) where
   (<>) a b = case a of

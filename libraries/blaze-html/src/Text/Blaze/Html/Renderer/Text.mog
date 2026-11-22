@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Render HTML as text. Moggi's text type is 'String'.
 module Text.Blaze.Html.Renderer.Text
   ( renderHtmlBuilder

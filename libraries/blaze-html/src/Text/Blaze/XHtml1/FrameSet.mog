@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The combinators for this flavour of HTML, generated from the same
 -- specification these attributes are generated from.
 module Text.Blaze.XHtml1.FrameSet
@@ -8,7 +9,7 @@ module Text.Blaze.XHtml1.FrameSet
   , AttributeValue
   , dataAttribute
   , customAttribute
-  , ToMarkup (..)
+  , ToMarkup(..)
   , text
   , preEscapedText
   , string
@@ -19,7 +20,7 @@ module Text.Blaze.XHtml1.FrameSet
   , unsafeByteStringComment
   , textTag
   , stringTag
-  , ToValue (..)
+  , ToValue(..)
   , textValue
   , preEscapedTextValue
   , stringValue
@@ -125,16 +126,14 @@ module Text.Blaze.XHtml1.FrameSet
   ) where
 
 import Control.Monad ((>>))
-import Data.Bool (Bool (..))
+import Data.Bool (Bool(..))
 import Data.Monoid (mempty)
 import Data.Semigroup ((<>))
 import Text.Blaze.Html
-import Text.Blaze.Internal (MarkupM (..), attribute, external)
+import Text.Blaze.Internal (MarkupM(..), attribute, external)
 
 -- src/Util/GenerateHtmlCombinators.hs:78
 --
-
-
 -- src/Util/GenerateHtmlCombinators.hs:157
 --
 -- | Combinator for the document type. This should be placed at the top
@@ -148,9 +147,10 @@ import Text.Blaze.Internal (MarkupM (..), attribute, external)
 --
 -- > <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 FrameSet//EN"
 -- >     "http://www.w3.org/TR/xhtml1/DTD/xhtml1-frameset.dtd">
---
 docType :: Html
-docType = preEscapedText "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 FrameSet//EN\"\n    \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-frameset.dtd\">\n"
+docType =
+  preEscapedText
+    "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 FrameSet//EN\"\n    \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-frameset.dtd\">\n"
 
 -- src/Util/GenerateHtmlCombinators.hs:178
 --
@@ -166,7 +166,6 @@ docType = preEscapedText "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 FrameSet
 -- > <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 FrameSet//EN"
 -- >     "http://www.w3.org/TR/xhtml1/DTD/xhtml1-frameset.dtd">
 -- > <html><span>foo</span></html>
---
 docTypeHtml :: Html -> Html
 docTypeHtml inner = docType >> html inner
 
@@ -181,7 +180,6 @@ docTypeHtml inner = docType >> html inner
 -- Result:
 --
 -- > <a><span>foo</span></a>
---
 a :: Html -> Html
 a = Parent "a" "<a" "</a>"
 
@@ -196,7 +194,6 @@ a = Parent "a" "<a" "</a>"
 -- Result:
 --
 -- > <abbr><span>foo</span></abbr>
---
 abbr :: Html -> Html
 abbr = Parent "abbr" "<abbr" "</abbr>"
 
@@ -211,7 +208,6 @@ abbr = Parent "abbr" "<abbr" "</abbr>"
 -- Result:
 --
 -- > <acronym><span>foo</span></acronym>
---
 acronym :: Html -> Html
 acronym = Parent "acronym" "<acronym" "</acronym>"
 
@@ -226,7 +222,6 @@ acronym = Parent "acronym" "<acronym" "</acronym>"
 -- Result:
 --
 -- > <address><span>foo</span></address>
---
 address :: Html -> Html
 address = Parent "address" "<address" "</address>"
 
@@ -241,7 +236,6 @@ address = Parent "address" "<address" "</address>"
 -- Result:
 --
 -- > <applet><span>foo</span></applet>
---
 applet :: Html -> Html
 applet = Parent "applet" "<applet" "</applet>"
 
@@ -256,7 +250,6 @@ applet = Parent "applet" "<applet" "</applet>"
 -- Result:
 --
 -- > <area />
---
 area :: Html
 area = Leaf "area" "<area" " />" ()
 
@@ -271,7 +264,6 @@ area = Leaf "area" "<area" " />" ()
 -- Result:
 --
 -- > <b><span>foo</span></b>
---
 b :: Html -> Html
 b = Parent "b" "<b" "</b>"
 
@@ -286,7 +278,6 @@ b = Parent "b" "<b" "</b>"
 -- Result:
 --
 -- > <basefont />
---
 basefont :: Html
 basefont = Leaf "basefont" "<basefont" " />" ()
 
@@ -301,7 +292,6 @@ basefont = Leaf "basefont" "<basefont" " />" ()
 -- Result:
 --
 -- > <bdo><span>foo</span></bdo>
---
 bdo :: Html -> Html
 bdo = Parent "bdo" "<bdo" "</bdo>"
 
@@ -316,7 +306,6 @@ bdo = Parent "bdo" "<bdo" "</bdo>"
 -- Result:
 --
 -- > <big><span>foo</span></big>
---
 big :: Html -> Html
 big = Parent "big" "<big" "</big>"
 
@@ -331,7 +320,6 @@ big = Parent "big" "<big" "</big>"
 -- Result:
 --
 -- > <blockquote><span>foo</span></blockquote>
---
 blockquote :: Html -> Html
 blockquote = Parent "blockquote" "<blockquote" "</blockquote>"
 
@@ -346,7 +334,6 @@ blockquote = Parent "blockquote" "<blockquote" "</blockquote>"
 -- Result:
 --
 -- > <body><span>foo</span></body>
---
 body :: Html -> Html
 body = Parent "body" "<body" "</body>"
 
@@ -361,7 +348,6 @@ body = Parent "body" "<body" "</body>"
 -- Result:
 --
 -- > <br />
---
 br :: Html
 br = Leaf "br" "<br" " />" ()
 
@@ -376,7 +362,6 @@ br = Leaf "br" "<br" " />" ()
 -- Result:
 --
 -- > <button><span>foo</span></button>
---
 button :: Html -> Html
 button = Parent "button" "<button" "</button>"
 
@@ -391,7 +376,6 @@ button = Parent "button" "<button" "</button>"
 -- Result:
 --
 -- > <caption><span>foo</span></caption>
---
 caption :: Html -> Html
 caption = Parent "caption" "<caption" "</caption>"
 
@@ -406,7 +390,6 @@ caption = Parent "caption" "<caption" "</caption>"
 -- Result:
 --
 -- > <center><span>foo</span></center>
---
 center :: Html -> Html
 center = Parent "center" "<center" "</center>"
 
@@ -421,7 +404,6 @@ center = Parent "center" "<center" "</center>"
 -- Result:
 --
 -- > <cite><span>foo</span></cite>
---
 cite :: Html -> Html
 cite = Parent "cite" "<cite" "</cite>"
 
@@ -436,7 +418,6 @@ cite = Parent "cite" "<cite" "</cite>"
 -- Result:
 --
 -- > <code><span>foo</span></code>
---
 code :: Html -> Html
 code = Parent "code" "<code" "</code>"
 
@@ -451,7 +432,6 @@ code = Parent "code" "<code" "</code>"
 -- Result:
 --
 -- > <col />
---
 col :: Html
 col = Leaf "col" "<col" " />" ()
 
@@ -466,7 +446,6 @@ col = Leaf "col" "<col" " />" ()
 -- Result:
 --
 -- > <colgroup><span>foo</span></colgroup>
---
 colgroup :: Html -> Html
 colgroup = Parent "colgroup" "<colgroup" "</colgroup>"
 
@@ -481,7 +460,6 @@ colgroup = Parent "colgroup" "<colgroup" "</colgroup>"
 -- Result:
 --
 -- > <dd><span>foo</span></dd>
---
 dd :: Html -> Html
 dd = Parent "dd" "<dd" "</dd>"
 
@@ -496,7 +474,6 @@ dd = Parent "dd" "<dd" "</dd>"
 -- Result:
 --
 -- > <del><span>foo</span></del>
---
 del :: Html -> Html
 del = Parent "del" "<del" "</del>"
 
@@ -511,7 +488,6 @@ del = Parent "del" "<del" "</del>"
 -- Result:
 --
 -- > <dfn><span>foo</span></dfn>
---
 dfn :: Html -> Html
 dfn = Parent "dfn" "<dfn" "</dfn>"
 
@@ -526,7 +502,6 @@ dfn = Parent "dfn" "<dfn" "</dfn>"
 -- Result:
 --
 -- > <dir><span>foo</span></dir>
---
 dir :: Html -> Html
 dir = Parent "dir" "<dir" "</dir>"
 
@@ -541,7 +516,6 @@ dir = Parent "dir" "<dir" "</dir>"
 -- Result:
 --
 -- > <div><span>foo</span></div>
---
 div :: Html -> Html
 div = Parent "div" "<div" "</div>"
 
@@ -556,7 +530,6 @@ div = Parent "div" "<div" "</div>"
 -- Result:
 --
 -- > <dl><span>foo</span></dl>
---
 dl :: Html -> Html
 dl = Parent "dl" "<dl" "</dl>"
 
@@ -571,7 +544,6 @@ dl = Parent "dl" "<dl" "</dl>"
 -- Result:
 --
 -- > <dt><span>foo</span></dt>
---
 dt :: Html -> Html
 dt = Parent "dt" "<dt" "</dt>"
 
@@ -586,7 +558,6 @@ dt = Parent "dt" "<dt" "</dt>"
 -- Result:
 --
 -- > <em><span>foo</span></em>
---
 em :: Html -> Html
 em = Parent "em" "<em" "</em>"
 
@@ -601,7 +572,6 @@ em = Parent "em" "<em" "</em>"
 -- Result:
 --
 -- > <fieldset><span>foo</span></fieldset>
---
 fieldset :: Html -> Html
 fieldset = Parent "fieldset" "<fieldset" "</fieldset>"
 
@@ -616,7 +586,6 @@ fieldset = Parent "fieldset" "<fieldset" "</fieldset>"
 -- Result:
 --
 -- > <font><span>foo</span></font>
---
 font :: Html -> Html
 font = Parent "font" "<font" "</font>"
 
@@ -631,7 +600,6 @@ font = Parent "font" "<font" "</font>"
 -- Result:
 --
 -- > <form><span>foo</span></form>
---
 form :: Html -> Html
 form = Parent "form" "<form" "</form>"
 
@@ -646,7 +614,6 @@ form = Parent "form" "<form" "</form>"
 -- Result:
 --
 -- > <frame />
---
 frame :: Html
 frame = Leaf "frame" "<frame" " />" ()
 
@@ -661,7 +628,6 @@ frame = Leaf "frame" "<frame" " />" ()
 -- Result:
 --
 -- > <frameset><span>foo</span></frameset>
---
 frameset :: Html -> Html
 frameset = Parent "frameset" "<frameset" "</frameset>"
 
@@ -676,7 +642,6 @@ frameset = Parent "frameset" "<frameset" "</frameset>"
 -- Result:
 --
 -- > <h1><span>foo</span></h1>
---
 h1 :: Html -> Html
 h1 = Parent "h1" "<h1" "</h1>"
 
@@ -691,7 +656,6 @@ h1 = Parent "h1" "<h1" "</h1>"
 -- Result:
 --
 -- > <h2><span>foo</span></h2>
---
 h2 :: Html -> Html
 h2 = Parent "h2" "<h2" "</h2>"
 
@@ -706,7 +670,6 @@ h2 = Parent "h2" "<h2" "</h2>"
 -- Result:
 --
 -- > <h3><span>foo</span></h3>
---
 h3 :: Html -> Html
 h3 = Parent "h3" "<h3" "</h3>"
 
@@ -721,7 +684,6 @@ h3 = Parent "h3" "<h3" "</h3>"
 -- Result:
 --
 -- > <h4><span>foo</span></h4>
---
 h4 :: Html -> Html
 h4 = Parent "h4" "<h4" "</h4>"
 
@@ -736,7 +698,6 @@ h4 = Parent "h4" "<h4" "</h4>"
 -- Result:
 --
 -- > <h5><span>foo</span></h5>
---
 h5 :: Html -> Html
 h5 = Parent "h5" "<h5" "</h5>"
 
@@ -751,7 +712,6 @@ h5 = Parent "h5" "<h5" "</h5>"
 -- Result:
 --
 -- > <h6><span>foo</span></h6>
---
 h6 :: Html -> Html
 h6 = Parent "h6" "<h6" "</h6>"
 
@@ -766,7 +726,6 @@ h6 = Parent "h6" "<h6" "</h6>"
 -- Result:
 --
 -- > <head><span>foo</span></head>
---
 head :: Html -> Html
 head = Parent "head" "<head" "</head>"
 
@@ -781,7 +740,6 @@ head = Parent "head" "<head" "</head>"
 -- Result:
 --
 -- > <hr />
---
 hr :: Html
 hr = Leaf "hr" "<hr" " />" ()
 
@@ -796,7 +754,6 @@ hr = Leaf "hr" "<hr" " />" ()
 -- Result:
 --
 -- > <html><span>foo</span></html>
---
 html :: Html -> Html
 html = Parent "html" "<html" "</html>"
 
@@ -811,7 +768,6 @@ html = Parent "html" "<html" "</html>"
 -- Result:
 --
 -- > <i><span>foo</span></i>
---
 i :: Html -> Html
 i = Parent "i" "<i" "</i>"
 
@@ -826,7 +782,6 @@ i = Parent "i" "<i" "</i>"
 -- Result:
 --
 -- > <iframe><span>foo</span></iframe>
---
 iframe :: Html -> Html
 iframe = Parent "iframe" "<iframe" "</iframe>"
 
@@ -841,7 +796,6 @@ iframe = Parent "iframe" "<iframe" "</iframe>"
 -- Result:
 --
 -- > <img />
---
 img :: Html
 img = Leaf "img" "<img" " />" ()
 
@@ -856,7 +810,6 @@ img = Leaf "img" "<img" " />" ()
 -- Result:
 --
 -- > <input />
---
 input :: Html
 input = Leaf "input" "<input" " />" ()
 
@@ -871,7 +824,6 @@ input = Leaf "input" "<input" " />" ()
 -- Result:
 --
 -- > <ins><span>foo</span></ins>
---
 ins :: Html -> Html
 ins = Parent "ins" "<ins" "</ins>"
 
@@ -886,7 +838,6 @@ ins = Parent "ins" "<ins" "</ins>"
 -- Result:
 --
 -- > <isindex><span>foo</span></isindex>
---
 isindex :: Html -> Html
 isindex = Parent "isindex" "<isindex" "</isindex>"
 
@@ -901,7 +852,6 @@ isindex = Parent "isindex" "<isindex" "</isindex>"
 -- Result:
 --
 -- > <kbd><span>foo</span></kbd>
---
 kbd :: Html -> Html
 kbd = Parent "kbd" "<kbd" "</kbd>"
 
@@ -916,7 +866,6 @@ kbd = Parent "kbd" "<kbd" "</kbd>"
 -- Result:
 --
 -- > <label><span>foo</span></label>
---
 label :: Html -> Html
 label = Parent "label" "<label" "</label>"
 
@@ -931,7 +880,6 @@ label = Parent "label" "<label" "</label>"
 -- Result:
 --
 -- > <legend><span>foo</span></legend>
---
 legend :: Html -> Html
 legend = Parent "legend" "<legend" "</legend>"
 
@@ -946,7 +894,6 @@ legend = Parent "legend" "<legend" "</legend>"
 -- Result:
 --
 -- > <li><span>foo</span></li>
---
 li :: Html -> Html
 li = Parent "li" "<li" "</li>"
 
@@ -961,7 +908,6 @@ li = Parent "li" "<li" "</li>"
 -- Result:
 --
 -- > <link />
---
 link :: Html
 link = Leaf "link" "<link" " />" ()
 
@@ -976,7 +922,6 @@ link = Leaf "link" "<link" " />" ()
 -- Result:
 --
 -- > <map><span>foo</span></map>
---
 map :: Html -> Html
 map = Parent "map" "<map" "</map>"
 
@@ -991,7 +936,6 @@ map = Parent "map" "<map" "</map>"
 -- Result:
 --
 -- > <menu><span>foo</span></menu>
---
 menu :: Html -> Html
 menu = Parent "menu" "<menu" "</menu>"
 
@@ -1006,7 +950,6 @@ menu = Parent "menu" "<menu" "</menu>"
 -- Result:
 --
 -- > <meta />
---
 meta :: Html
 meta = Leaf "meta" "<meta" " />" ()
 
@@ -1021,7 +964,6 @@ meta = Leaf "meta" "<meta" " />" ()
 -- Result:
 --
 -- > <noframes><span>foo</span></noframes>
---
 noframes :: Html -> Html
 noframes = Parent "noframes" "<noframes" "</noframes>"
 
@@ -1036,7 +978,6 @@ noframes = Parent "noframes" "<noframes" "</noframes>"
 -- Result:
 --
 -- > <noscript><span>foo</span></noscript>
---
 noscript :: Html -> Html
 noscript = Parent "noscript" "<noscript" "</noscript>"
 
@@ -1051,7 +992,6 @@ noscript = Parent "noscript" "<noscript" "</noscript>"
 -- Result:
 --
 -- > <object><span>foo</span></object>
---
 object :: Html -> Html
 object = Parent "object" "<object" "</object>"
 
@@ -1066,7 +1006,6 @@ object = Parent "object" "<object" "</object>"
 -- Result:
 --
 -- > <ol><span>foo</span></ol>
---
 ol :: Html -> Html
 ol = Parent "ol" "<ol" "</ol>"
 
@@ -1081,7 +1020,6 @@ ol = Parent "ol" "<ol" "</ol>"
 -- Result:
 --
 -- > <optgroup><span>foo</span></optgroup>
---
 optgroup :: Html -> Html
 optgroup = Parent "optgroup" "<optgroup" "</optgroup>"
 
@@ -1096,7 +1034,6 @@ optgroup = Parent "optgroup" "<optgroup" "</optgroup>"
 -- Result:
 --
 -- > <option><span>foo</span></option>
---
 option :: Html -> Html
 option = Parent "option" "<option" "</option>"
 
@@ -1111,7 +1048,6 @@ option = Parent "option" "<option" "</option>"
 -- Result:
 --
 -- > <p><span>foo</span></p>
---
 p :: Html -> Html
 p = Parent "p" "<p" "</p>"
 
@@ -1126,7 +1062,6 @@ p = Parent "p" "<p" "</p>"
 -- Result:
 --
 -- > <param />
---
 param :: Html
 param = Leaf "param" "<param" " />" ()
 
@@ -1141,7 +1076,6 @@ param = Leaf "param" "<param" " />" ()
 -- Result:
 --
 -- > <pre><span>foo</span></pre>
---
 pre :: Html -> Html
 pre = Parent "pre" "<pre" "</pre>"
 
@@ -1156,7 +1090,6 @@ pre = Parent "pre" "<pre" "</pre>"
 -- Result:
 --
 -- > <q><span>foo</span></q>
---
 q :: Html -> Html
 q = Parent "q" "<q" "</q>"
 
@@ -1171,7 +1104,6 @@ q = Parent "q" "<q" "</q>"
 -- Result:
 --
 -- > <s><span>foo</span></s>
---
 s :: Html -> Html
 s = Parent "s" "<s" "</s>"
 
@@ -1186,7 +1118,6 @@ s = Parent "s" "<s" "</s>"
 -- Result:
 --
 -- > <samp><span>foo</span></samp>
---
 samp :: Html -> Html
 samp = Parent "samp" "<samp" "</samp>"
 
@@ -1201,7 +1132,6 @@ samp = Parent "samp" "<samp" "</samp>"
 -- Result:
 --
 -- > <script><span>foo</span></script>
---
 script :: Html -> Html
 script = \inner -> external (Parent "script" "<script" "</script>" inner)
 
@@ -1216,7 +1146,6 @@ script = \inner -> external (Parent "script" "<script" "</script>" inner)
 -- Result:
 --
 -- > <select><span>foo</span></select>
---
 select :: Html -> Html
 select = Parent "select" "<select" "</select>"
 
@@ -1231,7 +1160,6 @@ select = Parent "select" "<select" "</select>"
 -- Result:
 --
 -- > <small><span>foo</span></small>
---
 small :: Html -> Html
 small = Parent "small" "<small" "</small>"
 
@@ -1246,7 +1174,6 @@ small = Parent "small" "<small" "</small>"
 -- Result:
 --
 -- > <span><span>foo</span></span>
---
 span :: Html -> Html
 span = Parent "span" "<span" "</span>"
 
@@ -1261,7 +1188,6 @@ span = Parent "span" "<span" "</span>"
 -- Result:
 --
 -- > <strong><span>foo</span></strong>
---
 strong :: Html -> Html
 strong = Parent "strong" "<strong" "</strong>"
 
@@ -1276,7 +1202,6 @@ strong = Parent "strong" "<strong" "</strong>"
 -- Result:
 --
 -- > <style><span>foo</span></style>
---
 style :: Html -> Html
 style = \inner -> external (Parent "style" "<style" "</style>" inner)
 
@@ -1291,7 +1216,6 @@ style = \inner -> external (Parent "style" "<style" "</style>" inner)
 -- Result:
 --
 -- > <sub><span>foo</span></sub>
---
 sub :: Html -> Html
 sub = Parent "sub" "<sub" "</sub>"
 
@@ -1306,7 +1230,6 @@ sub = Parent "sub" "<sub" "</sub>"
 -- Result:
 --
 -- > <sup><span>foo</span></sup>
---
 sup :: Html -> Html
 sup = Parent "sup" "<sup" "</sup>"
 
@@ -1321,7 +1244,6 @@ sup = Parent "sup" "<sup" "</sup>"
 -- Result:
 --
 -- > <table><span>foo</span></table>
---
 table :: Html -> Html
 table = Parent "table" "<table" "</table>"
 
@@ -1336,7 +1258,6 @@ table = Parent "table" "<table" "</table>"
 -- Result:
 --
 -- > <tbody><span>foo</span></tbody>
---
 tbody :: Html -> Html
 tbody = Parent "tbody" "<tbody" "</tbody>"
 
@@ -1351,7 +1272,6 @@ tbody = Parent "tbody" "<tbody" "</tbody>"
 -- Result:
 --
 -- > <td><span>foo</span></td>
---
 td :: Html -> Html
 td = Parent "td" "<td" "</td>"
 
@@ -1366,7 +1286,6 @@ td = Parent "td" "<td" "</td>"
 -- Result:
 --
 -- > <textarea><span>foo</span></textarea>
---
 textarea :: Html -> Html
 textarea = Parent "textarea" "<textarea" "</textarea>"
 
@@ -1381,7 +1300,6 @@ textarea = Parent "textarea" "<textarea" "</textarea>"
 -- Result:
 --
 -- > <tfoot><span>foo</span></tfoot>
---
 tfoot :: Html -> Html
 tfoot = Parent "tfoot" "<tfoot" "</tfoot>"
 
@@ -1396,7 +1314,6 @@ tfoot = Parent "tfoot" "<tfoot" "</tfoot>"
 -- Result:
 --
 -- > <th><span>foo</span></th>
---
 th :: Html -> Html
 th = Parent "th" "<th" "</th>"
 
@@ -1411,7 +1328,6 @@ th = Parent "th" "<th" "</th>"
 -- Result:
 --
 -- > <thead><span>foo</span></thead>
---
 thead :: Html -> Html
 thead = Parent "thead" "<thead" "</thead>"
 
@@ -1426,7 +1342,6 @@ thead = Parent "thead" "<thead" "</thead>"
 -- Result:
 --
 -- > <title><span>foo</span></title>
---
 title :: Html -> Html
 title = Parent "title" "<title" "</title>"
 
@@ -1441,7 +1356,6 @@ title = Parent "title" "<title" "</title>"
 -- Result:
 --
 -- > <tr><span>foo</span></tr>
---
 tr :: Html -> Html
 tr = Parent "tr" "<tr" "</tr>"
 
@@ -1456,7 +1370,6 @@ tr = Parent "tr" "<tr" "</tr>"
 -- Result:
 --
 -- > <tt><span>foo</span></tt>
---
 tt :: Html -> Html
 tt = Parent "tt" "<tt" "</tt>"
 
@@ -1471,7 +1384,6 @@ tt = Parent "tt" "<tt" "</tt>"
 -- Result:
 --
 -- > <u><span>foo</span></u>
---
 u :: Html -> Html
 u = Parent "u" "<u" "</u>"
 
@@ -1486,7 +1398,6 @@ u = Parent "u" "<u" "</u>"
 -- Result:
 --
 -- > <ul><span>foo</span></ul>
---
 ul :: Html -> Html
 ul = Parent "ul" "<ul" "</ul>"
 
@@ -1501,6 +1412,5 @@ ul = Parent "ul" "<ul" "</ul>"
 -- Result:
 --
 -- > <var><span>foo</span></var>
---
 var :: Html -> Html
 var = Parent "var" "<var" "</var>"

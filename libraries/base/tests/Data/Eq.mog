@@ -1,8 +1,9 @@
+module Main (main) where
+
 -- Data.Eq: the class names both methods in its MINIMAL pragma, in the spelling
 -- the class body uses for them, so an instance that writes `(==)` is complete
 -- and takes the default `(/=)`, and the other way round too. `Pair` writes
 -- `(==)` and `Rev` writes `(/=)`; each answers both operators.
-
 data Pair a = Pair a a
 
 instance Eq a => Eq (Pair a) where

@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Builders and writes for the lower eight bits of characters, the encoding
 -- @Data.ByteString.Char8@ uses.
 module Blaze.ByteString.Builder.Char8
@@ -10,17 +11,12 @@ module Blaze.ByteString.Builder.Char8
   , fromLazyText
   ) where
 
-import Blaze.ByteString.Builder.Internal
-  ( Builder
-  , Write
-  , fromByteString
-  , writeChar8
-  )
+import Blaze.ByteString.Builder.Internal (Builder, Write, fromByteString, writeChar8)
 import Data.Char (Char, ord)
 import Data.ByteString (pack)
 import Data.Int (Int)
 import Data.List ((:), map)
-import Data.Real (Integral (div, mod))
+import Data.Real (Integral(div, mod))
 import Data.String (String)
 import Data.String qualified as S
 import Data.Word (Word8)

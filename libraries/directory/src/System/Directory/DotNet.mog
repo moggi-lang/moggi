@@ -52,51 +52,84 @@ import System.IO.Base (IO, FilePath)
 import System.IO.Error (mkIOError)
 
 foreign dotnet type DInfo "System.IO.DirectoryInfo"
+
 foreign dotnet type FInfo "System.IO.FileInfo"
+
 foreign dotnet type FSInfo "System.IO.FileSystemInfo"
+
 foreign dotnet type DObject "System.Object"
+
 foreign dotnet type StrArray "string[]"
+
 foreign dotnet type DTime "valuetype System.DateTime"
 
 foreign dotnet function fileExists "System.IO.File:Exists" :: String -> Bool
+
 foreign dotnet function dirExists "System.IO.Directory:Exists" :: String -> Bool
+
 foreign dotnet function fileDelete "System.IO.File:Delete" :: String -> IO ()
+
 foreign dotnet function fileCopy "System.IO.File:Copy" :: String -> String -> Bool -> IO ()
+
 foreign dotnet function fileMove "System.IO.File:Move" :: String -> String -> IO ()
+
 foreign dotnet function dirMove "System.IO.Directory:Move" :: String -> String -> IO ()
+
 foreign dotnet function dirCreate "System.IO.Directory:CreateDirectory" :: String -> IO DInfo
+
 foreign dotnet function dirDelete "System.IO.Directory:Delete" :: String -> IO ()
+
 foreign dotnet function dirDeleteRecursive "System.IO.Directory:Delete" :: String -> Bool -> IO ()
+
 foreign dotnet function getEntries "System.IO.Directory:GetFileSystemEntries" :: String -> IO StrArray
+
 foreign dotnet function arrLength "System.Array.get_Length" :: StrArray -> Int32
+
 foreign dotnet function arrGetValue "System.Array.GetValue" :: StrArray -> Int32 -> DObject
+
 foreign dotnet function objToString "System.Convert:ToString" :: DObject -> String
+
 foreign dotnet function getFullPath "System.IO.Path:GetFullPath" :: String -> String
+
 foreign dotnet function getCurrentDir "System.IO.Directory:GetCurrentDirectory" :: String
+
 foreign dotnet function setCurrentDir "System.IO.Directory:SetCurrentDirectory" :: String -> IO ()
+
 foreign dotnet function getTempPath "System.IO.Path:GetTempPath" :: String
 
 foreign dotnet function newFileInfo "System.IO.FileInfo:__con" :: String -> FInfo
+
 foreign dotnet function fiLength "System.IO.FileInfo.get_Length" :: FInfo -> Int
+
 foreign dotnet function fiExists "System.IO.FileInfo.get_Exists" :: FInfo -> Bool
+
 foreign dotnet function fiReadOnly "System.IO.FileInfo.get_IsReadOnly" :: FInfo -> Bool
+
 foreign dotnet function fiSetReadOnly "System.IO.FileInfo.set_IsReadOnly" :: FInfo -> Bool -> IO ()
+
 foreign dotnet function fiLinkTarget "System.IO.FileInfo.get_LinkTarget" :: FInfo -> IO (Maybe String)
 
 foreign dotnet function createSymlink "System.IO.File:CreateSymbolicLink" :: String -> String -> IO FSInfo
 
 foreign dotnet function getAccessTimeRaw "System.IO.File:GetLastAccessTime" :: String -> IO DTime
+
 foreign dotnet function getWriteTimeRaw "System.IO.File:GetLastWriteTime" :: String -> IO DTime
+
 foreign dotnet function setAccessTimeRaw "System.IO.File:SetLastAccessTime" :: String -> DTime -> IO ()
+
 foreign dotnet function setWriteTimeRaw "System.IO.File:SetLastWriteTime" :: String -> DTime -> IO ()
+
 foreign dotnet function dateTicks "System.DateTime.get_Ticks" :: DTime -> Int
+
 foreign dotnet function dateFromTicks "System.DateTime:__con" :: Int -> DTime
 
 -- `UnixFileMode` lives in the core library, not `System.Runtime`: the verifier
 -- ignores scopes, but the emitter bakes the scope into the field reference,
 -- so a wrong one compiles and then fails at runtime (`MissingField`).
 foreign dotnet type UMode "valuetype [System.Private.CoreLib]System.IO.UnixFileMode"
+
 foreign dotnet function getUnixMode "System.IO.File:GetUnixFileMode" :: String -> IO UMode
+
 foreign dotnet const userExecFlag "System.IO.UnixFileMode:UserExecute" :: UMode
 
 -- | `Enum.HasFlag` takes a `System.Enum`, not the concrete mode: the
@@ -324,18 +357,20 @@ getPermissions p = do
   x <- executableBit p
   isDir <- doesDirectoryExist p
   pure (case isDir of
-    True -> Permissions
-      { permissionsReadable = exists
-      , permissionsWritable = exists && not ro
-      , permissionsExecutable = False
-      , permissionsSearchable = exists && x
-      }
-    False -> Permissions
-      { permissionsReadable = exists
-      , permissionsWritable = exists && not ro
-      , permissionsExecutable = x
-      , permissionsSearchable = False
-      })
+    True ->
+      Permissions
+        { permissionsReadable = exists
+        , permissionsWritable = exists && not ro
+        , permissionsExecutable = False
+        , permissionsSearchable = exists && x
+        }
+    False ->
+      Permissions
+        { permissionsReadable = exists
+        , permissionsWritable = exists && not ro
+        , permissionsExecutable = x
+        , permissionsSearchable = False
+        })
 
 -- | Only the writable bit travels: read-only is set or cleared, everything
 -- else stays as the host keeps it.

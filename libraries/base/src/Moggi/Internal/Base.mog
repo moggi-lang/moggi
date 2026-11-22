@@ -4,6 +4,7 @@
   jvm = Moggi.Internal.Base.JVM
   dotnet = Moggi.Internal.Base.DotNet
 #-}
+
 -- | The bottom of the library: the readable names of the machine's types.
 --
 -- 'Moggi.Internal.Prim' owns the MagicHash layer — @Int#@, @String#@, @List#@
@@ -84,6 +85,12 @@ module Moggi.Internal.Base
 
 import Moggi.Internal.Prim
 
+infix 4 ==, /=
+infix 4 <, <=, >, >=
+infixr 5 :|
+infixr 3 &&
+infixr 2 ||
+
 -- | A signed 64-bit integer, the same width on every backend: Java and C#
 -- take the host's 64-bit `long`, and PHP's own `int` is 64-bit too (a 64-bit
 -- PHP build is required — the compiler and every emitted entry module abort
@@ -154,16 +161,9 @@ take :: Int -> String -> String
 -- unchanged.
 drop :: Int -> String -> String
 
-infix 4 ==, /=
-infix 4 <, <=, >, >=
-infixr 5 :|
-
 -- | The type of truth values: 'False' and 'True'. A @case@ on a 'Bool' is
 -- the primitive branch of the language.
 data Bool = False | True
-
-infixr 3 &&
-infixr 2 ||
 
 -- | Conjunction: 'True' only when both operands are 'True'. The right operand
 -- is not evaluated when the left one is 'False'.
@@ -179,7 +179,7 @@ infixr 2 ||
 not :: Bool -> Bool
 not b = boolNot# b
 
--- |'otherwise' is defined as the value 'True'.  It helps to make
+-- | 'otherwise' is defined as the value 'True'.  It helps to make
 -- guards more readable.  eg.
 --
 -- >  f x | x < 0     = ...
@@ -204,41 +204,42 @@ data Ordering = LT | EQ | GT
 -- [__Negation__]: @x /= y@ = @not (x == y)@
 class Eq a where
   {-# MINIMAL (==) | (/=) #-}
-  (==), (/=) :: a -> a -> Bool
-
-  (/=) x y = boolNot# (x == y)
+  (==) :: a -> a -> Bool
   (==) x y = boolNot# (x /= y)
+  (/=) :: a -> a -> Bool
+  (/=) x y = boolNot# (x == y)
 
 -- | The 'Ord' class is used for totally ordered datatypes.
 class Eq a => Ord a where
   compare :: a -> a -> Ordering
-  (<), (<=), (>), (>=) :: a -> a -> Bool
-  max, min :: a -> a -> a
-
   compare x y = case x == y of
     True -> EQ
     False -> case x <= y of
       True -> LT
       False -> GT
-
-  (<=) x y = case compare x y of
-    GT -> False
-    _ -> True
-  (>=) x y = case compare x y of
-    LT -> False
-    _ -> True
-  (>) x y = case compare x y of
-    GT -> True
-    _ -> False
+  (<) :: a -> a -> Bool
   (<) x y = case compare x y of
     LT -> True
     _ -> False
-
-  -- These two default methods use '<=' rather than 'compare'
-  -- because the latter is often more expensive
+  (<=) :: a -> a -> Bool
+  (<=) x y = case compare x y of
+    GT -> False
+    _ -> True
+  (>) :: a -> a -> Bool
+  (>) x y = case compare x y of
+    GT -> True
+    _ -> False
+  (>=) :: a -> a -> Bool
+  (>=) x y = case compare x y of
+    LT -> False
+    _ -> True
+  max :: a -> a -> a
   max x y = case x <= y of
+    -- These two default methods use '<=' rather than 'compare'
+    -- because the latter is often more expensive
     True -> y
     False -> x
+  min :: a -> a -> a
   min x y = case x <= y of
     True -> x
     False -> y
@@ -251,7 +252,7 @@ class Eq a => Ord a where
 -- and names the constraint. A nullary class carries no dictionary, so its
 -- position in the tree costs nothing, and @Moggi.Stack@ re-exports it under its
 -- @base@ name.
-class HasCallStack
+class HasCallStack where
 
 -- | A non-empty list: a head element followed by a possibly empty tail. The
 -- `sconcat` method of 'Semigroup' names it, and the module that declares the

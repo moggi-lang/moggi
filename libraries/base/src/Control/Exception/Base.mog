@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Core exception combinators.
 --
 -- bracket/finally restore the handler on every path, which is the whole
@@ -105,16 +106,13 @@ mkCatchHandler handler se =
   maybe (exceptionThrowIo# se) (\e -> annotateIO (WhileHandling se) (handler e)) (fromException se)
 
 catch :: Exception e => IO a -> (e -> IO a) -> IO a
-catch action handler =
-  exceptionCatch# action (mkCatchHandler handler)
+catch action handler = exceptionCatch# action (mkCatchHandler handler)
 
 catchJust :: Exception e => (e -> Maybe b) -> IO a -> (b -> IO a) -> IO a
-catchJust p action handler =
-  catch action (mkCatchJustHandler p handler)
+catchJust p action handler = catch action (mkCatchJustHandler p handler)
 
 mkCatchJustHandler :: Exception e => (e -> Maybe b) -> (b -> IO a) -> e -> IO a
-mkCatchJustHandler p handler e =
-  maybe (throwIO e) handler (p e)
+mkCatchJustHandler p handler e = maybe (throwIO e) handler (p e)
 
 handle :: Exception e => (e -> IO a) -> IO a -> IO a
 handle handler action = catch action handler
@@ -123,8 +121,7 @@ handleJust :: Exception e => (e -> Maybe b) -> (b -> IO a) -> IO a -> IO a
 handleJust p handler action = catchJust p action handler
 
 try :: Exception e => IO a -> IO (Either e a)
-try action =
-  catch (mkTrySuccess action) mkTryFailure
+try action = catch (mkTrySuccess action) mkTryFailure
 
 mkTrySuccess :: IO a -> IO (Either e a)
 mkTrySuccess action = do
@@ -135,19 +132,16 @@ mkTryFailure :: Exception e => e -> IO (Either e a)
 mkTryFailure e = pure (Left e)
 
 tryJust :: Exception e => (e -> Maybe b) -> IO a -> IO (Either b a)
-tryJust p action =
-  catch (mkTrySuccess action) (mkTryJustHandler p)
+tryJust p action = catch (mkTrySuccess action) (mkTryJustHandler p)
 
 mkTryJustHandler :: Exception e => (e -> Maybe b) -> e -> IO (Either b a)
-mkTryJustHandler p e =
-  maybe (throwIO e) (mkLeftPure) (p e)
+mkTryJustHandler p e = maybe (throwIO e) mkLeftPure (p e)
 
 mkLeftPure :: b -> IO (Either b a)
 mkLeftPure b = pure (Left b)
 
 onException :: IO a -> IO b -> IO a
-onException action what =
-  exceptionCatch# action (mkOnExceptionHandler what)
+onException action what = exceptionCatch# action (mkOnExceptionHandler what)
 
 mkOnExceptionHandler :: IO b -> SomeException -> IO a
 mkOnExceptionHandler what se = do
@@ -163,8 +157,7 @@ bracket before after thing = do
   finally (thing a) (after a)
 
 bracket_ :: IO a -> IO b -> IO c -> IO c
-bracket_ before after thing =
-  bracket before (mkIgnore after) (mkIgnore thing)
+bracket_ before after thing = bracket before (mkIgnore after) (mkIgnore thing)
 
 mkIgnore :: IO b -> a -> IO b
 mkIgnore m _ = m
@@ -204,10 +197,7 @@ uninterruptibleMask_ :: IO a -> IO a
 uninterruptibleMask_ action = action
 
 -- | The masking state of the calling thread.
-data MaskingState
-  = Unmasked
-  | MaskedInterruptible
-  | MaskedUninterruptible
+data MaskingState = Unmasked | MaskedInterruptible | MaskedUninterruptible
   deriving (Eq, Ord, Show)
 
 -- | There is never a mask, so the state is always 'Unmasked'.

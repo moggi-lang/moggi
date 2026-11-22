@@ -1,7 +1,6 @@
 -- System.FilePath.Windows: the Windows flavour, tested deterministically on any
 -- host. Every pin below was verified against `filepath` 1.5.4.0
 -- `System.FilePath.Windows` over the shared differential corpus.
-
 module WindowsSuite (windowsSuite) where
 
 import Data.Char (chr)
@@ -16,7 +15,6 @@ windowsSuite = do
   expect "isPathSeparator backslash" (show (isPathSeparator '\\')) "True"
   expect "isPathSeparator slash" (show (isPathSeparator '/')) "True"
   expect "isSearchPathSeparator ;" (show (isSearchPathSeparator ';')) "True"
-
   expect "splitDrive C:foo" (show (splitDrive "C:foo")) "(\"C:\",\"foo\")"
   -- A bare `\\name` is a share drive consuming the whole string (`splitDrive
   -- "\\\\shared" == ("\\\\shared","")`, mirrored in `splitDrive`'s docs).
@@ -28,45 +26,43 @@ windowsSuite = do
   expect "dropDrive C:\\foo" (dropDrive "C:\\foo") "foo"
   expect "isDrive C:\\" (show (isDrive "C:\\")) "True"
   expect "joinDrive C: foo" (joinDrive "C:" "foo") "C:foo"
-
-  expect "splitFileName C:\\foo\\bar" (show (splitFileName "C:\\foo\\bar")) "(\"C:\\\\foo\\\\\",\"bar\")"
+  expect "splitFileName C:\\foo\\bar" (show (splitFileName "C:\\foo\\bar"))
+    "(\"C:\\\\foo\\\\\",\"bar\")"
   expect "takeFileName" (takeFileName "C:\\foo\\bar.txt") "bar.txt"
   expect "takeDirectory C:\\foo\\bar" (takeDirectory "C:\\foo\\bar") "C:\\foo"
   expect "combine C:\\foo bar" (combine "C:\\foo" "bar") "C:\\foo\\bar"
-  expect "(</>) absolute wins" (("C:\\foo" </> "D:\\bar")) "D:\\bar"
-
+  expect "(</>) absolute wins" ("C:\\foo" </> "D:\\bar") "D:\\bar"
   expect "splitExtension C:foo.bar" (show (splitExtension "C:foo.bar")) "(\"C:foo\",\".bar\")"
   expect "addExtension C:foo bar" (addExtension "C:foo" "bar") "C:foo.bar"
   expect "takeExtensions C:a.tar.gz" (takeExtensions "C:a.tar.gz") ".tar.gz"
-
   expect "splitPath C:\\foo\\bar" (show (splitPath "C:\\foo\\bar")) "[\"C:\\\\\",\"foo\\\\\",\"bar\"]"
-  expect "splitDirectories C:\\foo\\bar" (show (splitDirectories "C:\\foo\\bar")) "[\"C:\\\\\",\"foo\",\"bar\"]"
+  expect "splitDirectories C:\\foo\\bar" (show (splitDirectories "C:\\foo\\bar"))
+    "[\"C:\\\\\",\"foo\",\"bar\"]"
   expect "joinPath round trip" (joinPath (splitPath "C:\\foo\\bar")) "C:\\foo\\bar"
-
   expect "normalise C:./foo" (normalise "C:./foo") "C:foo"
   expect "normalise C:/foo/bar" (normalise "C:/foo/bar") "C:\\foo\\bar"
   expect "normalise backslash collapse" (normalise "C:\\\\.\\\\foo") "C:\\foo"
-
   expect "equalFilePath case-insensitive" (show (equalFilePath "C:\\FOO" "c:\\foo")) "True"
   expect "isAbsolute C:\\foo" (show (isAbsolute "C:\\foo")) "True"
   expect "isRelative foo" (show (isRelative "foo")) "True"
   expect "makeRelative C:\\foo C:\\foo\\bar" (makeRelative "C:\\foo" "C:\\foo\\bar") "bar"
-
   expect "isValid NUL" (show (isValid ("C:foo" <> singleton (chr 0) <> "bar"))) "False"
   expect "isValid C:\\foo" (show (isValid "C:\\foo")) "True"
   expect "isValid empty" (show (isValid "")) "False"
   expect "makeValid strips NUL" (makeValid ("C:foo" <> singleton (chr 0) <> "bar")) "C:foo_bar"
-
   expect "splitSearchPath" (show (splitSearchPath "C:\\A;D:\\B")) "[\"C:\\\\A\",\"D:\\\\B\"]"
-
   -- Reference properties, as assertions.
-  assertTrue "splitDrive uncurry (<>) == x" (let p = splitDrive "C:\\foo\\bar" in fst p <> snd p == "C:\\foo\\bar")
-  assertTrue "splitExtension uncurry (<>) == x" (let p = splitExtension "C:foo.bar" in fst p <> snd p == "C:foo.bar")
+  assertTrue "splitDrive uncurry (<>) == x"
+    (let p = splitDrive "C:\\foo\\bar" in fst p <> snd p == "C:\\foo\\bar")
+  assertTrue "splitExtension uncurry (<>) == x"
+    (let p = splitExtension "C:foo.bar" in fst p <> snd p == "C:foo.bar")
   assertTrue "joinPath (splitPath x) == x" (joinPath (splitPath "C:\\foo\\bar") == "C:\\foo\\bar")
-  assertTrue "uncurry (</>) (splitFileName x) == x" (let p = splitFileName "C:\\foo\\bar" in fst p </> snd p == "C:\\foo\\bar")
+  assertTrue "uncurry (</>) (splitFileName x) == x"
+    (let p = splitFileName "C:\\foo\\bar" in fst p </> snd p == "C:\\foo\\bar")
   assertTrue "takeDrive then dropDrive" (dropDrive "C:\\foo\\bar" == "foo\\bar")
   assertTrue "isAbsolute == not isRelative" (isAbsolute "C:\\foo" == not (isRelative "C:\\foo"))
   assertTrue "makeRelative x x == ." (makeRelative "C:\\a" "C:\\a" == ".")
   assertTrue "isValid makeValid always holds" (isValid (makeValid "C:\\a") && isValid (makeValid ""))
   assertTrue "hasTrailingPathSeparator" (hasTrailingPathSeparator "C:\\foo\\")
-  assertTrue "dropTrailingPathSeparator idempotent" (dropTrailingPathSeparator "C:\\foo\\" == "C:\\foo")
+  assertTrue "dropTrailingPathSeparator idempotent"
+    (dropTrailingPathSeparator "C:\\foo\\" == "C:\\foo")

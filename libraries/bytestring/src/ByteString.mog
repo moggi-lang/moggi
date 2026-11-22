@@ -4,8 +4,8 @@
   jvm = Data.ByteString.JVM
   dotnet = Data.ByteString.DotNet
 #-}
--- |
--- A sequence of bytes: fixed-width 8-bit values with no encoding attached, so
+
+-- | A sequence of bytes: fixed-width 8-bit values with no encoding attached, so
 -- the same content can be read as text in several encodings or written out
 -- unchanged. The type is strict — appending copies, and there is no lazy view of
 -- a file — which makes the length of a value its cost predictable.
@@ -137,7 +137,7 @@ import System.IO.Base (FilePath, packFilePath, unpackFilePath)
 import System.IO qualified as IO
 import System.IO (IO, Handle, stdin)
 import Data.Maybe
-import Data.String (IsString (..))
+import Data.String (IsString(..))
 import Data.Monoid
 import Data.Num ((+), (-))
 import Data.Ord
@@ -157,10 +157,15 @@ instance IsString ByteString where
 
 -- Backend byte length / slice (not Unicode scalars).
 bsLength :: ByteString -> Int
+
 bsTake :: Int -> ByteString -> ByteString
+
 bsDrop :: Int -> ByteString -> ByteString
+
 bsIndex :: ByteString -> Int -> Int
+
 bsPackInts :: [Int] -> ByteString
+
 bsUnpackInts :: ByteString -> [Int]
 
 empty :: ByteString
@@ -360,7 +365,7 @@ findList p (x : xs) = case p x of
 index :: ByteString -> Int -> Word8
 index b n = toWord8 (bsIndex b n)
 
--- |/O(n)/ The 'isPrefixOf' function takes two ByteStrings and returns 'True'
+-- | /O(n)/ The 'isPrefixOf' function takes two ByteStrings and returns 'True'
 -- if the first is a prefix of the second.
 isPrefixOf :: ByteString -> ByteString -> Bool
 isPrefixOf pre b = isPrefixList (unpack pre) (unpack b)
@@ -398,16 +403,12 @@ replicateList n w = case orderingIsGt# (intCompare# n 0) of
 showWord8ListRest :: [Word8] -> String
 showWord8ListRest xs = case xs of
   [] -> "]"
-  x : rest ->
-    (stringAppend# ","
-      (stringAppend# (show x) (showWord8ListRest rest)))
+  x : rest -> stringAppend# "," (stringAppend# (show x) (showWord8ListRest rest))
 
 showWord8List :: [Word8] -> String
 showWord8List xs = case xs of
   [] -> "[]"
-  x : rest ->
-    (stringAppend# "["
-      (stringAppend# (show x) (showWord8ListRest rest)))
+  x : rest -> stringAppend# "[" (stringAppend# (show x) (showWord8ListRest rest))
 
 -- Eq/Ord/Show/Semigroup/Monoid stay: class modules importing ByteString cycle
 -- (ByteString → backend String → Monoid/Semigroup, and Show/Eq/Ord via List/Int).
@@ -428,7 +429,6 @@ instance Show ByteString where
   show b = showWord8List (unpack b)
 
 -- Transforming
-
 -- | /O(n)/ The 'intersperse' function takes a 'Word8' and a
 -- 'ByteString' and `intersperses' that byte between the elements of
 -- the 'ByteString'.  It is analogous to the intersperse function on
@@ -453,7 +453,6 @@ concatMap f b = concat (listMap f (unpack b))
 
 -- Folds over the bytes. A 'ByteString' is already fully evaluated, so one fold
 -- per direction is all there is to offer.
-
 -- | 'foldl', applied to a binary operator, a starting value (typically
 -- the left-identity of the operator), and a ByteString, reduces the
 -- ByteString using the binary operator, from left to right.
@@ -494,7 +493,7 @@ foldr1 f b = case unpack b of
 
 foldr1List :: (Word8 -> Word8 -> Word8) -> [Word8] -> Word8
 foldr1List f ws = case ws of
-  [w] -> w
+  w : [] -> w
   w : rest -> f w (foldr1List f rest)
   [] -> error "Data.ByteString.foldr1: empty"
 
@@ -519,7 +518,6 @@ smaller x y = case x < y of
   False -> y
 
 -- Scans and accumulations
-
 scanl :: (Word8 -> Word8 -> Word8) -> Word8 -> ByteString -> ByteString
 scanl f z b = pack (L.scanl f z (unpack b))
 
@@ -552,7 +550,7 @@ dropFirst xs = case xs of
 
 lastOfList :: [Word8] -> Word8
 lastOfList ws = case ws of
-  [w] -> w
+  w : [] -> w
   _ : rest -> lastOfList rest
   [] -> error "Data.ByteString.lastOfList: empty"
 
@@ -561,18 +559,14 @@ lastOfList ws = case ws of
 -- passing an accumulating parameter from left to right, and returning a
 -- final value of this accumulator together with the new ByteString.
 mapAccumL :: (acc -> Word8 -> (acc, Word8)) -> acc -> ByteString -> (acc, ByteString)
-mapAccumL f z b =
-  let pair = L.mapAccumL f z (unpack b)
-  in (fst pair, pack (snd pair))
+mapAccumL f z b = let pair = L.mapAccumL f z (unpack b) in (fst pair, pack (snd pair))
 
 -- | The 'mapAccumR' function behaves like a combination of 'map' and
 -- 'foldr'; it applies a function to each element of a ByteString,
 -- passing an accumulating parameter from right to left, and returning a
 -- final value of this accumulator together with the new ByteString.
 mapAccumR :: (acc -> Word8 -> (acc, Word8)) -> acc -> ByteString -> (acc, ByteString)
-mapAccumR f z b =
-  let pair = L.mapAccumR f z (unpack b)
-  in (fst pair, pack (snd pair))
+mapAccumR f z b = let pair = L.mapAccumR f z (unpack b) in (fst pair, pack (snd pair))
 
 -- | /O(n)/, where /n/ is the length of the result.  The 'unfoldr'
 -- function is analogous to the List 'unfoldr'.  'unfoldr' builds a
@@ -597,9 +591,7 @@ unfoldr f z = pack (L.unfoldr f z)
 --
 -- > fst (unfoldrN n f s) == take n (unfoldr f s)
 unfoldrN :: Int -> (a -> Maybe (Word8, a)) -> a -> (ByteString, Maybe a)
-unfoldrN n f z =
-  let pair = unfoldrNGo n f z
-  in (pack (fst pair), snd pair)
+unfoldrN n f z = let pair = unfoldrNGo n f z in (pack (fst pair), snd pair)
 
 unfoldrNGo :: Int -> (a -> Maybe (Word8, a)) -> a -> ([Word8], Maybe a)
 unfoldrNGo k f s = case compare k 0 of
@@ -612,12 +604,9 @@ unfoldrNGoPos k f s = case f s of
   Just pair -> unfoldrNGoCons k f (fst pair) (snd pair)
 
 unfoldrNGoCons :: Int -> (a -> Maybe (Word8, a)) -> Word8 -> a -> ([Word8], Maybe a)
-unfoldrNGoCons k f w s2 =
-  let rest = unfoldrNGo (k - 1) f s2
-  in (w : fst rest, snd rest)
+unfoldrNGoCons k f w s2 = let rest = unfoldrNGo (k - 1) f s2 in (w : fst rest, snd rest)
 
 -- Substrings
-
 -- | /O(1)/ @'takeEnd' n xs@ is equivalent to @'drop' ('length' xs - n) xs@.
 -- Takes @n@ elements from end of bytestring.
 --
@@ -687,9 +676,7 @@ dropWhileEnd p b = pack (L.dropWhileEnd p (unpack b))
 --
 -- 'span' @p@ is equivalent to @'break' (not . p)@ and to @('takeWhile' p &&& 'dropWhile' p)@.
 span :: (Word8 -> Bool) -> ByteString -> (ByteString, ByteString)
-span p b =
-  let pair = L.span p (unpack b)
-  in (pack (fst pair), pack (snd pair))
+span p b = let pair = L.span p (unpack b) in (pack (fst pair), pack (snd pair))
 
 -- | Returns the longest (possibly empty) suffix of elements
 -- satisfying the predicate and the remainder of the string.
@@ -719,9 +706,7 @@ spanEnd p b =
 -- > break ((==) x) = breakByte x
 -- > break (==x) = breakByte x
 break :: (Word8 -> Bool) -> ByteString -> (ByteString, ByteString)
-break p b =
-  let pair = L.break p (unpack b)
-  in (pack (fst pair), pack (snd pair))
+break p b = let pair = L.break p (unpack b) in (pack (fst pair), pack (snd pair))
 
 -- | Returns the longest (possibly empty) suffix of elements which __do not__
 -- satisfy the predicate and the remainder of the string.
@@ -874,7 +859,6 @@ isInfixOf :: ByteString -> ByteString -> Bool
 isInfixOf needle hay = L.isInfixOf (unpack needle) (unpack hay)
 
 -- Searching
-
 -- | /O(1)/ 'ByteString' index, starting from 0, that returns 'Just' if:
 --
 -- > 0 <= n < length bs
@@ -914,7 +898,7 @@ elemIndexEnd w b =
   let m = elemIndex w (reverse b)
   in case m of
     Nothing -> Nothing
-    Just i -> Just ((length b - 1) - i)
+    Just i -> Just (length b - 1 - i)
 
 -- | /O(n)/ The 'findIndex' function takes a predicate and a 'ByteString' and
 -- returns the index of the first element in the ByteString
@@ -935,7 +919,7 @@ findIndexEnd p b =
   let m = findIndex p (reverse b)
   in case m of
     Nothing -> Nothing
-    Just i -> Just ((length b - 1) - i)
+    Just i -> Just (length b - 1 - i)
 
 -- | count returns the number of times its argument appears in the ByteString
 --
@@ -951,7 +935,6 @@ listLength xs = case xs of
   _ : rest -> 1 + listLength rest
 
 -- Zip / order
-
 -- | /O(n)/ 'zip' takes two ByteStrings and returns a list of
 -- corresponding pairs of bytes. If one input ByteString is short,
 -- excess elements of the longer ByteString are discarded. This is
@@ -974,9 +957,7 @@ packZipWith f a b = pack (L.zipWith f (unpack a) (unpack b))
 -- | /O(n)/ 'unzip' transforms a list of pairs of bytes into a pair of
 -- ByteStrings. Note that this performs two 'pack' operations.
 unzip :: [(Word8, Word8)] -> (ByteString, ByteString)
-unzip pairs =
-  let pair = L.unzip pairs
-  in (pack (fst pair), pack (snd pair))
+unzip pairs = let pair = L.unzip pairs in (pack (fst pair), pack (snd pair))
 
 -- | /O(n)/ Sort a ByteString efficiently, using counting sort.
 sort :: ByteString -> ByteString
@@ -988,9 +969,7 @@ sort b = pack (L.sort (unpack b))
 --
 -- > partition p bs == (filter p xs, filter (not . p) xs)
 partition :: (Word8 -> Bool) -> ByteString -> (ByteString, ByteString)
-partition p b =
-  let pair = L.partition p (unpack b)
-  in (pack (fst pair), pack (snd pair))
+partition p b = let pair = L.partition p (unpack b) in (pack (fst pair), pack (snd pair))
 
 -- | /O(n)/ Make a copy of the 'ByteString' with its own storage.
 -- This is mainly useful to allow the rest of the data pointed
@@ -1001,7 +980,6 @@ copy :: ByteString -> ByteString
 copy b = b
 
 -- UTF-8 validation
-
 -- | /O(n)/ Check whether a 'ByteString' represents valid UTF-8.
 isValidUtf8 :: ByteString -> Bool
 isValidUtf8 b = validUtf8 (unpack b)
@@ -1015,14 +993,16 @@ validUtf8 ws = case ws of
 
 restOk :: Int -> [Word8] -> Bool
 restOk lead rest =
-  if lead < 128 then validUtf8 rest
-  else if lead >= 194 && lead <= 223 then cont1 rest
-  else if lead >= 224 && lead <= 239 then cont2 lead rest
-  else cont3 lead rest
+  if lead < 128
+    then validUtf8 rest
+    else if lead >= 194 && lead <= 223
+      then cont1 rest
+      else if lead >= 224 && lead <= 239
+        then cont2 lead rest
+        else cont3 lead rest
 
 classifyLead :: Int -> Bool
-classifyLead lead =
-  lead < 128 || (lead >= 194 && lead <= 244)
+classifyLead lead = lead < 128 || lead >= 194 && lead <= 244
 
 cont1 :: [Word8] -> Bool
 cont1 rest = case rest of
@@ -1050,19 +1030,22 @@ isContByte w = word8ToInt# w >= 128 && word8ToInt# w <= 191
 
 second3Ok :: Int -> Int -> Bool
 second3Ok lead b1 =
-  if lead == 224 then b1 >= 160 && b1 <= 191
-  else if lead == 237 then b1 >= 128 && b1 <= 159
-  else b1 >= 128 && b1 <= 191
+  if lead == 224
+    then b1 >= 160 && b1 <= 191
+    else if lead == 237
+      then b1 >= 128 && b1 <= 159
+      else b1 >= 128 && b1 <= 191
 
 second4Ok :: Int -> Int -> Bool
 second4Ok lead b1 =
-  if lead == 240 then b1 >= 144 && b1 <= 191
-  else if lead == 244 then b1 >= 128 && b1 <= 143
-  else b1 >= 128 && b1 <= 191
+  if lead == 240
+    then b1 >= 144 && b1 <= 191
+    else if lead == 244
+      then b1 >= 128 && b1 <= 143
+      else b1 >= 128 && b1 <= 191
 
 -- I/O. The host text of a path or handle is written through the same symmetric
 -- coercion the backends use, so bytes reach the outside world unchanged.
-
 fromHostString :: String -> ByteString
 fromHostString s = bytesFromString# s
 
@@ -1125,7 +1108,6 @@ hPutNonBlocking h b = hPutStr h b
 
 -- Paths are host strings; the conversion is spelled out so the direction is
 -- visible at the call site.
-
 -- | Convert a 'ByteString' to a 'FilePath'.
 --
 -- This function uses the file system encoding, and resulting 'FilePath's

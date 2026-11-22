@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Data.Int.PHP
   ( showInt
   , intQuot

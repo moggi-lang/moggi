@@ -6,7 +6,6 @@
 -- modules import these names and contain only the checks. Keeping the deriving in
 -- a single module is also what keeps the compiler's generated generic evidence
 -- unambiguous — see the note in `README.md`.
-
 module Types
   ( Person(..)
   , PairP(..)
@@ -55,7 +54,10 @@ import Data.Map (Map, lookup)
 import Data.JSON
 import Moggi.Generics
 
-data Person = Person { name :: String, age :: Int }
+data Person = Person
+  { name :: String
+  , age :: Int
+  }
   deriving (Generic, Eq)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -83,7 +85,10 @@ data Result = Ok | Error String
   deriving (Generic, Eq)
   deriving anyclass (ToJSON, FromJSON)
 
-data ShapeS = CircleS { radius :: Int } | Square { side :: Int } | PointS
+data ShapeS
+  = CircleS { radius :: Int }
+  | Square { side :: Int }
+  | PointS
   deriving (Generic, Eq)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -194,7 +199,9 @@ instance FromJSON Opt where
   parseJSON = genericParseJSON optsOmit
   parseEncoding = genericParseEncoding optsOmit
 
-data ShapeT = CircleT { tRadius :: Int } | RectT { tWidth :: Int, tHeight :: Int }
+data ShapeT
+  = CircleT { tRadius :: Int }
+  | RectT { tWidth :: Int, tHeight :: Int }
   deriving (Generic, Eq)
 
 tagPrefix :: String -> String
@@ -211,31 +218,53 @@ instance FromJSON ShapeT where
   parseJSON = genericParseJSON tagOpts
   parseEncoding = genericParseEncoding tagOpts
 
-data Address = Address { street :: String, city :: String }
+data Address = Address
+  { street :: String
+  , city :: String
+  }
   deriving (Generic, Eq)
   deriving anyclass (ToJSON, FromJSON)
 
-data Customer = Customer { cName :: String, cAge :: Int, cAddress :: Address, cTags :: [String] }
+data Customer = Customer
+  { cName :: String
+  , cAge :: Int
+  , cAddress :: Address
+  , cTags :: [String]
+  }
   deriving (Generic, Eq)
   deriving anyclass (ToJSON, FromJSON)
 
-data Leaf = Leaf { n :: Int, lbl :: String }
+data Leaf = Leaf
+  { n :: Int
+  , lbl :: String
+  }
   deriving (Generic, Eq)
   deriving anyclass (ToJSON, FromJSON)
 
-data Nest3 = Nest3 { leaf :: Leaf, xs :: [Int] }
+data Nest3 = Nest3
+  { leaf :: Leaf
+  , xs :: [Int]
+  }
   deriving (Generic, Eq)
   deriving anyclass (ToJSON, FromJSON)
 
-data Nest2 = Nest2 { mid :: Nest3, tag :: String }
+data Nest2 = Nest2
+  { mid :: Nest3
+  , tag :: String
+  }
   deriving (Generic, Eq)
   deriving anyclass (ToJSON, FromJSON)
 
-data Nest1 = Nest1 { outer :: Nest2, count :: Int }
+data Nest1 = Nest1
+  { outer :: Nest2
+  , count :: Int
+  }
   deriving (Generic, Eq)
   deriving anyclass (ToJSON, FromJSON)
 
-data Tree = LeafT | NodeT { tVal :: Int, tLeft :: Tree, tRight :: Tree }
+data Tree
+  = LeafT
+  | NodeT { tVal :: Int, tLeft :: Tree, tRight :: Tree }
   deriving (Generic, Eq)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -276,14 +305,15 @@ instance FromJSON ColorObj where
   parseJSON = genericParseJSON tagObjOpts
   parseEncoding = genericParseEncoding tagObjOpts
 
-newtype Badge = Badge { badgeColor :: Color }
+newtype Badge = Badge
+  { badgeColor :: Color
+  }
   deriving (Generic, Eq)
   deriving anyclass (ToJSON, FromJSON)
 
 -- Generic encoders that take runtime `Options`. They are here rather than in the
 -- test modules because `genericToEncoding opts x` needs `Generic x` in scope, and
 -- a `Generic` instance derived in another module is not visible for that use.
-
 encShape :: Options -> ShapeS -> String
 encShape opts s = bsToStr (encodeEncoding (genericToEncoding opts s))
 

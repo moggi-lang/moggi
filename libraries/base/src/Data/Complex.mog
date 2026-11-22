@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Complex numbers in rectangular form: @a ':+' b@ is @a + bi@.
 --
 -- A complex number uses the '@(:+)@' constructor and the usual accessors,
@@ -6,21 +7,19 @@
 -- rational. There is no 'Ord' instance — complex numbers are not ordered —
 -- and no 'Real' or 'RealFrac' one.
 module Data.Complex
-  (
-  -- * Rectangular form
+  ( -- * Rectangular form
     Complex((:+))
-
   , realPart
   , imagPart
-  -- * Polar form
+    -- * Polar form
   , mkPolar
   , cis
   , polar
   , magnitude
   , phase
-  -- * Conjugate
+    -- * Conjugate
   , conjugate
-  )  where
+  ) where
 
 import Control.Applicative (Applicative(..), liftA2)
 import Control.Monad (Monad(..))
@@ -37,14 +36,24 @@ import Data.Num
 import Data.Ord
 import Data.Real
 import Moggi.Internal.Prim (mfixPure#)
-import Text.Read (Read(..), ReadPrec, ReadS, lex, prec, readParen, readS_to_Prec, readPrec_to_S, step)
+import Text.Read
+  ( Read(..)
+  , ReadPrec
+  , ReadS
+  , lex
+  , prec
+  , readParen
+  , readS_to_Prec
+  , readPrec_to_S
+  , step
+  )
 import Text.Show
+
+infix 6 :+
 
 -- | Complex numbers, in rectangular form: the real part and the imaginary
 -- part. Both are held strictly, as every field is.
 data Complex a = a :+ a
-
-infix 6 :+
 
 -- | The real part of a complex number.
 realPart :: Complex a -> a
@@ -116,12 +125,12 @@ complexBody = prec 6 (do
 -- The constructor, required as the token it is: a complex number is read only
 -- where @:+@ stands, so another symbol in its place is no parse.
 complexSymbol :: ReadPrec ()
-complexSymbol = readS_to_Prec (\_ s -> case lex s of
-  (tok, rest) : _ -> case tok == ":+" of
-    True -> [((), rest)]
-    False -> []
-  [] -> [])
-
+complexSymbol = readS_to_Prec (\_ s ->
+  case lex s of
+    (tok, rest) : _ -> case tok == ":+" of
+      True -> [((), rest)]
+      False -> []
+    [] -> [])
 
 -- 'map' changes both parts, so the shape of a complex number is fixed.
 instance Functor Complex where
@@ -145,8 +154,8 @@ instance MonadZip Complex where
 -- fed the real part the function produces, and the imaginary part likewise.
 instance MonadFix Complex where
   mfix f = case mfixPure# f (const True) realPart of
-    (real :+ _) -> case mfixPure# f (const True) imagPart of
-      (_ :+ imag) -> real :+ imag
+    real :+ _ -> case mfixPure# f (const True) imagPart of
+      _ :+ imag -> real :+ imag
 
 instance RealFloat a => Num (Complex a) where
   (+) (x :+ y) (u :+ v) = (x + u) :+ (y + v)
@@ -156,11 +165,11 @@ instance RealFloat a => Num (Complex a) where
   abs z = magnitude z :+ fromInteger 0
   signum z = case magnitude z == 0 of
     True -> 0
-    False -> (realPart z / magnitude z) :+ (imagPart z / magnitude z)
+    False -> realPart z / magnitude z :+ imagPart z / magnitude z
   fromInteger n = fromInteger n :+ fromInteger 0
 
 instance RealFloat a => Fractional (Complex a) where
-  (/) (x :+ y) (u :+ v) = ((x * u' + y * v') / d) :+ ((y * u' - x * v') / d)
+  (/) (x :+ y) (u :+ v) = (x * u' + y * v') / d :+ (y * u' - x * v') / d
     where
       u' = scaleFloat k u
       v' = scaleFloat k v
@@ -171,32 +180,32 @@ instance RealFloat a => Fractional (Complex a) where
 
 instance RealFloat a => Floating (Complex a) where
   pi = complexPi
-  exp (x :+ y) = (exp x * cos y) :+ (exp x * sin y)
+  exp (x :+ y) = exp x * cos y :+ exp x * sin y
   log z = complexLog z
   sqrt z = complexSqrt z
   x ** y = case y of
-    (0 :+ 0) -> 1 :+ 0
-    (exp_re :+ _) -> case x of
-      (0 :+ 0) -> case compare exp_re 0 of
+    0 :+ 0 -> 1 :+ 0
+    exp_re :+ _ -> case x of
+      0 :+ 0 -> case compare exp_re 0 of
         GT -> 0 :+ 0
         LT -> complexInf
         EQ -> complexNaN
-      (re :+ im) -> case isInfinite re || isInfinite im of
+      re :+ im -> case isInfinite re || isInfinite im of
         True -> case compare exp_re 0 of
           GT -> complexInf
           LT -> 0 :+ 0
           EQ -> complexNaN
         False -> exp (log x * y)
-  sin (x :+ y) = (sin x * cosh y) :+ (cos x * sinh y)
-  cos (x :+ y) = (cos x * cosh y) :+ (negate (sin x) * sinh y)
+  sin (x :+ y) = sin x * cosh y :+ cos x * sinh y
+  cos (x :+ y) = cos x * cosh y :+ negate (sin x) * sinh y
   tan (x :+ y) = (sinx * coshy :+ cosx * sinhy) / (cosx * coshy :+ negate (sinx * sinhy))
     where
       sinx = sin x
       cosx = cos x
       sinhy = sinh y
       coshy = cosh y
-  sinh (x :+ y) = (cos y * sinh x) :+ (sin y * cosh x)
-  cosh (x :+ y) = (cos y * cosh x) :+ (sin y * sinh x)
+  sinh (x :+ y) = cos y * sinh x :+ sin y * cosh x
+  cosh (x :+ y) = cos y * cosh x :+ sin y * sinh x
   tanh (x :+ y) = (cosy * sinhx :+ siny * coshx) / (cosy * coshx :+ siny * sinhx)
     where
       siny = sin y
@@ -207,11 +216,11 @@ instance RealFloat a => Floating (Complex a) where
   acosh z = log (z + sqrt (z + 1) * sqrt (z - 1))
   atanh z = log ((1 + z) / (1 - z)) / 2
   asin (x :+ y) = case log ((negate y :+ x) + sqrt (1 - (x :+ y) * (x :+ y))) of
-    (x' :+ y') -> y' :+ negate x'
+    x' :+ y' -> y' :+ negate x'
   acos (x :+ y) = case log ((x :+ y) + (0 :+ 1) * sqrt (1 - (x :+ y) * (x :+ y))) of
-    (x' :+ y') -> y' :+ negate x'
+    x' :+ y' -> y' :+ negate x'
   atan (x :+ y) = case log (((1 - y) :+ x) / sqrt (1 + (x :+ y) * (x :+ y))) of
-    (x' :+ y') -> y' :+ negate x'
+    x' :+ y' -> y' :+ negate x'
   log1p z = complexLog1p z
   expm1 z = complexExpm1 z
 
@@ -243,7 +252,7 @@ complexSqrt (x :+ y) = case x == 0 && y == 0 of
 -- @1@ keeps its precision. The recursive call is at the component type, where
 -- the 'RealFloat' argument's own 'log1p' is the one that applies.
 complexLog1p :: RealFloat a => Complex a -> Complex a
-complexLog1p (a :+ b) = case abs a < (1 / 2) && abs b < (1 / 2) of
+complexLog1p (a :+ b) = case abs a < 1 / 2 && abs b < 1 / 2 of
   True -> log1p (u / (1 + sqrt (u + 1))) :+ atan2 (1 + a) b
   False -> log (1 + (a :+ b))
   where
@@ -275,7 +284,7 @@ complexLog z = log (magnitude z) :+ phase z
 -- The two extreme results of @('**')@, built at the component type outside
 -- the instance body.
 complexInf :: RealFloat a => Complex a
-complexInf = (1 / 0) :+ 0
+complexInf = 1 / 0 :+ 0
 
 complexNaN :: RealFloat a => Complex a
-complexNaN = (0 / 0) :+ (0 / 0)
+complexNaN = 0 / 0 :+ 0 / 0

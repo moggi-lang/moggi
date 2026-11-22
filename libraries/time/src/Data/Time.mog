@@ -1,12 +1,10 @@
--- |
--- Dates and times: the common API in one import, following 'Data.Time'.
+-- | Dates and times: the common API in one import, following 'Data.Time'.
 --
 -- Import this module for the everyday core — 'Day' and Gregorian conversion,
 -- 'UTCTime' and durations, civil times and zones, formatting and the POSIX
 -- and system clocks — and reach for the specific modules ('Data.Time.Format'
 -- locales, 'Data.Time.Format.ISO8601', 'Data.Time.Clock.System' details)
 -- when one of them is all you need.
---
 module Data.Time
   ( Day(..)
   , toModifiedJulianDay

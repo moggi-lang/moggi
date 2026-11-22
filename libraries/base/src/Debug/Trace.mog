@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Functions that trace their arguments to standard error.
 --
 -- Tracing is deliberately outside 'IO' in its type: it is a debugging aid, not

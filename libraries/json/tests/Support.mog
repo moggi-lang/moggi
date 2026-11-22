@@ -3,7 +3,6 @@
 -- Every case asserts; the first failure is named and stops the run. There is no
 -- counter to get wrong and no shared state to thread, and a module's whole test
 -- is one `run… :: IO ()` the aggregator `Suite.mog` calls.
-
 module Support
   ( assertTrue
   , expect
@@ -28,8 +27,7 @@ assertTrue name ok = case ok of
   False -> die ("FAIL: " <> name)
 
 expect :: String -> String -> String -> IO ()
-expect name got want =
-  assertTrue (name <> " — got " <> got <> ", want " <> want) (got == want)
+expect name got want = assertTrue (name <> " — got " <> got <> ", want " <> want) (got == want)
 
 expectVal :: String -> IO String -> String -> IO ()
 expectVal name act want = do

@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | File-descriptor type used by @Control.Concurrent@'s wait operations.
 module Moggi.Internal.System.Posix.Types (Fd(..)) where
 
@@ -9,4 +10,5 @@ import Data.Ord (Ord(..), Ordering(..))
 import Text.Show
 
 -- | A host file descriptor.
-newtype Fd = Fd Int deriving (Eq, Ord, Show)
+newtype Fd = Fd Int
+  deriving (Eq, Ord, Show)

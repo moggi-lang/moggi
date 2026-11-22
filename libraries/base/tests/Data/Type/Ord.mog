@@ -1,3 +1,5 @@
+module Main (main) where
+
 import Data.Type.Ord (Compare, OrdCond, OrderingI(..), (<=?), Max, Min)
 import Data.Type.Equality ((:~:), castWith, Refl)
 import Data.Eq
@@ -8,7 +10,6 @@ import Text.Show
 -- arguments, and `OrdCond` selects on that answer. A comparison proof has
 -- `Ordering` kind, so it is shown rather than spent; `OrdCond` returns a type,
 -- which `castWith` carries a value across.
-
 ltProof :: Compare 3 5 :~: 'LT
 ltProof = Refl
 

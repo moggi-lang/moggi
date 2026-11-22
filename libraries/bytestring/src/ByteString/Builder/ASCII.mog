@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Decimal and hexadecimal encodings of numbers and byte strings.
 --
 -- The decimal encoders are the 'Show' instance of each type spelled into a
@@ -40,7 +41,7 @@ module Data.ByteString.Builder.ASCII
   , byteStringHex
   ) where
 
-import Data.Bool (Bool (..))
+import Data.Bool (Bool(..))
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Builder.Internal (Builder, power2, string7)
@@ -50,10 +51,10 @@ import Data.Double (Double, castDoubleToWord64)
 import Data.Int (Int, Int16, Int32, Int64, Int8)
 import Data.Integer (Integer)
 import Data.List qualified as L
-import Data.Monoid (Monoid (..))
+import Data.Monoid (Monoid(..))
 import Data.Num ((*), (+), (-))
 import Data.Ord ((<), (>))
-import Data.Real (Integral (div, mod, toInteger), fromIntegral)
+import Data.Real (Integral(div, mod, toInteger), fromIntegral)
 import Data.Semigroup ((<>))
 import Data.String qualified as S
 import Data.Word (Word, Word16, Word32, Word64, Word8)

@@ -3,6 +3,7 @@
   jvm = System.FilePath.Units.JVM
   dotnet = System.FilePath.Units.DotNet
 #-}
+
 -- | The host string in code units: bytes on PHP, UTF-16 units on the JVM and
 -- .NET. Private to `System.FilePath`: path manipulation only ever looks at
 -- ASCII units (separators, drive letters, extension markers) and cuts at

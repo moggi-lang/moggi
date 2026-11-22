@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Data.JSON.Class
   ( ToJSON(..)
   , FromJSON(..)
@@ -315,7 +316,6 @@ mapToEncoding xs = case xs of
 -- ---------------------------------------------------------------------------
 -- Either (Aeson: ObjectWithSingleField {"Left":…} / {"Right":…})
 -- ---------------------------------------------------------------------------
-
 instance (ToJSON a, ToJSON b) => ToJSON (Either a b) where
   toJSON e = case e of
     Left x -> jsonObject [("Left", toJSON x)]
@@ -390,7 +390,6 @@ parseEncodingRight enc = parseEncoding enc
 -- ---------------------------------------------------------------------------
 -- Map keys (Aeson ToJSONKey / FromJSONKey, text-key subset)
 -- ---------------------------------------------------------------------------
-
 class ToJSONKey a where
   toJSONKey :: a -> String
 

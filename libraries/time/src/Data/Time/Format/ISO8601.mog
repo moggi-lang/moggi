@@ -1,5 +1,4 @@
--- |
--- ISO 8601 parsing and formatting, following 'Data.Time.Format.ISO8601'.
+-- | ISO 8601 parsing and formatting, following 'Data.Time.Format.ISO8601'.
 --
 -- The profile is the extended format with a @T@ separator:
 -- @YYYY-MM-DD@, @YYYY-MM-DDTHH:MM:SS@ with an optional trimmed fractional
@@ -8,7 +7,6 @@
 -- (@YYYY-DDD@), week dates (@YYYYWwwD@) and the basic calendar format are
 -- not covered; neither are the general 'formatShow'\/'parseFormat'
 -- combinators.
---
 module Data.Time.Format.ISO8601
   ( formatDayISO
   , parseDayISO
@@ -86,23 +84,20 @@ parseLocalISO s = case parseTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%Q" s of
 
 -- | A zoned ISO time with a @±HH:MM@ offset.
 formatZonedISO :: ZonedTime -> String
-formatZonedISO zt = formatLocalISO (zonedTimeToLocalTime zt) <> showOffsetColon (timeZoneMinutes (zonedTimeZone zt))
+formatZonedISO zt =
+  formatLocalISO (zonedTimeToLocalTime zt) <> showOffsetColon (timeZoneMinutes (zonedTimeZone zt))
 
 showOffsetColon :: Int -> String
 showOffsetColon mins = sign <> pad2 h <> ":" <> pad2 m
   where
-    sign :: String
-    sign = case mins < 0 of
+    sign = (case mins < 0 of
       True -> "-"
-      False -> "+"
-    total :: Int
-    total = case mins < 0 of
+      False -> "+") :: String
+    total = (case mins < 0 of
       True -> negate mins
-      False -> mins
-    h :: Int
-    h = div total 60
-    m :: Int
-    m = mod total 60
+      False -> mins) :: Int
+    h = (div total 60) :: Int
+    m = (mod total 60) :: Int
 
 pad2 :: Int -> String
 pad2 n = case n < 10 of

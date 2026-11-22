@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | 'Write's and 'Builder's for serialising integers.
 --
 -- Upstream this module is one line per encoder over @Data.ByteString.Builder@
@@ -12,37 +13,30 @@
 -- documents for @x86-64@.
 module Blaze.ByteString.Builder.Int
   ( writeInt8
-
   , writeInt16be
   , writeInt32be
   , writeInt64be
-
   , writeInt16le
   , writeInt32le
   , writeInt64le
-
   , writeInthost
   , writeInt16host
   , writeInt32host
   , writeInt64host
-
   , fromInt8
   , fromInt8s
-
   , fromInt16be
   , fromInt32be
   , fromInt64be
   , fromInt32sbe
   , fromInt16sbe
   , fromInt64sbe
-
   , fromInt16le
   , fromInt32le
   , fromInt64le
   , fromInt16sle
   , fromInt32sle
   , fromInt64sle
-
   , fromInthost
   , fromInt16host
   , fromInt32host
@@ -60,49 +54,49 @@ import Data.Int (Int, Int16, Int32, Int64, Int8)
 
 -- | Write a single signed byte.
 writeInt8 :: Int8 -> Write
-writeInt8 x = writePrimFixed P.int8 x
+writeInt8 x = writePrimFixed (P.int8) x
 
 -- | Write an 'Int16' in big endian format.
 writeInt16be :: Int16 -> Write
-writeInt16be x = writePrimFixed P.int16BE x
+writeInt16be x = writePrimFixed (P.int16BE) x
 
 -- | Write an 'Int32' in big endian format.
 writeInt32be :: Int32 -> Write
-writeInt32be x = writePrimFixed P.int32BE x
+writeInt32be x = writePrimFixed (P.int32BE) x
 
 -- | Write an 'Int64' in big endian format.
 writeInt64be :: Int64 -> Write
-writeInt64be x = writePrimFixed P.int64BE x
+writeInt64be x = writePrimFixed (P.int64BE) x
 
 -- | Write an 'Int16' in little endian format.
 writeInt16le :: Int16 -> Write
-writeInt16le x = writePrimFixed P.int16LE x
+writeInt16le x = writePrimFixed (P.int16LE) x
 
 -- | Write an 'Int32' in little endian format.
 writeInt32le :: Int32 -> Write
-writeInt32le x = writePrimFixed P.int32LE x
+writeInt32le x = writePrimFixed (P.int32LE) x
 
 -- | Write an 'Int64' in little endian format.
 writeInt64le :: Int64 -> Write
-writeInt64le x = writePrimFixed P.int64LE x
+writeInt64le x = writePrimFixed (P.int64LE) x
 
 -- | Write an 'Int' in host order and host endianness. On a 64-bit machine the
 -- 'Int' is an 8-byte value, so values written this way are not portable to a
 -- machine with a different word size.
 writeInthost :: Int -> Write
-writeInthost x = writePrimFixed P.intHost x
+writeInthost x = writePrimFixed (P.intHost) x
 
 -- | Write an 'Int16' in native host order and host endianness.
 writeInt16host :: Int16 -> Write
-writeInt16host x = writePrimFixed P.int16Host x
+writeInt16host x = writePrimFixed (P.int16Host) x
 
 -- | Write an 'Int32' in native host order and host endianness.
 writeInt32host :: Int32 -> Write
-writeInt32host x = writePrimFixed P.int32Host x
+writeInt32host x = writePrimFixed (P.int32Host) x
 
 -- | Write an 'Int64' in native host order and host endianness.
 writeInt64host :: Int64 -> Write
-writeInt64host x = writePrimFixed P.int64Host x
+writeInt64host x = writePrimFixed (P.int64Host) x
 
 -- | Serialize a single byte.
 fromInt8 :: Int8 -> Builder

@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The types the directory operations pass around.
 --
 -- 'Permissions' records whether certain operations are permissible on a file
@@ -66,44 +67,49 @@ searchable p = case p of
 
 -- | A completely inaccessible file or directory.
 emptyPermissions :: Permissions
-emptyPermissions = Permissions
-  { permissionsReadable = False
-  , permissionsWritable = False
-  , permissionsExecutable = False
-  , permissionsSearchable = False
-  }
+emptyPermissions =
+  Permissions
+    { permissionsReadable = False
+    , permissionsWritable = False
+    , permissionsExecutable = False
+    , permissionsSearchable = False
+    }
 
 setOwnerReadable :: Bool -> Permissions -> Permissions
-setOwnerReadable b p = Permissions
-  { permissionsReadable = b
-  , permissionsWritable = writable p
-  , permissionsExecutable = executable p
-  , permissionsSearchable = searchable p
-  }
+setOwnerReadable b p =
+  Permissions
+    { permissionsReadable = b
+    , permissionsWritable = writable p
+    , permissionsExecutable = executable p
+    , permissionsSearchable = searchable p
+    }
 
 setOwnerWritable :: Bool -> Permissions -> Permissions
-setOwnerWritable b p = Permissions
-  { permissionsReadable = readable p
-  , permissionsWritable = b
-  , permissionsExecutable = executable p
-  , permissionsSearchable = searchable p
-  }
+setOwnerWritable b p =
+  Permissions
+    { permissionsReadable = readable p
+    , permissionsWritable = b
+    , permissionsExecutable = executable p
+    , permissionsSearchable = searchable p
+    }
 
 setOwnerExecutable :: Bool -> Permissions -> Permissions
-setOwnerExecutable b p = Permissions
-  { permissionsReadable = readable p
-  , permissionsWritable = writable p
-  , permissionsExecutable = b
-  , permissionsSearchable = searchable p
-  }
+setOwnerExecutable b p =
+  Permissions
+    { permissionsReadable = readable p
+    , permissionsWritable = writable p
+    , permissionsExecutable = b
+    , permissionsSearchable = searchable p
+    }
 
 setOwnerSearchable :: Bool -> Permissions -> Permissions
-setOwnerSearchable b p = Permissions
-  { permissionsReadable = readable p
-  , permissionsWritable = writable p
-  , permissionsExecutable = executable p
-  , permissionsSearchable = b
-  }
+setOwnerSearchable b p =
+  Permissions
+    { permissionsReadable = readable p
+    , permissionsWritable = writable p
+    , permissionsExecutable = executable p
+    , permissionsSearchable = b
+    }
 
 permissionsTag :: Permissions -> Int
 permissionsTag p = case readable p of
@@ -146,20 +152,21 @@ instance Ord Permissions where
   compare a b = intCompare# (permissionsTag a) (permissionsTag b)
 
 instance Show Permissions where
-  show p = "Permissions {readable = " <> show (readable p)
-    <> ", writable = " <> show (writable p)
-    <> ", executable = " <> show (executable p)
-    <> ", searchable = " <> show (searchable p)
-    <> "}"
+  show p =
+    "Permissions {readable = "
+      <> show (readable p)
+      <> ", writable = "
+      <> show (writable p)
+      <> ", executable = "
+      <> show (executable p)
+      <> ", searchable = "
+      <> show (searchable p)
+      <> "}"
 
 -- | Special directories for storing user-specific application data,
 -- configuration, and cache files, as specified by the XDG Base Directory
 -- Specification. Only the non-Windows defaults are implemented.
-data XdgDirectory
-  = XdgData
-  | XdgConfig
-  | XdgCache
-  | XdgState
+data XdgDirectory = XdgData | XdgConfig | XdgCache | XdgState
 
 xdgDirectoryTag :: XdgDirectory -> Int
 xdgDirectoryTag d = case d of
@@ -192,9 +199,7 @@ instance Read XdgDirectory where
 
 -- | Search paths for application data, as specified by the XDG Base Directory
 -- Specification. Only the non-Windows defaults are implemented.
-data XdgDirectoryList
-  = XdgDataDirs
-  | XdgConfigDirs
+data XdgDirectoryList = XdgDataDirs | XdgConfigDirs
 
 xdgDirectoryListTag :: XdgDirectoryList -> Int
 xdgDirectoryListTag d = case d of

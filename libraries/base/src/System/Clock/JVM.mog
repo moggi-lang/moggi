@@ -1,6 +1,4 @@
-module System.Clock.JVM
-  ( monotonicNanos
-  ) where
+module System.Clock.JVM (monotonicNanos) where
 
 import Control.Applicative
 import Control.Monad

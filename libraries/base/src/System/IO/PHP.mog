@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module System.IO.PHP
   ( stdin
   , stdout
@@ -29,7 +30,6 @@ import Control.Exception.Base (catch)
 import Moggi.IO.Exception
 import System.IO.Error (mkIOError)
 import System.IO.Types
-
 import Data.Bool
 import Control.Applicative
 import Control.Monad
@@ -117,8 +117,7 @@ openFile p mode = case rawIsDir p of
   False -> catch (rawFopen p (ioModeToString mode)) (openFileFailed p mode)
 
 openFileFailed :: FilePath -> IOMode -> HostException -> IO Handle
-openFileFailed p mode _ =
-  ioError (mkIOError (openErrorType p mode) "openFile" Nothing (Just p))
+openFileFailed p mode _ = ioError (mkIOError (openErrorType p mode) "openFile" Nothing (Just p))
 
 openErrorType :: FilePath -> IOMode -> IOErrorType
 openErrorType p mode = case rawIsDir p of
@@ -292,4 +291,3 @@ tempDirError dir = case rawPathExists dir of
   True -> case rawIsDir dir of
     False -> InappropriateType
     True -> PermissionDenied
-

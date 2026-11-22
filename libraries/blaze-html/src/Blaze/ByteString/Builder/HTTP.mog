@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Support for HTTP response encoding: the chunked transfer encoding of
 -- RFC 7230.
 --
@@ -14,16 +15,13 @@
 -- decodes the same octets; only the number of chunks differs, and only for
 -- payloads that would have spanned several upstream buffers. An empty builder
 -- emits no chunk at all, as upstream. The terminator is byte-identical.
-module Blaze.ByteString.Builder.HTTP
-  ( chunkedTransferEncoding
-  , chunkedTransferTerminator
-  ) where
+module Blaze.ByteString.Builder.HTTP (chunkedTransferEncoding, chunkedTransferTerminator) where
 
 import Blaze.ByteString.Builder (Builder)
 import Blaze.ByteString.Builder.ByteString (copyByteString)
 import Blaze.ByteString.Builder.Char8 (fromString)
 import Blaze.ByteString.Builder.Internal (fromByteString, toByteString)
-import Data.Bool (Bool (..))
+import Data.Bool (Bool(..))
 import Data.ByteString (ByteString, length, null)
 import Data.Char (Char, chr)
 import Data.Int (Int)
@@ -31,7 +29,7 @@ import Data.List ((:), (++))
 import Data.Monoid (mempty)
 import Data.Num ((+))
 import Data.Ord ((<))
-import Data.Real (Integral (div, mod))
+import Data.Real (Integral(div, mod))
 import Data.Semigroup ((<>))
 import Data.String (String)
 import Data.String qualified as S
@@ -46,7 +44,7 @@ hexDigit n = case n < 10 of
 hexDigits :: Int -> [Char]
 hexDigits n = case n < 16 of
   True -> hexDigit n : []
-  False -> hexDigits (div n 16) ++ (hexDigit (mod n 16) : [])
+  False -> hexDigits (div n 16) ++ hexDigit (mod n 16) : []
 
 -- | The lowercase hexadecimal length of a chunk, at least one digit.
 hexLength :: Int -> String

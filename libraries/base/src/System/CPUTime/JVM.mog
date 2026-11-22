@@ -1,6 +1,4 @@
-module System.CPUTime.JVM
-  ( cpuTimeNanos
-  ) where
+module System.CPUTime.JVM (cpuTimeNanos) where
 
 import Control.Applicative
 import Control.Monad
@@ -14,6 +12,7 @@ import System.IO.Base (IO)
 foreign jvm type ThreadMXBean "interface:java.lang.management.ThreadMXBean"
 
 foreign jvm function threadMXBean "java.lang.management.ManagementFactory:getThreadMXBean" :: IO ThreadMXBean
+
 foreign jvm function currentThreadCpuTime "java.lang.management.ThreadMXBean.getCurrentThreadCpuTime" :: ThreadMXBean -> Int
 
 -- Nanoseconds of CPU this thread has used. The JVM measures it at nanosecond

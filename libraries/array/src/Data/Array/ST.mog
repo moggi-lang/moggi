@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Mutable boxed arrays in 'ST': an 'STArray' is a fixed-size table from
 -- an 'Ix' index range to values that a state thread allocates, reads and
 -- writes, then freezes into a pure 'Array' — usually through 'runSTArray',

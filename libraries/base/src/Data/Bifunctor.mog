@@ -1,5 +1,4 @@
--- |
--- A type with two parameters that can be mapped over, either side at a time or
+-- | A type with two parameters that can be mapped over, either side at a time or
 -- both at once. 'Either' and the pair type are the two instances the library
 -- ships; a program that needs a mapping for its own two-parameter type writes
 -- the three methods below.
@@ -8,9 +7,7 @@
 -- @'first' f@ followed by @'second' g@, and an instance that has a cheaper
 -- implementation of one of the three should still keep the other two
 -- consistent with it.
-module Data.Bifunctor
-  ( Bifunctor(bimap, first, second)
-  ) where
+module Data.Bifunctor (Bifunctor(bimap, first, second)) where
 
 import Data.Either
 import Data.Kind (Type)
@@ -24,14 +21,11 @@ import Moggi.Internal.Base
 -- in its last parameter for every first parameter.
 class (forall a. Functor (p a)) => Bifunctor (p :: Type -> Type -> Type) where
   {-# MINIMAL bimap | first, second #-}
-
   -- | Map both parameters: the first function is applied to the value in the
   -- first parameter, the second to the value in the second.
   bimap :: (a -> b) -> (c -> d) -> p a c -> p b d
-
   -- | Map the first parameter and leave the second alone.
   first :: (a -> b) -> p a c -> p b c
-
   -- | Map the second parameter and leave the first alone.
   second :: (b -> c) -> p a b -> p a c
 

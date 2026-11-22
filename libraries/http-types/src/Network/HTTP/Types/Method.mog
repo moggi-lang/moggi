@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Types and constants for HTTP methods.
 --
 -- The HTTP standard defines a set of standard methods, when to use them,
@@ -12,7 +13,6 @@
 module Network.HTTP.Types.Method
   ( -- * HTTP methods
     Method
-
     -- ** Constants
   , methodGet
   , methodPost
@@ -23,9 +23,7 @@ module Network.HTTP.Types.Method
   , methodConnect
   , methodOptions
   , methodPatch
-
     -- ** Standard Methods
-
   , StdMethod(..)
   , parseMethod
   , renderMethod
@@ -101,7 +99,6 @@ data StdMethod
 -- These are ordered by suspected frequency. More popular methods should go first.
 -- The reason is that methodList is used with lookup.
 -- lookup is probably faster for these few cases than setting up an elaborate data structure.
-
 methodList :: [(Method, StdMethod)]
 methodList = map (\m -> (renderStdMethod m, m)) (enumFromTo minBound maxBound)
 

@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The primitive encoder types shared by "Data.ByteString.Builder.Prim" and
 -- its encoding modules.
 --
@@ -36,14 +37,17 @@ module Data.ByteString.Builder.Prim.Internal
   , boudedPrim
   ) where
 
-import Data.Bool (Bool (..))
+import Data.Bool (Bool(..))
 import Data.ByteString.Builder.Internal (Builder)
-import Data.Either (Either (..))
+import Data.Either (Either(..))
 import Data.Int (Int)
-import Data.Monoid (Monoid (..))
+import Data.Monoid (Monoid(..))
 import Data.Num ((+))
 import Data.Ord ((<))
 import Data.Semigroup ((<>))
+
+infixl 4 >$<
+infixr 5 >*<
 
 -- | The type used for sizes and size bounds.
 type Size = Int
@@ -53,14 +57,10 @@ type Size = Int
 class Contravariant f where
   contramap :: (b -> a) -> f a -> f b
 
-infixl 4 >$<
-
 -- | Type constructors supporting lifting of type products, so the size of a
 -- pair is the sum of its parts.
 class Monoidal f where
   pair :: f a -> f b -> f (a, b)
-
-infixr 5 >*<
 
 -- | A primitive that always produces exactly the given number of bytes.
 data FixedPrim a = FP Size (a -> Builder)
@@ -83,8 +83,8 @@ emptyF = FP 0 (\_ -> mempty)
 
 -- | Concatenate two fixed primitives, encoding a pair.
 pairF :: FixedPrim a -> FixedPrim b -> FixedPrim (a, b)
-pairF (FP widthA encodeA) (FP widthB encodeB) =
-  FP (widthA + widthB) (\value -> case value of
+pairF (FP widthA encodeA) (FP widthB encodeB) = FP (widthA + widthB) (\value ->
+  case value of
     (a, b) -> encodeA a <> encodeB b)
 
 -- | Change the value a fixed primitive is applied to before encoding it.
@@ -116,8 +116,8 @@ contramapB f (BP bound encode) = BP bound (\value -> encode (f value))
 
 -- | Concatenate two bounded primitives, encoding a pair.
 pairB :: BoundedPrim a -> BoundedPrim b -> BoundedPrim (a, b)
-pairB (BP boundA encodeA) (BP boundB encodeB) =
-  BP (boundA + boundB) (\value -> case value of
+pairB (BP boundA encodeA) (BP boundB encodeB) = BP (boundA + boundB) (\value ->
+  case value of
     (a, b) -> encodeA a <> encodeB b)
 
 -- | The larger of two bounds.
@@ -129,15 +129,15 @@ maxOf a b = case a < b of
 -- | Encode an 'Either' value using the first primitive for 'Left' values and
 -- the second for 'Right' values.
 eitherB :: BoundedPrim a -> BoundedPrim b -> BoundedPrim (Either a b)
-eitherB (BP boundA encodeA) (BP boundB encodeB) =
-  BP (maxOf boundA boundB) (\value -> case value of
+eitherB (BP boundA encodeA) (BP boundB encodeB) = BP (maxOf boundA boundB) (\value ->
+  case value of
     Left a -> encodeA a
     Right b -> encodeB b)
 
 -- | Encode with one of two primitives, depending on the value.
 condB :: (a -> Bool) -> BoundedPrim a -> BoundedPrim a -> BoundedPrim a
-condB choose (BP boundYes encodeYes) (BP boundNo encodeNo) =
-  BP (maxOf boundYes boundNo) (\value -> case choose value of
+condB choose (BP boundYes encodeYes) (BP boundNo encodeNo) = BP (maxOf boundYes boundNo) (\value ->
+  case choose value of
     True -> encodeYes value
     False -> encodeNo value)
 

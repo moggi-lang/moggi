@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Fixed-point arithmetic: a 'Fixed' value is an 'Integer' scaled by a
 -- resolution the type names, so @Fixed E2@ counts hundredths. The resolution is
 -- a type-level number — 'E0' is a whole unit, 'E2' a hundredth, 'E12' a
@@ -17,13 +18,20 @@ module Data.Fixed
   , HasResolution(..)
   , showFixed
     -- * Resolution \/ scaling factors
-  , E0, Uni
-  , E1, Deci
-  , E2, Centi
-  , E3, Milli
-  , E6, Micro
-  , E9, Nano
-  , E12, Pico
+  , E0
+  , Uni
+  , E1
+  , Deci
+  , E2
+  , Centi
+  , E3
+  , Milli
+  , E6
+  , Micro
+  , E9
+  , Nano
+  , E12
+  , Pico
     -- * Generalized functions on reals
   , div'
   , mod'
@@ -187,7 +195,7 @@ instance HasResolution a => Num (Fixed a) where
   fromInteger i = MkFixed (i * resolution (Proxy :: Proxy a))
 
 instance HasResolution a => Real (Fixed a) where
-  toRational (MkFixed x) = (x % 1) / (resolution (Proxy :: Proxy a) % 1)
+  toRational (MkFixed x) = x % 1 / (resolution (Proxy :: Proxy a) % 1)
 
 instance HasResolution a => Fractional (Fixed a) where
   (/) (MkFixed x) (MkFixed y) = MkFixed (div (x * resolution (Proxy :: Proxy a)) y)
@@ -245,13 +253,15 @@ showFixedWith chop res (MkFixed x) = case x < 0 of
 
 showFixedUnits :: Bool -> Integer -> Integer -> String
 showFixedUnits chop res x = case divMod x res of
-  (i, d) -> show i <> withDot (showIntegerZeros chop (fixedDigits res) (divCeil (d * pow10 (fixedDigits res)) res))
+  (i, d) ->
+    show i
+      <> withDot (showIntegerZeros chop (fixedDigits res) (divCeil (d * pow10 (fixedDigits res)) res))
   where
     divCeil u v = div (u + v - 1) v
 
 -- | Enough digits to be unambiguous.
 fixedDigits :: Integer -> Int
-fixedDigits res = (ceiling (logBase 10 (fromInteger res :: Double)) :: Int)
+fixedDigits res = (ceiling (logBase 10 ((fromInteger res) :: Double))) :: Int
 
 pow10 :: Int -> Integer
 pow10 k = case k <= 0 of

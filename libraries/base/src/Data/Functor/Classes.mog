@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Lifting a class through a type constructor.
 --
 -- A lifted instance compares or renders its argument through the function it is
@@ -7,37 +8,45 @@
 -- @'compare1' = 'liftCompare' 'compare'@,
 -- @'showsPrec1' = 'liftShowsPrec' 'showsPrec' 'showList'@. The @*With@ helpers
 -- write a constructor's instance in one line.
-module Data.Functor.Classes (
-    -- * Liftings of Prelude classes
+module Data.Functor.Classes
+  ( -- * Liftings of Prelude classes
     -- ** For unary constructors
-    Eq1(..), eq1,
-    Ord1(..), compare1,
-    Read1(..), readsPrec1,
-    liftReadListDefault,
-    liftReadListPrecDefault,
-    Show1(..), showsPrec1,
+    Eq1(..)
+  , eq1
+  , Ord1(..)
+  , compare1
+  , Read1(..)
+  , readsPrec1
+  , liftReadListDefault
+  , liftReadListPrecDefault
+  , Show1(..)
+  , showsPrec1
     -- ** For binary constructors
-    Eq2(..), eq2,
-    Ord2(..), compare2,
-    Read2(..), readsPrec2,
-    liftReadList2Default,
-    liftReadListPrec2Default,
-    Show2(..), showsPrec2,
+  , Eq2(..)
+  , eq2
+  , Ord2(..)
+  , compare2
+  , Read2(..)
+  , readsPrec2
+  , liftReadList2Default
+  , liftReadListPrec2Default
+  , Show2(..)
+  , showsPrec2
     -- * Helper functions
     -- $example
-    readsData,
-    readData,
-    readsUnaryWith,
-    readsBinaryWith,
-    showsUnaryWith,
-    showsBinaryWith,
+  , readsData
+  , readData
+  , readsUnaryWith
+  , readsBinaryWith
+  , showsUnaryWith
+  , showsBinaryWith
     -- ** Obsolete helpers
-    readsUnary,
-    readsUnary1,
-    readsBinary1,
-    showsUnary,
-    showsUnary1,
-    showsBinary1,
+  , readsUnary
+  , readsUnary1
+  , readsBinary1
+  , showsUnary
+  , showsUnary1
+  , showsBinary1
   ) where
 
 import Data.Bool
@@ -51,7 +60,20 @@ import Data.Ord
 import Data.Proxy (Proxy(Proxy))
 import Data.Functor.Identity (Identity(..))
 import Data.Tuple (Solo(MkSolo), Tuple2, Tuple3, Tuple4)
-import Text.Read (Read, ReadPrec, ReadS, lex, parens, prec, readParen, readListDefault, readPrec_to_S, readS_to_Prec, readsPrec, (<++>))
+import Text.Read
+  ( Read
+  , ReadPrec
+  , ReadS
+  , lex
+  , parens
+  , prec
+  , readParen
+  , readListDefault
+  , readPrec_to_S
+  , readS_to_Prec
+  , readsPrec
+  , (<++>)
+  )
 import Moggi.Internal.Base
 import Moggi.Internal.Prim
 import Text.Show (Show, ShowS, showChar, showList, showListWith, showParen, showString, showsPrec)
@@ -67,7 +89,7 @@ eq1 = liftEq (==)
 
 -- | Ordering lifted through a type constructor; @'liftCompare' compare@ is the
 -- ordinary ordering of @f a@.
-class (Eq1 f, forall a. Ord a => Ord (f a)) => Ord1 f where
+class (Eq1 f, (forall a. Ord a => Ord (f a))) => Ord1 f where
   liftCompare :: (a -> b -> Ordering) -> f a -> f b -> Ordering
 
 -- | The standard ordering of a lifted type constructor.
@@ -78,13 +100,10 @@ compare1 = liftCompare compare
 -- arguments, so a field is read by whichever instance the caller supplies.
 class (forall a. Read a => Read (f a)) => Read1 f where
   liftReadsPrec :: (Int -> ReadS a) -> ReadS [a] -> Int -> ReadS (f a)
-
   liftReadList :: (Int -> ReadS a) -> ReadS [a] -> ReadS [f a]
   liftReadList rp rl = readListParses (liftReadsPrec rp rl 0)
-
   liftReadPrec :: ReadPrec a -> ReadPrec [a] -> ReadPrec (f a)
   liftReadPrec rp rl = readS_to_Prec (\d -> liftReadsPrec (readPrec_to_S rp) (readPrec_to_S rl 0) d)
-
   liftReadListPrec :: ReadPrec a -> ReadPrec [a] -> ReadPrec [f a]
   liftReadListPrec rp rl = liftReadListPrecDefault rp rl
 
@@ -98,13 +117,13 @@ liftReadListDefault rp rl = readListParses (liftReadsPrec rp rl 0)
 
 -- | The list parser built from a lifted element parser.
 liftReadListPrecDefault :: Read1 f => ReadPrec a -> ReadPrec [a] -> ReadPrec [f a]
-liftReadListPrecDefault rp rl = readS_to_Prec (\_ -> liftReadList (readPrec_to_S rp) (readPrec_to_S rl 0))
+liftReadListPrecDefault rp rl =
+  readS_to_Prec (\_ -> liftReadList (readPrec_to_S rp) (readPrec_to_S rl 0))
 
 -- | Showing lifted through a type constructor: the argument renders both the
 -- elements and the list form, so a field is shown by the caller's instance.
 class (forall a. Show a => Show (f a)) => Show1 f where
   liftShowsPrec :: (Int -> a -> ShowS) -> ([a] -> ShowS) -> Int -> f a -> ShowS
-
   liftShowList :: (Int -> a -> ShowS) -> ([a] -> ShowS) -> [f a] -> ShowS
   liftShowList sp sl = showListWith (liftShowsPrec sp sl 0)
 
@@ -124,7 +143,7 @@ eq2 = liftEq2 (==) (==)
 
 -- | Ordering lifted through a binary type constructor; @'liftCompare2' compare
 -- compare@ is the ordinary ordering of @f a b@.
-class (Eq2 f, forall a. Ord a => Ord1 (f a)) => Ord2 f where
+class (Eq2 f, (forall a. Ord a => Ord1 (f a))) => Ord2 f where
   liftCompare2 :: (a -> b -> Ordering) -> (c -> d -> Ordering) -> f a c -> f b d -> Ordering
 
 -- | The standard ordering of a lifted binary type constructor.
@@ -134,15 +153,20 @@ compare2 = liftCompare2 compare compare
 -- | Reading lifted through a binary type constructor: one element parser per
 -- parameter, so each of the two fields is read by the caller's instance.
 class (forall a. Read a => Read1 (f a)) => Read2 f where
-  liftReadsPrec2 :: (Int -> ReadS a) -> ReadS [a] -> (Int -> ReadS b) -> ReadS [b] -> Int -> ReadS (f a b)
-
+  liftReadsPrec2
+    :: (Int -> ReadS a)
+    -> ReadS [a]
+    -> (Int -> ReadS b)
+    -> ReadS [b]
+    -> Int
+    -> ReadS (f a b)
   liftReadList2 :: (Int -> ReadS a) -> ReadS [a] -> (Int -> ReadS b) -> ReadS [b] -> ReadS [f a b]
   liftReadList2 rp1 rl1 rp2 rl2 = readListParses (liftReadsPrec2 rp1 rl1 rp2 rl2 0)
-
   liftReadPrec2 :: ReadPrec a -> ReadPrec [a] -> ReadPrec b -> ReadPrec [b] -> ReadPrec (f a b)
   liftReadPrec2 rp1 rl1 rp2 rl2 =
-    readS_to_Prec (\d -> liftReadsPrec2 (readPrec_to_S rp1) (readPrec_to_S rl1 0) (readPrec_to_S rp2) (readPrec_to_S rl2 0) d)
-
+    readS_to_Prec
+      (\d ->
+        liftReadsPrec2 (readPrec_to_S rp1) (readPrec_to_S rl1 0) (readPrec_to_S rp2) (readPrec_to_S rl2 0) d)
   liftReadListPrec2 :: ReadPrec a -> ReadPrec [a] -> ReadPrec b -> ReadPrec [b] -> ReadPrec [f a b]
   liftReadListPrec2 rp1 rl1 rp2 rl2 = liftReadListPrec2Default rp1 rl1 rp2 rl2
 
@@ -152,29 +176,55 @@ readsPrec2 prec =
   liftReadsPrec2 (\d s -> readsPrec d s) readListDefault (\d s -> readsPrec d s) readListDefault prec
 
 -- | The list reader built from a lifted element reader.
-liftReadList2Default :: Read2 f
-  => (Int -> ReadS a) -> ReadS [a] -> (Int -> ReadS b) -> ReadS [b] -> ReadS [f a b]
+liftReadList2Default
+  :: Read2 f
+  => (Int -> ReadS a)
+  -> ReadS [a]
+  -> (Int -> ReadS b)
+  -> ReadS [b]
+  -> ReadS [f a b]
 liftReadList2Default rp1 rl1 rp2 rl2 = readListParses (liftReadsPrec2 rp1 rl1 rp2 rl2 0)
 
 -- | The list parser built from both lifted element parsers.
-liftReadListPrec2Default :: Read2 f
-  => ReadPrec a -> ReadPrec [a] -> ReadPrec b -> ReadPrec [b] -> ReadPrec [f a b]
+liftReadListPrec2Default
+  :: Read2 f
+  => ReadPrec a
+  -> ReadPrec [a]
+  -> ReadPrec b
+  -> ReadPrec [b]
+  -> ReadPrec [f a b]
 liftReadListPrec2Default rp1 rl1 rp2 rl2 =
-  readS_to_Prec (\_ -> liftReadList2 (readPrec_to_S rp1) (readPrec_to_S rl1 0) (readPrec_to_S rp2) (readPrec_to_S rl2 0))
+  readS_to_Prec
+    (\_ ->
+      liftReadList2 (readPrec_to_S rp1) (readPrec_to_S rl1 0) (readPrec_to_S rp2) (readPrec_to_S rl2 0))
 
 -- | Showing lifted through a binary type constructor: one renderer per
 -- parameter, so each field is shown by the caller's instance.
 class (forall a. Show a => Show1 (f a)) => Show2 f where
-  liftShowsPrec2 :: (Int -> a -> ShowS) -> ([a] -> ShowS) -> (Int -> b -> ShowS) -> ([b] -> ShowS) -> Int -> f a b -> ShowS
-
-  liftShowList2 :: (Int -> a -> ShowS) -> ([a] -> ShowS) -> (Int -> b -> ShowS) -> ([b] -> ShowS) -> [f a b] -> ShowS
+  liftShowsPrec2
+    :: (Int -> a -> ShowS)
+    -> ([a] -> ShowS)
+    -> (Int -> b -> ShowS)
+    -> ([b] -> ShowS)
+    -> Int
+    -> f a b
+    -> ShowS
+  liftShowList2
+    :: (Int -> a -> ShowS)
+    -> ([a] -> ShowS)
+    -> (Int -> b -> ShowS)
+    -> ([b] -> ShowS)
+    -> [f a b]
+    -> ShowS
   liftShowList2 sp1 sl1 sp2 sl2 = showListWith (liftShowsPrec2 sp1 sl1 sp2 sl2 0)
 
 -- | The standard renderer of a lifted binary type constructor.
 showsPrec2 :: (Show2 f, Show a, Show b) => Int -> f a b -> ShowS
 showsPrec2 prec value =
-  liftShowsPrec2 (\d v -> showsPrec d v) (showListWith (\v -> showsPrec 0 v))
-    (\d v -> showsPrec d v) (showListWith (\v -> showsPrec 0 v)) prec value
+  liftShowsPrec2 (\d v -> showsPrec d v) (showListWith (\v -> showsPrec 0 v)) (\d v -> showsPrec d v)
+    (showListWith (\v -> showsPrec 0 v))
+    prec
+    value
 
 -- | Parse one constructor name, then hand it to that constructor's field reader.
 readsData :: (String -> ReadS a) -> Int -> ReadS a
@@ -192,7 +242,13 @@ readsUnaryWith rp name cons kw s = case kw == name of
   False -> []
 
 -- | A binary constructor: its name, then two fields at the application context.
-readsBinaryWith :: (Int -> ReadS a) -> (Int -> ReadS b) -> String -> (a -> b -> t) -> String -> ReadS t
+readsBinaryWith
+  :: (Int -> ReadS a)
+  -> (Int -> ReadS b)
+  -> String
+  -> (a -> b -> t)
+  -> String
+  -> ReadS t
 readsBinaryWith rp1 rp2 name cons kw s = case kw == name of
   True -> binaryEach cons (rp1 11 s) rp2
   False -> []
@@ -282,7 +338,8 @@ instance Read a => Read1 (Tuple2 a) where
   liftReadsPrec rp _ _ = afterOpen (pairFieldsWith (\n v -> readsPrec n v) rp)
 
 instance Show a => Show1 (Tuple2 a) where
-  liftShowsPrec sp sl = liftShowsPrec2 (\d v -> showsPrec d v) (showListWith (\v -> showsPrec 0 v)) sp sl
+  liftShowsPrec sp sl =
+    liftShowsPrec2 (\d v -> showsPrec d v) (showListWith (\v -> showsPrec 0 v)) sp sl
 
 instance Eq1 Maybe where
   liftEq _ Nothing Nothing = True
@@ -354,8 +411,7 @@ nonEmptyRest x pairs = case pairs of
   (xs, u) : rest -> (x :| xs, u) : nonEmptyRest x rest
 
 instance Show1 NonEmpty where
-  liftShowsPrec sp sl d (a :| arest) =
-    showParen (d > 5) (sp 6 a . showString " :| " . sl arest)
+  liftShowsPrec sp sl d (a :| arest) = showParen (d > 5) (sp 6 a . showString " :| " . sl arest)
 
 instance Eq1 Solo where
   liftEq eq (MkSolo a) (MkSolo b) = eq a b
@@ -398,9 +454,10 @@ instance Ord1 Proxy where
   liftCompare _ _ _ = EQ
 
 instance Read1 Proxy where
-  liftReadsPrec _ _ d s = readParen (d > 10) (\r -> case lex r of
-    ("Proxy", u) : _ -> [(Proxy, u)]
-    _ -> []) s
+  liftReadsPrec _ _ d s = readParen (d > 10) (\r ->
+    case lex r of
+      ("Proxy", u) : _ -> [(Proxy, u)]
+      _ -> []) s
 
 instance Show1 Proxy where
   liftShowsPrec _ _ _ _ = showString "Proxy"
@@ -488,8 +545,7 @@ instance Read2 Tuple2 where
   liftReadsPrec2 rp1 _ rp2 _ _ = afterOpen (pairFieldsWith rp1 rp2)
 
 instance Show2 Tuple2 where
-  liftShowsPrec2 sp1 _ sp2 _ _ (x, y) =
-    showChar '(' . sp1 0 x . showChar ',' . sp2 0 y . showChar ')'
+  liftShowsPrec2 sp1 _ sp2 _ _ (x, y) = showChar '(' . sp1 0 x . showChar ',' . sp2 0 y . showChar ')'
 
 instance Eq2 Either where
   liftEq2 e1 _ (Left x) (Left y) = e1 x y
@@ -540,8 +596,7 @@ instance Show a => Show2 (Tuple3 a) where
     showChar '(' . showsPrec 0 u1 . showChar ',' . sp1 0 x1 . showChar ',' . sp2 0 y1 . showChar ')'
 
 instance (Eq a, Eq b) => Eq2 (Tuple4 a b) where
-  liftEq2 e1 e2 (u1, u2, x1, y1) (v1, v2, x2, y2) =
-    u1 == v1 && u2 == v2 && e1 x1 x2 && e2 y1 y2
+  liftEq2 e1 e2 (u1, u2, x1, y1) (v1, v2, x2, y2) = u1 == v1 && u2 == v2 && e1 x1 x2 && e2 y1 y2
 
 instance (Ord a, Ord b) => Ord2 (Tuple4 a b) where
   liftCompare2 c1 c2 (u1, u2, x1, y1) (v1, v2, x2, y2) = case compare u1 v1 of
@@ -557,8 +612,15 @@ instance (Read a, Read b) => Read2 (Tuple4 a b) where
 
 instance (Show a, Show b) => Show2 (Tuple4 a b) where
   liftShowsPrec2 sp1 _ sp2 _ _ (u1, u2, x1, y1) =
-    showChar '(' . showsPrec 0 u1 . showChar ',' . showsPrec 0 u2
-      . showChar ',' . sp1 0 x1 . showChar ',' . sp2 0 y1 . showChar ')'
+    showChar '('
+      . showsPrec 0 u1
+      . showChar ','
+      . showsPrec 0 u2
+      . showChar ','
+      . sp1 0 x1
+      . showChar ','
+      . sp2 0 y1
+      . showChar ')'
 
 -- | Read the input after an opening parenthesis.
 afterOpen :: (String -> [(t, String)]) -> String -> [(t, String)]
@@ -588,31 +650,55 @@ pairFieldsWith :: (Int -> ReadS a) -> (Int -> ReadS b) -> String -> [(Tuple2 a b
 pairFieldsWith rp1 rp2 =
   firstField (rp1 0) (\x t -> firstField (afterComma (rp2 0)) (\y u -> closeField u (x, y)) t)
 
-tripleFieldsWith :: Read c => (Int -> ReadS a) -> (Int -> ReadS b) -> String -> [(Tuple3 c a b, String)]
+tripleFieldsWith
+  :: Read c
+  => (Int -> ReadS a)
+  -> (Int -> ReadS b)
+  -> String
+  -> [(Tuple3 c a b, String)]
 tripleFieldsWith rp1 rp2 =
-  firstField (readsPrec 0) (\x0 t0 ->
-    firstField (afterComma (rp1 0)) (\x1 t1 ->
-      firstField (afterComma (rp2 0)) (\x2 t2 -> closeField t2 (x0, x1, x2)) t1) t0)
+  firstField (readsPrec 0)
+    (\x0 t0 ->
+      firstField (afterComma (rp1 0))
+        (\x1 t1 -> firstField (afterComma (rp2 0)) (\x2 t2 -> closeField t2 (x0, x1, x2)) t1)
+        t0)
 
-quadFieldsWith :: (Read c, Read d) => (Int -> ReadS a) -> (Int -> ReadS b) -> String -> [(Tuple4 c d a b, String)]
+quadFieldsWith
+  :: (Read c, Read d)
+  => (Int -> ReadS a)
+  -> (Int -> ReadS b)
+  -> String
+  -> [(Tuple4 c d a b, String)]
 quadFieldsWith rp1 rp2 =
-  firstField (readsPrec 0) (\x0 t0 ->
-    firstField (afterComma (readsPrec 0)) (\x1 t1 ->
-      firstField (afterComma (rp1 0)) (\x2 t2 ->
-        firstField (afterComma (rp2 0)) (\x3 t3 -> closeField t3 (x0, x1, x2, x3)) t2) t1) t0)
+  firstField (readsPrec 0)
+    (\x0 t0 ->
+      firstField (afterComma (readsPrec 0))
+        (\x1 t1 ->
+          firstField (afterComma (rp1 0))
+            (\x2 t2 ->
+              firstField (afterComma (rp2 0)) (\x3 t3 -> closeField t3 (x0, x1, x2, x3)) t2)
+            t1)
+        t0)
 
 tripleFields :: (Read b, Read c) => (Int -> ReadS a) -> String -> [(Tuple3 b c a, String)]
 tripleFields rp =
-  firstField (readsPrec 0) (\x0 t0 ->
-    firstField (afterComma (readsPrec 0)) (\x1 t1 ->
-      firstField (afterComma (rp 0)) (\x2 t2 -> closeField t2 (x0, x1, x2)) t1) t0)
+  firstField (readsPrec 0)
+    (\x0 t0 ->
+      firstField (afterComma (readsPrec 0))
+        (\x1 t1 -> firstField (afterComma (rp 0)) (\x2 t2 -> closeField t2 (x0, x1, x2)) t1)
+        t0)
 
 quadFields :: (Read b, Read c, Read d) => (Int -> ReadS a) -> String -> [(Tuple4 b c d a, String)]
 quadFields rp =
-  firstField (readsPrec 0) (\x0 t0 ->
-    firstField (afterComma (readsPrec 0)) (\x1 t1 ->
-      firstField (afterComma (readsPrec 0)) (\x2 t2 ->
-        firstField (afterComma (rp 0)) (\x3 t3 -> closeField t3 (x0, x1, x2, x3)) t2) t1) t0)
+  firstField (readsPrec 0)
+    (\x0 t0 ->
+      firstField (afterComma (readsPrec 0))
+        (\x1 t1 ->
+          firstField (afterComma (readsPrec 0))
+            (\x2 t2 ->
+              firstField (afterComma (rp 0)) (\x3 t3 -> closeField t3 (x0, x1, x2, x3)) t2)
+            t1)
+        t0)
 
 eitherFields :: (Int -> ReadS a) -> (Int -> ReadS b) -> String -> [(Either a b, String)]
 eitherFields rp1 rp2 s = case lex s of

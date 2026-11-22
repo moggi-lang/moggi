@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Mutable boxed arrays in 'IO': an 'IOArray' is a fixed-size table from
 -- an 'Ix' index range to values that 'IO' actions allocate, read and
 -- write. Unlike 'STArray' (see "Data.Array.ST") there is no thread to run

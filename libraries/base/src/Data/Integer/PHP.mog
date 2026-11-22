@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Data.Integer.PHP
   ( integerAdd
   , integerSub
@@ -23,13 +24,21 @@ import Moggi.Internal.Prim
 
 -- Integer# is a decimal string for BCMath; PHP 8 bc* require string operands.
 foreign php function bcadd "bcadd" :: Integer -> Integer -> Integer
+
 foreign php function bcsub "bcsub" :: Integer -> Integer -> Integer
+
 foreign php function bcmul "bcmul" :: Integer -> Integer -> Integer
+
 foreign php function bcdiv "bcdiv" :: Integer -> Integer -> Integer
+
 foreign php function bcmod "bcmod" :: Integer -> Integer -> Integer
+
 foreign php function bccomp "bccomp" :: Integer -> Integer -> Int
+
 foreign php function rawFromInt "strval" :: Int -> Integer
+
 foreign php function rawIntval "intval" :: Integer -> Int
+
 foreign php function rawToString "strval" :: Integer -> String
 
 integerZero :: Integer

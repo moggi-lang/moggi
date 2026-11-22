@@ -4,8 +4,8 @@
   jvm = Data.Integer.JVM
   dotnet = Data.Integer.DotNet
 #-}
--- |
--- Integers of unbounded size: 'Integer' grows as far as memory allows, so
+
+-- | Integers of unbounded size: 'Integer' grows as far as memory allows, so
 -- arithmetic on it cannot overflow and there is no 'Bounded' instance to ask
 -- for a largest value. The price is that an operation costs what the numbers'
 -- widths cost, which is why a program that knows a value fits uses 'Data.Int'
@@ -22,10 +22,10 @@
 -- position of a negative value is 'True'.
 module Data.Integer
   ( Integer(..)
-  -- The operations the class instances are built from, so that other modules
-  -- defining an instance for a type over `Integer` can use them too: inside an
-  -- instance body a class method name resolves to that instance, not to
-  -- `Integer`'s.
+    -- The operations the class instances are built from, so that other modules
+    -- defining an instance for a type over `Integer` can use them too: inside an
+    -- instance body a class method name resolves to that instance, not to
+    -- `Integer`'s.
   , integerAdd
   , integerSub
   , integerMul
@@ -37,10 +37,10 @@ module Data.Integer
   , integerFromInt
   , integerToInt
   , integerShow
-  -- The bit operations on the two's-complement view, for the same reason: a
-  -- module defining a `Bits` instance for a type over `Integer` builds it from
-  -- these (a class method name inside an instance body resolves to that
-  -- instance, not to `Integer`'s).
+    -- The bit operations on the two's-complement view, for the same reason: a
+    -- module defining a `Bits` instance for a type over `Integer` builds it from
+    -- these (a class method name inside an instance body resolves to that
+    -- instance, not to `Integer`'s).
   , integerAndBits
   , integerOrBits
   , integerXorBits
@@ -68,17 +68,29 @@ import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
 integerAdd :: Integer -> Integer -> Integer
+
 integerSub :: Integer -> Integer -> Integer
+
 integerMul :: Integer -> Integer -> Integer
+
 integerNegate :: Integer -> Integer
+
 integerAbs :: Integer -> Integer
+
 integerSignum :: Integer -> Integer
+
 integerQuot :: Integer -> Integer -> Integer
+
 integerRem :: Integer -> Integer -> Integer
+
 integerCompare :: Integer -> Integer -> Ordering
+
 integerEq :: Integer -> Integer -> Bool
+
 integerShow :: Integer -> String
+
 integerFromInt :: Int -> Integer
+
 integerToInt :: Integer -> Int
 
 instance Eq Integer where
@@ -177,7 +189,6 @@ instance Show Integer where
 -- ---------------------------------------------------------------------------
 -- Bit operations: fake two's complement over a sign-magnitude representation
 -- ---------------------------------------------------------------------------
-
 integerBitsNegativeShiftError :: a
 integerBitsNegativeShiftError = error "Data.Bits: negative shift amount"
 
@@ -228,15 +239,17 @@ integerAndTail x y = case x == integerBitMinusOneI of
 
 integerAndStep :: Integer -> Integer -> Integer -> Integer -> Integer
 integerAndStep x y acc place =
-  integerAndGo
-    (div x integerBitLimbBase)
-    (div y integerBitLimbBase)
-    (acc + place * integerFromInt (intAnd# (integerToInt (mod x integerBitLimbBase)) (integerToInt (mod y integerBitLimbBase))))
+  integerAndGo (div x integerBitLimbBase) (div y integerBitLimbBase)
+    (acc
+      + place
+      * integerFromInt
+        (intAnd# (integerToInt (mod x integerBitLimbBase)) (integerToInt (mod y integerBitLimbBase))))
     (place * integerBitLimbBase)
 
 -- De Morgan: @x .|. y == complement (complement x .&. complement y)@.
 integerOrBits :: Integer -> Integer -> Integer
-integerOrBits x y = integerComplementBits (integerAndBits (integerComplementBits x) (integerComplementBits y))
+integerOrBits x y =
+  integerComplementBits (integerAndBits (integerComplementBits x) (integerComplementBits y))
 
 -- @x `xor` y == (x .|. y) .&. complement (x .&. y)@.
 integerXorBits :: Integer -> Integer -> Integer
@@ -296,7 +309,9 @@ integerPopCountBits x = case compare x integerBitZeroI of
 integerPopCountNonNeg :: Integer -> Int
 integerPopCountNonNeg x = case x == integerBitZeroI of
   True -> 0
-  False -> intAdd# (intPopCnt# (integerToInt (mod x integerBitLimbBase))) (integerPopCountNonNeg (div x integerBitLimbBase))
+  False ->
+    intAdd# (intPopCnt# (integerToInt (mod x integerBitLimbBase)))
+      (integerPopCountNonNeg (div x integerBitLimbBase))
 
 instance Real Integer where
   toRational n = n :% 1

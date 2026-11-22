@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 ------------------------------------------------------------------------------
 --
 -- Module      :  Data.Dynamic
@@ -9,27 +10,24 @@
 -- Stability   :  stable
 -- Portability :  portable
 --
--- | The Dynamic interface provides basic support for dynamic types.
 ------------------------------------------------------------------------------
 --
 -- Operations for injecting values of arbitrary type into
 -- a dynamically typed value, Dynamic, are provided, together
 -- with operations for converting dynamic values into a concrete
 -- (monomorphic) type.
+-- | The Dynamic interface provides basic support for dynamic types.
 module Data.Dynamic
   ( -- * The @Dynamic@ type
     Dynamic(..)
-
     -- * Converting to and from @Dynamic@
   , toDyn
   , fromDyn
   , fromDynamic
-
     -- * Applying functions of dynamic type
   , dynApply
   , dynApp
   , dynTypeRep
-
     -- * Convenience re-exports
   , Typeable
   ) where
@@ -50,7 +48,6 @@ import Moggi.Internal.Type.Reflection (mkFunTy)
 --              The type Dynamic
 --
 -------------------------------------------------------------
-
 {- |
   A value of type 'Dynamic' is an object encapsulated together with its type.
 
@@ -66,9 +63,9 @@ data Dynamic where
 
 -- | @since base-2.01
 instance Show Dynamic where
-  -- the instance just prints the type representation.
   showsPrec _ (Dynamic t _) = showString "<<" . showsPrec 0 t . showString ">>"
 
+-- the instance just prints the type representation.
 -- here so that it isn't an orphan
 -- | @since base-4.0.0.0
 instance Exception Dynamic where
@@ -83,33 +80,39 @@ instance Exception Dynamic where
 -- a monomorphic type signature.  For example:
 --
 -- >    toDyn (id :: Int -> Int)
---
 toDyn :: Typeable a => a -> Dynamic
 toDyn v = Dynamic typeRep v
 
 -- | Converts a 'Dynamic' object back into an ordinary value of the correct
 -- type.  See also 'fromDynamic'.
-fromDyn :: Typeable a
-        => Dynamic      -- ^ the dynamically-typed object
-        -> a            -- ^ a default value
-        -> a            -- ^ returns: the value of the first argument, if
-                        -- it has the correct type, otherwise the value of
-                        -- the second argument.
+-- returns: the value of the first argument, if
+-- it has the correct type, otherwise the value of
+-- the second argument.
+fromDyn
+  :: Typeable a
+  => Dynamic
+     -- ^ the dynamically-typed object
+  -> a
+     -- ^ a default value
+  -> a
 fromDyn (Dynamic t v) def = case eqTypeRep t (typeOf def) of
   Just HRefl -> v
-  Nothing    -> def
+  Nothing -> def
 
 -- | Converts a 'Dynamic' object back into an ordinary value of the correct
 -- type.  See also 'fromDyn'.
+-- returns: @'Just' a@, if the dynamically-typed
+-- object has the correct type (and @a@ is its value),
+-- or 'Nothing' otherwise.
 fromDynamic
-        :: forall a. Typeable a
-        => Dynamic      -- ^ the dynamically-typed object
-        -> Maybe a      -- ^ returns: @'Just' a@, if the dynamically-typed
-                        -- object has the correct type (and @a@ is its value),
-                        -- or 'Nothing' otherwise.
+  :: forall a.
+     Typeable a
+  => Dynamic
+     -- ^ the dynamically-typed object
+  -> Maybe a
 fromDynamic (Dynamic t v) = case eqTypeRep t rep of
   Just HRefl -> Just v
-  Nothing    -> Nothing
+  Nothing -> Nothing
   where
     rep = typeRep :: TypeRep a
 
@@ -123,16 +126,18 @@ dynApply (Dynamic t1 f) (Dynamic t2 x) = case t1 of
   Fun ta tr -> case eqTypeRep t1 (mkFunTy ta tr) of
     Just HRefl -> case eqTypeRep ta t2 of
       Just HRefl -> Just (Dynamic tr (f x))
-      Nothing    -> Nothing
+      Nothing -> Nothing
     Nothing -> Nothing
   _ -> Nothing
 
 dynApp :: Dynamic -> Dynamic -> Dynamic
 dynApp f x = case dynApply f x of
-  Just r  -> r
-  Nothing -> errorWithoutStackTrace ("Type error in dynamic application.\n" <>
-                                     "Can't apply function " <> show f <>
-                                     " to argument " <> show x)
+  Just r -> r
+  Nothing ->
+    errorWithoutStackTrace
+      ("Type error in dynamic application.\n" <>
+      "Can't apply function " <> show f <>
+      " to argument " <> show x)
 
 dynTypeRep :: Dynamic -> SomeTypeRep
 dynTypeRep (Dynamic tr _) = SomeTypeRep tr

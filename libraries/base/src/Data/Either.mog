@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- |
--- The 'Either' type, and associated operations.
+
+-- | The 'Either' type, and associated operations.
 module Data.Either
   ( Either(Left, Right)
   , either
@@ -187,7 +187,7 @@ instance Foldable (Either a) where
 instance Traversable (Either a) where
   traverse f mx = case mx of
     Left a -> pure (Left a)
-    Right b -> Right <$> (f b)
+    Right b -> Right <$> f b
 
 instance (Eq a, Eq b) => Eq (Either a b) where
   (==) x y = case x of

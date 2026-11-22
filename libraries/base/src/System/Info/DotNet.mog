@@ -1,7 +1,4 @@
-module System.Info.DotNet
-  ( os
-  , arch
-  ) where
+module System.Info.DotNet (os, arch) where
 
 import Data.String (isPrefixOf)
 

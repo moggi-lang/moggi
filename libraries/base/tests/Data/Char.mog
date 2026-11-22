@@ -1,10 +1,11 @@
--- Data.Char: general categories, case/property predicates, case conversion,
--- digit conversion, and the GeneralCategory instances. Values stay in ASCII
--- (plus chr-built code points) so all backends agree.
+module Main (main) where
 
 import Data.Char
 import Text.Read
 
+-- Data.Char: general categories, case/property predicates, case conversion,
+-- digit conversion, and the GeneralCategory instances. Values stay in ASCII
+-- (plus chr-built code points) so all backends agree.
 main :: IO ()
 main = do
   putStrLn (show (generalCategory 'A'))
@@ -17,10 +18,10 @@ main = do
   putStrLn (show (fromEnum (generalCategory 'A')))
   putStrLn (show (fromEnum (generalCategory 'a')))
   putStrLn (show (fromEnum (generalCategory '5')))
-  putStrLn (show (toEnum 2 :: GeneralCategory))
+  putStrLn (show ((toEnum 2) :: GeneralCategory))
   putStrLn (show (minBound :: GeneralCategory))
   putStrLn (show (maxBound :: GeneralCategory))
-  putStrLn (show (read "DecimalNumber" :: GeneralCategory))
+  putStrLn (show ((read "DecimalNumber") :: GeneralCategory))
   putStrLn (show (isLower 'a'))
   putStrLn (show (isUpper 'a'))
   putStrLn (show (isLower 'A'))

@@ -3,8 +3,8 @@
   jvm = Data.Time.Clock.JVM
   dotnet = Data.Time.Clock.DotNet
 #-}
--- |
--- UTC times and durations, following the 'Data.Time.Clock'.
+
+-- | UTC times and durations, following the 'Data.Time.Clock'.
 --
 -- 'UTCTime' is a 'Day' plus a 'DiffTime' day fraction, and both durations
 -- ('DiffTime', 'NominalDiffTime') count picoseconds in an 'Integer', so
@@ -21,7 +21,6 @@
 --   ('secondsToNominalDiffTime', 'nominalDiffTimeToSeconds',
 --   'picosecondsToNominalDiffTime', 'nominalDiffTimeToPicoseconds', and the
 --   'DiffTime' twins) are plain functions on 'Integer'.
---
 module Data.Time.Clock
   ( DiffTime(..)
   , NominalDiffTime(..)
@@ -111,9 +110,9 @@ instance Num DiffTime where
 instance Fractional DiffTime where
   (/) a b = MkDiffTime (integerQuot (integerMul (unDiffTime a) picosPerSecond) (unDiffTime b))
   recip a = MkDiffTime (integerQuot (integerMul picosPerSecond picosPerSecond) (unDiffTime a))
-  -- A rational number of seconds, in picoseconds.
   fromRational r = MkDiffTime (integerQuot (integerMul (numerator r) picosPerSecond) (denominator r))
 
+-- A rational number of seconds, in picoseconds.
 instance Num NominalDiffTime where
   (+) a b = MkNominalDiffTime (integerAdd (unNominal a) (unNominal b))
   (-) a b = MkNominalDiffTime (integerSub (unNominal a) (unNominal b))
@@ -128,7 +127,8 @@ instance Num NominalDiffTime where
 instance Fractional NominalDiffTime where
   (/) a b = MkNominalDiffTime (integerQuot (integerMul (unNominal a) picosPerSecond) (unNominal b))
   recip a = MkNominalDiffTime (integerQuot (integerMul picosPerSecond picosPerSecond) (unNominal a))
-  fromRational r = MkNominalDiffTime (integerQuot (integerMul (numerator r) picosPerSecond) (denominator r))
+  fromRational r =
+    MkNominalDiffTime (integerQuot (integerMul (numerator r) picosPerSecond) (denominator r))
 
 instance Show DiffTime where
   show t = show (unDiffTime t)
@@ -206,18 +206,13 @@ instance Show UTCTime where
 showDayFraction :: DiffTime -> String
 showDayFraction t = pad2 h <> ":" <> pad2 mi <> ":" <> pad2 s <> frac
   where
-    totalSeconds :: Integer
-    totalSeconds = diffTimeToSeconds t
-    h :: Int
-    h = fromInteger (div totalSeconds 3600)
-    mi :: Int
-    mi = fromInteger (mod (div totalSeconds 60) 60)
-    s :: Int
-    s = fromInteger (mod totalSeconds 60)
-    frac :: String
-    frac = case mod (unDiffTime t) picosPerSecond of
+    totalSeconds = (diffTimeToSeconds t) :: Integer
+    h = (fromInteger (div totalSeconds 3600)) :: Int
+    mi = (fromInteger (mod (div totalSeconds 60) 60)) :: Int
+    s = (fromInteger (mod totalSeconds 60)) :: Int
+    frac = (case mod (unDiffTime t) picosPerSecond of
       0 -> ""
-      p -> "." <> trimZeros (pad12 p)
+      p -> "." <> trimZeros (pad12 p)) :: String
 
 pad2 :: Int -> String
 pad2 n = case n < 10 of
@@ -252,33 +247,33 @@ dropLast s = case S.length s <= 1 of
 diffUTCTime :: UTCTime -> UTCTime -> NominalDiffTime
 diffUTCTime a b = MkNominalDiffTime (integerAdd dayPicos dtPicos)
   where
-    dayPicos :: Integer
-    dayPicos = (toInteger (toModifiedJulianDay (utctDay a)) - toInteger (toModifiedJulianDay (utctDay b))) * 86400 * picosPerSecond
-    dtPicos :: Integer
-    dtPicos = integerSub (unDiffTime (utctDayTime a)) (unDiffTime (utctDayTime b))
+    dayPicos =
+      ((toInteger (toModifiedJulianDay (utctDay a))
+      - toInteger (toModifiedJulianDay (utctDay b)))
+        * 86400
+        * picosPerSecond) :: Integer
+    dtPicos = (integerSub (unDiffTime (utctDayTime a)) (unDiffTime (utctDayTime b))) :: Integer
 
 -- | Shift a time by a duration, normalizing the fraction back into its
 -- day range.
 addUTCTime :: NominalDiffTime -> UTCTime -> UTCTime
 addUTCTime d t = utcTime (addDays mjdShift (utctDay t)) (picosecondsToDiffTime fracPicos)
   where
-    total :: Integer
-    total = toInteger (toModifiedJulianDay (utctDay t)) * picosPerDay + unDiffTime (utctDayTime t) + unNominal d
-    mjdShift :: Integer
-    mjdShift = div total picosPerDay - toInteger (toModifiedJulianDay (utctDay t))
-    fracPicos :: Integer
-    fracPicos = mod total picosPerDay
+    total =
+      (toInteger (toModifiedJulianDay (utctDay t))
+      * picosPerDay
+        + unDiffTime (utctDayTime t)
+        + unNominal d) :: Integer
+    mjdShift = (div total picosPerDay - toInteger (toModifiedJulianDay (utctDay t))) :: Integer
+    fracPicos = (mod total picosPerDay) :: Integer
 
 -- | Build a 'UTCTime' from unix-epoch seconds (whole-second precision).
 utcTimeFromUnix :: Int -> UTCTime
 utcTimeFromUnix secs = utcTime (ModifiedJulianDay (40587 + fromInteger q)) (secondsToDiffTime r)
   where
-    qr :: (Integer, Integer)
-    qr = divMod (toInteger secs) 86400
-    q :: Integer
-    q = fst qr
-    r :: Integer
-    r = snd qr
+    qr = (divMod (toInteger secs) 86400) :: (Integer, Integer)
+    q = (fst qr) :: Integer
+    r = (snd qr) :: Integer
 
 -- Wall-clock seconds from the backend; the facade turns them into a 'UTCTime'.
 currentTimeSeconds :: IO Int

@@ -4,6 +4,7 @@
   jvm = Data.JSON.Encoding.JVM
   dotnet = Data.JSON.Encoding.DotNet
 #-}
+
 -- | Backend-native JSON tree helpers for the efficient encode/decode path.
 -- Implementations live in Data.JSON.Encoding.{PHP,JVM,DotNet}. 'Encoding' is a
 -- per-backend foreign type (host JSON tree); the facade re-exports it.
@@ -42,22 +43,41 @@ import Moggi.Internal.Base
 import System.IO (IO)
 
 encNull :: Encoding
+
 encBool :: Bool -> Encoding
+
 encString :: String -> Encoding
+
 encInt :: Int -> Encoding
+
 encInteger :: Integer -> Encoding
+
 encDouble :: Double -> Encoding
+
 encArray :: [Encoding] -> Encoding
+
 encObject :: [String] -> [Encoding] -> Encoding
+
 encKind :: Encoding -> Int
+
 lookupField :: Encoding -> String -> Maybe Encoding
+
 arrayElems :: Encoding -> Either String [Encoding]
+
 encStringOrFail :: Encoding -> String
+
 encGetBool :: Encoding -> Bool
+
 encGetInt :: Encoding -> Int
+
 encGetDouble :: Encoding -> Double
+
 encGetInteger :: Encoding -> Integer
+
 encodeEncoding :: Encoding -> ByteString
+
 decodeEncoding :: ByteString -> IO (Either String Encoding)
+
 objectKeys :: Encoding -> [String]
+
 objectVals :: Encoding -> [Encoding]

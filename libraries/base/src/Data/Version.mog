@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | A general library for representation and manipulation of versions.
 --
 -- Versioning schemes are many and varied, so the version
@@ -11,14 +12,14 @@
 -- subsumes many of the versioning schemes commonly in use, and we
 -- provide implementations of 'Eq', 'Ord' and conversion to\/from 'String'
 -- which will be appropriate for some applications, but not all.
---
-module Data.Version (
-        -- * The @Version@ type
-        Version(..),
-        -- * A concrete representation of @Version@
-        showVersion, parseVersion,
-        -- * Constructor function
-        makeVersion
+module Data.Version
+  ( -- * The @Version@ type
+    Version(..)
+    -- * A concrete representation of @Version@
+  , showVersion
+  , parseVersion
+    -- * Constructor function
+  , makeVersion
   ) where
 
 import Data.Bool
@@ -59,51 +60,47 @@ possible concrete representation is provided (see 'showVersion' and
 'parseVersion'), but depending on the application a different concrete
 representation may be more appropriate.
 -}
-data Version =
-  Version { versionBranch :: [Int],
-                -- ^ The numeric branch for this version.  This reflects the
-                -- fact that most software versions are tree-structured; there
-                -- is a main trunk which is tagged with versions at various
-                -- points (1,2,3...), and the first branch off the trunk after
-                -- version 3 is 3.1, the second branch off the trunk after
-                -- version 3 is 3.2, and so on.  The tree can be branched
-                -- arbitrarily, just by adding more digits.
-                --
-                -- We represent the branch as a list of 'Int', so
-                -- version 3.2.1 becomes [3,2,1].  Lexicographic ordering
-                -- (i.e. the default instance of 'Ord' for @[Int]@) gives
-                -- the natural ordering of branches.
-
-           versionTags :: [String]  -- really a bag
-                -- ^ A version can be tagged with an arbitrary list of strings.
-                -- The interpretation of the list of tags is entirely dependent
-                -- on the entity that this version applies to.
-        }
+data Version = Version
+  { -- | The numeric branch for this version.  This reflects the
+    -- fact that most software versions are tree-structured; there
+    -- is a main trunk which is tagged with versions at various
+    -- points (1,2,3...), and the first branch off the trunk after
+    -- version 3 is 3.1, the second branch off the trunk after
+    -- version 3 is 3.2, and so on.  The tree can be branched
+    -- arbitrarily, just by adding more digits.
+    --
+    -- We represent the branch as a list of 'Int', so
+    -- version 3.2.1 becomes [3,2,1].  Lexicographic ordering
+    -- (i.e. the default instance of 'Ord' for @[Int]@) gives
+    -- the natural ordering of branches.
+    versionBranch :: [Int]
+  , -- | A version can be tagged with an arbitrary list of strings.
+    -- The interpretation of the list of tags is entirely dependent
+    -- on the entity that this version applies to.
+    versionTags :: [String]
+  }
   deriving (Show, Generic)
 
+-- really a bag
 instance Eq Version where
-  v1 == v2 = v1.versionBranch == v2.versionBranch
-               && sort v1.versionTags == sort v2.versionTags
+  v1 == v2 = v1.versionBranch == v2.versionBranch && sort (v1.versionTags) == sort (v2.versionTags)
 
 instance Ord Version where
   v1 `compare` v2 = v1.versionBranch `compare` v2.versionBranch
 
 -- -----------------------------------------------------------------------------
 -- A concrete representation of 'Version'
-
 -- | Provides one possible concrete representation for 'Version'.  For
 -- a version with 'versionBranch' @= [1,2,3]@ and 'versionTags'
 -- @= [\"tag1\",\"tag2\"]@, the output will be @1.2.3-tag1-tag2@.
---
 showVersion :: Version -> String
-showVersion (Version branch tags)
-  = joinDotted (map show branch) <> showTags tags
+showVersion (Version branch tags) = joinDotted (map show branch) <> showTags tags
 
 -- | Join strings with @"."@ between neighbours.
 joinDotted :: [String] -> String
 joinDotted xs = case xs of
   [] -> ""
-  [x] -> x
+  x : [] -> x
   x : rest -> x <> "." <> joinDotted rest
 
 -- | Prefix every tag with @"-"@ and concatenate.

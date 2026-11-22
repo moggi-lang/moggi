@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Data.String.DotNet
   ( singleton
   , pack
@@ -26,7 +27,6 @@ import Moggi.Internal.Prim
 
 -- Ordinary BCL FFI only (no Moggi.Rt.StringOps).
 -- Width-exact signatures: BCL String/Char APIs are int32/UTF-16-char based.
-
 foreign dotnet function rawConvertFromUtf32 "System.Char:ConvertFromUtf32" :: Int32 -> String
 
 foreign dotnet function rawUtf16Length "System.String.get_Length" :: String -> Int32
@@ -103,6 +103,7 @@ splitOn sep s =
 
 length :: String -> Int
 length s = codePointCountGo s 0 (utf16Length s) 0
+
 -- | A top-level loop rather than a closure: the scalar walk of a long string
 -- must run in constant stack, and only an entry's tail call becomes one.
 codePointCountGo :: String -> Int -> Int -> Int -> Int
@@ -125,7 +126,7 @@ isSuffixOf :: String -> String -> Bool
 isSuffixOf suffix s = rawEndsWith s suffix
 
 lines :: String -> [String]
-lines "" = ([] :: [String])
+lines "" = [] :: [String]
 lines s = L.reverse (L.dropWhile (\x -> x == "") (L.reverse (splitOn "\n" s)))
 
 words :: String -> [String]
@@ -137,5 +138,5 @@ unlines (line : rest) = line <> "\n" <> unlines rest
 
 unwords :: [String] -> String
 unwords [] = ""
-unwords [x] = x
+unwords (x : []) = x
 unwords (x : rest) = x <> " " <> unwords rest

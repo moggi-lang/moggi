@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The shared core of the builder modules: the 'Builder' type and the
 -- character encoders the other builder modules are written in terms of.
 --
@@ -58,16 +59,16 @@ module Data.ByteString.Builder.Internal
   , power2
   ) where
 
-import Data.Bool (Bool (..))
+import Data.Bool (Bool(..))
 import Data.ByteString (ByteString, concat, null, pack)
 import Data.Char (Char, ord)
 import Data.Int (Int)
 import Data.Integer (Integer)
 import Data.List ((:), foldr)
-import Data.Monoid (Monoid (..))
+import Data.Monoid (Monoid(..))
 import Data.Num ((*), (+), (-))
 import Data.Ord ((<))
-import Data.Real (Integral (div, mod))
+import Data.Real (Integral(div, mod))
 import Data.Semigroup ((<>))
 import Data.String (String)
 import Data.String qualified as S
@@ -142,21 +143,13 @@ string8 s = stringWith 256 s
 -- | The UTF-8 bytes of a character, in order.
 encodeChar :: Int -> [Word8]
 encodeChar code =
-  if code < 128 then
-    [byte code]
-  else if code < 2048 then
-    [byte (192 + div code 64), byte (128 + mod code 64)]
-  else if code < 65536 then
-    [ byte (224 + div code 4096)
-    , byte (128 + mod (div code 64) 64)
-    , byte (128 + mod code 64)
-    ]
-  else
-    [ byte (240 + div code 262144)
-    , byte (128 + mod (div code 4096) 64)
-    , byte (128 + mod (div code 64) 64)
-    , byte (128 + mod code 64)
-    ]
+  if code < 128
+    then [byte code]
+    else if code < 2048
+      then [byte (192 + div code 64), byte (128 + mod code 64)]
+      else if code < 65536
+        then [byte (224 + div code 4096), byte (128 + mod (div code 64) 64), byte (128 + mod code 64)]
+        else [byte (240 + div code 262144), byte (128 + mod (div code 4096) 64), byte (128 + mod (div code 64) 64), byte (128 + mod code 64)]
 
 -- | The low byte of a codepoint, as UTF-8 uses it in a single-byte case.
 byte :: Int -> Word8

@@ -1,79 +1,80 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Data.Double
-  (-- *  Classes
-    Floating(..),
-    RealFloat(..),
+  ( -- *  Classes
+    Floating(..)
+  , RealFloat(..)
     -- *  'Double'
-    Double(..),
+  , Double(..)
     -- **  Conversion
-    double2Int,
-    int2Double,
-    word2Double,
-    rationalToDouble,
-    castWord64ToDouble,
-    castDoubleToWord64,
+  , double2Int
+  , int2Double
+  , word2Double
+  , rationalToDouble
+  , castWord64ToDouble
+  , castDoubleToWord64
     -- **  Operations
-    floorDouble,
-    ceilingDouble,
-    truncateDouble,
-    roundDouble,
-    properFractionDouble,
+  , floorDouble
+  , ceilingDouble
+  , truncateDouble
+  , roundDouble
+  , properFractionDouble
     -- **  Predicate
-    isDoubleDenormalized,
-    isDoubleFinite,
-    isDoubleInfinite,
-    isDoubleNaN,
-    isDoubleNegativeZero,
+  , isDoubleDenormalized
+  , isDoubleFinite
+  , isDoubleInfinite
+  , isDoubleNaN
+  , isDoubleNegativeZero
     -- **  Comparison
-    gtDouble,
-    geDouble,
-    leDouble,
-    ltDouble,
+  , gtDouble
+  , geDouble
+  , leDouble
+  , ltDouble
     -- **  Arithmetic
-    plusDouble,
-    minusDouble,
-    timesDouble,
-    divideDouble,
-    negateDouble,
-    expDouble,
-    expm1Double,
-    logDouble,
-    log1pDouble,
-    sqrtDouble,
-    fabsDouble,
-    sinDouble,
-    cosDouble,
-    tanDouble,
-    asinDouble,
-    acosDouble,
-    atanDouble,
-    sinhDouble,
-    coshDouble,
-    tanhDouble,
-    asinhDouble,
-    acoshDouble,
-    atanhDouble,
+  , plusDouble
+  , minusDouble
+  , timesDouble
+  , divideDouble
+  , negateDouble
+  , expDouble
+  , expm1Double
+  , logDouble
+  , log1pDouble
+  , sqrtDouble
+  , fabsDouble
+  , sinDouble
+  , cosDouble
+  , tanDouble
+  , asinDouble
+  , acosDouble
+  , atanDouble
+  , sinhDouble
+  , coshDouble
+  , tanhDouble
+  , asinhDouble
+  , acoshDouble
+  , atanhDouble
     -- *  Formatting
-    FFFormat(..),
-    formatRealFloat,
-    formatRealFloatAlt,
-    showSignedFloat,
+  , FFFormat(..)
+  , formatRealFloat
+  , formatRealFloatAlt
+  , showSignedFloat
     -- *  Operations
-    log1mexpOrd,
-    roundTo,
-    floatToDigits,
-    integerToBinaryFloat',
+  , log1mexpOrd
+  , roundTo
+  , floatToDigits
+  , integerToBinaryFloat'
     -- *  Monomorphic equality operators
-    eqDouble,
+  , eqDouble
     -- *  Internal
-    clamp,
-    expt,
-    expts,
-    expts10,
-    maxExpt,
-    maxExpt10,
-    minExpt,
-    powerDouble
+  , clamp
+  , expt
+  , expts
+  , expts10
+  , maxExpt
+  , maxExpt10
+  , minExpt
+  , powerDouble
   ) where
 
 import Data.Bool
@@ -132,7 +133,6 @@ str = S.unpack
 -- ---------------------------------------------------------------------------
 -- IsNaN / isInfinite / isNegativeZero, derived from the IEEE operations.
 -- ---------------------------------------------------------------------------
-
 doubleLessThan :: Double -> Double -> Bool
 doubleLessThan a b = case doubleCompare# a b of
   LT -> True
@@ -158,7 +158,6 @@ isNegativeZeroDouble x = case doubleEq# x 0.0 of
 -- ---------------------------------------------------------------------------
 -- Showing
 -- ---------------------------------------------------------------------------
-
 -- | Show a signed 'Double' to full precision using standard decimal notation
 -- for arguments whose absolute value lies between @0.1@ and @9,999,999@, and
 -- scientific notation otherwise.
@@ -192,53 +191,59 @@ doFmt decs format digits =
       e = snd digits
       ds = map intToDigit is
   in case format of
-    FFGeneric -> doFmt decs (case e < 0 || e > 7 of True -> FFExponent; False -> FFFixed) digits
+    FFGeneric -> doFmt decs (case e < 0 || e > 7 of
+      True -> FFExponent
+      False -> FFFixed) digits
     FFExponent -> case decs of
       Nothing -> case ds of
-        ['0'] -> str "0.0e0"
-        [d] -> d : str ".0e" ++ str (show (e - 1))
-        (d:ds') -> d : '.' : ds' ++ str "e" ++ str (show (e - 1))
+        '0' : [] -> str "0.0e0"
+        d : [] -> d : str ".0e" ++ str (show (e - 1))
+        d : ds' -> d : '.' : ds' ++ str "e" ++ str (show (e - 1))
         [] -> error "formatRealFloat/doFmt/FFExponent: []"
       Just d -> case d <= 0 of
         True -> case is of
-          [0] -> str "0e0"
-          _ ->
-            let rounded = roundTo 10 1 is
-                ei = fst rounded
-                is' = snd rounded
-                ns = map intToDigit (case ei > 0 of True -> init is'; False -> is')
-            in head ns : 'e' : str (show (e - 1 + ei))
-        False ->
-          let dec' = max d 1
-          in case is of
-            [0] -> '0' : '.' : replicate dec' '0' ++ str "e0"
-            _ ->
-              let rounded = roundTo 10 (dec' + 1) is
-                  ei = fst rounded
-                  is' = snd rounded
-                  ns = map intToDigit (case ei > 0 of True -> init is'; False -> is')
-              in head ns : '.' : tail ns ++ ('e' : str (show (e - 1 + ei)))
+          0 : [] -> str "0e0"
+          _ -> let rounded = roundTo 10 1 is
+                   ei = fst rounded
+                   is' = snd rounded
+                   ns = map intToDigit (case ei > 0 of
+                 True -> init is'
+                 False -> is')
+               in head ns : 'e' : str (show (e - 1 + ei))
+        False -> let dec' = max d 1
+                 in case is of
+                   0 : [] -> '0' : '.' : replicate dec' '0' ++ str "e0"
+                   _ -> let rounded = roundTo 10 (dec' + 1) is
+                            ei = fst rounded
+                            is' = snd rounded
+                            ns = map intToDigit (case ei > 0 of
+                          True -> init is'
+                          False -> is')
+                        in head ns : '.' : tail ns ++ 'e' : str (show (e - 1 + ei))
     FFFixed -> case decs of
       Nothing -> case e <= 0 of
         True -> str "0." ++ replicate (negate e) '0' ++ ds
         False -> fixedDigits e [] ds
-      Just d ->
-        let dec' = max d 0
-        in case e >= 0 of
-          True ->
-            let rounded = roundTo 10 (dec' + e) is
-                ei = fst rounded
-                is' = snd rounded
-                all' = map intToDigit is'
-                ls = take (e + ei) all'
-                rs = drop (e + ei) all'
-            in mk0 ls ++ (case null rs of True -> []; False -> '.' : rs)
-          False ->
-            let rounded = roundTo 10 dec' (replicate (negate e) 0 ++ is)
-                ei = fst rounded
-                is' = snd rounded
-                ns = map intToDigit (case ei > 0 of True -> is'; False -> 0 : is')
-            in head ns : (case null (tail ns) of True -> []; False -> '.' : tail ns)
+      Just d -> let dec' = max d 0
+                in case e >= 0 of
+                  True -> let rounded = roundTo 10 (dec' + e) is
+                              ei = fst rounded
+                              is' = snd rounded
+                              all' = map intToDigit is'
+                              ls = take (e + ei) all'
+                              rs = drop (e + ei) all'
+                          in mk0 ls ++ (case null rs of
+                            True -> []
+                            False -> '.' : rs)
+                  False -> let rounded = roundTo 10 dec' (replicate (negate e) 0 ++ is)
+                               ei = fst rounded
+                               is' = snd rounded
+                               ns = map intToDigit (case ei > 0 of
+                             True -> is'
+                             False -> 0 : is')
+                           in head ns : (case null (tail ns) of
+                             True -> []
+                             False -> '.' : tail ns)
 
 mk0 :: [Char] -> [Char]
 mk0 [] = ['0']
@@ -247,7 +252,7 @@ mk0 ls = ls
 fixedDigits :: Int -> [Char] -> [Char] -> [Char]
 fixedDigits 0 s rs = mk0 (reverse s) ++ '.' : mk0 rs
 fixedDigits n s [] = fixedDigits (n - 1) ('0' : s) []
-fixedDigits n s (r:rs) = fixedDigits (n - 1) (r : s) rs
+fixedDigits n s (r : rs) = fixedDigits (n - 1) (r : s) rs
 
 roundTo :: Int -> Int -> [Int] -> (Int, [Int])
 roundTo base d is =
@@ -260,10 +265,14 @@ roundTo base d is =
 
 roundToGo :: Int -> Int -> Bool -> [Int] -> (Int, [Int])
 roundToGo b2 n _ [] = (0, replicate n 0)
-roundToGo b2 0 e (x:xs) = case x == b2 && e && all (== 0) xs of
+roundToGo b2 0 e (x : xs) = case x == b2 && e && all (== 0) xs of
   True -> (0, [])
-  False -> ((case x >= b2 of True -> 1; False -> 0), [])
-roundToGo b2 n _ (i:xs) =
+  False -> ( case x >= b2 of
+    True -> 1
+    False -> 0
+  , []
+  )
+roundToGo b2 n _ (i : xs) =
   let inner = roundToGo b2 (n - 1) (even i) xs
       c = fst inner
       ds = snd inner
@@ -278,7 +287,6 @@ roundToGo b2 n _ (i:xs) =
 -- Based on "Printing Floating-Point Numbers Quickly and Accurately" by
 -- R.G. Burger and R.K. Dybvig, PLDI 96, over 'Integer'.
 -- ---------------------------------------------------------------------------
-
 floatToDigitsDouble :: Double -> ([Int], Int)
 floatToDigitsDouble x = case doubleEq# x 0.0 of
   True -> ([0], 0)
@@ -295,8 +303,8 @@ floatToDigitsNonZero x =
       minExp = -1074
       n = minExp - e0
       adjusted = case n > 0 of
-        True -> (integerQuot f0 (b ^ n), e0 + n)
-        False -> (f0, e0)
+    True -> (integerQuot f0 (b ^ n), e0 + n)
+    False -> (f0, e0)
       f = fst adjusted
       e = snd adjusted
       factors = floatToDigitsFactors b p minExp f e
@@ -306,19 +314,22 @@ floatToDigitsNonZero x =
       mDn = snd (snd factors)
       k = floatToDigitsK p e0 base r s mUp mDn
       rds = case k >= 0 of
-        True -> floatToDigitsGen base r (s * base ^ k) mUp mDn []
-        False ->
-          let bk = base ^ intNegate# k
-          in floatToDigitsGen base (r * bk) s (mUp * bk) (mDn * bk) []
+    True -> floatToDigitsGen base r (s * base ^ k) mUp mDn []
+    False -> let bk = base ^ intNegate# k in floatToDigitsGen base (r * bk) s (mUp * bk) (mDn * bk) []
   in (map integerToInt (reverse rds), k)
 
-floatToDigitsFactors :: Integer -> Int -> Int -> Integer -> Int -> ((Integer, Integer), (Integer, Integer))
+floatToDigitsFactors
+  :: Integer
+  -> Int
+  -> Int
+  -> Integer
+  -> Int
+  -> ((Integer, Integer), (Integer, Integer))
 floatToDigitsFactors b p minExp f e = case e >= 0 of
-  True ->
-    let be = b ^ e
-    in case f == b ^ (p - 1) of
-      True -> ((f * be * b * 2, 2 * b), (be * b, be))
-      False -> ((f * be * 2, 2), (be, be))
+  True -> let be = b ^ e
+          in case f == b ^ (p - 1) of
+            True -> ((f * be * b * 2, 2 * b), (be * b, be))
+            False -> ((f * be * 2, 2), (be, be))
   False -> case e > minExp && f == b ^ (p - 1) of
     True -> ((f * b * 2, b ^ (intNegate# e + 1) * 2), (b, 1))
     False -> ((f * 2, b ^ intNegate# e * 2), (1, 1))
@@ -326,10 +337,10 @@ floatToDigitsFactors b p minExp f e = case e >= 0 of
 floatToDigitsK :: Int -> Int -> Integer -> Integer -> Integer -> Integer -> Integer -> Int
 floatToDigitsK p e0 base r s mUp mDn =
   let lx = p - 1 + e0
-      k1 = (lx * 8651) `quot` 28738
+      k1 = lx * 8651 `quot` 28738
       k0 = case lx >= 0 of
-        True -> k1 + 1
-        False -> k1
+    True -> k1 + 1
+    False -> k1
   in floatToDigitsFixup base r s mUp mDn k0
 
 floatToDigitsFixup :: Integer -> Integer -> Integer -> Integer -> Integer -> Int -> Int
@@ -350,10 +361,10 @@ floatToDigitsGen base rn sN mUpN mDnN ds =
       mDnN' = mDnN * base
   in case (rn' < mDnN', rn' + mUpN' > sN) of
     (True, False) -> dn : ds
-    (False, True) -> (dn + 1) : ds
+    (False, True) -> dn + 1 : ds
     (True, True) -> case rn' * 2 < sN of
       True -> dn : ds
-      False -> (dn + 1) : ds
+      False -> dn + 1 : ds
     (False, False) -> floatToDigitsGen base rn' sN mUpN' mDnN' (dn : ds)
 
 -- ---------------------------------------------------------------------------
@@ -361,7 +372,6 @@ floatToDigitsGen base rn sN mUpN mDnN ds =
 -- values. The magnitude is brought into [2^52, 2^53) by exact scaling with
 -- powers of two, so no bit-level primitive is needed.
 -- ---------------------------------------------------------------------------
-
 decodeDouble :: Double -> (Integer, Int)
 decodeDouble x = case doubleEq# x 0.0 of
   -- Zero has no significand to scale, and the scaling loop below would not
@@ -394,7 +404,6 @@ decodeScaleUp x e = case doubleCompare# x 4503599627370496.0 of
 -- arguments where that identity would overflow keep the `log x + log 2` branch
 -- written here.
 -- ---------------------------------------------------------------------------
-
 instance Floating Double where
   pi = 3.141592653589793
   exp x = doubleExp# x
@@ -468,11 +477,11 @@ ratioMagnitude a b = scaleByPowerOfTwo (doubleFromInteger# q) (negate k)
   where
     k = 53 + bitLength b - bitLength a
     scaled = case k >= 0 of
-      True -> a * (integerFromInt 2 ^ k)
+      True -> a * integerFromInt 2 ^ k
       False -> a
     divisor = case k >= 0 of
       True -> b
-      False -> b * (integerFromInt 2 ^ (negate k))
+      False -> b * integerFromInt 2 ^ negate k
     q = roundQuotient scaled divisor
 
 bitLength :: Integer -> Int
@@ -518,7 +527,6 @@ isDoubleNegativeZero x = isNegativeZeroDouble x
 -- ---------------------------------------------------------------------------
 -- Conversions
 -- ---------------------------------------------------------------------------
-
 double2Int :: Double -> Int
 double2Int x = doubleToInt# x
 
@@ -531,7 +539,6 @@ word2Double w = doubleFromInteger# (toInteger w)
 -- ---------------------------------------------------------------------------
 -- Rounding to integral values
 -- ---------------------------------------------------------------------------
-
 truncateToInteger :: Double -> Integer
 truncateToInteger x = case isNaNDouble x of
   True -> error "truncate: NaN"
@@ -548,7 +555,7 @@ magnitudeWhole x = case doubleEq# x 0.0 of
 
 wholeOfDecoded :: (Integer, Int) -> Integer
 wholeOfDecoded decoded = case snd decoded >= 0 of
-  True -> fst decoded * (integerFromInt 2 ^ snd decoded)
+  True -> fst decoded * integerFromInt 2 ^ snd decoded
   False -> integerQuot (fst decoded) (integerFromInt 2 ^ intNegate# (snd decoded))
 
 truncateDouble :: Integral a => Double -> a
@@ -596,7 +603,6 @@ properFractionDouble x = (fromInteger w, x - doubleFromInteger# w)
 -- ---------------------------------------------------------------------------
 -- Predicates
 -- ---------------------------------------------------------------------------
-
 isDoubleFinite :: Double -> Bool
 isDoubleFinite x = case isNaNDouble x of
   True -> False
@@ -612,7 +618,6 @@ isDoubleDenormalized x = case doubleEq# x 0.0 of
 -- ---------------------------------------------------------------------------
 -- Comparison
 -- ---------------------------------------------------------------------------
-
 gtDouble :: Double -> Double -> Bool
 gtDouble a b = case doubleCompare# a b of
   GT -> True
@@ -638,7 +643,6 @@ ltDouble a b = case doubleCompare# a b of
 -- ---------------------------------------------------------------------------
 -- Arithmetic
 -- ---------------------------------------------------------------------------
-
 plusDouble :: Double -> Double -> Double
 plusDouble a b = doubleAdd# a b
 
@@ -711,7 +715,6 @@ atanhDouble x = doubleAtanh# x
 -- ---------------------------------------------------------------------------
 -- Formatting
 -- ---------------------------------------------------------------------------
-
 formatRealFloat :: FFFormat -> Maybe Int -> Double -> String
 formatRealFloat fmt decs x = S.pack (formatRealFloatChars fmt decs x)
 
@@ -741,7 +744,6 @@ showSignedFloat showPos p x = case doubleLessThan x 0.0 of
 -- ---------------------------------------------------------------------------
 -- Powers of two and the numeric-literal helpers
 -- ---------------------------------------------------------------------------
-
 powerDouble :: Double -> Double -> Double
 powerDouble x y = doublePow# x y
 
@@ -760,7 +762,7 @@ expt :: Integer -> Int -> Integer
 expt b e = b ^ e
 
 expts10 :: Integer -> Int -> Integer
-expts10 m e = m * (integerFromInt 10 ^ e)
+expts10 m e = m * integerFromInt 10 ^ e
 
 expts :: Int -> [(Integer, Int)]
 expts b = exptsUp b 0
@@ -828,7 +830,6 @@ integerBits n = case n == integerFromInt 0 of
 -- ---------------------------------------------------------------------------
 -- RealFloat
 -- ---------------------------------------------------------------------------
-
 class (RealFrac a, Floating a) => RealFloat a where
   floatRadix :: a -> Integer
   floatDigits :: a -> Int
@@ -836,8 +837,27 @@ class (RealFrac a, Floating a) => RealFloat a where
   decodeFloat :: a -> (Integer, Int)
   encodeFloat :: Integer -> Int -> a
   exponent :: a -> Int
+  exponent x = case decodeFloat x of
+    -- The quadrant comes from the signs of both arguments, with the signed
+    -- zeroes of IEEE giving the angles on the negative real axis their sides.
+    -- The significand and the exponent are the two halves of 'decodeFloat', and
+    -- 'scaleFloat' re-encodes with the exponent shifted, clamped so the sum
+    -- cannot overflow an 'Int'.
+    (m, n) -> case m == 0 of
+      True -> 0
+      False -> n + floatDigits x
   significand :: a -> a
+  significand x = case decodeFloat x of
+    (m, _) -> encodeFloat m (negate (floatDigits x))
   scaleFloat :: Int -> a -> a
+  scaleFloat k x = case k == 0 of
+    True -> x
+    False -> case x == 0 || isNaN x || isInfinite x of
+      True -> x
+      False -> case decodeFloat x of
+        (m, n) -> case floatRange x of
+          (l, h) ->
+            encodeFloat m (n + clamp (negate (h - l + 4 * floatDigits x)) (h - l + 4 * floatDigits x) k)
   isNaN :: a -> Bool
   isInfinite :: a -> Bool
   isDenormalized :: a -> Bool
@@ -846,9 +866,6 @@ class (RealFrac a, Floating a) => RealFloat a where
   -- | @'atan2' y x@ is the angle of the point @(x, y)@, in @(-pi, pi]@: the
   -- quadrant is chosen from the signs of both arguments.
   atan2 :: a -> a -> a
-
-  -- The quadrant comes from the signs of both arguments, with the signed
-  -- zeroes of IEEE giving the angles on the negative real axis their sides.
   atan2 y x = case x > 0 of
     True -> atan (y / x)
     False -> case x == 0 && y > 0 of
@@ -867,34 +884,15 @@ class (RealFrac a, Floating a) => RealFloat a where
                   True -> y
                   False -> x + y
 
-  -- The significand and the exponent are the two halves of 'decodeFloat', and
-  -- 'scaleFloat' re-encodes with the exponent shifted, clamped so the sum
-  -- cannot overflow an 'Int'.
-  exponent x = case decodeFloat x of
-    (m, n) -> case m == 0 of
-      True -> 0
-      False -> n + floatDigits x
-
-  significand x = case decodeFloat x of
-    (m, _) -> encodeFloat m (negate (floatDigits x))
-
-  scaleFloat k x = case k == 0 of
-    True -> x
-    False -> case x == 0 || isNaN x || isInfinite x of
-      True -> x
-      False -> case decodeFloat x of
-        (m, n) -> case floatRange x of
-          (l, h) -> encodeFloat m (n + clamp (negate (h - l + 4 * floatDigits x)) (h - l + 4 * floatDigits x) k)
-
 instance RealFloat Double where
   floatRadix _ = integerFromInt 2
   floatDigits _ = 53
   floatRange _ = (0 - 1021, 1024)
   decodeFloat x = decodeDouble x
   encodeFloat m e = doubleMul# (doubleFromInteger# m) (powerOfTwo e)
-  -- @x = significand x * 2 ^ exponent x@, with 'floatDigits' 53: the
-  -- significand of a normal value lies in [1/2, 1).
   exponent x = case doubleEq# x 0.0 of
+    -- @x = significand x * 2 ^ exponent x@, with 'floatDigits' 53: the
+    -- significand of a normal value lies in [1/2, 1).
     True -> 0
     False -> 53 + snd (decodeDouble x)
   significand x = case doubleEq# x 0.0 of
@@ -921,7 +919,7 @@ doubleToRational x = case isNaN x || isInfinite x of
   True -> error "Data.Real.toRational: not finite"
   False -> case decodeDouble x of
     (m, e) -> case e >= 0 of
-      True -> (m * pow2 e) % 1
+      True -> m * pow2 e % 1
       False -> m % pow2 (negate e)
 
 pow2 :: Int -> Integer

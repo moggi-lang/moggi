@@ -122,7 +122,6 @@
 --      \"/Finger trees: a simple general-purpose data structure/\",
 --      Journal of Functional Programming 16:2 (2006) pp 197-217.
 --      <http://staff.city.ac.uk/~ross/papers/FingerTree.html>.
-
 module Data.Sequence
   ( Seq
   , empty
@@ -187,10 +186,31 @@ import Data.Bool
 import Data.Eq
 import Data.Foldable hiding (null, length, toList)
 import Data.Functor
-import Data.List hiding (
-  map, filter, null, length, lookup, take, drop, splitAt, reverse,
-  sort, sortBy, sortOn, zip, zipWith, unzip, tails, inits, replicate,
-  iterate, cycle, chunksOf, scanl, scanr, intersperse
+import Data.List hiding
+  ( map
+  , filter
+  , null
+  , length
+  , lookup
+  , take
+  , drop
+  , splitAt
+  , reverse
+  , sort
+  , sortBy
+  , sortOn
+  , zip
+  , zipWith
+  , unzip
+  , tails
+  , inits
+  , replicate
+  , iterate
+  , cycle
+  , chunksOf
+  , scanl
+  , scanr
+  , intersperse
   )
 import Data.Maybe
 import Data.Ord
@@ -280,7 +300,10 @@ listSpan p (x : xs) = case p x of
   False -> ([], x : xs)
 
 listBreak :: (a -> Bool) -> [a] -> ([a], [a])
-listBreak p xs = listSpan (\x -> case p x of True -> False; False -> True) xs
+listBreak p xs = listSpan (\x ->
+  case p x of
+    True -> False
+    False -> True) xs
 
 listReplicate :: Int -> a -> [a]
 listReplicate n x = case n <= 0 of
@@ -384,10 +407,10 @@ chunksOfList n xs = case n <= 0 of
     [] -> []
     _ -> listTake n xs : chunksOfList n (listDrop n xs)
 
-data ViewL a = EmptyL | (:<) a (Seq a)
+data ViewL a = EmptyL | a :< (Seq a)
   deriving (Eq, Show)
 
-data ViewR a = EmptyR | (:>) (Seq a) a
+data ViewR a = EmptyR | (Seq a) :> a
   deriving (Eq, Show)
 
 viewl :: Seq a -> ViewL a
@@ -483,7 +506,7 @@ sortOn f s = sortBy (\x y -> compare (f x) (f y)) s
 -- observable behavior (a stably sorted sequence) is the same.
 mergeSort :: (a -> a -> Ordering) -> [a] -> [a]
 mergeSort _ [] = []
-mergeSort _ [x] = [x]
+mergeSort _ (x : []) = [x]
 mergeSort cmp xs = case splitHalf xs of
   (left, right) -> mergeLists cmp (mergeSort cmp left) (mergeSort cmp right)
 
@@ -579,7 +602,9 @@ foldIndexGoL f z i (x : xs) = foldIndexGoL f (f z i x) (i + 1) xs
 
 foldrWithIndex :: (Int -> a -> b -> b) -> b -> Seq a -> b
 foldrWithIndex f z s = case s of
-  MkSeq xs -> foldr (\pair acc -> case pair of (i, x) -> f i x acc) z (listZip (listIterateN (listLength xs) (\n -> n + 1) 0) xs)
+  MkSeq xs -> foldr (\pair acc ->
+    case pair of
+      (i, x) -> f i x acc) z (listZip (listIterateN (listLength xs) (\n -> n + 1) 0) xs)
 
 foldMapWithIndex :: Monoid m => (Int -> a -> m) -> Seq a -> m
 foldMapWithIndex f s = foldrWithIndex (\i x acc -> f i x <> acc) mempty s

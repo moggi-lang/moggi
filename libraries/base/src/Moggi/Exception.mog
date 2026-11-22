@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Exceptions and exception-handling functions.
 --
 -- `Exception` carries `(Typeable e, Show e)` as its superclasses, and

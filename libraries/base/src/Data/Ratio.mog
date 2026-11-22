@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Rational numbers: the 'Ratio' type, its constructor and the functions
 -- written over it.
 --
@@ -19,7 +20,6 @@ module Data.Ratio
   , denominator
   , approxRational
   ) where
-
 
 import Control.Applicative
 import Control.Monad
@@ -44,7 +44,8 @@ instance Typeable Ratio where
 -- Ratios print as @n % d@, at the precedence the constructor's fixity gives
 -- them, so a compound ratio is parenthesised.
 instance (Integral a, Show a) => Show (Ratio a) where
-  showsPrec p (x :% y) s = showParen (p > 7) (\t -> showsPrec 8 x (showString " % " (showsPrec 8 y t))) s
+  showsPrec p (x :% y) s =
+    showParen (p > 7) (\t -> showsPrec 8 x (showString " % " (showsPrec 8 y t))) s
 
 -- The parser for @n % d@: read two values, consume the @%@ and reduce them.
 -- 'readsPrec' carries the precedence, so @read@ and @readPrec@ both work, and
@@ -74,10 +75,10 @@ ratioBody = prec 7 (do
 -- simplest rational between @d'/r'@ and @d/r@.
 approxRational :: RealFrac a => a -> a -> Rational
 approxRational rat eps =
-  -- Converting before subtracting or adding keeps a wide @eps@ from
-  -- overflowing the intermediate type.
   simplestRational (toRational rat - toRational eps) (toRational rat + toRational eps)
 
+-- Converting before subtracting or adding keeps a wide @eps@ from
+-- overflowing the intermediate type.
 simplestRational :: Rational -> Rational -> Rational
 simplestRational x y = case y < x of
   True -> simplestRational y x
@@ -86,7 +87,9 @@ simplestRational x y = case y < x of
     False -> case x > 0 of
       True -> simplestPositive (numerator x) (denominator x) (numerator y) (denominator y)
       False -> case y < 0 of
-        True -> negate (simplestPositive (negate (numerator y)) (denominator y) (negate (numerator x)) (denominator x))
+        True ->
+          negate
+            (simplestPositive (negate (numerator y)) (denominator y) (negate (numerator x)) (denominator x))
         False -> 0 % 1
 
 -- Assumes @0 < n/d < n'/d'@.

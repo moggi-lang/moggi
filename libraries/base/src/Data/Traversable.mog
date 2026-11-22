@@ -1,21 +1,19 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Visiting every element with an effect: the 'Traversable' class
 -- ('traverse', 'sequenceA', 'mapM', 'sequence'), the 'for'/'forM' and
 -- 'mapAccum' family built on it.
 module Data.Traversable
-  (
-    -- * The 'Traversable' class
+  ( -- * The 'Traversable' class
     Traversable(..)
-
-  -- * Utility functions
+    -- * Utility functions
   , for
   , forM
   , forAccumM
   , mapAccumL
   , mapAccumR
   , mapAccumM
-
-  -- * General definitions for superclass methods
+    -- * General definitions for superclass methods
   , fmapDefault
   , foldMapDefault
   ) where
@@ -36,24 +34,20 @@ import Moggi.Internal.Base
 
 class (Functor t, Foldable t) => Traversable t where
   {-# MINIMAL traverse | sequenceA #-}
-
   -- | Map each element of a structure to an action, evaluate these actions
   -- from left to right, and collect the results. For a version that ignores
   -- the results see 'Data.Foldable.traverse_'.
   traverse :: Applicative f => (a -> f b) -> t a -> f (t b)
   traverse f t = sequenceA (map f t)
-
   -- | Evaluate each action in the structure from left to right, and collect
   -- the results. For a version that ignores the results see
   -- 'Data.Foldable.sequenceA_'.
   sequenceA :: Applicative f => t (f a) -> f (t a)
   sequenceA t = traverse (\x -> x) t
-
   -- | Map each element of a structure to a monadic action, evaluate these
   -- actions from left to right, and collect the results.
   mapM :: Monad m => (a -> m b) -> t a -> m (t b)
   mapM f t = traverse f t
-
   -- | Evaluate each monadic action in the structure from left to right, and
   -- collect the results.
   sequence :: Monad m => t (m a) -> m (t a)
@@ -109,29 +103,33 @@ newtype StateR s a = StateR (s -> (s, a))
 
 instance Functor (StateL s) where
   map g st = case st of
-    StateL step -> StateL (\acc -> case step acc of
-      (acc', v) -> (acc', g v))
+    StateL step -> StateL (\acc ->
+      case step acc of
+        (acc', v) -> (acc', g v))
 
 instance Applicative (StateL s) where
   pure x = StateL (\acc -> (acc, x))
-  (<*>) gf gv = StateL (\acc -> case gf of
-    StateL stepF -> case gv of
-      StateL stepV -> case stepF acc of
-        (acc', g) -> case stepV acc' of
-          (acc'', v) -> (acc'', g v))
+  (<*>) gf gv = StateL (\acc ->
+    case gf of
+      StateL stepF -> case gv of
+        StateL stepV -> case stepF acc of
+          (acc', g) -> case stepV acc' of
+            (acc'', v) -> (acc'', g v))
 
 instance Functor (StateR s) where
   map g st = case st of
-    StateR step -> StateR (\acc -> case step acc of
-      (acc', v) -> (acc', g v))
+    StateR step -> StateR (\acc ->
+      case step acc of
+        (acc', v) -> (acc', g v))
 
 instance Applicative (StateR s) where
   pure x = StateR (\acc -> (acc, x))
-  (<*>) gf gv = StateR (\acc -> case gv of
-    StateR stepV -> case gf of
-      StateR stepF -> case stepV acc of
-        (acc', v) -> case stepF acc' of
-          (acc'', g) -> (acc'', g v))
+  (<*>) gf gv = StateR (\acc ->
+    case gv of
+      StateR stepV -> case gf of
+        StateR stepF -> case stepV acc of
+          (acc', v) -> case stepF acc' of
+            (acc'', g) -> (acc'', g v))
 
 instance Traversable Identity where
   traverse f (Identity x) = pure Identity <*> f x
@@ -145,7 +143,7 @@ foldMapDefault f t = foldr (\a acc -> f a <> acc) mempty t
 instance Traversable Maybe where
   traverse f mx = case mx of
     Nothing -> pure Nothing
-    Just x -> pure Just <*> (f x)
+    Just x -> pure Just <*> f x
 
 instance Traversable (Arg a) where
   traverse f m = case m of
@@ -162,16 +160,21 @@ newtype AccumM s m a = AccumM (s -> m (s, a))
 
 instance Monad m => Functor (AccumM s m) where
   map g st = case st of
-    AccumM step -> AccumM (\acc -> step acc >>= (\sb -> case sb of
-      (acc', v) -> pure (acc', g v)))
+    AccumM step -> AccumM (\acc ->
+      step acc >>= (\sb ->
+        case sb of
+          (acc', v) -> pure (acc', g v)))
 
 instance Monad m => Applicative (AccumM s m) where
   pure x = AccumM (\acc -> pure (acc, x))
   (<*>) gf gv = case gf of
     AccumM stepF -> case gv of
-      AccumM stepV -> AccumM (\acc -> stepF acc >>= (\fg -> case fg of
-        (acc', g) -> stepV acc' >>= (\vb -> case vb of
-          (acc'', v) -> pure (acc'', g v))))
+      AccumM stepV -> AccumM (\acc ->
+        stepF acc >>= (\fg ->
+          case fg of
+            (acc', g) -> stepV acc' >>= (\vb ->
+              case vb of
+                (acc'', v) -> pure (acc'', g v))))
 
 -- | Combine 'mapM' and 'mapAccumL': traverse while evaluating actions and
 -- threading an accumulator left to right, returning it with the new structure.

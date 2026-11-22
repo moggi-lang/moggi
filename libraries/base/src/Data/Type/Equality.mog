@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- |
--- Module      :  Data.Type.Equality
+
+-- | Module      :  Data.Type.Equality
 -- License     :  BSD-style (see the file LICENSE)
 --
 -- Stability   :  stable
@@ -9,13 +9,11 @@
 -- Definition of propositional equality @(':~:')@. Pattern-matching on a variable
 -- of type @(a ':~:' b)@ produces a proof that @a '~' b@.
 module Data.Type.Equality
-  (
-    -- * The equality types
+  ( -- * The equality types
     type (~)
   , type (~~)
   , (:~:)(..)
   , (:~~:)(..)
-
     -- * Working with equality
   , sym
   , trans
@@ -24,10 +22,8 @@ module Data.Type.Equality
   , apply
   , inner
   , outer
-
     -- * Inferring equality from other types
   , TestEquality(..)
-
     -- * Boolean type-level equality
   , type (==)
   ) where
@@ -47,33 +43,32 @@ import Text.Show (Show(..))
 -- with credit to Conal Elliott for 'ty', Erik Hesselink & Martijn van
 -- Steenbergen for 'type-equality', Edward Kmett for 'eq', and Gabor Greif
 -- for 'type-eq'
-
 -- | Symmetry of equality
-sym :: (a :~: b) -> (b :~: a)
+sym :: a :~: b -> b :~: a
 sym Refl = Refl
 
 -- | Transitivity of equality
-trans :: (a :~: b) -> (b :~: c) -> (a :~: c)
+trans :: a :~: b -> b :~: c -> a :~: c
 trans Refl Refl = Refl
 
 -- | Type-safe cast, using propositional equality
-castWith :: (a :~: b) -> a -> b
+castWith :: a :~: b -> a -> b
 castWith Refl x = x
 
 -- | Generalized form of type-safe cast using propositional equality
-gcastWith :: (a :~: b) -> ((a ~ b) => r) -> r
+gcastWith :: a :~: b -> ((a ~ b) => r) -> r
 gcastWith Refl x = x
 
 -- | Apply one equality to another, jointly
-apply :: (f :~: g) -> (a :~: b) -> (f a :~: g b)
+apply :: f :~: g -> a :~: b -> f a :~: g b
 apply Refl Refl = Refl
 
 -- | Extract a witness of equality of two types
-inner :: (f a :~: g b) -> a :~: b
+inner :: f a :~: g b -> a :~: b
 inner Refl = Refl
 
 -- | Extract a witness of equality of two type constructors
-outer :: (f a :~: g b) -> f :~: g
+outer :: f a :~: g b -> f :~: g
 outer Refl = Refl
 
 instance Eq (a :~: b) where
@@ -85,14 +80,14 @@ instance Show (a :~: b) where
 instance Ord (a :~: b) where
   compare Refl Refl = EQ
 
-deriving instance a ~ b => Read (a :~: b)
+deriving instance (a ~ b) => Read (a :~: b)
 
-instance a ~ b => Enum (a :~: b) where
+instance (a ~ b) => Enum (a :~: b) where
   toEnum 0 = Refl
   toEnum _ = error "Data.Type.Equality.toEnum: bad argument"
   fromEnum Refl = 0
 
-deriving instance a ~ b => Bounded (a :~: b)
+deriving instance (a ~ b) => Bounded (a :~: b)
 
 instance Eq (a :~~: b) where
   (==) HRefl HRefl = True

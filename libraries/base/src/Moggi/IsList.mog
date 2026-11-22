@@ -1,12 +1,11 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | @base@'s 'IsList' class: types that can be built from a list of items.
 --
 -- The class lives here with its instances. The 'CallStack' instance is
 -- declared beside this class; the 'ByteArray' instance remains beside
 -- 'ByteArray' in "Data.Array.Byte".
-module Moggi.IsList
-  ( IsList(..)
-  ) where
+module Moggi.IsList (IsList(..)) where
 
 import Data.Function (id)
 import Data.Int (Int)
@@ -21,15 +20,12 @@ import Moggi.Stack.Types (CallStack, SrcLoc, fromCallSiteList, getCallStack)
 -- not implement. The methods are still usable directly.
 class IsList l where
   type Item l
-
   -- | Build the structure @l@ from a list of its items.
   fromList :: [Item l] -> l
-
   -- | Like 'fromList', with the input list's length as a hint. The default
   -- ignores the hint.
   fromListN :: Int -> [Item l] -> l
   fromListN _ = fromList
-
   -- | The items of @l@, in order.
   toList :: l -> [Item l]
 

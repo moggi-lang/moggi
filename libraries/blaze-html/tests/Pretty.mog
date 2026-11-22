@@ -1,6 +1,5 @@
 -- The parts of the surface the ported test suite does not reach: the
 -- document type that opens a page, and the indented renderer.
-
 module Pretty (prettySuite) where
 
 import Data.ByteString (ByteString)

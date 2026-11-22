@@ -1,5 +1,4 @@
--- |
--- Civil times and time zones, following the 'Data.Time.LocalTime'.
+-- | Civil times and time zones, following the 'Data.Time.LocalTime'.
 --
 -- A 'LocalTime' is a 'Day' plus a 'TimeOfDay' with no zone attached; a
 -- 'ZonedTime' pairs one with a 'TimeZone'. Conversion to UTC
@@ -13,7 +12,6 @@
 -- 'getTimeZone'\/'getCurrentTimeZone' IO (the hosts report no portable zone
 -- database through the current bindings) — build zones with 'utc',
 -- 'minutesToTimeZone' and 'hoursToTimeZone'.
---
 module Data.Time.LocalTime
   ( TimeOfDay(..)
   , todHour
@@ -106,12 +104,9 @@ pad2 n = case n < 10 of
 showSecs :: DiffTime -> String
 showSecs s = pad2 whole <> frac
   where
-    totalPicos :: Integer
-    totalPicos = diffTimeToPicoseconds s
-    whole :: Int
-    whole = fromInteger (div totalPicos 1000000000000)
-    frac :: String
-    frac = showFrac (mod totalPicos 1000000000000)
+    totalPicos = (diffTimeToPicoseconds s) :: Integer
+    whole = (fromInteger (div totalPicos 1000000000000)) :: Int
+    frac = (showFrac (mod totalPicos 1000000000000)) :: String
 
 showFrac :: Integer -> String
 showFrac p = case p == 0 of
@@ -209,7 +204,9 @@ instance Show ZonedTime where
 
 -- | The day fraction of a 'TimeOfDay' as a duration.
 timeOfDayToTime :: TimeOfDay -> NominalDiffTime
-timeOfDayToTime tod = secondsToNominalDiffTime (toInteger (todHour tod * 3600 + todMin tod * 60)) + diffTimeToNominal (todSec tod)
+timeOfDayToTime tod =
+  secondsToNominalDiffTime (toInteger (todHour tod * 3600 + todMin tod * 60))
+    + diffTimeToNominal (todSec tod)
 
 picosPerHour :: Integer
 picosPerHour = 3600000000000000
@@ -221,18 +218,16 @@ picosPerMinute = 60000000000000
 timeToTimeOfDay :: NominalDiffTime -> TimeOfDay
 timeToTimeOfDay d = TimeOfDay h mi (picosecondsToDiffTime s)
   where
-    total :: Integer
-    total = mod (nominalDiffTimeToPicoseconds d) 86400000000000000
-    h :: Int
-    h = fromInteger (div total picosPerHour)
-    mi :: Int
-    mi = fromInteger (mod (div total picosPerMinute) 60)
-    s :: Integer
-    s = mod total picosPerMinute
+    total = (mod (nominalDiffTimeToPicoseconds d) 86400000000000000) :: Integer
+    h = (fromInteger (div total picosPerHour)) :: Int
+    mi = (fromInteger (mod (div total picosPerMinute) 60)) :: Int
+    s = (mod total picosPerMinute) :: Integer
 
 -- | Interpret a 'LocalTime' in a zone as UTC.
 localTimeToUTC :: TimeZone -> LocalTime -> UTCTime
-localTimeToUTC tz lt = addUTCTime (negate (zoneOffset tz)) (utcTime (localDay lt) (nominalToDiffTime (timeOfDayToTime (localTimeOfDay lt))))
+localTimeToUTC tz lt =
+  addUTCTime (negate (zoneOffset tz))
+    (utcTime (localDay lt) (nominalToDiffTime (timeOfDayToTime (localTimeOfDay lt))))
 
 -- | View a UTC time through a zone.
 utcToLocalTime :: TimeZone -> UTCTime -> LocalTime

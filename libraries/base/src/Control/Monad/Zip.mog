@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Monadic zipping: 'mzip' pairs the values of two actions, the shape a monad
 -- comprehension's zipped generators are written in terms of.
 --
@@ -9,9 +10,7 @@
 -- actions, and an 'IO' value may not appear outside an 'IO'-returning
 -- function, so the method has no type at 'IO' here. 'mzip' itself is
 -- 'Control.Monad.liftM2' with a pair, which needs no instance.
-module Control.Monad.Zip
-  ( MonadZip(mzip, mzipWith, munzip)
-  ) where
+module Control.Monad.Zip (MonadZip(mzip, mzipWith, munzip)) where
 
 import Control.Monad
 import Data.List.NonEmpty
@@ -28,10 +27,10 @@ import Moggi.Internal.Prim
 class Monad m => MonadZip m where
   mzip :: m a -> m b -> m (a, b)
   mzip ma mb = mzipWith (\a b -> (a, b)) ma mb
-
   mzipWith :: (a -> b -> c) -> m a -> m b -> m c
-  mzipWith f ma mb = liftM (\ab -> case ab of (a, b) -> f a b) (mzip ma mb)
-
+  mzipWith f ma mb = liftM (\ab ->
+    case ab of
+      (a, b) -> f a b) (mzip ma mb)
   munzip :: m (a, b) -> (m a, m b)
   munzip mab = (liftM fst mab, liftM snd mab)
 

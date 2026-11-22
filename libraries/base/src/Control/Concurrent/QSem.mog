@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Simple quantity semaphores.
 module Control.Concurrent.QSem
   ( QSem
@@ -29,12 +30,11 @@ newtype QSem = QSem (MVar (Int, [MVar ()], [MVar ()]))
 -- | Build a semaphore with the given initial quantity, which must be at least
 -- zero.
 newQSem :: Int -> IO QSem
-newQSem initial =
-  case initial < 0 of
-    True -> ioError (userError "newQSem: Initial quantity must be non-negative")
-    False -> do
-      sem <- newMVar (initial, [], [])
-      pure (QSem sem)
+newQSem initial = case initial < 0 of
+  True -> ioError (userError "newQSem: Initial quantity must be non-negative")
+  False -> do
+    sem <- newMVar (initial, [], [])
+    pure (QSem sem)
 
 -- | Wait for a unit, in FIFO order with the other waiters.
 --
@@ -44,27 +44,24 @@ waitQSem :: QSem -> IO ()
 waitQSem (QSem sem) = mask_ (do
   state <- takeMVar sem
   case state of
-    (available, ready, blocked) ->
-      case available == 0 of
-        True -> do
-          waiter <- newEmptyMVar
-          putMVar sem (available, ready, waiter : blocked)
-          waitQSemWaiter sem waiter
-        False -> putMVar sem (available - 1, ready, blocked))
+    (available, ready, blocked) -> case available == 0 of
+      True -> do
+        waiter <- newEmptyMVar
+        putMVar sem (available, ready, waiter : blocked)
+        waitQSemWaiter sem waiter
+      False -> putMVar sem (available - 1, ready, blocked))
 
 waitQSemWaiter :: MVar (Int, [MVar ()], [MVar ()]) -> MVar () -> IO ()
-waitQSemWaiter sem waiter =
-  onException (takeMVar waiter)
-    (uninterruptibleMask_ (do
-      state <- takeMVar sem
-      alreadyWoken <- tryTakeMVar waiter
-      case alreadyWoken of
-        Just () -> do
-          next <- signalQSemState state
-          putMVar sem next
-        Nothing -> do
-          putMVar waiter ()
-          putMVar sem state))
+waitQSemWaiter sem waiter = onException (takeMVar waiter) (uninterruptibleMask_ (do
+  state <- takeMVar sem
+  alreadyWoken <- tryTakeMVar waiter
+  case alreadyWoken of
+    Just () -> do
+      next <- signalQSemState state
+      putMVar sem next
+    Nothing -> do
+      putMVar waiter ()
+      putMVar sem state))
 
 -- | Return a unit, waking the longest waiter if there is one.
 signalQSem :: QSem -> IO ()
@@ -74,10 +71,9 @@ signalQSem (QSem sem) = uninterruptibleMask_ (do
   putMVar sem next)
 
 signalQSemState :: (Int, [MVar ()], [MVar ()]) -> IO (Int, [MVar ()], [MVar ()])
-signalQSemState (available, ready, blocked) =
-  case available == 0 of
-    False -> pure (available + 1, ready, blocked)
-    True -> signalWaiters ready blocked
+signalQSemState (available, ready, blocked) = case available == 0 of
+  False -> pure (available + 1, ready, blocked)
+  True -> signalWaiters ready blocked
 
 signalWaiters :: [MVar ()] -> [MVar ()] -> IO (Int, [MVar ()], [MVar ()])
 signalWaiters [] [] = pure (1, [], [])

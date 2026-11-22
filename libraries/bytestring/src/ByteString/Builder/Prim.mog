@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Builder primitives: the lower-level encoders that the builder encoders are
 -- written in terms of.
 --
@@ -41,8 +42,8 @@ import Data.ByteString.Builder.Prim.Internal
 import Data.Char (Char)
 import Data.Int (Int)
 import Data.List (foldr)
-import Data.Maybe (Maybe (..))
-import Data.Monoid (Monoid (..))
+import Data.Maybe (Maybe(..))
+import Data.Monoid (Monoid(..))
 import Data.Semigroup ((<>))
 import Data.Word (Word8)
 

@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The 'Write' type and the combinators for choosing between writes.
 --
 -- Upstream a 'Write' is a bound together with a 'Poke', an action that moves a
@@ -14,21 +15,19 @@
 -- type) and the @Storable@ writes, for which base has neither the class nor a
 -- pointer.
 module Blaze.ByteString.Builder.Internal.Write
-  ( Write (..)
+  ( Write(..)
   , getBound
-
   , writeIf
   , writeEq
   , writeOrdering
   , writeOrd
-
   , fromWrite
   , fromWriteSingleton
   , fromWriteList
   ) where
 
 import Blaze.ByteString.Builder.Internal
-  ( Write (..)
+  ( Write(..)
   , bound
   , fromWrite
   , fromWriteList
@@ -38,7 +37,7 @@ import Blaze.ByteString.Builder.Internal
 import Data.Bool (Bool)
 import Data.Eq (Eq, (==))
 import Data.Int (Int)
-import Data.Ord (Ord, Ordering (..), compare)
+import Data.Ord (Ord, Ordering(..), compare)
 
 -- | The largest number of bytes a write can produce.
 getBound :: Write -> Int
@@ -49,24 +48,22 @@ maxOf :: Int -> Int -> Int
 maxOf a b = if a < b then b else a
 
 -- | Choose between two writes on a predicate, keeping the larger bound.
-writeIf :: (a -> Bool) -> (a -> Write) -> (a -> Write) -> (a -> Write)
-writeIf p wTrue wFalse x =
-  Write (maxOf (bound (wTrue x)) (bound (wFalse x)))
-        (payload (if p x then wTrue x else wFalse x))
+writeIf :: (a -> Bool) -> (a -> Write) -> (a -> Write) -> a -> Write
+writeIf p wTrue wFalse x = Write (maxOf (bound (wTrue x)) (bound (wFalse x))) (payload (if p x
+  then wTrue x
+  else wFalse x))
 
 -- | Choose between two writes by comparing the value with a test value.
-writeEq :: Eq a => a -> (a -> Write) -> (a -> Write) -> (a -> Write)
+writeEq :: Eq a => a -> (a -> Write) -> (a -> Write) -> a -> Write
 writeEq test = writeIf (\x -> x == test)
 
 -- | Choose one of three writes from an ordering, keeping the largest bound.
-writeOrdering :: (a -> Ordering) -> (a -> Write) -> (a -> Write) -> (a -> Write) -> (a -> Write)
-writeOrdering ord wLT wEQ wGT x =
-  Write (maxOf (bound (wLT x)) (maxOf (bound (wEQ x)) (bound (wGT x))))
-        (payload (case ord x of
-          LT -> wLT x
-          EQ -> wEQ x
-          GT -> wGT x))
+writeOrdering :: (a -> Ordering) -> (a -> Write) -> (a -> Write) -> (a -> Write) -> a -> Write
+writeOrdering ord wLT wEQ wGT x = Write (maxOf (bound (wLT x)) (maxOf (bound (wEQ x)) (bound (wGT x)))) (payload (case ord x of
+  LT -> wLT x
+  EQ -> wEQ x
+  GT -> wGT x))
 
 -- | Choose one of three writes by comparing the value with a test value.
-writeOrd :: Ord a => a -> (a -> Write) -> (a -> Write) -> (a -> Write) -> (a -> Write)
+writeOrd :: Ord a => a -> (a -> Write) -> (a -> Write) -> (a -> Write) -> a -> Write
 writeOrd test = writeOrdering (\x -> compare x test)

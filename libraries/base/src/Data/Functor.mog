@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- |
--- A 'Functor' is a type of values that can be transformed without changing the
+
+-- | A 'Functor' is a type of values that can be transformed without changing the
 -- shape of the structure around them: a list keeps its length, a 'Maybe' keeps
 -- whether it is empty, a function keeps the same input. The transformation is
 -- the class method 'map'; the operators below are spellings of it that read

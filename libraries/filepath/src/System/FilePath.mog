@@ -202,13 +202,22 @@ isDrive :: FilePath -> Bool
 isDrive x = if isWindows then W.isDrive x else P.isDrive x
 
 hasTrailingPathSeparator :: FilePath -> Bool
-hasTrailingPathSeparator x = if isWindows then W.hasTrailingPathSeparator x else P.hasTrailingPathSeparator x
+hasTrailingPathSeparator x =
+  if isWindows
+    then W.hasTrailingPathSeparator x
+    else P.hasTrailingPathSeparator x
 
 addTrailingPathSeparator :: FilePath -> FilePath
-addTrailingPathSeparator x = if isWindows then W.addTrailingPathSeparator x else P.addTrailingPathSeparator x
+addTrailingPathSeparator x =
+  if isWindows
+    then W.addTrailingPathSeparator x
+    else P.addTrailingPathSeparator x
 
 dropTrailingPathSeparator :: FilePath -> FilePath
-dropTrailingPathSeparator x = if isWindows then W.dropTrailingPathSeparator x else P.dropTrailingPathSeparator x
+dropTrailingPathSeparator x =
+  if isWindows
+    then W.dropTrailingPathSeparator x
+    else P.dropTrailingPathSeparator x
 
 normalise :: FilePath -> FilePath
 normalise x = if isWindows then W.normalise x else P.normalise x

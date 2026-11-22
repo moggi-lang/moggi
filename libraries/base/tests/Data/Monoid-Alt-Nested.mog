@@ -1,3 +1,5 @@
+module Main (main) where
+
 import Data.Eq
 import Data.Maybe
 import Data.Monoid
@@ -15,7 +17,6 @@ import Text.Show
 -- `Nested` adds the nested case: its `Ord` instance needs the superclass
 -- obligation `Eq (Nested f a)`, whose own context `Eq (f a)` is only reachable
 -- from `Ord (f a)` by expanding that variable-headed constraint's superclasses.
-
 data Nested f a = Nested (f a)
 
 instance Eq (f a) => Eq (Nested f a) where
@@ -39,5 +40,5 @@ main = do
   putStrLn ("alt-max: " <> show (max (Alt (Just 1)) (Alt (Just 2))))
   report "nested-eq" (Nested (Just "a") == Nested (Just "a"))
   ordering "nested-compare" (compare (Nested [1, 2]) (Nested [1, 3]))
-  putStrLn (show (getAlt ((Alt (Just 1)) <> (Alt (Just 2)))))
-  putStrLn (show (getAlt ((Alt (Nothing :: Maybe Int)) <> (Alt (Just 2)))))
+  putStrLn (show (getAlt (Alt (Just 1) <> Alt (Just 2))))
+  putStrLn (show (getAlt (Alt (Nothing :: Maybe Int) <> Alt (Just 2))))

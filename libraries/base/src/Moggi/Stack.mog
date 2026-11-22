@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Call stacks and source locations.
 --
 -- The compiler models every Moggi thread as a host thread, so the runtime can
@@ -23,7 +24,6 @@ module Moggi.Stack
   , currentCallStack
   , whoCreated
   , errorWithStackTrace
-
     -- * Source locations
   , SrcLoc(..)
   , prettySrcLoc
@@ -68,17 +68,7 @@ decodeCallSite line = case splitOn "\t" line of
   package : moduleName : name : file : startLine : startCol : _ ->
     case (readMaybe startLine, readMaybe startCol) of
       (Just lineNo, Just colNo) ->
-        Just
-          ( name
-          , SrcLoc
-              (unset package)
-              (unset moduleName)
-              (unset file)
-              lineNo
-              colNo
-              lineNo
-              colNo
-          )
+        Just (name, SrcLoc (unset package) (unset moduleName) (unset file) lineNo colNo lineNo colNo)
       _ -> Nothing
   _ -> Nothing
 
@@ -148,8 +138,7 @@ prettyCallStackLines stack = case getCallStack stack of
 
 siteLines :: [(String, SrcLoc)] -> [String]
 siteLines [] = []
-siteLines ((name, loc) : rest) =
-  ("  " <> name <> ", called at " <> prettySrcLoc loc) : siteLines rest
+siteLines ((name, loc) : rest) = "  " <> name <> ", called at " <> prettySrcLoc loc : siteLines rest
 
 -- | Render a location as @file:line:col in package:module@, matching @base@.
 prettySrcLoc :: SrcLoc -> String

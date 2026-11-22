@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Data.ByteString.JVM
   ( bsLength
   , bsTake

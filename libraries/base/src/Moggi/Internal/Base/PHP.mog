@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Moggi.Internal.Base.PHP
   ( unpack
   , take
@@ -8,7 +9,6 @@ module Moggi.Internal.Base.PHP
 import Moggi.Internal.Prim
 
 -- Scalar-aware calls via PHP mbstring / IntlChar foreigns, no PHP helpers.
-
 foreign php function mbStrLen "mb_strlen" :: String -> String -> Int
 
 foreign php function mbSubstr "mb_substr" :: String -> Int -> Int -> String -> String

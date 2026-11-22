@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Types and constants to describe HTTP status codes.
 --
 -- At the bottom are some functions to check if a given 'Status' is from a
@@ -14,13 +15,11 @@ module Network.HTTP.Types.Status
   ( -- * HTTP Status
     Status(..)
   , mkStatus
-
     -- ** Parsing and Rendering
   , parseStatusCode
   , renderStatusCode
   , parseFullStatus
   , renderFullStatus
-
     -- * Common statuses
   , status100
   , continue100
@@ -120,7 +119,6 @@ module Network.HTTP.Types.Status
   , httpVersionNotSupported505
   , status511
   , networkAuthenticationRequired511
-
     -- * Checking status code category
   , statusIsInformational
   , statusIsSuccessful
@@ -225,7 +223,7 @@ instance Enum Status where
     504 -> status504
     505 -> status505
     511 -> status511
-    c -> mkStatus c B.empty
+    c -> mkStatus c (B.empty)
 
 instance Bounded Status where
   minBound = status100
@@ -517,7 +515,6 @@ expectationFailed417 = status417
 
 -- FIXME: RFC 7168 updates the message to "I'm a Teapot" (capital T)
 -- Should we update this?
-
 -- | I'm a teapot 418
 status418 :: Status
 status418 = mkStatus 418 "I'm a teapot"
@@ -682,11 +679,9 @@ statusIsServerError status = case status of
 -- | Render the 3 digit 'Status' code into a 'ByteString'.
 renderStatusCode :: Status -> ByteString
 renderStatusCode status = case status of
-  Status code _ ->
-    if code >= 1000
-      then encodeUtf8 (show status)
-      else
-        B8.pack (digitString code)
+  Status code _ -> if code >= 1000
+    then encodeUtf8 (show status)
+    else B8.pack (digitString code)
 
 digit3 :: Int -> Char
 digit3 x = chr (48 + x)
@@ -694,16 +689,14 @@ digit3 x = chr (48 + x)
 digitString :: Int -> String
 digitString code =
   showChar (digit3 (div code 100))
-    (showChar (digit3 (div (mod code 100) 10))
-      (showChar (digit3 (mod code 10)) ""))
+    (showChar (digit3 (div (mod code 100) 10)) (showChar (digit3 (mod code 10)) ""))
 
 -- | Render the full 'Status' code with status message into a 'ByteString'.
 renderFullStatus :: Status -> ByteString
 renderFullStatus status = case status of
-  Status code msg ->
-    if code >= 1000
-      then encodeUtf8 (show code) <> encodeUtf8 " " <> msg
-      else renderStatusCode status <> encodeUtf8 " " <> msg
+  Status code msg -> if code >= 1000
+    then encodeUtf8 (show code) <> encodeUtf8 " " <> msg
+    else renderStatusCode status <> encodeUtf8 " " <> msg
 
 -- | Parses the first three characters as digits and converts them to an 'Int'.
 --
@@ -740,10 +733,7 @@ parseStatusCode bs = case B8.uncons bs of
             Just i -> Just (h * 100 + t * 10 + i, B.drop 3 bs)
 
 toNumber :: Char -> Maybe Int
-toNumber c =
-  if c >= '0' && c <= '9'
-    then Just (ord c - 48)
-    else Nothing
+toNumber c = if c >= '0' && c <= '9' then Just (ord c - 48) else Nothing
 
 -- | Assumes the provided 'ByteString' is either:
 --
@@ -772,7 +762,6 @@ parseFullStatus bs = case parseStatusCode bs of
   Nothing -> Nothing
   Just parsed -> case B.uncons (snd parsed) of
     Nothing -> Just (mkStatus (fst parsed) (encodeUtf8 ""))
-    Just rest ->
-      if fst rest == 32
-        then Just (mkStatus (fst parsed) (snd rest))
-        else Nothing
+    Just rest -> if fst rest == 32
+      then Just (mkStatus (fst parsed) (snd rest))
+      else Nothing

@@ -1,11 +1,11 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Running an 'IO' action from code that has no 'IO' in its type.
 --
 -- The prefix says what the type no longer promises: a function that uses these
 -- can perform effects, so its type is not a description of what it does.
 module System.IO.Unsafe
-  (
-    -- * Unsafe 'System.IO.IO' operations
+  ( -- * Unsafe 'System.IO.IO' operations
     unsafePerformIO
   , unsafeFixIO
   ) where

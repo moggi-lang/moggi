@@ -1,12 +1,10 @@
--- |
--- Finite maps from keys to values, following the 'Data.Map'.
+-- | Finite maps from keys to values, following the 'Data.Map'.
 --
 -- A map is a key-ordered association list (see 'insert'): lookup, insert
 -- and delete walk the list, so every operation costs what the same
 -- operation costs on lists. The exported API is the subset a program
 -- reaches for most often; anything beyond it is added when a program needs
 -- it, not before.
---
 module Data.Map
   ( Map
   , empty
@@ -45,9 +43,7 @@ import Data.Bool
 import Data.Eq
 import Data.Foldable hiding (null)
 import Data.Functor hiding (unzip)
-import Data.List hiding (
-  map, filter, null, lookup, singleton, union, find, insert
-  )
+import Data.List hiding (map, filter, null, lookup, singleton, union, find, insert)
 import Data.Maybe
 import Data.Ord
 import Moggi.Internal.Base
@@ -60,7 +56,7 @@ data AssocEntry k v = AssocEntry k v
   deriving (Eq, Ord, Show)
 
 data Map k v = MkMap [AssocEntry k v]
-  deriving Show
+  deriving (Show)
 
 empty :: Map k v
 empty = MkMap []

@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The core of "Blaze.ByteString.Builder": what a 'Builder' is, and the few
 -- operations the rest of the package is written with.
 --
@@ -6,8 +7,8 @@
 -- strict, so a builder is run once into a single value and the write-buffer
 -- machinery of the upstream library has nowhere to go.
 module Blaze.ByteString.Builder.Internal
-  ( Builder (..)
-  , Write (..)
+  ( Builder(..)
+  , Write(..)
   , runBuilder
   , toByteString
   , toLazyByteString
@@ -33,9 +34,9 @@ import Data.ByteString (ByteString, append, concat, length, null, pack, unpack)
 import Data.Char (Char, ord)
 import Data.Int (Int)
 import Data.List ((:), foldr, map)
-import Data.Monoid (Monoid (..))
+import Data.Monoid (Monoid(..))
 import Data.Num
-import Data.Real (Integral (div, mod))
+import Data.Real (Integral(div, mod))
 import Data.Semigroup ((<>))
 import Data.String (String)
 import Data.String qualified as S
@@ -130,7 +131,7 @@ fromWrite :: Write -> Builder
 fromWrite w = fromByteString (payload w)
 
 -- | A write specialised to one value.
-fromWriteSingleton :: (a -> Write) -> (a -> Builder)
+fromWriteSingleton :: (a -> Write) -> a -> Builder
 fromWriteSingleton f a = fromWrite (f a)
 
 -- | A write for every value of a list.

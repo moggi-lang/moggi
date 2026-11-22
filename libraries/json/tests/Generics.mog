@@ -1,7 +1,6 @@
 -- Generic compatibility: the shapes the old backend suite pinned — newtype
 -- unwrapping, a unary record staying an object, positional sum contents, an
 -- empty-array nullary, all-nullary tag overrides, and a nested all-nullary field.
-
 module Generics (genericsSuite) where
 
 import Data.ByteString.Char8 qualified as C

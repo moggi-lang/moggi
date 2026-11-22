@@ -1,11 +1,10 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The Bool type and related functions.
 module Data.Bool
-  (
-    -- * Booleans
+  ( -- * Booleans
     Bool(..)
-
-  -- ** Operations
+    -- ** Operations
   , (&&)
   , (||)
   , not
@@ -40,7 +39,6 @@ import Moggi.Internal.Base
 -- >>> let p = False
 -- >>> bool f t p == if p then t else f
 -- True
---
 bool :: a -> a -> Bool -> a
 bool x y b = case b of
   True -> x

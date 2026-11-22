@@ -1,3 +1,5 @@
+module Main (main) where
+
 import Control.Monad.Zip
 import Data.Proxy (Proxy(Proxy))
 import Data.Tuple (Solo(MkSolo))
@@ -8,7 +10,7 @@ main = do
   putStrLn (show (mzipWith (+) [1, 2] [3, 4]))
   putStrLn (show (munzip [(1, 'a'), (2, 'b')]))
   putStrLn (show (mzip (Just 1) (Just 2)))
-  putStrLn (show (mzip (Just 1 :: Maybe Int) (Nothing :: Maybe Int)))
+  putStrLn (show (mzip ((Just 1) :: Maybe Int) (Nothing :: Maybe Int)))
   putStrLn (show (munzip (Just (1, 2))))
   putStrLn (show (mzip (MkSolo 1) (MkSolo 2)))
   putStrLn (show (munzip (MkSolo (1, 2))))

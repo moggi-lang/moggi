@@ -1,3 +1,5 @@
+module Main (main) where
+
 import Data.Eq
 import Data.Ord
 import Data.Double (castWord64ToDouble, castDoubleToWord64, rationalToDouble)
@@ -6,10 +8,8 @@ import Text.Show
 -- IEEE 754 semantics and `Show`: NaN, infinities, negative zero, and the
 -- shortest round-trip decimal form, all identical on every backend. The
 -- `Floating` surface continues below, on the same values.
-
 -- IEEE 754 semantics and `Show`: NaN, infinities, negative zero, and the
 -- shortest round-trip decimal form, all identical on every backend.
-
 half :: Double -> Double
 half x = x / (1.0 + 1.0)
 
@@ -31,9 +31,9 @@ negInf = negate one / zero
 report :: String -> Bool -> IO ()
 report label b = putStrLn (label <> ": " <> show b)
 
-
 near :: Double -> Double -> Bool
 near a b = abs (a - b) < 1.0e-9
+
 main :: IO ()
 main = do
   report "nan==nan" (nan == nan)
@@ -59,13 +59,16 @@ main = do
   report "rationalToDouble 1 3" (rationalToDouble 1 3 == 1.0 / 3.0)
   report "rationalToDouble 2^2000 over 1" (rationalToDouble (2 ^ 2000) 1 == inf)
   report "rationalToDouble 1 over 2^2000" (rationalToDouble 1 (2 ^ 2000) == 0.0)
-  report "rationalToDouble 1 over 2^1074" (rationalToDouble 1 (2 ^ 1074) == rationalToDouble 2 (2 ^ 1075))
+  report "rationalToDouble 1 over 2^1074"
+    (rationalToDouble 1 (2 ^ 1074) == rationalToDouble 2 (2 ^ 1075))
   report "rationalToDouble tie at 2^-1075" (rationalToDouble 1 (2 ^ 1075) == 0.0)
-  report "rationalToDouble just above tie" (rationalToDouble 3 (2 ^ 1076) == rationalToDouble 1 (2 ^ 1074))
+  report "rationalToDouble just above tie"
+    (rationalToDouble 3 (2 ^ 1076) == rationalToDouble 1 (2 ^ 1074))
   report "rationalToDouble smallest is positive" (rationalToDouble 1 (2 ^ 1074) > 0.0)
   report "min subnormal literal" (5.0e-324 == rationalToDouble 1 (2 ^ 1074))
   report "tiny literal" (1.0e-320 > 0.0)
-  report "rationalToDouble max finite" (rationalToDouble ((2 ^ 1024) - (2 ^ 971)) 1 == 1.7976931348623157e308)
+  report "rationalToDouble max finite"
+    (rationalToDouble (2 ^ 1024 - 2 ^ 971) 1 == 1.7976931348623157e308)
   report "rationalToDouble over max" (rationalToDouble (2 ^ 1024) 1 == inf)
   putStrLn (show (8.0 :: Double))
   putStrLn (show (0.1 :: Double))
@@ -78,9 +81,9 @@ main = do
   putStrLn (show inf)
   putStrLn (show nan)
   putStrLn (show (negate zero))
-  putStrLn (show (0.1 + 0.2 :: Double))
+  putStrLn (show (0.1 + (0.2 :: Double)))
   putStrLn (show (3.141592653589793 :: Double))
-  putStrLn (show (negate 1.0e10 :: Double))
+  putStrLn (show ((negate 1.0e10) :: Double))
   report "sqrt 4 == 2" (sqrt 4.0 == 2.0)
   report "exp 0 == 1" (exp 0.0 == 1.0)
   report "log 1 == 0" (log 1.0 == 0.0)
@@ -111,7 +114,7 @@ main = do
   report "asinh 1e300 ~ 691.4686750787736" (near (asinh 1.0e300) 691.4686750787736)
   report "acosh 1e300 ~ 691.4686750787736" (near (acosh 1.0e300) 691.4686750787736)
   report "expm1 1e-3 ~ 0.0010005001667083417" (near (expm1 1.0e-3) 0.0010005001667083417)
-  report "(**) negative base, integral exponent" ((-2.0) ** 3.0 == -8.0)
+  report "(**) negative base, integral exponent" (-2.0 ** 3.0 == -8.0)
   report "(**) 2 ** 0.5 ~ sqrt 2" (near (2.0 ** 0.5) 1.4142135623730951)
   report "logBase 10 1000 ~ 3" (near (logBase 10.0 1000.0) 3.0)
   report "log1pexp 1000 == 1000" (log1pexp 1000.0 == 1000.0)

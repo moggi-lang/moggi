@@ -2,7 +2,6 @@
 -- and @Data.Array.ST@\/@Data.Array.IO@ re-export @Data.Array.MArray@.
 -- This module imports only the re-exporting modules, so a dropped
 -- re-export fails to compile here.
-
 module ReExportSuite (reExportSuite) where
 
 import Control.Monad.ST (ST, runST)
@@ -23,10 +22,12 @@ reExportSuite :: IO ()
 reExportSuite = do
   assertTrue "Ix range through Data.Array" (range (0, 2) == [0, 1, 2])
   assertTrue "Ix inRange through Data.Array" (inRange (0, 2) 1)
-  let n = runST (do marr <- newSTIs (0, 2) [1, 2, 3]; getElems marr) :: [Int]
+  let n = (runST (do
+    marr <- newSTIs (0, 2) [1, 2, 3]
+    getElems marr)) :: [Int]
   assertTrue "MArray through Data.Array.ST" (n == [1, 2, 3])
   marr <- newIOIs (0, 1) [7, 8]
   es <- getElems marr
   assertTrue "MArray through Data.Array.IO" (es == [7, 8])
-  let arr = array (0, 1) [(0, 7), (1, 8)] :: Array Int Int
+  let arr = (array (0, 1) [(0, 7), (1, 8)]) :: Array Int Int
   assertTrue "array through Data.Array" (elems arr == [7, 8])

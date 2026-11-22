@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Strict state threads: a computation that touches mutable cells and
 -- answers a pure value.
 --

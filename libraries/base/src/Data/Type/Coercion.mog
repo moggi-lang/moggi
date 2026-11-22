@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 --
 -- Module      :  Data.Type.Coercion
 -- License     :  BSD-style (see the LICENSE file in the distribution)
@@ -46,7 +47,6 @@ data Coercion a b where
 -- with credit to Conal Elliott for 'ty', Erik Hesselink & Martijn van
 -- Steenbergen for 'type-equality', Edward Kmett for 'eq', and Gabor Greif
 -- for 'type-eq'
-
 -- | Type-safe cast, using representational equality
 coerceWith :: Coercion a b -> a -> b
 coerceWith Coercion x = coerce x
@@ -66,7 +66,7 @@ trans :: Coercion a b -> Coercion b c -> Coercion a c
 trans Coercion Coercion = Coercion
 
 -- | Convert propositional (nominal) equality to representational equality
-repr :: (a :~: b) -> Coercion a b
+repr :: a :~: b -> Coercion a b
 repr Refl = Coercion
 
 -- | @since base-4.7.0.0

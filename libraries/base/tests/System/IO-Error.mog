@@ -1,8 +1,10 @@
--- System.IO.Error: the IOError record's accessors and setters, and the two
--- handler shapes catch accepts (an inline lambda and a named function).
+module Main (main) where
+
 import Control.Exception
 import System.IO.Error
 
+-- System.IO.Error: the IOError record's accessors and setters, and the two
+-- handler shapes catch accepts (an inline lambda and a named function).
 -- A cross-module nullary constructor used as a value, not applied.
 errorTypes :: [IOErrorType]
 errorTypes = [doesNotExistErrorType, permissionErrorType]
@@ -54,4 +56,6 @@ main = do
   report "kind in action" (putStrLn (show (map (\t -> show t) errorTypes)))
   putStrLn ("isUserError: " <> show (isUserError (userError "boom")))
   putStrLn ("userError: " <> show (userError "boom"))
-  putStrLn ("location of userError: " <> ioeGetLocation (annotateIOError (userError "boom") "ctx" Nothing (Just "f.txt")))
+  putStrLn
+    ("location of userError: "
+      <> ioeGetLocation (annotateIOError (userError "boom") "ctx" Nothing (Just "f.txt")))

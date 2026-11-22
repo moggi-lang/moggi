@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Types and constants to describe the HTTP version.
 --
 -- There are no parsing functions, as the formats are fairly different

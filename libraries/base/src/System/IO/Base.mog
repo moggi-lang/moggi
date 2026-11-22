@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The `IO` type and its instances, and `FilePath`: paths as host strings.
 --
 -- Users import {@link System.IO}; this module exists so dependents that must not

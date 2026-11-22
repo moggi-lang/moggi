@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -----------------------------------------------------------------------------
 --
 -- Module      :  Data.Typeable
@@ -27,66 +28,74 @@
 --
 -- 'Typeable' is poly-kinded.
 module Data.Typeable
-    ( -- * The Typeable class
-      Typeable
-    , typeOf
-    , typeRep
-
-      -- * Propositional equality
-    , (:~:)(Refl)
-    , (:~~:)(HRefl)
-
-      -- * Type-safe cast
-    , cast
-    , eqT
-    , heqT
-    , decT
-    , hdecT
-    , gcast                -- a generalisation of cast
-
-      -- * Generalized casts for higher-order kinds
-    , gcast1               -- :: ... => c (t a) -> Maybe (c (t' a))
-    , gcast2               -- :: ... => c (t a b) -> Maybe (c (t' a b))
-
-      -- * A canonical proxy type
-    , Proxy (..)
-
-      -- * Type representations
-    , TypeRep
-    , rnfTypeRep
-    , showsTypeRep
-    , mkFunTy
-
-      -- * Observing type representations
-    , funResultTy
-    , splitTyConApp
-    , typeRepArgs
-    , typeRepTyCon
-    , typeRepFingerprint
-
-      -- * Type constructors
-    , TyCon          -- abstract, instance of: Eq, Show, Typeable
-                     -- For now don't export Module to avoid name clashes
-    , tyConPackage
-    , tyConModule
-    , tyConName
-    , rnfTyCon
-    , tyConFingerprint
-
-      -- * For backwards compatibility
-    , typeOf1, typeOf2, typeOf3, typeOf4, typeOf5, typeOf6, typeOf7
-      -- Jank
-    , trLiftedRep
-    ) where
+  ( -- * The Typeable class
+    Typeable
+  , typeOf
+  , typeRep
+    -- * Propositional equality
+  , (:~:)(Refl)
+  , (:~~:)(HRefl)
+    -- * Type-safe cast
+  , cast
+  , eqT
+  , heqT
+  , decT
+  , hdecT
+  , gcast
+    -- a generalisation of cast
+    -- * Generalized casts for higher-order kinds
+  , gcast1
+    -- :: ... => c (t a) -> Maybe (c (t' a))
+  , gcast2
+    -- :: ... => c (t a b) -> Maybe (c (t' a b))
+    -- * A canonical proxy type
+  , Proxy(..)
+    -- * Type representations
+  , TypeRep
+  , rnfTypeRep
+  , showsTypeRep
+  , mkFunTy
+    -- * Observing type representations
+  , funResultTy
+  , splitTyConApp
+  , typeRepArgs
+  , typeRepTyCon
+  , typeRepFingerprint
+    -- * Type constructors
+  , TyCon
+    -- abstract, instance of: Eq, Show, Typeable
+    -- For now don't export Module to avoid name clashes
+  , tyConPackage
+  , tyConModule
+  , tyConName
+  , rnfTyCon
+  , tyConFingerprint
+    -- * For backwards compatibility
+  , typeOf1
+  , typeOf2
+  , typeOf3
+  , typeOf4
+  , typeOf5
+  , typeOf6
+  , typeOf7
+    -- Jank
+  , trLiftedRep
+  ) where
 
 import Moggi.Internal.Type.Reflection qualified as I
 import Moggi.Internal.Type.Reflection
-  ( Typeable, Fingerprint, SomeTypeRep(..)
-  , TyCon, tyConPackage, tyConModule, tyConName, rnfTyCon, tyConFingerprint
+  ( Typeable
+  , Fingerprint
+  , SomeTypeRep(..)
+  , TyCon
+  , tyConPackage
+  , tyConModule
+  , tyConName
+  , rnfTyCon
+  , tyConFingerprint
   , trLiftedRep
   )
 import Data.Type.Equality
-
 import Data.Either
 import Data.Maybe
 import Data.Proxy
@@ -96,7 +105,6 @@ import Text.Show (ShowS, shows)
 
 -- | A quantified type representation.
 type TypeRep = SomeTypeRep
-
 
 -- | Observe a type representation for the type of a value.
 typeOf :: forall a. Typeable a => a -> TypeRep
@@ -117,10 +125,10 @@ showsTypeRep t = shows t
 cast :: forall a b. (Typeable a, Typeable b) => a -> Maybe b
 cast x = case ta `I.eqTypeRep` tb of
   Just HRefl -> Just x
-  Nothing    -> Nothing
- where
-  ta = I.typeRepProxy (Proxy :: Proxy a)
-  tb = I.typeRepProxy (Proxy :: Proxy b)
+  Nothing -> Nothing
+  where
+    ta = I.typeRepProxy (Proxy :: Proxy a)
+    tb = I.typeRepProxy (Proxy :: Proxy b)
 
 -- | Extract a witness of equality of two types
 --
@@ -128,7 +136,7 @@ cast x = case ta `I.eqTypeRep` tb of
 eqT :: forall a b. (Typeable a, Typeable b) => Maybe (a :~: b)
 eqT = case heqT :: Maybe (a :~~: b) of
   Just HRefl -> Just Refl
-  Nothing    -> Nothing
+  Nothing -> Nothing
 
 -- | Decide an equality of two types
 --
@@ -136,7 +144,7 @@ eqT = case heqT :: Maybe (a :~~: b) of
 decT :: forall a b. (Typeable a, Typeable b) => Either (a :~: b -> Void) (a :~: b)
 decT = case hdecT :: Either (a :~~: b -> Void) (a :~~: b) of
   Right HRefl -> Right Refl
-  Left p      -> Left (refuteHomogeneous p)
+  Left p -> Left (refuteHomogeneous p)
 
 -- The refutation of @a :~~: b@ is a refutation of @a :~: b@: a homogeneous
 -- witness is the heterogeneous one. This is the lambda @\Refl -> p HRefl@;
@@ -149,38 +157,36 @@ refuteHomogeneous p Refl = p HRefl
 -- @since base-4.18.0.0
 heqT :: forall a b. (Typeable a, Typeable b) => Maybe (a :~~: b)
 heqT = ta `I.eqTypeRep` tb
- where
-  ta = I.typeRepProxy (Proxy :: Proxy a)
-  tb = I.typeRepProxy (Proxy :: Proxy b)
+  where
+    ta = I.typeRepProxy (Proxy :: Proxy a)
+    tb = I.typeRepProxy (Proxy :: Proxy b)
 
 -- | Decide heterogeneous equality of two types.
 --
 -- @since base-4.19.0.0
 hdecT :: forall a b. (Typeable a, Typeable b) => Either (a :~~: b -> Void) (a :~~: b)
 hdecT = ta `I.decTypeRep` tb
- where
-  ta = I.typeRepProxy (Proxy :: Proxy a)
-  tb = I.typeRepProxy (Proxy :: Proxy b)
+  where
+    ta = I.typeRepProxy (Proxy :: Proxy a)
+    tb = I.typeRepProxy (Proxy :: Proxy b)
 
 -- | A flexible variation parameterised in a type constructor
 gcast :: forall a b c. (Typeable a, Typeable b) => c a -> Maybe (c b)
 gcast x = case eqT :: Maybe (a :~: b) of
   Just Refl -> Just x
-  Nothing   -> Nothing
+  Nothing -> Nothing
 
 -- | Cast over @k1 -> k2@
-gcast1 :: forall c t t' a. (Typeable t, Typeable t')
-       => c (t a) -> Maybe (c (t' a))
+gcast1 :: forall c t t' a. (Typeable t, Typeable t') => c (t a) -> Maybe (c (t' a))
 gcast1 x = case eqT :: Maybe (t :~: t') of
   Just Refl -> Just x
-  Nothing   -> Nothing
+  Nothing -> Nothing
 
 -- | Cast over @k1 -> k2 -> k3@
-gcast2 :: forall c t t' a b. (Typeable t, Typeable t')
-       => c (t a b) -> Maybe (c (t' a b))
+gcast2 :: forall c t t' a b. (Typeable t, Typeable t') => c (t a b) -> Maybe (c (t' a b))
 gcast2 x = case eqT :: Maybe (t :~: t') of
   Just Refl -> Just x
-  Nothing   -> Nothing
+  Nothing -> Nothing
 
 -- | Applies a type to a function type. Returns: @Just u@ if the first argument
 -- represents a function of type @t -> u@ and the second argument represents a
@@ -200,7 +206,8 @@ splitTyConApp t = case t of
 
 -- | Observe the argument types of a type representation
 typeRepArgs :: TypeRep -> [TypeRep]
-typeRepArgs ty = case splitTyConApp ty of (_, args) -> args
+typeRepArgs ty = case splitTyConApp ty of
+  (_, args) -> args
 
 -- | Observe the type constructor of a quantified type representation.
 typeRepTyCon :: TypeRep -> TyCon
@@ -217,7 +224,6 @@ typeRepFingerprint t = case t of
 -- | Force a 'TypeRep' to normal form.
 rnfTypeRep :: TypeRep -> ()
 rnfTypeRep = I.rnfSomeTypeRep
-
 
 -- Keeping backwards-compatibility
 typeOf1 :: forall t a. Typeable t => t a -> TypeRep

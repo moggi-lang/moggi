@@ -4,6 +4,7 @@
   jvm = Data.Char.JVM
   dotnet = Data.Char.DotNet
 #-}
+
 -- | The 'Char' type and associated operations.
 --
 -- Unicode characters are divided into letters, numbers, marks, punctuation,
@@ -14,36 +15,48 @@
 -- the scalars of the literal and slice it, so they live here, next to the
 -- classification they read through.
 module Data.Char
-  (
-    Char
-
-  -- * Character classification
-  , isControl, isSpace
-  , isLower, isLowerCase, isUpper, isUpperCase, isAlpha, isAlphaNum, isPrint
-  , isDigit, isOctDigit, isHexDigit
-  , isLetter, isMark, isNumber, isPunctuation, isSymbol, isSeparator
-
-  -- ** Subranges
-  , isAscii, isLatin1
-  , isAsciiUpper, isAsciiLower
-
-  -- ** Unicode general categories
-  , GeneralCategory(..), generalCategory
-
-  -- * Case conversion
-  , toUpper, toLower, toTitle
-
-  -- * Single digit characters
+  ( Char
+    -- * Character classification
+  , isControl
+  , isSpace
+  , isLower
+  , isLowerCase
+  , isUpper
+  , isUpperCase
+  , isAlpha
+  , isAlphaNum
+  , isPrint
+  , isDigit
+  , isOctDigit
+  , isHexDigit
+  , isLetter
+  , isMark
+  , isNumber
+  , isPunctuation
+  , isSymbol
+  , isSeparator
+    -- ** Subranges
+  , isAscii
+  , isLatin1
+  , isAsciiUpper
+  , isAsciiLower
+    -- ** Unicode general categories
+  , GeneralCategory(..)
+  , generalCategory
+    -- * Case conversion
+  , toUpper
+  , toLower
+  , toTitle
+    -- * Single digit characters
   , digitToInt
   , intToDigit
-
-  -- * Numeric representations
+    -- * Numeric representations
   , ord
   , chr
-
-  -- * String representations
+    -- * String representations
   , showLitChar
-  , lexLitChar, readLitChar
+  , lexLitChar
+  , readLitChar
   ) where
 
 import Data.Bool
@@ -164,7 +177,6 @@ toTitle :: Char -> Char
 digitToInt :: Char -> Int
 
 -- Code-range predicates: pure Moggi on ord.
-
 intLt a b = case intCompare# a b of
   LT -> True
   EQ -> False
@@ -192,10 +204,7 @@ charEqInt a b = case intCompare# a b of
   _ -> False
 
 -- Surrogates U+D800..U+DFFF are code points but not Unicode scalar values.
-isUnicodeScalar n =
-  intGte n 0
-  && intLte n 1114111
-  && (intLt n 55296 || intGt n 57343)
+isUnicodeScalar n = intGte n 0 && intLte n 1114111 && (intLt n 55296 || intGt n 57343)
 
 isAscii :: Char -> Bool
 isAscii c = intLt (ord c) 128
@@ -213,9 +222,7 @@ isOctDigit :: Char -> Bool
 isOctDigit c = inRange 48 55 (ord c)
 
 isHexDigit :: Char -> Bool
-isHexDigit c =
-  let n = ord c
-  in isDigit c || inRange 65 70 n || inRange 97 102 n
+isHexDigit c = let n = ord c in isDigit c || inRange 65 70 n || inRange 97 102 n
 
 intToDigit :: Int -> Char
 intToDigit n = case inRange 0 9 n of
@@ -423,14 +430,38 @@ charsPrefix p s = case p of
 
 litNames :: [(String, Int)]
 litNames =
-  [ ("NUL", 0), ("SOH", 1), ("STX", 2), ("ETX", 3)
-  , ("EOT", 4), ("ENQ", 5), ("ACK", 6), ("BEL", 7)
-  , ("BS", 8), ("HT", 9), ("LF", 10), ("VT", 11)
-  , ("FF", 12), ("CR", 13), ("SO", 14), ("SI", 15)
-  , ("DLE", 16), ("DC1", 17), ("DC2", 18), ("DC3", 19)
-  , ("DC4", 20), ("NAK", 21), ("SYN", 22), ("ETB", 23)
-  , ("CAN", 24), ("EM", 25), ("SUB", 26), ("ESC", 27)
-  , ("FS", 28), ("GS", 29), ("RS", 30), ("US", 31)
+  [ ("NUL", 0)
+  , ("SOH", 1)
+  , ("STX", 2)
+  , ("ETX", 3)
+  , ("EOT", 4)
+  , ("ENQ", 5)
+  , ("ACK", 6)
+  , ("BEL", 7)
+  , ("BS", 8)
+  , ("HT", 9)
+  , ("LF", 10)
+  , ("VT", 11)
+  , ("FF", 12)
+  , ("CR", 13)
+  , ("SO", 14)
+  , ("SI", 15)
+  , ("DLE", 16)
+  , ("DC1", 17)
+  , ("DC2", 18)
+  , ("DC3", 19)
+  , ("DC4", 20)
+  , ("NAK", 21)
+  , ("SYN", 22)
+  , ("ETB", 23)
+  , ("CAN", 24)
+  , ("EM", 25)
+  , ("SUB", 26)
+  , ("ESC", 27)
+  , ("FS", 28)
+  , ("GS", 29)
+  , ("RS", 30)
+  , ("US", 31)
   , ("DEL", 127)
   ]
 

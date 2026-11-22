@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The precedence layer of the 'Read' class: a parser that carries the
 -- precedence context a signature asks for, so a parser can be composed instead
 -- of threaded through by hand.
@@ -66,9 +67,10 @@ pfail = ReadPrec (\_ _ -> [])
 
 -- | The left parser, and the right one only when the left answers nothing.
 (<++>) :: ReadPrec a -> ReadPrec a -> ReadPrec a
-p <++> q = ReadPrec (\d s -> case readPrec_to_S p d s of
-  [] -> readPrec_to_S q d s
-  xs -> xs)
+p <++> q = ReadPrec (\d s ->
+  case readPrec_to_S p d s of
+    [] -> readPrec_to_S q d s
+    xs -> xs)
 
 -- | Run the parser at precedence zero.
 reset :: ReadPrec a -> ReadPrec a

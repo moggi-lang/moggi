@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- |
--- The types the input/output operations pass around.
+
+-- | The types the input/output operations pass around.
 --
 -- A 'Handle' is an open connection to a file: the operations that read and
 -- write take one, and the operations that open and close a file produce and

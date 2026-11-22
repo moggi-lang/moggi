@@ -1,4 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
+module Main (main) where
+
 import Control.Monad
 import Data.Bits
 import Data.Bool
@@ -20,7 +23,6 @@ import System.IO
 -- large), the signed and unsigned complements, the popCount/zero-count
 -- identities, and the `Integer` fake two's-complement rule for negative values.
 -- Every backend must print the same lines.
-
 w :: Int -> Word
 w = fromIntegral
 
@@ -92,24 +94,21 @@ main = do
   putStrLn (show (setBit (w8 0) 3))
   putStrLn (show (clearBit (w8 255) 3))
   putStrLn (show (complementBit (w8 0) 3))
-  putStrLn (show (bit 7 :: Word8))
-  putStrLn (show (bit 8 :: Word8))
+  putStrLn (show ((bit 7) :: Word8))
+  putStrLn (show ((bit 8) :: Word8))
   putStrLn (show (w8 128 .>>. 7))
   putStrLn (show (w8 1 .<<. 7))
   putStrLn (show (w8 128 !>>. 7))
   putStrLn (show (w8 1 !<<. 7))
-
   -- Word16 / Word32 / Word64 boundaries.
   putStrLn (show (oneBits :: Word16))
   putStrLn (show (shiftL (w16 1) 15))
   putStrLn (show (shiftL (w16 1) 16))
   putStrLn (show (rotate (w16 1) (negate 1)))
   putStrLn (unsignedParts (w16 32769))
-
   putStrLn (show (oneBits :: Word32))
   putStrLn (show (shiftR (oneBits :: Word32) 31))
   putStrLn (show (rotate (w32 2147483649) 1))
-
   putStrLn (show (oneBits :: Word64))
   putStrLn (show (shiftR (oneBits :: Word64) 63))
   putStrLn (show (shiftL (w64 1) 64))
@@ -117,10 +116,9 @@ main = do
   putStrLn (show (countLeadingZeros (oneBits :: Word64)))
   putStrLn (show (countTrailingZeros (w64 0)))
   putStrLn (show (testBit (oneBits :: Word64) 63))
-  putStrLn (show (bit 63 :: Word64))
+  putStrLn (show ((bit 63) :: Word64))
   putStrLn (show (rotate (w64 1) 63))
   putStrLn (show (w64 255 .&. w64 15))
-
   -- Word (host width).
   putStrLn (show (popCount (oneBits :: Word)))
   putStrLn (show (countTrailingZeros (w 0)))
@@ -133,7 +131,6 @@ main = do
   putStrLn (show (oneBits > w 0))
   putStrLn (show (w 1 > oneBits))
   putStrLn (show (signum (oneBits :: Word)))
-
   -- Int8: sign extension in every direction.
   putStrLn (show (complement (i8 0)))
   putStrLn (show (complement (i8 127)))
@@ -154,7 +151,6 @@ main = do
   putStrLn (show (i8 (negate 1) .&. i8 15))
   putStrLn (show (i8 (negate 1) .|. i8 0))
   putStrLn (show (i8 5 .^. i8 5))
-
   -- Int16 / Int32 / Int64.
   putStrLn (show (complement (i16 0)))
   putStrLn (show (shiftR (i16 (negate 1)) 15))
@@ -164,7 +160,6 @@ main = do
   putStrLn (show (rotate (i32 (negate 2147483648)) 1))
   putStrLn (show (i64 `xor` i64))
   putStrLn (show (popCount (complement i64)))
-
   -- Int (host width).
   putStrLn (show (complement (i 0)))
   putStrLn (show (complement (i (negate 1))))
@@ -181,7 +176,6 @@ main = do
   putStrLn (show (bitSizeMaybe (i 0)))
   putStrLn (show (bitSize (i 0)))
   putStrLn (show (isSigned (i 0)))
-
   -- Bool: a one-bit bit field.
   putStrLn (show (bitSize True))
   putStrLn (show (True .&. False))
@@ -191,15 +185,14 @@ main = do
   putStrLn (show (shift True 0))
   putStrLn (show (shift True 1))
   putStrLn (show (rotate True 5))
-  putStrLn (show (bit 0 :: Bool))
-  putStrLn (show (bit 1 :: Bool))
+  putStrLn (show ((bit 0) :: Bool))
+  putStrLn (show ((bit 1) :: Bool))
   putStrLn (show (testBit True 0))
   putStrLn (show (testBit True 1))
   putStrLn (show (popCount True))
   putStrLn (show (finiteBitSize False))
   putStrLn (show (countLeadingZeros False))
   putStrLn (show (countTrailingZeros True))
-
   -- Integer: fake two's complement for negative values.
   putStrLn (show (z 171 .&. z 18))
   putStrLn (show (z 171 .|. z 18))
@@ -217,14 +210,13 @@ main = do
   putStrLn (show (shiftR (negate (z 4)) 1))
   putStrLn (show (shiftR (negate (z 1)) 200))
   putStrLn (show (shiftR (complement (z 0)) 5))
-  putStrLn (show (bit 70 :: Integer))
+  putStrLn (show ((bit 70) :: Integer))
   putStrLn (show (rotate (z 5) 3))
   putStrLn (show (rotate (negate (z 5)) 1))
   putStrLn (show (shiftL (z 1) 0))
   putStrLn (show (bitSizeMaybe (z 0)))
   putStrLn (show (isSigned (z 0)))
   putStrLn (show (negate (z 5) .&. z 15))
-
   -- Natural: the same bit pattern rules without negative values.
   putStrLn (show (nat 171 .&. nat 18))
   putStrLn (show (nat 171 .|. nat 18))
@@ -235,35 +227,32 @@ main = do
   putStrLn (show (testBit (nat 171) 0))
   putStrLn (show (bitSizeMaybe (nat 0)))
   putStrLn (show (isSigned (nat 0)))
-
   -- toIntegralSized.
-  putStrLn (show (toIntegralSized (100 :: Int) :: Maybe Word8))
-  putStrLn (show (toIntegralSized (200 :: Int) :: Maybe Word8))
-  putStrLn (show (toIntegralSized (w8 200) :: Maybe Int8))
-  putStrLn (show (toIntegralSized (w8 100) :: Maybe Int8))
-  putStrLn (show (toIntegralSized (negate 1 :: Int) :: Maybe Word8))
-  putStrLn (show (toIntegralSized (w8 255) :: Maybe Int16))
-  putStrLn (show (toIntegralSized (300 :: Int) :: Maybe Word8))
-  putStrLn (show (toIntegralSized (5 :: Int) :: Maybe Integer))
-  putStrLn (show (toIntegralSized (negate 5 :: Int) :: Maybe Integer))
-  putStrLn (show (toIntegralSized (5 :: Int) :: Maybe Natural))
-  putStrLn (show (toIntegralSized (negate 5 :: Int) :: Maybe Natural))
-  putStrLn (show (toIntegralSized (1000 :: Int) :: Maybe Int8))
-  putStrLn (show (toIntegralSized (negate 129 :: Int) :: Maybe Int8))
-  putStrLn (show (toIntegralSized (negate 128 :: Int) :: Maybe Int8))
-  putStrLn (show (toIntegralSized (127 :: Int) :: Maybe Int8))
-  putStrLn (show (toIntegralSized (128 :: Int) :: Maybe Int8))
-  putStrLn (show (toIntegralSized (300 :: Int) :: Maybe Int16))
-  putStrLn (show (toIntegralSized (70000 :: Int) :: Maybe Int16))
-  putStrLn (show (toIntegralSized (z 5) :: Maybe Int))
-  putStrLn (show (toIntegralSized (z 5) :: Maybe Word8))
-  putStrLn (show (toIntegralSized (w8 200) :: Maybe Word16))
-
+  putStrLn (show ((toIntegralSized (100 :: Int)) :: Maybe Word8))
+  putStrLn (show ((toIntegralSized (200 :: Int)) :: Maybe Word8))
+  putStrLn (show ((toIntegralSized (w8 200)) :: Maybe Int8))
+  putStrLn (show ((toIntegralSized (w8 100)) :: Maybe Int8))
+  putStrLn (show ((toIntegralSized ((negate 1) :: Int)) :: Maybe Word8))
+  putStrLn (show ((toIntegralSized (w8 255)) :: Maybe Int16))
+  putStrLn (show ((toIntegralSized (300 :: Int)) :: Maybe Word8))
+  putStrLn (show ((toIntegralSized (5 :: Int)) :: Maybe Integer))
+  putStrLn (show ((toIntegralSized ((negate 5) :: Int)) :: Maybe Integer))
+  putStrLn (show ((toIntegralSized (5 :: Int)) :: Maybe Natural))
+  putStrLn (show ((toIntegralSized ((negate 5) :: Int)) :: Maybe Natural))
+  putStrLn (show ((toIntegralSized (1000 :: Int)) :: Maybe Int8))
+  putStrLn (show ((toIntegralSized ((negate 129) :: Int)) :: Maybe Int8))
+  putStrLn (show ((toIntegralSized ((negate 128) :: Int)) :: Maybe Int8))
+  putStrLn (show ((toIntegralSized (127 :: Int)) :: Maybe Int8))
+  putStrLn (show ((toIntegralSized (128 :: Int)) :: Maybe Int8))
+  putStrLn (show ((toIntegralSized (300 :: Int)) :: Maybe Int16))
+  putStrLn (show ((toIntegralSized (70000 :: Int)) :: Maybe Int16))
+  putStrLn (show ((toIntegralSized (z 5)) :: Maybe Int))
+  putStrLn (show ((toIntegralSized (z 5)) :: Maybe Word8))
+  putStrLn (show ((toIntegralSized (w8 200)) :: Maybe Word16))
   -- The unbounded types report no width, and `bitSize` on them fails; the
   -- failure is pinned by Exec-Bits-BitSize.mog.
   putStrLn (show (bitSizeMaybe (z 0)))
   putStrLn (show (bitSizeMaybe (nat 0)))
-
   -- Monoids under bitwise operations.
   putStrLn (show (getAnd (And (w8 171) <> And (w8 18))))
   putStrLn (show (getIor (Ior (w8 171) <> Ior (w8 18))))
@@ -279,29 +268,29 @@ main = do
   putStrLn (show (popCount (And (w8 171))))
   putStrLn (show (getAnd (And (i8 15) <> And (i8 3))))
   putStrLn (show (getIff (Iff (i8 0) <> Iff (i8 0))))
-
   -- Word and Word64 hold the full unsigned 64-bit range, so their host
   -- representation is negative above maxBound :: Int; showing and ordering
   -- them has to treat the bits as unsigned.
   putStrLn (show (maxBound :: Word))
   putStrLn (show (minBound :: Word))
-  putStrLn (show (maxBound :: Word > w 0))
-  putStrLn (show (w 0 > maxBound :: Word))
-  putStrLn (show (w 1 < maxBound :: Word))
+  putStrLn (show ((maxBound :: Word) > w 0))
+  putStrLn (show (w 0 > (maxBound :: Word)))
+  putStrLn (show (w 1 < (maxBound :: Word)))
   putStrLn (show (signum (maxBound :: Word)))
   putStrLn (show (signum (w 0)))
   putStrLn (show (max (maxBound :: Word) (w 1)))
   putStrLn (show (min (maxBound :: Word) (w 1)))
   putStrLn (show (maxBound :: Word64))
-  putStrLn (show (maxBound :: Word64 > w64 0))
-  putStrLn (show (w64 1 < maxBound :: Word64))
-  putStrLn (show (w64 0 < maxBound :: Word64))
+  putStrLn (show ((maxBound :: Word64) > w64 0))
+  putStrLn (show (w64 1 < (maxBound :: Word64)))
+  putStrLn (show (w64 0 < (maxBound :: Word64)))
   putStrLn (show (maxBound :: Word32))
-  putStrLn (show (maxBound :: Word32 > w32 0))
+  putStrLn (show ((maxBound :: Word32) > w32 0))
+
 -- Leading zeros, the highest bit, and the width of a 16-bit value, as one
 -- composite line so the readers of a golden file can see the parts.
 unsignedParts :: Word16 -> String
 unsignedParts x =
-  stringAppend#
-    (show (countLeadingZeros x))
-    (stringAppend# "," (stringAppend# (show (countTrailingZeros x)) (stringAppend# "," (show (popCount x)))))
+  stringAppend# (show (countLeadingZeros x))
+    (stringAppend# ","
+      (stringAppend# (show (countTrailingZeros x)) (stringAppend# "," (show (popCount x)))))

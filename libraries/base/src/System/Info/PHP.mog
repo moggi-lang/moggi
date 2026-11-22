@@ -1,10 +1,9 @@
-module System.Info.PHP
-  ( os
-  , arch
-  ) where
+module System.Info.PHP (os, arch) where
+
 import Data.Functor (Functor(map))
 
 foreign php const rawOsFamily "PHP:PHP_OS_FAMILY" :: String
+
 foreign php function rawMachineType "php_uname" :: String -> String
 
 -- | `PHP_OS_FAMILY` in the `System.Info.os` spelling. The family names are

@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Unsafe conversions between mutable and immutable arrays, overloaded
 -- over any 'MArray'\/'IArray' pair.
 --
@@ -13,10 +14,7 @@
 -- What is not here: @castSTUArray@, @castIOUArray@ and
 -- @unsafeForeignPtrToStorableArray@. Moggi has no unboxed arrays and no
 -- @Foreign.Ptr@\/@Storable@ machinery for them to be built on.
-module Data.Array.Unsafe
-  ( unsafeFreeze
-  , unsafeThaw
-  ) where
+module Data.Array.Unsafe (unsafeFreeze, unsafeThaw) where
 
 import Data.Array.IArray (IArray, freeze, thaw)
 import Data.Array.MArray (MArray)

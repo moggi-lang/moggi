@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Some type classes to make more general functions when handling query strings.
 --
 -- Porting notes: Moggi has no lazy 'ByteString', so the @L.ByteString@

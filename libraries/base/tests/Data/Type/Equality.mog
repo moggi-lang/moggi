@@ -1,4 +1,22 @@
-import Data.Type.Equality ((~), (~~), (:~:), (:~~:), (==), Refl, HRefl, sym, trans, castWith, gcastWith, apply, inner, outer, TestEquality(..))
+module Main (main) where
+
+import Data.Type.Equality
+  ( (~)
+  , (~~)
+  , (:~:)
+  , (:~~:)
+  , (==)
+  , Refl
+  , HRefl
+  , sym
+  , trans
+  , castWith
+  , gcastWith
+  , apply
+  , inner
+  , outer
+  , TestEquality(..)
+  )
 import Data.Maybe (Maybe(..))
 import Data.Eq
 import Data.Ord
@@ -13,7 +31,6 @@ import Data.Enum (Enum(..))
 -- inspecting the value. `castWith` is the point of the exercise: the proof is
 -- spent, the value crosses to the other type unchanged, and the checker has
 -- learned `a ~ b` for the body. The instances are observed on the same values.
-
 intRefl :: Int :~: Int
 intRefl = Refl
 
@@ -48,7 +65,7 @@ outerProof = outer maybeEquality
 -- `gcastWith` uses a proof to let the body see the two types as one: the
 -- continuation's context `(a ~ b) => r` adds no argument, and the value is
 -- checked as `r` with the equality in scope.
-castViaProof :: (a :~: a) -> a -> a
+castViaProof :: a :~: a -> a -> a
 castViaProof p x = gcastWith p x
 
 -- `:~~:` is the same proposition at two kinds, and `TestEquality` learns it
@@ -95,8 +112,8 @@ main = do
   putStrLn (show (case testEquality hetero hetero of
     Just Refl -> True
     Nothing -> False))
-  putStrLn (show (read "Refl" :: Int :~: Int))
+  putStrLn (show ((read "Refl") :: Int :~: Int))
   putStrLn (show (fromEnum (Refl :: Int :~: Int)))
-  putStrLn (show (toEnum 0 :: Int :~: Int))
+  putStrLn (show ((toEnum 0) :: Int :~: Int))
   putStrLn (show (maxBound :: Int :~: Int))
   putStrLn (show (hetSame 17))

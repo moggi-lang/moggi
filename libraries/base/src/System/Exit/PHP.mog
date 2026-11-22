@@ -1,6 +1,4 @@
-module System.Exit.PHP
-  ( exitWithCode
-  ) where
+module System.Exit.PHP (exitWithCode) where
 
 import Control.Applicative
 import Control.Monad

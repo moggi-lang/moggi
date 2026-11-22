@@ -1,11 +1,10 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The thread handle shared by `Control.Concurrent` and
 -- `Control.Exception.throwTo`. It is its own module so the exception layer can
 -- name a thread without importing the concurrency layer (which would be a
 -- cycle).
-module Moggi.Internal.Thread
-  ( ThreadId(..)
-  ) where
+module Moggi.Internal.Thread (ThreadId(..)) where
 
 import Data.Bool (Bool(..))
 import Data.Eq
@@ -14,4 +13,5 @@ import Data.Ord
 import Text.Show
 
 -- | A handle to a thread, ordered arbitrarily and shown for debugging.
-newtype ThreadId = ThreadId Int deriving (Eq, Ord, Show)
+newtype ThreadId = ThreadId Int
+  deriving (Eq, Ord, Show)

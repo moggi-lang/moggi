@@ -1,6 +1,4 @@
-module System.Clock.PHP
-  ( monotonicNanos
-  ) where
+module System.Clock.PHP (monotonicNanos) where
 
 import Control.Applicative
 import Control.Monad

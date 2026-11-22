@@ -1,5 +1,4 @@
--- |
--- Directed graphs, following the 'Data.Graph'.
+-- | Directed graphs, following the 'Data.Graph'.
 --
 -- The implementation is array-based ('Array Vertex [Vertex]'), as in the
 -- reference: a graph is a table from each vertex to its successors, and the
@@ -13,7 +12,6 @@
 -- ('scc'). The 'SCC' type is plain (no 'Foldable' \/ 'Traversable' \/
 -- 'Generic' machinery), 'path' is a DFS reachability check, and anything
 -- beyond this core is added when a program needs it, not before.
---
 module Data.Graph
   ( Vertex
   , Edge
@@ -35,18 +33,54 @@ module Data.Graph
 
 import Control.Applicative
 import Control.Monad
-import Data.Array (Array, accumArray, amap, assocs, bounds as arrayBounds, indices as arrayIndices, (!))
+import Data.Array
+  ( Array
+  , accumArray
+  , amap
+  , assocs
+  , bounds as arrayBounds
+  , indices as arrayIndices
+  , (!)
+  )
 import Data.Bool
 import Data.Eq
 import Data.Foldable hiding (null, length, toList)
 import Data.Functor
 import Data.Int
 import Data.Ix (inRange)
-import Data.List hiding (
-  map, filter, null, length, lookup, take, drop, splitAt, reverse,
-  sort, sortBy, sortOn, zip, zipWith, unzip, tails, inits, replicate,
-  iterate, cycle, chunksOf, scanl, scanr, intersperse, concatMap, maximum, minimum, sum,
-  singleton, union, find, insert
+import Data.List hiding
+  ( map
+  , filter
+  , null
+  , length
+  , lookup
+  , take
+  , drop
+  , splitAt
+  , reverse
+  , sort
+  , sortBy
+  , sortOn
+  , zip
+  , zipWith
+  , unzip
+  , tails
+  , inits
+  , replicate
+  , iterate
+  , cycle
+  , chunksOf
+  , scanl
+  , scanr
+  , intersperse
+  , concatMap
+  , maximum
+  , minimum
+  , sum
+  , singleton
+  , union
+  , find
+  , insert
   )
 import Data.Maybe
 import Data.Ord
@@ -176,12 +210,13 @@ reachableFrom :: Graph -> Vertex -> Vertex -> Bool
 reachableFrom g from to = reachableGo (successors g from) (S.singleton from) to
   where
     reachableGo :: [Vertex] -> Set Vertex -> Vertex -> Bool
-    reachableGo [] _ _ = False
-    reachableGo (v : vs) seen want = case v == want of
-      True -> True
-      False -> case S.member v seen of
-        True -> reachableGo vs seen want
-        False -> reachableGo (successors g v ++ vs) (S.insert v seen) want
+    reachableGo _p0 _p1 _p2 = case (_p0, _p1, _p2) of
+      ([], _, _) -> False
+      (v : vs, seen, want) -> case v == want of
+        True -> True
+        False -> case S.member v seen of
+          True -> reachableGo vs seen want
+          False -> reachableGo (successors g v ++ vs) (S.insert v seen) want
 
 -- Depth-first search producing a forest and the visited set it leaves behind.
 dfsTrees :: Graph -> [Vertex] -> Set Vertex -> ([Tree Vertex], Set Vertex)
@@ -219,7 +254,7 @@ topSort :: Graph -> [Vertex]
 topSort g = listReverse (postOrder g)
 
 postOrder :: Graph -> [Vertex]
-postOrder g = case dfsTrees g (vertices g) S.empty of
+postOrder g = case dfsTrees g (vertices g) (S.empty) of
   (forest, _) -> flattenForestPost forest
 
 flattenForestPost :: [Tree Vertex] -> [Vertex]
@@ -233,7 +268,7 @@ flattenTreePost t = case t of
 -- | The connected components of the underlying undirected graph, as a
 -- forest in vertex order.
 components :: Graph -> [Tree Vertex]
-components g = case dfsTrees (underlying g) (vertices g) S.empty of
+components g = case dfsTrees (underlying g) (vertices g) (S.empty) of
   (forest, _) -> forest
 
 underlying :: Graph -> Graph
@@ -269,5 +304,5 @@ memberList v (w : ws) = case v == w of
   False -> memberList v ws
 
 dfsOnOrder :: Graph -> [Vertex] -> [Tree Vertex]
-dfsOnOrder g order = case dfsTrees g order S.empty of
+dfsOnOrder g order = case dfsTrees g order (S.empty) of
   (forest, _) -> forest

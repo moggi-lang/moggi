@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Type and constants for handling HTTP header fields.
 --
 -- At the bottom are also some functions to handle certain header field values.
@@ -16,9 +17,7 @@ module Network.HTTP.Types.Header
   , HeaderName
   , RequestHeaders
   , ResponseHeaders
-
     -- ** Common headers
-
     -- to prevent accidental spelling errors.
   , hAccept
   , hAcceptCharset
@@ -90,9 +89,7 @@ module Network.HTTP.Types.Header
   , hVia
   , hWWWAuthenticate
   , hWarning
-
     -- ** Byte ranges
-
     --
     -- https://www.rfc-editor.org/rfc/rfc9110.html#name-byte-ranges
   , ByteRange(..)
@@ -489,29 +486,27 @@ parseByteRanges bs1 =
   let prefix = "bytes=" :: ByteString
       split = B.splitAt (B.length prefix) bs1
   in if fst split == prefix
-       then case parseRange (snd split) of
-         Nothing -> Nothing
-         Just r -> parseRanges (fst r) (snd r)
-       else Nothing
+    then case parseRange (snd split) of
+      Nothing -> Nothing
+      Just r -> parseRanges (fst r) (snd r)
+    else Nothing
 
 parseRange :: ByteString -> Maybe (ByteRange, ByteString)
 parseRange bs2 = case B8.readInteger bs2 of
   Nothing -> Nothing
-  Just i ->
-    if fst i < 0
-      then Just (ByteRangeSuffix (negate (fst i)), snd i)
-      else case startsWithHyphen bs2 of
-        -- A suffix of zero is not satisfiable: "-0" reaches the parser as a
-        -- non-negative zero whose input still carries the sign.
-        True -> Nothing
-        False -> case popByte _hyphen (snd i) of
-          Nothing -> Just (ByteRangeFrom (fst i), snd i)
-          Just bs4 -> case B8.readInteger bs4 of
-            Just j ->
-              if fst j >= fst i
-                then Just (ByteRangeFromTo (fst i) (fst j), snd j)
-                else Just (ByteRangeFrom (fst i), bs4)
-            Nothing -> Just (ByteRangeFrom (fst i), bs4)
+  Just i -> if fst i < 0
+    then Just (ByteRangeSuffix (negate (fst i)), snd i)
+    else case startsWithHyphen bs2 of
+      -- A suffix of zero is not satisfiable: "-0" reaches the parser as a
+      -- non-negative zero whose input still carries the sign.
+      True -> Nothing
+      False -> case popByte _hyphen (snd i) of
+        Nothing -> Just (ByteRangeFrom (fst i), snd i)
+        Just bs4 -> case B8.readInteger bs4 of
+          Just j -> if fst j >= fst i
+            then Just (ByteRangeFromTo (fst i) (fst j), snd j)
+            else Just (ByteRangeFrom (fst i), bs4)
+          Nothing -> Just (ByteRangeFrom (fst i), bs4)
 
 startsWithHyphen :: ByteString -> Bool
 startsWithHyphen bs = case B.uncons bs of
@@ -532,7 +527,9 @@ parseRanges r bs3 = case B.null bs3 of
 popByte :: Word8 -> ByteString -> Maybe ByteString
 popByte w8 bs = case B.uncons bs of
   Nothing -> Nothing
-  Just b -> if fst b == w8 then Just (snd b) else Nothing
+  Just b -> if fst b == w8
+    then Just (snd b)
+    else Nothing
 
 _comma :: Word8
 _comma = 44

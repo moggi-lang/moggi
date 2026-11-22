@@ -1,15 +1,20 @@
+module Main (main) where
+
+import Data.Foldable
+
 -- Data.Foldable: the derived instances, including fields whose parameter sits
 -- deeper than one constructor. A `Maybe (Maybe a)` field folds as
 -- `foldr (\x acc -> foldr f acc x) z v` -- the accumulator comes first in
 -- `foldr`'s callback, so the inner fold has to be flipped -- and `[[a]]` /
 -- `Maybe [a]` compose the same way one level further down.
-import Data.Foldable
+data Nest a = Nest (Maybe (Maybe a))
+  deriving (Show, Functor, Foldable, Traversable)
 
-data Nest a = Nest (Maybe (Maybe a)) deriving (Show, Functor, Foldable, Traversable)
+data Deep a = Deep [[a]]
+  deriving (Show, Foldable)
 
-data Deep a = Deep [[a]] deriving (Show, Foldable)
-
-data Wrap a = Wrap (Maybe [a]) deriving (Show, Foldable)
+data Wrap a = Wrap (Maybe [a])
+  deriving (Show, Foldable)
 
 -- Fold through the class rather than the instance, so the derived instance's
 -- dictionary is what the call goes through.
@@ -23,7 +28,7 @@ main = do
   putStrLn (show (foldl (-) 0 (Nest (Just (Just 3)))))
   putStrLn (show (foldMap (\x -> [x]) (Nest (Just (Just 3)))))
   putStrLn (show (toList (Nest (Just (Just 3)))))
-  putStrLn (show (toList (Nest (Just Nothing) :: Nest Int)))
+  putStrLn (show (toList ((Nest (Just Nothing)) :: Nest Int)))
   putStrLn (show (length (Nest (Just (Just 3)))))
   putStrLn (show (sum (Nest (Just (Just 3)))))
   putStrLn (show (product (Nest (Just (Just 4)))))

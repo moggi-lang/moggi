@@ -1,6 +1,4 @@
--- System.IO.openTempFile/openBinaryTempFile: create in a scratch directory,
--- write and read back, check the template prefix, fail cleanly on a missing
--- directory, and remove the files afterwards.
+module Main (main) where
 
 import System.IO.Error (tryIOError)
 import Data.List (isInfixOf)
@@ -11,6 +9,9 @@ import System.Directory (removeFile)
 import System.IO
 import System.IO.Base (packFilePath, unpackFilePath)
 
+-- System.IO.openTempFile/openBinaryTempFile: create in a scratch directory,
+-- write and read back, check the template prefix, fail cleanly on a missing
+-- directory, and remove the files afterwards.
 -- Every literal below is ASCII, so the strict decoding in `txt` always
 -- succeeds here.
 fp :: String -> FilePath

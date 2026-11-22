@@ -1,6 +1,4 @@
-module Data.Time.Clock.System.JVM
-  ( systemParts
-  ) where
+module Data.Time.Clock.System.JVM (systemParts) where
 
 import Control.Applicative
 import Control.Monad
@@ -13,7 +11,9 @@ import System.IO.Base (IO)
 foreign jvm type Instant "java.time.Instant"
 
 foreign jvm function instantNow "java.time.Instant:now" :: IO Instant
+
 foreign jvm function instantEpochSecond "java.time.Instant.getEpochSecond" :: Instant -> Int
+
 foreign jvm function instantNano "java.time.Instant.getNano" :: Instant -> Int32
 
 -- Nanosecond resolution from a single instant: both parts come from the

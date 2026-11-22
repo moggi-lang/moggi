@@ -26,12 +26,10 @@
 -- `bitSize` is provided for compatibility and deprecated: `bitSizeMaybe`
 -- distinguishes types without a fixed size, and `finiteBitSize` is total.
 module Data.Bits
-  (
-    -- * Type classes
+  ( -- * Type classes
     Bits(..)
   , FiniteBits(..)
-
-  -- * Extra functions
+    -- * Extra functions
   , bitDefault
   , testBitDefault
   , popCountDefault
@@ -42,8 +40,7 @@ module Data.Bits
   , (.<<.)
   , (!>>.)
   , (!<<.)
-
-  -- * Newtypes
+    -- * Newtypes
   , And(And)
   , getAnd
   , Ior(Ior)
@@ -92,20 +89,32 @@ class Eq a => Bits a where
   -- | @shift x i@ shifts @x@ left by @i@ bits if @i@ is positive, or right by
   -- @-i@ bits otherwise. Right shifts sign-extend for signed types.
   shift :: a -> Int -> a
+  shift x i = case intCompare# i 0 of
+    LT -> shiftR x (intNegate# i)
+    GT -> shiftL x i
+    EQ -> x
   -- | @rotate x i@ rotates @x@ left by @i@ bits if @i@ is positive, or right
   -- by @-i@ bits otherwise. For unbounded types like 'Integer', 'rotate' is
   -- the same as 'shift'.
   rotate :: a -> Int -> a
+  rotate x i = case intCompare# i 0 of
+    LT -> rotateR x (intNegate# i)
+    GT -> rotateL x i
+    EQ -> x
   -- | 'zeroBits' is the value with all bits unset.
   zeroBits :: a
+  zeroBits = clearBit (bit 0) 0
   -- | @bit i@ is a value with the @i@th bit set and all other bits clear.
   bit :: Int -> a
   -- | @setBit x i@ is the same as @x .|. bit i@.
   setBit :: a -> Int -> a
+  setBit x i = x .|. bit i
   -- | @clearBit x i@ is the same as @x .&. complement (bit i)@.
   clearBit :: a -> Int -> a
+  clearBit x i = x .&. complement (bit i)
   -- | @complementBit x i@ is the same as @x `xor` bit i@.
   complementBit :: a -> Int -> a
+  complementBit x i = x `xor` bit i
   -- | @testBit x i@ is the same as @x .&. bit i /= 0@.
   testBit :: a -> Int -> Bool
   -- | The number of bits in the type of the argument, or 'Nothing' for types
@@ -115,46 +124,33 @@ class Eq a => Bits a where
   -- Fails for types without a fixed size such as 'Integer' and 'Natural'.
   -- Deprecated: use 'bitSizeMaybe' or 'finiteBitSize' instead.
   bitSize :: a -> Int
+  bitSize b = case bitSizeMaybe b of
+    Nothing -> error "bitSize is undefined"
+    Just n -> n
   -- | Whether the argument is a signed type. The value is ignored.
   isSigned :: a -> Bool
   -- | Shift left; fails on a negative shift amount.
   shiftL :: a -> Int -> a
+  shiftL x i = shift x i
   -- | Shift right; fails on a negative shift amount. Signed types sign-extend.
   shiftR :: a -> Int -> a
+  shiftR x i = shift x (intNegate# i)
   -- | Like 'shiftL', but out-of-range shift amounts need not be checked:
   -- this implementation treats them exactly like 'shiftL'.
   unsafeShiftL :: a -> Int -> a
+  unsafeShiftL x i = shiftL x i
   -- | Like 'shiftR', but out-of-range shift amounts need not be checked:
   -- this implementation treats them exactly like 'shiftR'.
   unsafeShiftR :: a -> Int -> a
+  unsafeShiftR x i = shiftR x i
   -- | Rotate left.
   rotateL :: a -> Int -> a
+  rotateL x i = rotate x i
   -- | Rotate right.
   rotateR :: a -> Int -> a
+  rotateR x i = rotate x (intNegate# i)
   -- | The number of set bits in the argument (population count).
   popCount :: a -> Int
-
-  shift x i = case intCompare# i 0 of
-    LT -> shiftR x (intNegate# i)
-    GT -> shiftL x i
-    EQ -> x
-  rotate x i = case intCompare# i 0 of
-    LT -> rotateR x (intNegate# i)
-    GT -> rotateL x i
-    EQ -> x
-  zeroBits = clearBit (bit 0) 0
-  setBit x i = x .|. bit i
-  clearBit x i = x .&. complement (bit i)
-  complementBit x i = x `xor` bit i
-  shiftL x i = shift x i
-  shiftR x i = shift x (intNegate# i)
-  unsafeShiftL x i = shiftL x i
-  unsafeShiftR x i = shiftR x i
-  rotateL x i = rotate x i
-  rotateR x i = rotate x (intNegate# i)
-  bitSize b = case bitSizeMaybe b of
-    Nothing -> error "bitSize is undefined"
-    Just n -> n
 
 -- | Types with a finite, fixed number of bits.
 class Bits b => FiniteBits b where
@@ -163,10 +159,10 @@ class Bits b => FiniteBits b where
   finiteBitSize :: b -> Int
   -- | The number of zero bits preceding the most significant set bit.
   countLeadingZeros :: b -> Int
+  countLeadingZeros x =
+    intSub# (intSub# (finiteBitSize x) 1) (leadingZerosGo x (intSub# (finiteBitSize x) 1))
   -- | The number of zero bits following the least significant set bit.
   countTrailingZeros :: b -> Int
-
-  countLeadingZeros x = intSub# (intSub# (finiteBitSize x) 1) (leadingZerosGo x (intSub# (finiteBitSize x) 1))
   countTrailingZeros x = trailingZerosGo x (finiteBitSize x) 0
 
 -- Naive default: walk down from the top bit.
@@ -220,7 +216,7 @@ bitDefault i = shiftL (bitsNum 1) i
 
 -- | Default implementation for 'testBit': @testBitDefault x i = x .&. bit i /= 0@.
 testBitDefault :: (Bits a, Num a) => a -> Int -> Bool
-testBitDefault x i = (x .&. bit i) /= bitsNum 0
+testBitDefault x i = x .&. bit i /= bitsNum 0
 
 -- | Default implementation for 'popCount'. Naive on purpose: instances are
 -- expected to provide an optimized implementation for their size.
@@ -241,7 +237,6 @@ bitsNegativeShiftError = throw Overflow
 -- ---------------------------------------------------------------------------
 -- Bool: a one-bit bit field
 -- ---------------------------------------------------------------------------
-
 instance Bits Bool where
   (.&.) a b = a && b
   (.|.) a b = a || b
@@ -311,7 +306,6 @@ instance Bits Integer where
     _ -> integerShiftRBits a i
   unsafeShiftL a i = shiftL a i
   unsafeShiftR a i = shiftR a i
-  -- An Integer is unbounded, so it never wraps around.
   rotate a i = shift a i
   rotateL a i = rotate a i
   rotateR a i = rotate a (intNegate# i)
@@ -326,10 +320,10 @@ instance Bits Integer where
   bitSize _ = error "Data.Bits.bitSize(Integer)"
   isSigned _ = True
 
+-- An Integer is unbounded, so it never wraps around.
 -- ---------------------------------------------------------------------------
 -- Monoids under bitwise operations
 -- ---------------------------------------------------------------------------
-
 -- | Monoid under bitwise AND.
 newtype And a = And a
   deriving newtype (Bounded, Enum, Bits, FiniteBits, Eq)
@@ -347,8 +341,8 @@ instance FiniteBits a => Monoid (And a) where
   mempty = And oneBits
 
 instance Show a => Show (And a) where
-  showsPrec d x = showParen (d > 10)
-    (\r -> showString "And {getAnd = " (showsPrec 0 (getAnd x) (showString "}" r)))
+  showsPrec d x =
+    showParen (d > 10) (\r -> showString "And {getAnd = " (showsPrec 0 (getAnd x) (showString "}" r)))
 
 -- | Monoid under bitwise inclusive OR.
 newtype Ior a = Ior a
@@ -365,8 +359,8 @@ instance Bits a => Monoid (Ior a) where
   mempty = Ior zeroBits
 
 instance Show a => Show (Ior a) where
-  showsPrec d x = showParen (d > 10)
-    (\r -> showString "Ior {getIor = " (showsPrec 0 (getIor x) (showString "}" r)))
+  showsPrec d x =
+    showParen (d > 10) (\r -> showString "Ior {getIor = " (showsPrec 0 (getIor x) (showString "}" r)))
 
 -- | Monoid under bitwise XOR.
 newtype Xor a = Xor a
@@ -383,8 +377,8 @@ instance Bits a => Monoid (Xor a) where
   mempty = Xor zeroBits
 
 instance Show a => Show (Xor a) where
-  showsPrec d x = showParen (d > 10)
-    (\r -> showString "Xor {getXor = " (showsPrec 0 (getXor x) (showString "}" r)))
+  showsPrec d x =
+    showParen (d > 10) (\r -> showString "Xor {getXor = " (showsPrec 0 (getXor x) (showString "}" r)))
 
 -- | Monoid under bitwise equality: 1 where the corresponding bits match, 0
 -- otherwise.
@@ -402,13 +396,12 @@ instance FiniteBits a => Monoid (Iff a) where
   mempty = Iff oneBits
 
 instance Show a => Show (Iff a) where
-  showsPrec d x = showParen (d > 10)
-    (\r -> showString "Iff {getIff = " (showsPrec 0 (getIff x) (showString "}" r)))
+  showsPrec d x =
+    showParen (d > 10) (\r -> showString "Iff {getIff = " (showsPrec 0 (getIff x) (showString "}" r)))
 
 -- ---------------------------------------------------------------------------
 -- toIntegralSized
 -- ---------------------------------------------------------------------------
-
 -- | Convert an 'Integral' value to another 'Integral' type, yielding 'Nothing'
 -- when the value is not representable in the target type. A type without a
 -- fixed width (such as 'Integer') is treated as unbounded in that direction.
@@ -434,10 +427,9 @@ toIntegralSized :: (Integral a, Integral b, Bits a, Bits b) => a -> Maybe b
 toIntegralSized x = toIntegralSizedAt x (bitSizeOf (bitsZero :: b)) (signedOf (bitsZero :: b))
 
 toIntegralSizedAt :: (Integral a, Integral b, Bits a, Bits b) => a -> Maybe Int -> Bool -> Maybe b
-toIntegralSizedAt x yWidth ySigned =
-  case toIntegralFits (bitSizeOf x) (signedOf x) yWidth ySigned x of
-    True -> Just (fromIntegral x)
-    False -> Nothing
+toIntegralSizedAt x yWidth ySigned = case toIntegralFits (bitSizeOf x) (signedOf x) yWidth ySigned x of
+  True -> Just (fromIntegral x)
+  False -> Nothing
 
 -- The width and signedness of a type, as measured by its own instance. Each of
 -- these has a single constrained type variable.
@@ -449,10 +441,9 @@ signedOf x = isSigned x
 
 -- The whole range check, performed in the source type.
 toIntegralFits :: (Integral a, Bits a) => Maybe Int -> Bool -> Maybe Int -> Bool -> a -> Bool
-toIntegralFits xWidth xSigned yWidth ySigned x =
-  case toIntegralReachesLower (toIntegralLowerBound xWidth xSigned yWidth ySigned) x of
-    False -> False
-    True -> toIntegralReachesUpper (toIntegralUpperBound xWidth xSigned yWidth ySigned) x
+toIntegralFits xWidth xSigned yWidth ySigned x = case toIntegralReachesLower (toIntegralLowerBound xWidth xSigned yWidth ySigned) x of
+  False -> False
+  True -> toIntegralReachesUpper (toIntegralUpperBound xWidth xSigned yWidth ySigned) x
 
 toIntegralReachesLower :: Ord a => Maybe a -> a -> Bool
 toIntegralReachesLower bound x = case bound of
@@ -470,31 +461,29 @@ toIntegralReachesUpper bound x = case bound of
 
 -- The smallest target value that the source range does not already imply.
 toIntegralLowerBound :: (Integral a, Bits a) => Maybe Int -> Bool -> Maybe Int -> Bool -> Maybe a
-toIntegralLowerBound xWidth xSigned yWidth ySigned =
-  case toIntegralSubType xWidth xSigned yWidth ySigned of
-    True -> Nothing
-    False -> case xSigned of
-      True -> case ySigned of
-        -- A signed source into an unsigned target is bounded below by 0.
-        False -> Just (bitsNum 0)
-        True -> case yWidth of
-          Just yw -> Just (negate (bit (intSub# yw 1)))
-          Nothing -> Nothing
-      False -> Nothing
+toIntegralLowerBound xWidth xSigned yWidth ySigned = case toIntegralSubType xWidth xSigned yWidth ySigned of
+  True -> Nothing
+  False -> case xSigned of
+    True -> case ySigned of
+      -- A signed source into an unsigned target is bounded below by 0.
+      False -> Just (bitsNum 0)
+      True -> case yWidth of
+        Just yw -> Just (negate (bit (intSub# yw 1)))
+        Nothing -> Nothing
+    False -> Nothing
 
 -- The largest target value that the source range does not already imply.
 toIntegralUpperBound :: (Integral a, Bits a) => Maybe Int -> Bool -> Maybe Int -> Bool -> Maybe a
-toIntegralUpperBound xWidth xSigned yWidth ySigned =
-  case toIntegralSubType xWidth xSigned yWidth ySigned of
-    True -> Nothing
-    False -> case xSigned of
-      True -> case ySigned of
-        False -> case toIntegralUnsignedCovers xWidth yWidth of
-          -- Every non-negative source value fits the target.
-          True -> Nothing
-          False -> toIntegralTargetMax yWidth ySigned
-        True -> toIntegralTargetMax yWidth ySigned
-      False -> toIntegralTargetMax yWidth ySigned
+toIntegralUpperBound xWidth xSigned yWidth ySigned = case toIntegralSubType xWidth xSigned yWidth ySigned of
+  True -> Nothing
+  False -> case xSigned of
+    True -> case ySigned of
+      False -> case toIntegralUnsignedCovers xWidth yWidth of
+        -- Every non-negative source value fits the target.
+        True -> Nothing
+        False -> toIntegralTargetMax yWidth ySigned
+      True -> toIntegralTargetMax yWidth ySigned
+    False -> toIntegralTargetMax yWidth ySigned
 
 -- The largest value of the target type, produced in the source type.
 toIntegralTargetMax :: (Integral a, Bits a) => Maybe Int -> Bool -> Maybe a
@@ -567,7 +556,6 @@ toIntegralWidthEq xWidth yWidth = case xWidth of
 -- needs the type's `Eq` and `Num` dictionaries, which live with the type; a
 -- module that both owns the type and imports this one would close an import
 -- cycle.
-
 -- A shift count at or above the host width shifts every bit out, so these
 -- wrap the raw primitives, whose counts are only defined in [0,63].
 bitsShiftL :: Int -> Int -> Int

@@ -1,6 +1,5 @@
 -- Data.Array.IO: mutable arrays in 'IO' — allocation, reads, writes, the
 -- copying freeze/thaw and the O(1) unsafe handoff.
-
 module IOSuite (ioSuite) where
 
 import Data.Array (Array, bounds, elems)

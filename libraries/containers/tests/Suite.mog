@@ -8,7 +8,6 @@
 -- The module is named `Suite`, not `Main`: the descriptor's `[test-suite]`
 -- declares `main = Suite`, and a package may carry more than one executable, so
 -- an entry point cannot be identified by being called `Main`.
-
 module Suite (main) where
 
 import SetSuite (setSuite)

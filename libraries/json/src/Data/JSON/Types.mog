@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Data.JSON.Types
   ( Number(..)
   , Value(..)
@@ -31,7 +32,7 @@ module Data.JSON.Types
   , modifyFieldLabel
   , modifyConstructorTag
   , objectLookup
-) where
+  ) where
 
 import Data.Bool
 import Moggi.Internal.Base
@@ -45,9 +46,7 @@ import Data.Maybe (Maybe)
 import Data.String
 
 -- | JSON number: exact integer or IEEE float.
-data Number
-  = NumInteger Integer
-  | NumDouble Double
+data Number = NumInteger Integer | NumDouble Double
 
 -- | Portable JSON AST. `Object` payload is `Map String Value` (see `Object`).
 data Value
@@ -147,11 +146,7 @@ objectLookup m k = lookup k m
 type Parser a = Either String a
 
 -- | Aeson `SumEncoding`. Default is `TaggedObject "tag" "contents"`.
-data SumEncoding
-  = TaggedObject String String
-  | UntaggedValue
-  | ObjectWithSingleField
-  | TwoElemArray
+data SumEncoding = TaggedObject String String | UntaggedValue | ObjectWithSingleField | TwoElemArray
 
 defaultTaggedObject :: SumEncoding
 defaultTaggedObject = TaggedObject "tag" "contents"
@@ -168,20 +163,19 @@ defaultTaggedObject = TaggedObject "tag" "contents"
 --   tagSingleConstructors = False
 --   rejectUnknownFields = False  -- reserved; not enforced yet
 data Options = Options
-  { optFieldLabelModifier     :: String -> String
+  { optFieldLabelModifier :: String -> String
   , optConstructorTagModifier :: String -> String
-  , optAllNullaryToStringTag  :: Bool
-  , optOmitNothingFields      :: Bool
-  , optAllowOmittedFields     :: Bool
-  , optSumEncoding            :: SumEncoding
-  , optUnwrapUnaryRecords     :: Bool
-  , optTagSingleConstructors  :: Bool
-  , optRejectUnknownFields    :: Bool
+  , optAllNullaryToStringTag :: Bool
+  , optOmitNothingFields :: Bool
+  , optAllowOmittedFields :: Bool
+  , optSumEncoding :: SumEncoding
+  , optUnwrapUnaryRecords :: Bool
+  , optTagSingleConstructors :: Bool
+  , optRejectUnknownFields :: Bool
   }
 
 defaultOptions :: Options
-defaultOptions =
-  Options id id True False True defaultTaggedObject False False False
+defaultOptions = Options id id True False True defaultTaggedObject False False False
 
 fieldLabelModifier :: (String -> String) -> Options -> Options
 fieldLabelModifier f (Options _ c a o u s w t r) = Options f c a o u s w t r
@@ -210,10 +204,10 @@ tagSingleConstructors t (Options f c a o u s w _ r) = Options f c a o u s w t r
 rejectUnknownFields :: Bool -> Options -> Options
 rejectUnknownFields r (Options f c a o u s w t _) = Options f c a o u s w t r
 
-getFieldLabelModifier :: Options -> (String -> String)
+getFieldLabelModifier :: Options -> String -> String
 getFieldLabelModifier (Options f _ _ _ _ _ _ _ _) = f
 
-getConstructorTagModifier :: Options -> (String -> String)
+getConstructorTagModifier :: Options -> String -> String
 getConstructorTagModifier (Options _ c _ _ _ _ _ _ _) = c
 
 getAllNullaryToStringTag :: Options -> Bool

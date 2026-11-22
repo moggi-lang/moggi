@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- |
--- Categories: composable morphisms with an identity.
+
+-- | Categories: composable morphisms with an identity.
 --
 -- A category is a type of morphisms between two objects. 'id' is the morphism
 -- that does nothing, and '(.)' composes two compatible morphisms. The methods
@@ -61,7 +61,6 @@ class Category cat where
   --
   -- These essentially state that 'id' should "do nothing".
   id :: cat a a
-
   -- | Morphism composition. Implementations should satisfy the law:
   --
   -- [Associativity]  @f '.' (g '.' h)  =  (f '.' g) '.' h@

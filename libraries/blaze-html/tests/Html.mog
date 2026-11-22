@@ -8,7 +8,6 @@
 -- renderings coincide, but both are still exercised; the Utf8 renderer is
 -- compared as bytes, which is where the escapes and multi-byte characters
 -- actually differ.
-
 module Html (htmlSuite) where
 
 import Control.Applicative (pure)
@@ -81,18 +80,23 @@ htmlSuite = do
   check "case 7" "<u>hello</u>" (H.u "hello")
   check "case 8" "<3 Moggi" (preEscapedToMarkup ("<3 Moggi" :: String))
   check "case 9" "<script />" (preEscapedToMarkup ("<script />" :: String))
-  check "case 10" "<p class=\"'&!;\">bad</p>" ((p ! class_ (preEscapedToValue ("'&!;" :: String))) "bad")
+  check "case 10" "<p class=\"'&!;\">bad</p>"
+    ((p ! class_ (preEscapedToValue ("'&!;" :: String))) "bad")
   check "case 11" "<span id=\"&amp;\">λ</span>" ((H.span ! id "&") "λ")
   check "case 12" "∀x. x ∈ A" "∀x. x ∈ A"
   check "case 13" "$6, €7.01, £75" "$6, €7.01, £75"
-  check "case 14" "<li>4</li><li>5</li><li>6</li>" (li (toHtml (4 :: Int)) <> li (toHtml (5 :: Int)) <> li (toHtml (6 :: Int)))
+  check "case 14" "<li>4</li><li>5</li><li>6</li>"
+    (li (toHtml (4 :: Int)) <> li (toHtml (5 :: Int)) <> li (toHtml (6 :: Int)))
   check "case 15" "<br><img><area>" (br <> img <> area)
-  check "case 16" "<p data-foo=\"bar\">A paragraph</p>" ((p ! dataAttribute "foo" "bar") "A paragraph")
+  check "case 16" "<p data-foo=\"bar\">A paragraph</p>"
+    ((p ! dataAttribute "foo" "bar") "A paragraph")
   check "case 17" "<p>Hello</p>" ((p ! mempty) "Hello")
   check "case 18" "<img src=\"foo.png\" alt=\"foo\">" (img ! (src "foo.png" <> alt "foo"))
   check "case 19" "12345678910" (mconcat (map toHtml ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10] :: [Int])))
-  check "case 20" "<img src=\"funny-picture-4.png\">" (img ! src (toValue "funny-picture-" <> toValue (4 :: Integer) <> toValue ".png"))
-  check "case 21" "abcdefghijklmnopqrstuvwxyz" (mconcat (map toHtml (S.unpack "abcdefghijklmnopqrstuvwxyz")))
+  check "case 20" "<img src=\"funny-picture-4.png\">"
+    (img ! src (toValue "funny-picture-" <> toValue (4 :: Integer) <> toValue ".png"))
+  check "case 21" "abcdefghijklmnopqrstuvwxyz"
+    (mconcat (map toHtml (S.unpack "abcdefghijklmnopqrstuvwxyz")))
   check "case 22" "<p>A paragraph</p>" (customParent "p" "A paragraph")
   check "case 23" "<img src=\"foo.png\">" (customLeaf "img" False ! src "foo.png")
   check "case 24" "<img />" (customLeaf "img" True)

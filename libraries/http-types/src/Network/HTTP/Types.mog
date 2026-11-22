@@ -1,9 +1,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Network.HTTP.Types
   ( -- * Methods
-
     Method
-
     -- ** Constants
   , methodGet
   , methodPost
@@ -15,32 +14,25 @@ module Network.HTTP.Types
   , methodOptions
   , methodPatch
   , StdMethod(..)
-
     -- ** Parsing and redering methods
   , parseMethod
   , renderMethod
   , renderStdMethod
-
     -- * Versions
-
   , HttpVersion(..)
   , http09
   , http10
   , http11
   , http20
   , http30
-
     -- * Status
-
   , Status(..)
   , mkStatus
-
     -- ** Parsing and Rendering
   , parseStatusCode
   , renderStatusCode
   , parseFullStatus
   , renderFullStatus
-
     -- ** Constants
   , status100
   , continue100
@@ -140,23 +132,18 @@ module Network.HTTP.Types
   , httpVersionNotSupported505
   , status511
   , networkAuthenticationRequired511
-
     -- *** Category checks
   , statusIsInformational
   , statusIsSuccessful
   , statusIsRedirection
   , statusIsClientError
   , statusIsServerError
-
     -- * Headers
-
-
     -- ** Types
   , Header
   , HeaderName
   , RequestHeaders
   , ResponseHeaders
-
     -- ** Constants
   , hAccept
   , hAcceptCharset
@@ -228,7 +215,6 @@ module Network.HTTP.Types
   , hVia
   , hWWWAuthenticate
   , hWarning
-
     -- ** Byte ranges
   , ByteRange(..)
   , renderByteRangeBuilder
@@ -237,12 +223,8 @@ module Network.HTTP.Types
   , renderByteRangesBuilder
   , renderByteRanges
   , parseByteRanges
-
     -- * URI
-
-
     -- ** Query strings
-
     -- *** Query
   , Query
   , QueryItem
@@ -250,45 +232,37 @@ module Network.HTTP.Types
   , renderQueryBuilder
   , parseQuery
   , parseQueryReplacePlus
-
     -- *** Text query string (UTF8 encoded)
   , QueryText
   , queryTextToQuery
   , queryToQueryText
   , renderQueryText
   , parseQueryText
-
     -- *** SimpleQuery
   , SimpleQuery
   , SimpleQueryItem
   , simpleQueryToQuery
   , renderSimpleQuery
   , parseSimpleQuery
-
     -- *** PartialEscapeQuery
   , PartialEscapeQuery
   , PartialEscapeQueryItem
   , EscapeItem(..)
   , renderQueryPartialEscape
   , renderQueryBuilderPartialEscape
-
     -- ** Generalized query types
   , QueryLike(..)
   , QueryKeyLike(..)
   , QueryValueLike(..)
-
     -- ** Path
-
     -- *** Segments + Query String
   , extractPath
   , encodePath
   , decodePath
-
     -- *** Path Segments
   , encodePathSegments
   , encodePathSegmentsRelative
   , decodePathSegments
-
     -- ** URL encoding / decoding
   , urlEncode
   , urlEncodeBuilder

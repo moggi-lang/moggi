@@ -1,6 +1,5 @@
 -- Decoding edges: characters, nested Maybes, number shapes, escapes, duplicate
 -- keys, whitespace, and the inputs that must be rejected.
-
 module Edges (edgesSuite) where
 
 import Data.ByteString.Char8 qualified as C
@@ -30,7 +29,7 @@ showZero e = case e of
 
 showNeg :: Either String Int -> String
 showNeg e = case e of
-  Right n -> case n == (0 - 7) of
+  Right n -> case n == 0 - 7 of
     True -> "ok"
     False -> "bad"
   Left _ -> "bad"

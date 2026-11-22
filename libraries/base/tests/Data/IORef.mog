@@ -1,7 +1,9 @@
--- Data.IORef: allocation, reads, writes and the modify helpers, each
--- sequenced in bind order, plus the independence of two references.
+module Main (main) where
+
 import Data.IORef
 
+-- Data.IORef: allocation, reads, writes and the modify helpers, each
+-- sequenced in bind order, plus the independence of two references.
 main :: IO ()
 main = do
   r <- newIORef (10 :: Int)

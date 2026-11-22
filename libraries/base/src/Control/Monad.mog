@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- |
--- A 'Monad' is a type of actions that can be chained: @(>>=)@ takes the value an
+
+-- | A 'Monad' is a type of actions that can be chained: @(>>=)@ takes the value an
 -- action produced and returns the next action to run, which is what the @do@
 -- notation is written in terms of. 'pure', from 'Applicative', is the action
 -- that produces a value and does nothing else.
@@ -15,23 +15,19 @@
 -- compiling; new code does not need them. The same is true of the class
 -- 'MonadPlus' and its two methods, which say what 'Alternative' already says.
 module Control.Monad
-  (
-    -- * Functor and monad classes
+  ( -- * Functor and monad classes
     Functor(..)
   , Monad((>>=), (>>))
   , MonadPlus(mzero, mplus)
-
-  -- * Functions
-
-  -- ** Basic @Monad@ functions
+    -- * Functions
+    -- ** Basic @Monad@ functions
   , void
   , (=<<)
   , (>=>)
   , (<=<)
   , forever
   , join
-
-  -- ** Generalisations of list functions
+    -- ** Generalisations of list functions
   , msum
   , mfilter
   , filterM
@@ -42,13 +38,11 @@ module Control.Monad
   , foldM_
   , replicateM
   , replicateM_
-
-  -- ** Conditional execution of monadic expressions
+    -- ** Conditional execution of monadic expressions
   , guard
   , when
   , unless
-
-  -- ** Monadic lifting operators
+    -- ** Monadic lifting operators
   , liftM
   , liftM2
   , liftM3
@@ -58,10 +52,6 @@ module Control.Monad
   , WrappedMonad(WrapMonad)
   , unwrapMonad
   ) where
-
--- mapM / sequence / forM live in Data.Traversable (traverse / sequenceA).
--- foldM / filterM / zipWithM / replicateM stay list-Kleisli here to avoid a
--- Control.Monad ↔ Data.Foldable import cycle.
 
 import Control.Applicative
 import Data.Bool
@@ -76,9 +66,11 @@ infixl 1 >>=, >>
 infixr 1 =<<
 infixr 1 >=>, <=<
 
+-- mapM / sequence / forM live in Data.Traversable (traverse / sequenceA).
+-- foldM / filterM / zipWithM / replicateM stay list-Kleisli here to avoid a
+-- Control.Monad ↔ Data.Foldable import cycle.
 class Applicative m => Monad m where
   (>>=) :: m a -> (a -> m b) -> m b
-
   -- | Run both actions in order and drop the first value: @m >> k@ is the
   -- effect of both, with @k@'s result. A method (rather than a top-level
   -- function) so instances can override it; the default sequences '(>>=)'.
@@ -96,7 +88,6 @@ class (Alternative m, Monad m) => MonadPlus m where
   -- @mzero = empty@
   mzero :: m a
   mzero = empty
-
   -- | An associative operation. The default definition is
   --
   -- @mplus = (<|>)@
@@ -172,9 +163,10 @@ msum xs = case xs of
   x : rest -> mplus x (msum rest)
 
 mfilter :: MonadPlus m => (a -> Bool) -> m a -> m a
-mfilter p ma = ma >>= (\x -> case p x of
-  True -> pure x
-  False -> mzero)
+mfilter p ma = ma >>= (\x ->
+  case p x of
+    True -> pure x
+    False -> mzero)
 
 liftM :: Monad m => (a1 -> r) -> m a1 -> m r
 liftM f ma = ma >>= (\a -> pure (f a))
@@ -188,14 +180,25 @@ liftM3 f ma mb mc = ma >>= (\a -> mb >>= (\b -> mc >>= (\c -> pure (f a b c))))
 liftM4 :: Monad m => (a1 -> a2 -> a3 -> a4 -> r) -> m a1 -> m a2 -> m a3 -> m a4 -> m r
 liftM4 f ma mb mc md = ma >>= (\a -> mb >>= (\b -> mc >>= (\c -> md >>= (\d -> pure (f a b c d)))))
 
-liftM5 :: Monad m => (a1 -> a2 -> a3 -> a4 -> a5 -> r) -> m a1 -> m a2 -> m a3 -> m a4 -> m a5 -> m r
-liftM5 f ma mb mc md me = ma >>= (\a -> mb >>= (\b -> mc >>= (\c -> md >>= (\d -> me >>= (\e -> pure (f a b c d e))))))
+liftM5
+  :: Monad m
+  => (a1 -> a2 -> a3 -> a4 -> a5 -> r)
+  -> m a1
+  -> m a2
+  -> m a3
+  -> m a4
+  -> m a5
+  -> m r
+liftM5 f ma mb mc md me =
+  ma >>= (\a -> mb >>= (\b -> mc >>= (\c -> md >>= (\d -> me >>= (\e -> pure (f a b c d e))))))
 
 mapAndUnzipM :: Monad m => (a -> m (b, c)) -> [a] -> m ([b], [c])
 mapAndUnzipM _ [] = pure ([], [])
-mapAndUnzipM f (x : xs) = f x >>= (\yz -> case yz of
-  (y, z) -> mapAndUnzipM f xs >>= (\yzs -> case yzs of
-    (ys, zs) -> pure (y : ys, z : zs)))
+mapAndUnzipM f (x : xs) = f x >>= (\yz ->
+  case yz of
+    (y, z) -> mapAndUnzipM f xs >>= (\yzs ->
+      case yzs of
+        (ys, zs) -> pure (y : ys, z : zs)))
 
 ap :: Monad m => m (a -> b) -> m a -> m b
 ap mf ma = mf >>= (\f -> ma >>= (\a -> pure (f a)))
@@ -209,7 +212,7 @@ instance Monad Maybe where
 instance Monad Down where
   (>>=) (Down a) k = k a
 
-instance MonadPlus Maybe
+instance MonadPlus Maybe where
 
 -- | A 'Monad' seen through its 'Applicative' interface only: 'pure' and
 -- '(<*>)' here are the 'Monad' ones, which lets 'Applicative' combinators
@@ -229,5 +232,6 @@ instance Applicative m => Applicative (WrappedMonad m) where
 
 instance Monad m => Monad (WrappedMonad m) where
   (>>=) m f = case m of
-    WrapMonad x -> WrapMonad (x >>= (\a -> case f a of
-      WrapMonad y -> y))
+    WrapMonad x -> WrapMonad (x >>= (\a ->
+      case f a of
+        WrapMonad y -> y))

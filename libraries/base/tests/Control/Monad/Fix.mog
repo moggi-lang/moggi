@@ -1,53 +1,68 @@
+module Main (main) where
+
 import Control.Monad.Fix
 import Data.Either (Either(..), either)
 import Data.Functor.Identity (Identity(..), runIdentity)
 import Data.Maybe (Maybe(..), maybe)
 
 factorial :: Int -> Int
-factorial = fix (\rec n -> case n <= 1 of
-  True -> 1
-  False -> n * rec (n - 1))
+factorial = fix (\rec n ->
+  case n <= 1 of
+    True -> 1
+    False -> n * rec (n - 1))
 
 sumTo :: Int -> Int -> Int
-sumTo = fix (\rec n acc -> case n <= 0 of
-  True -> acc
-  False -> rec (n - 1) (acc + n))
+sumTo = fix (\rec n acc ->
+  case n <= 0 of
+    True -> acc
+    False -> rec (n - 1) (acc + n))
 
 incrementFixed :: Int -> Int
 incrementFixed = fix (\rec -> \x -> x + 1)
 
 factorialIO :: IO (Int -> Int)
-factorialIO = mfix (\rec -> pure (\n -> case n <= 1 of
-  True -> 1
-  False -> n * rec (n - 1)))
+factorialIO = mfix (\rec ->
+  pure (\n ->
+    case n <= 1 of
+      True -> 1
+      False -> n * rec (n - 1)))
 
 countdownIO :: IO (Int -> Int)
-countdownIO = mfix (\rec -> pure (\n -> case n <= 0 of
-  True -> 0
-  False -> n + rec (n - 1)))
+countdownIO = mfix (\rec ->
+  pure (\n ->
+    case n <= 0 of
+      True -> 0
+      False -> n + rec (n - 1)))
 
 effectThenValue :: IO Int
-effectThenValue = mfix (\rec -> do
-  putStrLn "effects run before the knot is tied"
-  pure 7)
+effectThenValue = mfix (\rec ->
+  do
+    putStrLn "effects run before the knot is tied"
+    pure 7)
 
 identityFixed :: Identity (Int -> Int)
-identityFixed = mfix (\rec -> Identity (\n -> case n <= 0 of
-  True -> 0
-  False -> n + rec (n - 1)))
+identityFixed = mfix (\rec ->
+  Identity (\n ->
+    case n <= 0 of
+      True -> 0
+      False -> n + rec (n - 1)))
 
 maybeFixed :: Maybe (Int -> Int)
-maybeFixed = mfix (\rec -> Just (\n -> case n <= 0 of
-  True -> 0
-  False -> n + rec (n - 1)))
+maybeFixed = mfix (\rec ->
+  Just (\n ->
+    case n <= 0 of
+      True -> 0
+      False -> n + rec (n - 1)))
 
 maybeEmpty :: Maybe Int
 maybeEmpty = mfix (\_ -> Nothing)
 
 eitherFixed :: Either String (Int -> Int)
-eitherFixed = mfix (\rec -> Right (\n -> case n <= 0 of
-  True -> 0
-  False -> n + rec (n - 1)))
+eitherFixed = mfix (\rec ->
+  Right (\n ->
+    case n <= 0 of
+      True -> 0
+      False -> n + rec (n - 1)))
 
 eitherEmpty :: Either String Int
 eitherEmpty = mfix (\_ -> Left "absent")

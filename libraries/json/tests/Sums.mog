@@ -1,6 +1,5 @@
 -- Sums: a newtype-like single-field constructor unwraps, an all-nullary sum is a
 -- string, and a mixed sum is a tagged object.
-
 module Sums (sumsSuite) where
 
 import Data.ByteString.Char8 qualified as C

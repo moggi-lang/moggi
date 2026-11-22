@@ -52,11 +52,12 @@ data PHPValue
   | PhpResource Resource
 
 type PHPArray = [PHPValue]
+
 type PHPObject = [MapEntry String PHPValue]
 
-data PHPList a = MkPHPList (List a)
+data PHPList a = MkPHPList [a]
 
-data PHPMap k v = MkPHPMap (List (MapEntry k v))
+data PHPMap k v = MkPHPMap [MapEntry k v]
 
 itemsOfList lst = case lst of
   MkPHPList xs -> xs
@@ -68,8 +69,8 @@ indexAt xs n = case indexNegative n of
   False -> indexAtPos xs n
 
 indexAtPos [] _ = Nothing
-indexAtPos (x:_) 0 = Just x
-indexAtPos (_:rest) n = indexAtPos rest (n - 1)
+indexAtPos (x : _) 0 = Just x
+indexAtPos (_ : rest) n = indexAtPos rest (n - 1)
 
 indexIntList lst i = indexAt (itemsOfList lst) i
 
@@ -78,7 +79,7 @@ pushIntList lst x = MkPHPList (itemsOfList lst <> (x : []))
 entriesOfMap mp = case mp of
   MkPHPMap xs -> xs
 
-lookupEntry :: String -> List (MapEntry String Int) -> Maybe Int
+lookupEntry :: String -> [MapEntry String Int] -> Maybe Int
 lookupEntry _ [] = Nothing
 lookupEntry k (MapEntry k' v : rest) = case k == k' of
   True -> Just v
@@ -86,7 +87,7 @@ lookupEntry k (MapEntry k' v : rest) = case k == k' of
 
 lookupStringIntMap mp k = lookupEntry k (entriesOfMap mp)
 
-insertEntry :: String -> Int -> List (MapEntry String Int) -> List (MapEntry String Int)
+insertEntry :: String -> Int -> [MapEntry String Int] -> [MapEntry String Int]
 insertEntry k v [] = MapEntry k v : []
 insertEntry k v (MapEntry k' v' : rest) = case k == k' of
   True -> MapEntry k v : rest

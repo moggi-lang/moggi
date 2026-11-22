@@ -11,7 +11,6 @@
 -- comparison in the encoder shows up as the neighbouring class rather than as
 -- a plausible-looking encoding: 0x7F/0x80 (one to two bytes), 0x7FF/0x800
 -- (two to three), 0xFFFF/0x10000 (three to four).
-
 module Builder (builderSuite) where
 
 import Data.ByteString qualified as BS
@@ -63,19 +62,34 @@ builderSuite = do
   expect "charUtf8 emoji is four bytes" (show (bytes (B.charUtf8 grin))) "[240,159,152,128]"
   expect "string7 of three code points" (show (bytes (B.string7 three))) "[105,44,0]"
   expect "string8 of three code points" (show (bytes (B.string8 three))) "[233,172,0]"
-  expect "stringUtf8 of three code points" (show (bytes (B.stringUtf8 three))) "[195,169,226,130,172,240,159,152,128]"
-  expect "byteString copies the UTF-8 bytes" (show (bytes (B.byteString (BS.pack [195, 169, 226, 130, 172, 240, 159, 152, 128])))) "[195,169,226,130,172,240,159,152,128]"
-  expect "shortByteString copies the bytes" (show (bytes (B.shortByteString (BS.pack [233, 172, 0])))) "[233,172,0]"
-  expect "sliceOfShortByteString takes a slice" (show (bytes (B.sliceOfShortByteString 1 2 (BS.pack [233, 172, 0])))) "[172,0]"
-  expect "intDec stays ASCII beside UTF-8" (show (bytes (B.charUtf8 eAccent <> A.intDec 42 <> B.charUtf8 euro))) "[195,169,52,50,226,130,172]"
-  expect "formatDouble stays ASCII beside UTF-8" (show (bytes (B.stringUtf8 (S.pack [eAccent]) <> RF.formatDouble RF.generic 12.5))) "[195,169,49,50,46,53]"
-  expect "byteStringHex stays ASCII beside UTF-8" (show (bytes (B.charUtf8 grin <> A.byteStringHex (BS.pack [255])))) "[240,159,152,128,102,102]"
+  expect "stringUtf8 of three code points" (show (bytes (B.stringUtf8 three)))
+    "[195,169,226,130,172,240,159,152,128]"
+  expect "byteString copies the UTF-8 bytes"
+    (show (bytes (B.byteString (BS.pack [195, 169, 226, 130, 172, 240, 159, 152, 128]))))
+    "[195,169,226,130,172,240,159,152,128]"
+  expect "shortByteString copies the bytes" (show (bytes (B.shortByteString (BS.pack [233, 172, 0]))))
+    "[233,172,0]"
+  expect "sliceOfShortByteString takes a slice"
+    (show (bytes (B.sliceOfShortByteString 1 2 (BS.pack [233, 172, 0]))))
+    "[172,0]"
+  expect "intDec stays ASCII beside UTF-8"
+    (show (bytes (B.charUtf8 eAccent <> A.intDec 42 <> B.charUtf8 euro)))
+    "[195,169,52,50,226,130,172]"
+  expect "formatDouble stays ASCII beside UTF-8"
+    (show (bytes (B.stringUtf8 (S.pack [eAccent]) <> RF.formatDouble (RF.generic) 12.5)))
+    "[195,169,49,50,46,53]"
+  expect "byteStringHex stays ASCII beside UTF-8"
+    (show (bytes (B.charUtf8 grin <> A.byteStringHex (BS.pack [255]))))
+    "[240,159,152,128,102,102]"
   expect "charUtf8 U+007F is one byte" (show (bytes (B.charUtf8 u7f))) "[127]"
   expect "charUtf8 U+0080 is two bytes" (show (bytes (B.charUtf8 u80))) "[194,128]"
   expect "charUtf8 U+07FF is two bytes" (show (bytes (B.charUtf8 u7ff))) "[223,191]"
   expect "charUtf8 U+0800 is three bytes" (show (bytes (B.charUtf8 u800))) "[224,160,128]"
   expect "charUtf8 U+FFFF is three bytes" (show (bytes (B.charUtf8 uffff))) "[239,191,191]"
   expect "charUtf8 U+10000 is four bytes" (show (bytes (B.charUtf8 u10000))) "[240,144,128,128]"
-  expect "char7 keeps 7 bits at the boundaries" (show (bytes (B.string7 boundaries))) "[127,0,127,0,127,0]"
-  expect "char8 keeps 8 bits at the boundaries" (show (bytes (B.string8 boundaries))) "[127,128,255,0,255,0]"
-  expect "stringUtf8 switches length at the boundaries" (show (bytes (B.stringUtf8 boundaries))) "[127,194,128,223,191,224,160,128,239,191,191,240,144,128,128]"
+  expect "char7 keeps 7 bits at the boundaries" (show (bytes (B.string7 boundaries)))
+    "[127,0,127,0,127,0]"
+  expect "char8 keeps 8 bits at the boundaries" (show (bytes (B.string8 boundaries)))
+    "[127,128,255,0,255,0]"
+  expect "stringUtf8 switches length at the boundaries" (show (bytes (B.stringUtf8 boundaries)))
+    "[127,194,128,223,191,224,160,128,239,191,191,240,144,128,128]"

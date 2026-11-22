@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Converting values to readable strings:
 -- the 'Show' class and associated functions.
 module Text.Show
@@ -71,7 +72,6 @@ type ShowS = String -> String
 --   @\"Leaf 1 :^: (Leaf 2 :^: Leaf 3)\"@.
 class Show a where
   {-# MINIMAL showsPrec | show #-}
-
   -- | Convert a value to a readable 'String'.
   --
   -- 'showsPrec' should satisfy the law
@@ -86,20 +86,17 @@ class Show a where
   -- That is, 'readsPrec' parses the string produced by 'showsPrec', and delivers
   -- the value that 'showsPrec' started with.
   showsPrec :: Int -> a -> ShowS
-
+  showsPrec _ x s = showString (show x) s
   -- | A specialised variant of 'showsPrec', using precedence context zero,
   -- and returning an ordinary 'String'.
   show :: a -> String
-
+  show x = shows x ""
   -- | The method 'showList' is provided to allow the programmer to give a
   -- specialised way of showing lists of values. For example, this is used by
   -- the predefined 'Show' instance of the 'Char' type, where values of type
   -- 'String' should be shown in double quotes, rather than between square
   -- brackets.
   showList :: [a] -> ShowS
-
-  showsPrec _ x s = showString (show x) s
-  show x = shows x ""
   showList ls s = showListWith shows ls s
 
 -- | Show a list (using square brackets and commas), given a function
@@ -108,8 +105,9 @@ showListWith :: (a -> ShowS) -> [a] -> ShowS
 showListWith _ [] s = showString "[]" s
 showListWith showx (x : xs) s = showChar '[' (showx x (showl xs))
   where
-    showl [] = showChar ']' s
-    showl (y : ys) = showChar ',' (showx y (showl ys))
+    showl _p0 = case _p0 of
+      [] -> showChar ']' s
+      y : ys -> showChar ',' (showx y (showl ys))
 
 -- | equivalent to 'showsPrec' with a precedence of 0.
 shows :: Show a => a -> ShowS

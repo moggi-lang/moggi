@@ -1,12 +1,11 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Internal representation of an exception context.
 --
 -- It lives below the exception types so @ErrorCall@ can attach a 'CallStack'
 -- annotation without importing the public context module, which imports
 -- 'Data.Dynamic' and therefore 'Moggi.Err'.
-module Moggi.Internal.Exception.Context
-  ( ExceptionContext(..)
-  ) where
+module Moggi.Internal.Exception.Context (ExceptionContext(..)) where
 
 import Data.List ((:), (++))
 import Data.Semigroup ((<>))

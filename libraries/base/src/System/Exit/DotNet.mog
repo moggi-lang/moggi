@@ -1,6 +1,4 @@
-module System.Exit.DotNet
-  ( exitWithCode
-  ) where
+module System.Exit.DotNet (exitWithCode) where
 
 import Data.Int
 import Moggi.Internal.Base

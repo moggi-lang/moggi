@@ -1,6 +1,4 @@
-module Data.Time.Clock.System.DotNet
-  ( systemParts
-  ) where
+module Data.Time.Clock.System.DotNet (systemParts) where
 
 import Control.Applicative
 import Control.Monad
@@ -14,7 +12,9 @@ import System.IO.Base (IO)
 foreign dotnet type DateTimeOffset "System.DateTimeOffset"
 
 foreign dotnet function dtoUtcNow "System.DateTimeOffset:get_UtcNow" :: IO DateTimeOffset
+
 foreign dotnet function dtoToUnixTimeSeconds "System.DateTimeOffset.ToUnixTimeSeconds" :: DateTimeOffset -> Int
+
 foreign dotnet function dtoMillisecond "System.DateTimeOffset.get_Millisecond" :: DateTimeOffset -> Int32
 
 -- Millisecond resolution from a single reading: both parts come from the

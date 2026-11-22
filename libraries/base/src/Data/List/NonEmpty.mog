@@ -85,14 +85,13 @@ import Moggi.Internal.Base
 import Moggi.Internal.Prim
 import Text.Show
 
--- 'NonEmpty(..)' and its ':|' fixity live in 'Data.Semigroup' (the 'sconcat'
--- method names the type, so the class module owns it) and are re-exported
--- here with the instances and combinators.
 infixr 5 <|
 infixl 9 !!
 
+-- 'NonEmpty(..)' and its ':|' fixity live in 'Data.Semigroup' (the 'sconcat'
+-- method names the type, so the class module owns it) and are re-exported
+-- here with the instances and combinators.
 -- Helpers (must appear before instances; instance bodies absorb following decls)
-
 listMap :: (a -> b) -> [a] -> [b]
 listMap f xs = case xs of
   [] -> []
@@ -102,10 +101,10 @@ listAppend :: [a] -> [a] -> [a]
 listAppend xs ys = listAppend# xs ys
 
 listLength :: [a] -> Int
-listLength xs = let
-    go n ys = case ys of
-      [] -> n
-      _ : rest -> go (n + 1) rest
+listLength xs =
+  let go n ys = case ys of
+        [] -> n
+        _ : rest -> go (n + 1) rest
   in go 0 xs
 
 listFoldl :: (b -> a -> b) -> b -> [a] -> b
@@ -122,7 +121,7 @@ liftList f xs = fromList (f (toList xs))
 bindNe :: NonEmpty a -> (a -> NonEmpty b) -> NonEmpty b
 bindNe ne f = case ne of
   a :| rest -> case f a of
-    b :| bs -> b :| (listAppend bs (bindList rest f))
+    b :| bs -> b :| listAppend bs (bindList rest f)
 
 bindList :: [a] -> (a -> NonEmpty b) -> [b]
 bindList xs f = case xs of
@@ -156,32 +155,24 @@ neTails1 xs = case xs of
 groupByList :: (a -> a -> Bool) -> [a] -> [NonEmpty a]
 groupByList eq xs = case xs of
   [] -> []
-  x : rest ->
-    let s = DL.span (eq x) rest
-    in (x :| (fst s)) : groupByList eq (snd s)
+  x : rest -> let s = DL.span (eq x) rest in (x :| fst s) : groupByList eq (snd s)
 
 interleavePerms :: a -> [a] -> [a] -> [a] -> [[a]] -> [[a]]
-interleavePerms t ts is xs r =
-  let pair = interleavePermsGo t ts id xs r
-  in snd pair
+interleavePerms t ts is xs r = let pair = interleavePermsGo t ts id xs r in snd pair
 
 interleavePermsGo :: a -> [a] -> ([a] -> [a]) -> [a] -> [[a]] -> ([a], [[a]])
 interleavePermsGo t ts f xs r = case xs of
   [] -> (ts, r)
-  y : ys ->
-    let pair = interleavePermsGo t ts (\zs -> f (y : zs)) ys r
-        us = fst pair
-        zs = snd pair
-    in (y : us, f (t : y : us) : zs)
+  y : ys -> let pair = interleavePermsGo t ts (\zs -> f (y : zs)) ys r
+                us = fst pair
+                zs = snd pair
+            in (y : us, f (t : y : us) : zs)
 
 permsList :: [a] -> [a] -> [[a]]
 permsList xs is = case xs of
   [] -> []
   t : ts ->
-    listFoldrPerm
-      (\ys r -> interleavePerms t ts is ys r)
-      (permsList ts (t : is))
-      (DL.permutations is)
+    listFoldrPerm (\ys r -> interleavePerms t ts is ys r) (permsList ts (t : is)) (DL.permutations is)
 
 listFoldrPerm :: ([a] -> [[a]] -> [[a]]) -> [[a]] -> [[a]] -> [[a]]
 listFoldrPerm f z xs = case xs of
@@ -196,7 +187,6 @@ indexAt xs n = case xs of
     False -> indexAt rest (n - 1)
 
 -- Non-empty stream transformations ------------------------------------------
-
 intersperse :: a -> NonEmpty a -> NonEmpty a
 intersperse a ne = case ne of
   b :| bs -> b :| (case bs of
@@ -218,8 +208,7 @@ scanr1 f ne = case ne of
   a :| xs -> fromList (DL.scanr1 f (a : xs))
 
 transpose :: NonEmpty (NonEmpty a) -> NonEmpty (NonEmpty a)
-transpose xss =
-  map fromList (fromList (DL.transpose (toList (map toList xss))))
+transpose xss = map fromList (fromList (DL.transpose (toList (map toList xss))))
 
 sortBy :: (a -> a -> Ordering) -> NonEmpty a -> NonEmpty a
 sortBy f xs = liftList (DL.sortBy f) xs
@@ -228,7 +217,6 @@ sortWith :: Ord o => (a -> o) -> NonEmpty a -> NonEmpty a
 sortWith f xs = sortBy (comparing f) xs
 
 -- Basic functions -----------------------------------------------------------
-
 length :: NonEmpty a -> Int
 length ne = case ne of
   _ :| xs -> 1 + listLength xs
@@ -277,7 +265,7 @@ singleton :: a -> NonEmpty a
 singleton a = a :| []
 
 (<|) :: a -> NonEmpty a -> NonEmpty a
-(<|) a xs = a :| (toList xs)
+(<|) a xs = a :| toList xs
 
 cons :: a -> NonEmpty a -> NonEmpty a
 cons a xs = a <| xs
@@ -288,7 +276,7 @@ uncons ne = case ne of
 
 unfoldr :: (a -> (b, Maybe a)) -> a -> NonEmpty b
 unfoldr f a = case f a of
-  pair -> (fst pair) :| (maybe [] (unfoldrGo f) (snd pair))
+  pair -> fst pair :| maybe [] (unfoldrGo f) (snd pair)
 
 sort :: Ord a => NonEmpty a -> NonEmpty a
 sort xs = liftList (DL.sort) xs
@@ -309,29 +297,27 @@ tails :: Foldable f => f a -> NonEmpty [a]
 tails xs = fromList (DL.tails (foldableToList xs))
 
 tails1 :: NonEmpty a -> NonEmpty (NonEmpty a)
-tails1 xs = xs :| (neTails1 (tail xs))
+tails1 xs = xs :| neTails1 (tail xs)
 
 append :: NonEmpty a -> NonEmpty a -> NonEmpty a
 append xs ys = xs <> ys
 
 appendList :: NonEmpty a -> [a] -> NonEmpty a
 appendList ne ys = case ne of
-  x :| xs -> x :| (listAppend xs ys)
+  x :| xs -> x :| listAppend xs ys
 
 prependList :: [a] -> NonEmpty a -> NonEmpty a
 prependList ls ne = case ls of
   [] -> ne
-  x : xs -> x :| (listAppend xs (toList ne))
+  x : xs -> x :| listAppend xs (toList ne)
 
 -- Building streams ----------------------------------------------------------
-
 -- `iterate`, `repeat` and `cycle` are deliberately absent: each one builds an
 -- infinite structure, and strict evaluation would diverge on every use.
-
 unfold :: (a -> (b, Maybe a)) -> a -> NonEmpty b
 unfold f a = case f a of
   pair -> case snd pair of
-    Nothing -> (fst pair) :| []
+    Nothing -> fst pair :| []
     Just c -> fst pair <| unfold f c
 
 insert :: (Foldable f, Ord a) => a -> f a -> NonEmpty a
@@ -341,7 +327,6 @@ some1 :: Alternative f => f a -> f (NonEmpty a)
 some1 x = liftA2 (:|) x (many x)
 
 -- Extracting sublists -------------------------------------------------------
-
 take :: Int -> NonEmpty a -> [a]
 take n xs = DL.take n (toList xs)
 
@@ -386,9 +371,7 @@ group1 xs = groupBy1 (\a b -> a == b) xs
 
 groupBy1 :: (a -> a -> Bool) -> NonEmpty a -> NonEmpty (NonEmpty a)
 groupBy1 eq ne = case ne of
-  x :| xs ->
-    let s = DL.span (eq x) xs
-    in (x :| (fst s)) :| (groupBy eq (snd s))
+  x :| xs -> let s = DL.span (eq x) xs in (x :| fst s) :| groupBy eq (snd s)
 
 groupWith1 :: Eq b => (a -> b) -> NonEmpty a -> NonEmpty (NonEmpty a)
 groupWith1 f xs = groupBy1 (on (\a b -> a == b) f) xs
@@ -397,13 +380,12 @@ groupAllWith1 :: Ord b => (a -> b) -> NonEmpty a -> NonEmpty (NonEmpty a)
 groupAllWith1 f xs = groupWith1 f (sortWith f xs)
 
 permutations :: [a] -> NonEmpty [a]
-permutations xs0 = xs0 :| (permsList xs0 [])
+permutations xs0 = xs0 :| permsList xs0 []
 
 permutations1 :: NonEmpty a -> NonEmpty (NonEmpty a)
 permutations1 xs = map fromList (permutations (toList xs))
 
 -- Sublist predicates --------------------------------------------------------
-
 isPrefixOf :: Eq a => [a] -> NonEmpty a -> Bool
 isPrefixOf prefix ne = case prefix of
   [] -> True
@@ -419,16 +401,14 @@ isPrefixOfEq y ys x xs = case y == x of
   False -> False
 
 -- Set operations ------------------------------------------------------------
-
 nub :: Eq a => NonEmpty a -> NonEmpty a
 nub xs = nubBy (\a b -> a == b) xs
 
 nubBy :: (a -> a -> Bool) -> NonEmpty a -> NonEmpty a
 nubBy eq ne = case ne of
-  a :| xs -> a :| (DL.nubBy eq (DL.filter (\b -> not (eq a b)) xs))
+  a :| xs -> a :| DL.nubBy eq (DL.filter (\b -> not (eq a b)) xs)
 
 -- Indexing ------------------------------------------------------------------
-
 (!!) :: NonEmpty a -> Int -> a
 (!!) ne n = case ne of
   x :| xs -> case n == 0 of
@@ -438,24 +418,20 @@ nubBy eq ne = case ne of
       False -> error "Data.List.NonEmpty.index: negative index"
 
 -- Zips ----------------------------------------------------------------------
-
 zip :: NonEmpty a -> NonEmpty b -> NonEmpty (a, b)
 zip xs ys = zipWith (\a b -> (a, b)) xs ys
 
 zipWith :: (a -> b -> c) -> NonEmpty a -> NonEmpty b -> NonEmpty c
 zipWith f na nb = case na of
   a :| xs -> case nb of
-    b :| ys -> (f a b) :| (DL.zipWith f xs ys)
+    b :| ys -> f a b :| DL.zipWith f xs ys
 
 unzip :: NonEmpty (a, b) -> (NonEmpty a, NonEmpty b)
 unzip ne = case ne of
   ab :| rest -> case ab of
-    (a, b) ->
-      let u = DL.unzip rest
-      in (a :| (fst u), b :| (snd u))
+    (a, b) -> let u = DL.unzip rest in (a :| fst u, b :| snd u)
 
 -- Converting ----------------------------------------------------------------
-
 fromList :: [a] -> NonEmpty a
 fromList (a : xs) = a :| xs
 fromList [] = error "NonEmpty.fromList: empty list"
@@ -478,7 +454,6 @@ listFoldXor f z xs = case xs of
   y : ys -> f y (listFoldXor f z ys)
 
 -- Instances -----------------------------------------------------------------
-
 listFoldrNe :: (a -> b -> b) -> b -> [a] -> b
 listFoldrNe f z xs = case xs of
   [] -> z
@@ -487,16 +462,16 @@ listFoldrNe f z xs = case xs of
 traverseList :: Applicative f => (a -> f b) -> [a] -> f [b]
 traverseList f xs = case xs of
   [] -> pure []
-  x : rest -> pure (\y ys -> y : ys) <*> (f x) <*> (traverseList f rest)
+  x : rest -> pure (\y ys -> y : ys) <*> f x <*> traverseList f rest
 
 instance Semigroup (NonEmpty a) where
   (<>) na nb = case na of
     a :| xs -> case nb of
-      b :| ys -> a :| (listAppend xs (b : ys))
+      b :| ys -> a :| listAppend xs (b : ys)
 
 instance Functor NonEmpty where
   map f ne = case ne of
-    a :| xs -> (f a) :| (listMap f xs)
+    a :| xs -> f a :| listMap f xs
 
 instance Foldable NonEmpty where
   foldr f z ne = case ne of
@@ -506,8 +481,7 @@ instance Foldable NonEmpty where
 
 instance Traversable NonEmpty where
   traverse f ne = case ne of
-    a :| xs ->
-      pure (\b ys -> b :| ys) <*> (f a) <*> (traverseList f xs)
+    a :| xs -> pure (\b ys -> b :| ys) <*> f a <*> traverseList f xs
 
 instance Applicative NonEmpty where
   pure x = x :| []
@@ -518,7 +492,6 @@ instance Monad NonEmpty where
 
 -- 'sconcat' is a 'Semigroup' method (see 'Data.Semigroup'); its default folds
 -- with '(<>)', associating to the right as @base@'s does.
-
 instance Show a => Show (NonEmpty a) where
   showsPrec d ne = case ne of
     a :| as -> showParen (d > 5) (\s -> showsPrec 11 a (showString " :| " (showsPrec 11 as s)))

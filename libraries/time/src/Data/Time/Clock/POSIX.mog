@@ -1,12 +1,10 @@
--- |
--- POSIX time, following the 'Data.Time.Clock.POSIX'.
+-- | POSIX time, following the 'Data.Time.Clock.POSIX'.
 --
 -- 'POSIXTime' is seconds since the unix epoch as a 'NominalDiffTime', so
 -- 'utcTimeToPOSIXSeconds' and 'posixSecondsToUTCTime' convert without
 -- losing the picoseconds, and 'getPOSIXTime' reads the backend clock.
 -- Leap seconds are not represented (POSIX time ignores them, as does the
 -- conversion here).
---
 module Data.Time.Clock.POSIX
   ( POSIXTime
   , posixSecondsToUTCTime

@@ -51,43 +51,75 @@ import System.IO.Error (mkIOError)
 import Moggi.Internal.Prim
 
 foreign jvm type JFile "java.io.File"
+
 foreign jvm type JPath "interface java.nio.file.Path"
+
 foreign jvm type JObject "java.lang.Object"
+
 foreign jvm type Iterator "interface java.util.Iterator"
+
 foreign jvm type Iterable "interface java.lang.Iterable"
+
 foreign jvm type DirectoryStream "interface java.nio.file.DirectoryStream"
+
 foreign jvm type FileTime "java.nio.file.attribute.FileTime"
+
 foreign jvm type OutStream "java.io.OutputStream"
 
 foreign jvm function newFile "java.io.File:__con" :: String -> JFile
+
 foreign jvm function fileToPath "java.io.File.toPath" :: JFile -> JPath
+
 foreign jvm function fileExists "java.io.File.exists" :: JFile -> Bool
+
 foreign jvm function fileIsFile "java.io.File.isFile" :: JFile -> Bool
+
 foreign jvm function fileIsDirectory "java.io.File.isDirectory" :: JFile -> Bool
+
 foreign jvm function fileCanRead "java.io.File.canRead" :: JFile -> Bool
+
 foreign jvm function fileCanWrite "java.io.File.canWrite" :: JFile -> Bool
+
 foreign jvm function fileCanExecute "java.io.File.canExecute" :: JFile -> Bool
+
 foreign jvm function fileSetReadable "java.io.File.setReadable" :: JFile -> Bool -> Bool -> Bool
+
 foreign jvm function fileSetWritable "java.io.File.setWritable" :: JFile -> Bool -> Bool -> Bool
+
 foreign jvm function fileSetExecutable "java.io.File.setExecutable" :: JFile -> Bool -> Bool -> Bool
+
 foreign jvm function fileLastModified "java.io.File.lastModified" :: JFile -> Int
+
 foreign jvm function fileLength "java.io.File.length" :: JFile -> Int
+
 foreign jvm function fileMkdir "java.io.File.mkdir" :: JFile -> Bool
+
 foreign jvm function fileMkdirs "java.io.File.mkdirs" :: JFile -> Bool
+
 foreign jvm function fileDelete "java.io.File.delete" :: JFile -> Bool
+
 foreign jvm function fileRenameTo "java.io.File.renameTo" :: JFile -> JFile -> Bool
+
 foreign jvm function fileGetCanonicalPath "java.io.File.getCanonicalPath" :: JFile -> IO String
+
 foreign jvm function fileSetLastModified "java.io.File.setLastModified" :: JFile -> Int -> Bool
 
 foreign jvm function pathToString "java.nio.file.Path.toString" :: JPath -> String
+
 foreign jvm function pathGetFileName "java.nio.file.Path.getFileName" :: JPath -> JPath
 
 foreign jvm function filesDelete "java.nio.file.Files:delete" :: JPath -> IO ()
+
 foreign jvm function filesDeleteIfExists "java.nio.file.Files:deleteIfExists" :: JPath -> IO Bool
+
 foreign jvm function filesCopyToStream "java.nio.file.Files:copy" :: JPath -> OutStream -> IO Int
+
 foreign jvm function filesIsSymbolicLink "java.nio.file.Files:isSymbolicLink" :: JPath -> Bool
+
 foreign jvm function filesReadSymbolicLink "java.nio.file.Files:readSymbolicLink" :: JPath -> IO JPath
+
 foreign jvm function filesNewDirectoryStream "java.nio.file.Files:newDirectoryStream" :: JPath -> IO DirectoryStream
+
 foreign jvm function filesSetLastModifiedTime "java.nio.file.Files:setLastModifiedTime" :: JPath -> FileTime -> IO JPath
 
 -- | Variadic host calls: the trailing options array is omitted, so the calls
@@ -95,17 +127,23 @@ foreign jvm function filesSetLastModifiedTime "java.nio.file.Files:setLastModifi
 -- attributes). The declarations stay short; overload resolution proves each
 -- elided parameter variadic from `javap -v` flags, never from its shape.
 foreign jvm function filesCreateSymbolicLink "java.nio.file.Files:createSymbolicLink" :: JPath -> JPath -> IO JPath
+
 foreign jvm function filesGetAttribute "java.nio.file.Files:getAttribute" :: JPath -> String -> IO JObject
+
 foreign jvm function filesSetAttribute "java.nio.file.Files:setAttribute" :: JPath -> String -> FileTime -> IO JPath
+
 foreign jvm function objectAsFileTime "java.nio.file.attribute.FileTime:__cast" :: JObject -> FileTime
 
 foreign jvm function newFileOutputStream "java.io.FileOutputStream:__con" :: String -> OutStream
+
 foreign jvm function outClose "java.io.OutputStream.close" :: OutStream -> IO ()
 
 foreign jvm function fileTimeToMillis "java.nio.file.attribute.FileTime.toMillis" :: FileTime -> Int
+
 foreign jvm function fileTimeFromMillis "java.nio.file.attribute.FileTime:fromMillis" :: Int -> FileTime
 
 foreign jvm function systemGetProperty "java.lang.System:getProperty" :: String -> String
+
 foreign jvm function systemSetProperty "java.lang.System:setProperty" :: String -> String -> String
 
 -- | The `java.lang.Object` an erased generic member trades in. `Iterator<E>.next` erases to
@@ -116,9 +154,13 @@ foreign jvm function systemSetProperty "java.lang.System:setProperty" :: String 
 foreign jvm type ErasedIterationValue "java.lang.Object"
 
 foreign jvm function iterableIterator "java.lang.Iterable.iterator" :: DirectoryStream -> Iterator
+
 foreign jvm function iterHasNext "java.util.Iterator.hasNext" :: Iterator -> Bool
+
 foreign jvm function iterNextErased "java.util.Iterator.next" :: Iterator -> ErasedIterationValue
+
 foreign jvm function iterNextPath "java.nio.file.Path:__cast" :: ErasedIterationValue -> JPath
+
 foreign jvm function objectsIsNull "java.util.Objects:isNull" :: JPath -> Bool
 
 toFile :: FilePath -> JFile
@@ -390,18 +432,20 @@ getPermissions p = do
   x <- pure (fileCanExecute f)
   isDir <- doesDirectoryExist p
   pure (case isDir of
-    True -> Permissions
-      { permissionsReadable = r
-      , permissionsWritable = w
-      , permissionsExecutable = False
-      , permissionsSearchable = r && x
-      }
-    False -> Permissions
-      { permissionsReadable = r
-      , permissionsWritable = w
-      , permissionsExecutable = x
-      , permissionsSearchable = False
-      })
+    True ->
+      Permissions
+        { permissionsReadable = r
+        , permissionsWritable = w
+        , permissionsExecutable = False
+        , permissionsSearchable = r && x
+        }
+    False ->
+      Permissions
+        { permissionsReadable = r
+        , permissionsWritable = w
+        , permissionsExecutable = x
+        , permissionsSearchable = False
+        })
 
 -- | Owner bits only, the way the host's `setReadable`/`setWritable`/
 -- `setExecutable` owner forms set them; a searchable directory takes the
