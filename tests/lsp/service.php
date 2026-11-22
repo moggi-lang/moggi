@@ -157,7 +157,7 @@ $fixEdits = svcFormatDocument($fixSvc, $importUri);
 $assert(\count($fixEdits) === 1, 'imported-fixity format produces one edit: ' . \json_encode($fixEdits));
 $fixText = (string) ($fixEdits[0]['newText'] ?? '');
 $assert(\str_contains($fixText, "value = a <+> b <+> c\n"), 'LSP formatter keeps an imported right-associative chain: ' . $fixText);
-$assert(\str_contains($fixText, "mixed = a <+> (b * c)\n"), 'LSP formatter uses imported precedence: ' . $fixText);
+$assert(\str_contains($fixText, "mixed = a <+> b * c\n"), 'LSP formatter uses imported precedence: ' . $fixText);
 $assert(! \str_contains($fixText, '(a <+> b) * c'), 'LSP formatter did not use default fixity for an imported operator: ' . $fixText);
 
 @\unlink($opsPath);

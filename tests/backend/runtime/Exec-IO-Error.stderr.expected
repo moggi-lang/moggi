@@ -3,6 +3,6 @@ moggi: Uncaught exception base:Moggi.Exception.Type.ErrorCall:
 boom
 
 CallStack (from HasCallStack):
-  at Moggi.Err.error (libraries/base/src/Moggi/Err.mog:8:13)
+  at Moggi.Err.error (libraries/base/src/Moggi/Err.mog:13:13)
   at Main.fail (tests/backend/runtime/Exec-IO-Error.mog:2:8)
   at Main.main (tests/backend/runtime/Exec-IO-Error.mog:5:8)
