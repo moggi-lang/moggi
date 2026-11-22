@@ -1,0 +1,3 @@
+module Bad.TrailingOperator where
+
+f x = x +

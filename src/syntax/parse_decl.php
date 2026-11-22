@@ -1546,6 +1546,7 @@ function parseFamilyEquationLhs(ParserState $state): Ast\TypeNode
         $opToken = advance($state);
         $right = parseFamilyEquationAtom($state);
         $left = new Ast\TypeApp(new Ast\TypeCon($opToken->lexeme), [$left, $right]);
+        $left->infixSpelling = true;
     }
 
     return $left;
@@ -1565,7 +1566,10 @@ function parseFamilyEquationAtom(ParserState $state): Ast\TypeNode
     }
 
     if ($head instanceof Ast\TypeApp) {
-        return new Ast\TypeApp($head->con, [...$head->args, ...$args]);
+        $app = new Ast\TypeApp($head->con, [...$head->args, ...$args]);
+        $app->infixSpelling = $head->infixSpelling;
+
+        return $app;
     }
 
     return new Ast\TypeApp($head, $args);

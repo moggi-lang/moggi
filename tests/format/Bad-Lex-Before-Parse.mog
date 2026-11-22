@@ -1,0 +1,5 @@
+module Demo.LexBeforeParse where
+
+first = )
+
+second = "unterminated

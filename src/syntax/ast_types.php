@@ -2126,6 +2126,14 @@ final class TypeApp extends AstNode implements TypeNode
      * `Tuple2 a b` must keep printing that way, so the sugar is recorded rather than inferred.
      */
     public bool $tupleSugar = false;
+
+    /**
+     * Whether the source wrote this application infix (`f :+: g`).
+     *
+     * Prefix application of a symbolic constructor (`(:*:) f g`) parses to the same shape, so the
+     * spelling is recorded rather than inferred from the head.
+     */
+    public bool $infixSpelling = false;
 }
 
 final class TypeArrow extends AstNode implements TypeNode

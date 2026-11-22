@@ -1,0 +1,3 @@
+module Bad.IncompleteData where
+
+data Shape =

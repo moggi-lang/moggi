@@ -1,0 +1,6 @@
+module Bad.CommentWithoutHome where
+
+data Shape
+  = Circle
+  | Square
+  {- this comment has no place in the canonical layout -}
