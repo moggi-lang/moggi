@@ -172,6 +172,7 @@ function parseTypeInfix(ParserState $state, bool $anyOperator = false): Ast\Type
         $opToken = advance($state);
         $right = parseTypeAtom($state);
         $app = new Ast\TypeApp(new Ast\TypeCon($opToken->lexeme), [$left, $right]);
+        $app->infixSpelling = true;
         $app->setLocation(
             $opToken->line,
             $opToken->col,
@@ -234,6 +235,7 @@ function parseTypeAtom(ParserState $state): Ast\TypeNode
 
     if ($head instanceof Ast\TypeApp) {
         $app = new Ast\TypeApp($head->con, [...$head->args, ...$args]);
+        $app->infixSpelling = $head->infixSpelling;
         if ($head->line !== 0) {
             $app->setLocation($head->line, $head->col, $head->endCol);
         }

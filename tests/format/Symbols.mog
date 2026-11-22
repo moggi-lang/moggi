@@ -1,0 +1,72 @@
+module Demo.Symbols ((<.>), (:*:), Shape(..), Empty, NonEmpty(..)) where
+
+import Demo.Helpers ((<+>), (.:), named, coerce#)
+
+infixr 5 <+>
+infixl 6 `stepped`
+
+data Shape=Circle|Square
+
+data Empty
+  deriving(Eq)
+
+data NonEmpty a=a:|[a]
+  deriving(Eq,Show)
+
+data (:*:) f g a = Pair (f a) (g a)
+
+newtype Wrapper a=Wrapper(a->a)
+
+class (Eq a,Show a)=>Pretty a where
+  (<~>)::a->a->Bool
+  pretty::a->String
+
+class Functor f=>Wrapped (f::Type->Type) where
+  wrap::a->f a
+
+class Minimal a where
+  {-# MINIMAL seed | (grow, prune) #-}
+  seed::a->a
+  grow::a->a
+  prune::a->a
+  seed x=x
+
+instance (Eq a,Show a)=>Pretty[a] where
+  xs <~> ys = xs == ys
+  pretty xs=show xs
+
+label::Char->String
+label 'a'="a"
+label ' '="space"
+label '"'="quote"
+label _="other"
+
+classify::String->Int
+classify ""=0
+classify "-"=1
+classify _=2
+
+headOf::NonEmpty a->a
+headOf (x :| _)=x
+
+proof::('True&&'False):~:'False
+proof=Refl
+
+pair::(:*:) Maybe(List) Int
+pair=Pair (Just 1)[2]
+
+step::Int->Int
+step n=((n+1)*2)::Int
+
+prepend::[Int]->[Int]
+prepend xs=(0:xs):[]
+
+nested::Maybe Int->Int
+nested m=case m of
+  Just k -> k
+  Nothing -> 0
+
+choose::Maybe Int->Int
+choose m=if m==Nothing then 0 else case m of
+  Just k -> k
+  Nothing -> 0

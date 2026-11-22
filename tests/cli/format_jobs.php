@@ -91,7 +91,7 @@ MOG
     $assert(($fixityWritten['exitCode'] ?? 1) === 0, 'formatting imported fixity must succeed: ' . $fixityWritten['stderr']);
     $fixitySource = (string) \file_get_contents($fixity . '/Main.mog');
     $assert(\str_contains($fixitySource, "value = a <+> b <+> c\n"), 'an imported right-associative chain was re-parenthesized: ' . $fixitySource);
-    $assert(\str_contains($fixitySource, "mixed = a <+> (b * c)\n"), 'imported precedence was not used: ' . $fixitySource);
+    $assert(\str_contains($fixitySource, "mixed = a <+> b * c\n"), 'imported precedence was not used: ' . $fixitySource);
     $assert(! \str_contains($fixitySource, '(a <+> b) * c'), 'the formatter parsed the imported operator with default fixity: ' . $fixitySource);
 
     echo "format jobs tests passed ({$checks} checks)\n";

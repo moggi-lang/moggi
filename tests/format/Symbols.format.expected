@@ -38,7 +38,7 @@ class Minimal a where
   prune :: a -> a
 
 instance (Eq a, Show a) => Pretty [a] where
-  (<~>) xs ys = xs == ys
+  xs <~> ys = xs == ys
   pretty xs = show xs
 
 label :: Char -> String

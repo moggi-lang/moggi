@@ -2256,7 +2256,7 @@ function printTypeNode(Ast\TypeNode $type): string
             && \count($type->args) === 1) {
             return '[' . printType($type->args[0]) . ']';
         }
-        if ($type->con instanceof Ast\TypeCon && isSymbolicName($type->con->name)) {
+        if ($type->con instanceof Ast\TypeCon && isSymbolicName($type->con->name) && $type->infixSpelling) {
             if (\count($type->args) === 2) {
                 return printTypeOperand($type->args[0]) . ' ' . $type->con->name . ' ' . printTypeOperand($type->args[1]);
             }

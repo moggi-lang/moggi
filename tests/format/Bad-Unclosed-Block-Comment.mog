@@ -1,0 +1,4 @@
+module Bad.UnclosedBlockComment where
+
+{- a note the author is still writing
+s = 1
