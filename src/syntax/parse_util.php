@@ -579,7 +579,14 @@ function attachTrailingDocToPreviousMethod(array &$methods, ?string $trailingDoc
 
     $last = \array_pop($methods);
     if ($last instanceof Ast\ClassMethodSig) {
-        $methods[] = new Ast\ClassMethodSig($last->name, $last->type, mergeDoc($last->doc, $trailingDoc));
+        $methods[] = new Ast\ClassMethodSig(
+            $last->name,
+            $last->type,
+            mergeDoc($last->doc, $trailingDoc),
+            $last->params,
+            $last->body,
+            $last->infixDefinition,
+        );
     } elseif ($last instanceof Ast\FunctionDecl) {
         $last->doc = mergeDoc($last->doc, $trailingDoc);
         $methods[] = $last;

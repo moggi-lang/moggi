@@ -219,7 +219,7 @@ function render(Doc $doc, int $width = WIDTH): string
                     }
                     break;
                 }
-                $out .= "\n" . ($pads[$indent] ??= \str_repeat(' ', $indent));
+                $out = \rtrim($out, " \t") . "\n" . ($pads[$indent] ??= \str_repeat(' ', $indent));
                 $column = $indent;
                 break;
         }
@@ -239,6 +239,46 @@ function render(Doc $doc, int $width = WIDTH): string
 function fits(Doc $doc, int $remaining): bool
 {
     return $remaining >= 0 && ! $doc->hasHardLine && $doc->flatWidth <= $remaining;
+}
+
+/**
+ * Columns the first rendered line of `$doc` occupies.
+ *
+ * A block document starts with a line of its own before its first hard line. Whether it can share a
+ * line with the text in front of it depends on that first line, not on the whole document: `fits()`
+ * always says no for a hard-line document. A flat subtree contributes its cached width; a group is
+ * measured flat, which can only overestimate the first line and so never puts a body on a line that
+ * does not fit.
+ */
+function firstLineWidth(Doc $doc): int
+{
+    $width = 0;
+
+    /** @var list<Doc> $stack */
+    $stack = [$doc];
+    while ($stack !== []) {
+        $node = \array_pop($stack);
+        if (! $node->hasHardLine) {
+            $width += $node->flatWidth;
+
+            continue;
+        }
+
+        if ($node->kind === 'line') {
+            return $width;
+        }
+        if ($node->kind === 'concat') {
+            for ($i = \count($node->children) - 1; $i >= 0; --$i) {
+                $stack[] = $node->children[$i];
+            }
+
+            continue;
+        }
+
+        $stack[] = $node->children[0];
+    }
+
+    return $width;
 }
 
 /**

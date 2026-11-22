@@ -308,7 +308,10 @@ function parseInferredInfixFunction(ParserState $state): Ast\FunctionDecl
     $right = expect($state, TokenKind::VarId)->lexeme;
     $body = parseFunctionBody($state);
 
-    return new Ast\FunctionDecl($name, null, [new Ast\PatVar($left), new Ast\PatVar($right)], $body);
+    $decl = new Ast\FunctionDecl($name, null, [new Ast\PatVar($left), new Ast\PatVar($right)], $body);
+    $decl->infixDefinition = true;
+
+    return $decl;
 }
 
 /**
@@ -340,7 +343,10 @@ function parseInferredBacktickFunction(ParserState $state): Ast\FunctionDecl
     $right = expect($state, TokenKind::VarId)->lexeme;
     $body = parseFunctionBody($state);
 
-    return new Ast\FunctionDecl($name, null, [new Ast\PatVar($left), new Ast\PatVar($right)], $body);
+    $decl = new Ast\FunctionDecl($name, null, [new Ast\PatVar($left), new Ast\PatVar($right)], $body);
+    $decl->infixDefinition = true;
+
+    return $decl;
 }
 
 /**
@@ -418,11 +424,12 @@ function looksLikeFunctionDecl(ParserState $state): bool
 
     try {
         $startLine = peek($state)->line;
+        $startCol = peek($state)->col;
 
-        while (peek($state)->line === $startLine
-            && startsPattern($state)
+        while (startsPattern($state)
             && ! isAt($state, TokenKind::Op, 0, '=')
-            && ! isAt($state, TokenKind::Pipe)) {
+            && ! isAt($state, TokenKind::Pipe)
+            && (peek($state)->line === $startLine || peek($state)->col > $startCol)) {
             parsePatternAtom($state);
         }
 
@@ -557,7 +564,10 @@ function parseInfixFunctionDecl(ParserState $state, string $name, Ast\TypeNode $
     $right = expect($state, TokenKind::VarId)->lexeme;
     $body = parseFunctionBody($state);
 
-    return new Ast\FunctionDecl($name, $type, [new Ast\PatVar($left), new Ast\PatVar($right)], $body);
+    $decl = new Ast\FunctionDecl($name, $type, [new Ast\PatVar($left), new Ast\PatVar($right)], $body);
+    $decl->infixDefinition = true;
+
+    return $decl;
 }
 
 /**
@@ -575,7 +585,10 @@ function parseBacktickFunctionDecl(ParserState $state, string $name, Ast\TypeNod
     $right = expect($state, TokenKind::VarId)->lexeme;
     $body = parseFunctionBody($state);
 
-    return new Ast\FunctionDecl($name, $type, [new Ast\PatVar($left), new Ast\PatVar($right)], $body);
+    $decl = new Ast\FunctionDecl($name, $type, [new Ast\PatVar($left), new Ast\PatVar($right)], $body);
+    $decl->infixDefinition = true;
+
+    return $decl;
 }
 
 /**
@@ -1680,6 +1693,9 @@ function parseClassDecl(ParserState $state): Ast\ClassDecl
                 $group[0]->name,
                 $group[0]->type,
                 mergeDoc($leadingDoc, $group[0]->doc),
+                $group[0]->params,
+                $group[0]->body,
+                $group[0]->infixDefinition,
             );
         }
         $methods = [...$methods, ...$group];
@@ -2020,6 +2036,7 @@ function attachClassMethodDefault(
             mergeDoc($leadingDoc, $sig->doc),
             $fn->params,
             $fn->body,
+            $fn->infixDefinition,
         );
 
         return;
@@ -2392,7 +2409,7 @@ function isFollowingTopLevelDecl(ParserState $state): bool
         return true;
     }
 
-    if (isAt($state, TokenKind::VarId) && looksLikeSameLineFunctionDecl($state)) {
+    if (isAt($state, TokenKind::VarId) && looksLikeFunctionDecl($state)) {
         return true;
     }
 

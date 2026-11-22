@@ -8,18 +8,22 @@ use function Moggi\Syntax\Parser\standardFixity;
 use function Moggi\Syntax\isConstructorName;
 
 /**
- * The associativity the parens around a nested operator chain depend on.
+ * The fixity the parens around a nested operator chain depend on.
  *
  * The tree records grouping but not fixity, so `(x : xs) : ys` and `x : (xs : ys)` are distinguishable
- * only by association, which the operator decides. `printProgram` fills this from the module's own
- * `infix*` lines and the fixities its imports bring into scope; `:` is the language's cons. An
- * operator neither declares nor imports has no associativity this printer can know, so it answers
- * `null` and the caller keeps the parentheses the source had.
+ * only by association, which the operator decides, and `(a <$ b) $< c` from `a <$ (b $< c)` only by
+ * precedence. `printProgram` fills this from the module's own `infix*` lines and the fixities its
+ * imports bring into scope; `:` is the language's cons. An operator neither declares nor imports has
+ * no fixity this printer can know, so it answers `null` and the caller keeps the parentheses the
+ * source had.
  */
 final class Operators
 {
     /** @var array<string, string> */
     private static array $assoc = [];
+
+    /** @var array<string, int> */
+    private static array $precedence = [];
 
     /**
      * @param list<array{operators: list<string>, assoc: string, precedence: int}> $declarations
@@ -28,12 +32,14 @@ final class Operators
     public static function begin(array $declarations, array $imported = []): void
     {
         self::$assoc = [];
+        self::$precedence = [];
         foreach ($imported as $operator => $info) {
             self::$assoc[$operator] = match ($info['assoc'] ?? 'infixl') {
                 'r', 'infixr' => 'infixr',
                 'n', 'infix' => 'infix',
                 default => 'infixl',
             };
+            self::$precedence[$operator] = (int) ($info['precedence'] ?? $info['prec'] ?? 9);
         }
         foreach ($declarations as $declaration) {
             $assoc = match ($declaration['assoc']) {
@@ -43,8 +49,33 @@ final class Operators
             };
             foreach ($declaration['operators'] as $operator) {
                 self::$assoc[$operator] = $assoc;
+                self::$precedence[$operator] = (int) ($declaration['precedence'] ?? 9);
             }
         }
+    }
+
+    /**
+     * The precedence the module declares, or the language's own.
+     *
+     * `null` means unknown, as for associativity: a chain under an operator the module never
+     * declares keeps the parentheses the source had.
+     */
+    public static function precedence(?string $operator): ?int
+    {
+        if ($operator === null) {
+            return null;
+        }
+
+        if (isset(self::$precedence[$operator])) {
+            return self::$precedence[$operator];
+        }
+        if ($operator === ':') {
+            return 5;
+        }
+
+        $standard = standardFixity($operator);
+
+        return $standard['precedence'] ?? null;
     }
 
     /**
@@ -406,7 +437,7 @@ function printDeclaration(Ast\AstNode $item): Doc
     if ($item->docIsTrailing && $item instanceof Ast\DataDecl) {
         $docs = [];
         foreach (\explode("\n", \trim($doc)) as $line) {
-            $docs[] = '  -- ^ ' . $line;
+            $docs[] = \rtrim('  -- ^ ' . $line);
         }
 
         return joinLines([$body, ...\array_map(text(...), $docs)]);
@@ -430,9 +461,9 @@ function appendToFirstLine(string $text, string $comment): string
 function docComment(string $doc): Doc
 {
     $lines = \explode("\n", \trim($doc));
-    $docs = ['-- | ' . \array_shift($lines)];
+    $docs = [\rtrim('-- | ' . \array_shift($lines))];
     foreach ($lines as $line) {
-        $docs[] = '-- ' . $line;
+        $docs[] = \rtrim('-- ' . $line);
     }
 
     return joinLines(\array_map(text(...), $docs));
@@ -544,7 +575,7 @@ function printGadtData(Ast\DataDecl $data, string $head, array $clauses): Doc
         $constructorDoc = $constructor->doc ?? null;
         if (\is_string($constructorDoc) && \trim($constructorDoc) !== '') {
             foreach (\explode("\n", \trim($constructorDoc)) as $line => $text) {
-                $lines[] = Doc::text(($line === 0 ? '-- | ' : '-- ') . $text);
+                $lines[] = Doc::text(\rtrim(($line === 0 ? '-- | ' : '-- ') . $text));
             }
         }
         $lines[] = Doc::text(printedName($constructor->name) . ' :: ' . printType($constructor->signature));
@@ -572,6 +603,7 @@ function printFunction(Ast\FunctionDecl $function): Doc
 {
     $docs = [];
     $name = printedName($function->name);
+    $infix = $function->infixDefinition ? $function->name : null;
 
     if ($function->type !== null) {
         $docs[] = signature($name, $function->type);
@@ -584,14 +616,14 @@ function printFunction(Ast\FunctionDecl $function): Doc
     if ($function->clauses !== null && \count($function->clauses) > 1) {
         $clauses = [];
         foreach ($function->clauses as $clause) {
-            $clauses[] = binding($name, $clause['params'], $clause['body']);
+            $clauses[] = binding($name, $clause['params'], $clause['body'], $infix);
         }
         $docs[] = joinLines($clauses);
 
         return joinLines($docs);
     }
 
-    $docs[] = binding($name, $function->params, $function->body);
+    $docs[] = binding($name, $function->params, $function->body, $infix);
 
     return joinLines($docs);
 }
@@ -657,9 +689,7 @@ function breakSignature(string $name, Ast\TypeNode $type): Doc
         return Doc::text($name . ' :: ' . printType($type));
     }
 
-    $context = $constraints === []
-        ? null
-        : '(' . \implode(', ', \array_map(printType(...), $constraints)) . ')';
+    $context = $constraints === [] ? null : printedContext($constraints);
 
     $lines = [];
     if ($forall !== null) {
@@ -778,15 +808,69 @@ function typeHasDocs(Ast\TypeNode $type): bool
     return false;
 }
 
-/** `name p1 p2 = body`, with the body's own block (`where`, guards, `case`) below it. */
-function binding(string $name, array $params, Ast\AstNode $body): Doc
+/**
+ * A definition head: the name and its parameters, wrapped when the head is wider than the page.
+ *
+ * The parameter list is the part of a head that can break without changing the binding. Later
+ * parameters continue four columns in, the shape a hand-written head already uses, and the `=`
+ * stays on the last parameter's line.
+ *
+ * @param list<string> $printed
+ */
+function headDoc(string $name, array $printed, ?string $infix = null): Doc
+{
+    if ($infix !== null && \count($printed) === 2) {
+        return Doc::text($printed[0] . ' ' . infixOperator($infix) . ' ' . $printed[1]);
+    }
+    if ($printed === []) {
+        return Doc::text($name);
+    }
+
+    $flat = $name . ' ' . \implode(' ', $printed);
+
+    if (\count($printed) === 1 || displayWidth($flat) + 2 <= WIDTH - 2) {
+        return Doc::text($flat);
+    }
+
+    $lines = [];
+    $current = $name;
+    $last = \count($printed) - 1;
+    foreach ($printed as $index => $param) {
+        $suffix = $index === $last ? 2 : 0;
+        $budget = $lines === [] ? WIDTH - 2 : WIDTH - 6;
+        $candidate = $current . ' ' . $param;
+        if ($current !== $name && displayWidth($candidate) + $suffix > $budget) {
+            $lines[] = $current;
+            $current = $param;
+            continue;
+        }
+        $current = $candidate;
+    }
+    $lines[] = $current;
+
+    $rest = [];
+    foreach (\array_slice($lines, 1) as $line) {
+        $rest[] = Doc::line();
+        $rest[] = Doc::text($line);
+    }
+
+    return Doc::concat([Doc::text($lines[0]), Doc::nest(4, Doc::concat($rest))]);
+}
+
+/**
+ * `name p1 p2 = body`, with the body's own block (`where`, guards, `case`) below it.
+ *
+ * `$infix` is the unparenthesized operator name when the source defined it between its two
+ * operands (`xs <+> ys = …`); the parameters then keep their order around the operator.
+ */
+function binding(string $name, array $params, Ast\AstNode $body, ?string $infix = null): Doc
 {
     $printed = [];
     foreach ($params as $param) {
         $printed[] = printParam($param);
     }
 
-    $head = $name . ($printed === [] ? '' : ' ' . \implode(' ', $printed));
+    $head = headDoc($name, $printed, $infix);
 
     $comp = $body->listComp();
     if ($comp !== null) {
@@ -795,7 +879,7 @@ function binding(string $name, array $params, Ast\AstNode $body): Doc
 
     if ($body instanceof Ast\Where) {
         return Doc::concat([
-            binding($name, $params, $body->expr),
+            binding($name, $params, $body->expr, $infix),
             Doc::line(),
             Doc::text('  where'),
             Doc::nest(4, Doc::concat([Doc::line(), printBindings($body->bindings)])),
@@ -811,7 +895,7 @@ function binding(string $name, array $params, Ast\AstNode $body): Doc
     }
 
     if ($body instanceof Ast\Let && (containsBlock($body) || \count($body->bindings) > 1)) {
-        return Doc::concat([Doc::text($head . ' ='), Doc::nest(2, Doc::concat([Doc::line(), letDoc($body)]))]);
+        return Doc::concat([$head, Doc::text(' ='), Doc::nest(2, Doc::concat([Doc::line(), letDoc($body)]))]);
     }
 
     if ($body instanceof Ast\DoExpr) {
@@ -819,22 +903,25 @@ function binding(string $name, array $params, Ast\AstNode $body): Doc
     }
 
     if (containsBlock($body)) {
-        return Doc::concat([Doc::text($head . ' = '), expressionDoc($body)]);
+        return Doc::concat([$head, Doc::text(' = '), expressionDoc($body)]);
     }
 
-    $inline = $head . ' = ' . printExpression($body);
-    if (displayWidth($inline) <= WIDTH) {
-        return Doc::text($inline);
+    if (! $head->hasHardLine) {
+        $inline = renderFlat($head) . ' = ' . printExpression($body);
+        if (displayWidth($inline) <= WIDTH) {
+            return Doc::text($inline);
+        }
     }
 
     return printBrokenBody($head, $body);
 }
 
 /** A body too wide for its line: the expression starts on the next line, two columns in. */
-function printBrokenBody(string $head, Ast\AstNode $body): Doc
+function printBrokenBody(Doc $head, Ast\AstNode $body): Doc
 {
     return Doc::concat([
-        Doc::text($head . ' ='),
+        $head,
+        Doc::text(' ='),
         Doc::nest(2, Doc::concat([Doc::line(), brokenBodyDoc($body, 2)])),
     ]);
 }
@@ -939,7 +1026,7 @@ function brokenNodeDoc(Ast\AstNode $expression, int $indent): Doc
         foreach ($expression->params as $param) {
             $params[] = printParam($param->pattern ?? $param);
         }
-        $head = '\\' . \implode(' ', $params) . ' -> ';
+        $head = '\\' . \implode(' ', $params) . ' ->';
 
         return Doc::concat([
             Doc::text($head),
@@ -1084,29 +1171,104 @@ function brokenRecordDoc(Ast\RecordCon $record): Doc
  * A broken operator chain: the first operand, then one line per segment with a leading operator.
  *
  * Each segment hangs two columns past the first operand, which is the shape the fixtures pin for a
- * body, a `case` alternative and a guard alike.
+ * body, a `case` alternative and a guard alike. A chain whose source already broke after its
+ * operators takes `sourceChainDoc` instead, so the term structure the author wrote survives.
  */
-function chainDoc(Ast\Infix $chain, int $indent): Doc
+function chainDoc(Ast\Infix $chain, int $indent, bool $hanging = false): Doc
 {
+    if (chainHasSourceBreaks($chain)) {
+        return sourceChainDoc($chain, $indent);
+    }
+
     [$operator, $operands] = flattenChain($chain);
-    $parts = [brokenOperandDoc($operands[0], $operator, true, $indent)];
+    $parts = [brokenOperandDoc($operands[0], $operator, true, $indent, true)];
     for ($index = 1, $count = \count($operands); $index < $count; ++$index) {
-        $parts[] = Doc::nest(2, Doc::concat([
+        $segment = Doc::concat([
             Doc::line(),
             Doc::text(infixOperator($operator) . ' '),
-            Doc::align(brokenOperandDoc($operands[$index], $operator, false, $indent + 4)),
-        ]));
+            brokenOperandDoc($operands[$index], $operator, false, $indent + 2, true),
+        ]);
+        $parts[] = $hanging ? $segment : Doc::nest(2, $segment);
+    }
+
+    return Doc::concat($parts);
+}
+
+/**
+ * Whether the source broke this chain, or a chain nested in it, across lines.
+ *
+ * A chain the author already broke keeps its breaks: reflowing it into one operator per line
+ * destroys the term structure the nesting was written to show. A sum of products reads as one
+ * term per line, not one operator per line.
+ */
+function chainHasSourceBreaks(Ast\Infix $chain): bool
+{
+    [, $operands, $breaks] = flattenChain($chain);
+    if (\in_array(true, $breaks, true)) {
+        return true;
+    }
+    foreach ($operands as $operand) {
+        if ($operand instanceof Ast\Infix && chainHasSourceBreaks($operand)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * A chain the source already breaks: the operator ends the line and the next operand starts at the
+ * chain's own column, not past a staircase of indents.
+ *
+ * A parenthesized operand that begins on a later line keeps its opening parenthesis on the
+ * operator's line, so a nested sum of products reads `term + factor * (` and then the next level,
+ * exactly the shape it was written in.
+ */
+function sourceChainDoc(Ast\Infix $chain, int $indent): Doc
+{
+    [$operator, $operands, $breaks] = flattenChain($chain);
+    $parts = [brokenOperandDoc($operands[0], $operator, true, $indent, true)];
+    for ($index = 1, $count = \count($operands); $index < $count; ++$index) {
+        $operand = $operands[$index];
+        $operatorText = infixOperator($operator);
+        if (! $breaks[$index - 1]) {
+            $parts[] = Doc::text(' ' . $operatorText . ' ');
+            $parts[] = brokenOperandDoc($operand, $operator, false, $indent, true);
+            continue;
+        }
+
+        $parts[] = Doc::text(' ' . $operatorText);
+        $needsParens = ($operand instanceof Ast\Infix && ! keepsGroupingWithoutParens($operand, $operator, false))
+            || $operand instanceof Ast\TypeAsc || $operand instanceof Ast\Lambda || containsBlock($operand);
+        if ($needsParens) {
+            $parts[] = Doc::text(' (');
+            $inner = $operand instanceof Ast\Infix
+                ? chainDoc($operand, $indent, true)
+                : expressionDoc($operand);
+            $parts[] = Doc::concat([Doc::line(), $inner, Doc::text(')')]);
+            continue;
+        }
+
+        $parts[] = Doc::concat([Doc::line(), brokenOperandDoc($operand, $operator, false, $indent, true)]);
     }
 
     return Doc::concat($parts);
 }
 
 /** One operand of a broken chain, with the parentheses its grouping needs. */
-function brokenOperandDoc(Ast\AstNode $operand, ?string $parentOperator, bool $left, int $indent): Doc
+function brokenOperandDoc(Ast\AstNode $operand, ?string $parentOperator, bool $left, int $indent, bool $hanging = false): Doc
 {
     $needsParens = ($operand instanceof Ast\Infix && ! keepsGroupingWithoutParens($operand, $parentOperator, $left))
         || $operand instanceof Ast\TypeAsc || $operand instanceof Ast\Lambda || containsBlock($operand);
+
+    if ($hanging && $operand instanceof Ast\Infix) {
+        $doc = chainDoc($operand, $indent, true);
+
+        return $needsParens ? Doc::concat([Doc::text('('), $doc, Doc::text(')')]) : $doc;
+    }
+
     $doc = brokenExpressionDoc($operand, $indent + ($needsParens ? 1 : 0));
+
     if ($needsParens) {
         $doc = Doc::concat([Doc::text('('), $doc, Doc::text(')')]);
     }
@@ -1123,41 +1285,50 @@ function brokenOperandDoc(Ast\AstNode $operand, ?string $parentOperator, bool $l
  * exactly as the tree wrote it; flattening it would turn explicit parentheses into a different
  * parse. A non-associative operator has only its two operands and never flattens.
  *
- * @return array{string, list<Ast\AstNode>}
+ * The third element says, for the operator between consecutive operands, whether the source put
+ * its right operand on a later line than the operator. That distinguishes the author's
+ * operator-at-line-end layout from the printer's leading-operator layout, which must not be read
+ * back as one.
+ *
+ * @return array{string, list<Ast\AstNode>, list<bool>}
  */
 function flattenChain(Ast\Infix $chain): array
 {
     $operator = $chain->operator;
     $assoc = Operators::assoc($operator);
+
     if ($assoc === null || $assoc === 'infix') {
-        return [$operator, [$chain->left, $chain->right]];
+        return [$operator, [$chain->left, $chain->right], [$chain->breakAfterOperator]];
     }
 
     $operands = [];
+    $breaks = [];
     $node = $chain;
     if ($assoc === 'infixr') {
         while ($node instanceof Ast\Infix && $node->operator === $operator) {
             $operands[] = $node->left;
+            $breaks[] = $node->breakAfterOperator;
             $node = $node->right;
         }
         $operands[] = $node;
 
-        return [$operator, $operands];
+        return [$operator, $operands, $breaks];
     }
 
     while ($node instanceof Ast\Infix && $node->operator === $operator) {
         $operands[] = $node->right;
+        $breaks[] = $node->breakAfterOperator;
         $node = $node->left;
     }
     $operands[] = $node;
 
-    return [$operator, \array_reverse($operands)];
+    return [$operator, \array_reverse($operands), \array_reverse($breaks)];
 }
 
 /** Guards hang under the binding at two columns. */
-function printGuards(string $head, Ast\GuardsExpr $guards): Doc
+function printGuards(Doc $head, Ast\GuardsExpr $guards): Doc
 {
-    $parts = [Doc::text($head)];
+    $parts = [$head];
     foreach ($guards->clauses as $clause) {
         if (! $clause instanceof Ast\Guarded) {
             throw new FormatError('the printer does not handle ' . \get_class($clause) . ' in a guard block yet');
@@ -1186,17 +1357,20 @@ function printGuards(string $head, Ast\GuardsExpr $guards): Doc
 }
 
 /** `head = if c then a else b`, inline while it fits. */
-function printIfBinding(string $head, Ast\CaseExpr $if): Doc
+function printIfBinding(Doc $head, Ast\CaseExpr $if): Doc
 {
     $parts = $if->ifParts;
-    if (! containsBlock($parts['cond']) && ! containsBlock($parts['then']) && ! containsBlock($parts['else'])) {
-        $flat = $head . ' = ' . printIfInline($if);
+    if (! $head->hasHardLine
+        && ! containsBlock($parts['cond'])
+        && ! containsBlock($parts['then'])
+        && ! containsBlock($parts['else'])) {
+        $flat = renderFlat($head) . ' = ' . printIfInline($if);
         if (displayWidth($flat) <= WIDTH) {
             return Doc::text($flat);
         }
     }
 
-    return Doc::concat([Doc::text($head . ' ='), Doc::nest(2, Doc::concat([Doc::line(), ifExpression($if)]))]);
+    return Doc::concat([$head, Doc::text(' ='), Doc::nest(2, Doc::concat([Doc::line(), ifExpression($if)]))]);
 }
 
 /** `if c then a else b` on one line, with a nested `if` staying inline too. */
@@ -1307,9 +1481,9 @@ function letDoc(Ast\Let $let): Doc
 }
 
 /** `head = case x of` with one alternative per line at two columns. */
-function printCase(string $head, Ast\CaseExpr $case): Doc
+function printCase(Doc $head, Ast\CaseExpr $case): Doc
 {
-    return Doc::concat([Doc::text($head . ' = '), caseExpressionDoc($case)]);
+    return Doc::concat([$head, Doc::text(' = '), caseExpressionDoc($case)]);
 }
 
 /**
@@ -1328,18 +1502,32 @@ function caseExpressionDoc(Ast\CaseExpr $case): Doc
         $trailing = Trivia::takeTrailing($alt->pattern->line);
         $suffix = $trailing === null ? '' : ' ' . $trailing['text'];
 
-        if (! containsBlock($alt->body)) {
+        $block = containsBlock($alt->body);
+        if (! $block) {
             $inline = $pattern . ' -> ' . printExpression($alt->body) . $suffix;
             if (displayWidth($inline) + 2 <= WIDTH) {
                 $alts[] = Doc::line();
                 $alts[] = Doc::text($inline);
                 continue;
             }
+
+            $alts[] = Doc::line();
+            $alts[] = Doc::text($pattern . ' ->' . $suffix);
+            $alts[] = Doc::nest(2, Doc::concat([Doc::line(), altBodyDoc($alt->body)]));
+            continue;
+        }
+
+        $body = altBodyDoc($alt->body);
+        $head = $pattern . ' -> ';
+        if ($suffix === '' && displayWidth($head) + 2 + firstLineWidth($body) <= WIDTH) {
+            $alts[] = Doc::line();
+            $alts[] = Doc::concat([Doc::text($head), $body]);
+            continue;
         }
 
         $alts[] = Doc::line();
         $alts[] = Doc::text($pattern . ' ->' . $suffix);
-        $alts[] = Doc::nest(2, Doc::concat([Doc::line(), altBodyDoc($alt->body)]));
+        $alts[] = Doc::nest(2, Doc::concat([Doc::line(), $body]));
     }
 
     $head = containsBlock($case->scrutinee)
@@ -1356,9 +1544,9 @@ function altBodyDoc(Ast\AstNode $body): Doc
 }
 
 /** `head = do` with one statement per line at two columns. */
-function printDo(string $head, Ast\DoExpr $do): Doc
+function printDo(Doc $head, Ast\DoExpr $do): Doc
 {
-    return Doc::concat([Doc::text($head . ' = '), doExpressionDoc($do)]);
+    return Doc::concat([$head, Doc::text(' = '), doExpressionDoc($do)]);
 }
 
 /** `do` as an expression: the statements sit two columns under it. */
@@ -1582,7 +1770,7 @@ function printData(Ast\DataDecl $data): Doc
 
             foreach (\explode("\n", $docText) as $line => $text) {
                 $parts[] = Doc::line();
-                $parts[] = Doc::text(($line === 0 ? $marker . '-- | ' : '    -- ') . $text);
+                $parts[] = Doc::text(\rtrim(($line === 0 ? $marker . '-- | ' : '    -- ') . $text));
             }
             $parts[] = Doc::line();
             $parts[] = Doc::text($body);
@@ -1604,7 +1792,7 @@ function printData(Ast\DataDecl $data): Doc
                 $ctorLines[] = Doc::text($marker . $constructor);
             } else {
                 foreach (\explode("\n", \trim($ctorDoc)) as $line => $text) {
-                    $ctorLines[] = Doc::text(($line === 0 ? $marker . '-- | ' : '  -- ') . $text);
+                    $ctorLines[] = Doc::text(\rtrim(($line === 0 ? $marker . '-- | ' : '  -- ') . $text));
                 }
                 $ctorLines[] = Doc::text('  ' . $constructor);
             }
@@ -1847,7 +2035,12 @@ function printClass(Ast\ClassDecl $class): Doc
         }
         $members[] = signature(printedName($method->name), $method->type);
         if ($method->body !== null) {
-            $members[] = binding(printedName($method->name), $method->params, $method->body);
+            $members[] = binding(
+                printedName($method->name),
+                $method->params,
+                $method->body,
+                $method->infixDefinition ? $method->name : null,
+            );
         }
         $methodEnds[] = \count($members);
     }
@@ -1870,19 +2063,41 @@ function printClass(Ast\ClassDecl $class): Doc
 }
 
 /**
- * A constraint in a class or instance context.
+ * One or more constraints as a context, in the parentheses the parser needs.
+ *
+ * A single constraint needs none: `FromJSON a => …` is the same context with or without a pair,
+ * and the bare form is what was written. Every context entry that cannot stand bare — a `forall`,
+ * a nested context, an arrow or an infix constraint — keeps its parentheses in `contextEntry()`.
+ *
+ * @param list<Ast\TypeNode> $constraints
+ */
+function printedContext(array $constraints): string
+{
+    if (\count($constraints) === 1) {
+        return contextEntry($constraints[0]);
+    }
+
+    return '(' . \implode(', ', \array_map(printType(...), $constraints)) . ')';
+}
+
+/**
+ * A constraint in a context.
  *
  * A context that is itself a `forall`, a nested context or an arrow has to keep its parentheses, or
- * the parser reads it as several constraints: `class (forall a. C p a) => D p` is one.
+ * the parser reads it as several constraints: `class (forall a. C p a) => D p` is one. An infix
+ * constraint does too: `a ~~ a => …` does not parse, because `~~` only continues a type inside
+ * parentheses. A class application needs none, so `FromJSON a => …` stays bare.
  */
 function contextEntry(Ast\TypeNode $constraint): string
 {
     $printed = printType($constraint);
 
-    return $constraint instanceof Ast\TypeForall || $constraint instanceof Ast\TypeConstrained
+    $parenthesized = $constraint instanceof Ast\TypeForall || $constraint instanceof Ast\TypeConstrained
         || $constraint instanceof Ast\TypeArrow
-        ? '(' . $printed . ')'
-        : $printed;
+        || ($constraint instanceof Ast\TypeApp && $constraint->con instanceof Ast\TypeCon
+            && isSymbolicName($constraint->con->name));
+
+    return $parenthesized ? '(' . $printed . ')' : $printed;
 }
 
 /** `instance C (T a) where`, its context inline. */
@@ -2045,6 +2260,15 @@ function printTypeNode(Ast\TypeNode $type): string
             if (\count($type->args) === 2) {
                 return printTypeOperand($type->args[0]) . ' ' . $type->con->name . ' ' . printTypeOperand($type->args[1]);
             }
+            if (\count($type->args) > 2) {
+                $head = '(' . printTypeOperand($type->args[0]) . ' ' . $type->con->name . ' '
+                    . printTypeOperand($type->args[1]) . ')';
+                foreach (\array_slice($type->args, 2) as $argument) {
+                    $head .= ' ' . printTypeArgument($argument);
+                }
+
+                return $head;
+            }
 
             $head = '(' . $type->con->name . ')';
             foreach ($type->args as $argument) {
@@ -2062,7 +2286,7 @@ function printTypeNode(Ast\TypeNode $type): string
         return $args === [] ? $head : $head . ' ' . \implode(' ', $args);
     }
     if ($type instanceof Ast\TypeConstrained) {
-        return '(' . \implode(', ', \array_map(printType(...), $type->constraints)) . ') => ' . printType($type->body);
+        return printedContext($type->constraints) . ' => ' . printType($type->body);
     }
     if ($type instanceof Ast\TypeForall) {
         return 'forall ' . printedTypeBinders($type) . '. ' . printType($type->body);
@@ -2388,8 +2612,15 @@ function expressionDocNode(Ast\AstNode $expression): Doc
         foreach ($expression->params as $param) {
             $params[] = printParam($param->pattern ?? $param);
         }
+        $head = '\\' . \implode(' ', $params) . ' ->';
+        if (containsBlock($expression->body)) {
+            return Doc::concat([
+                Doc::text($head),
+                Doc::nest(2, Doc::concat([Doc::line(), expressionDoc($expression->body)])),
+            ]);
+        }
 
-        return Doc::concat([Doc::text('\\' . \implode(' ', $params) . ' -> '), expressionDoc($expression->body)]);
+        return Doc::concat([Doc::text($head . ' '), expressionDoc($expression->body)]);
     }
     if ($expression instanceof Ast\Let) {
         return letDoc($expression);
@@ -2503,15 +2734,18 @@ function comprehensionPartDoc(Ast\AstNode $expression, bool $comments): Doc
  *
  * @param array{expr: Ast\AstNode, qualifiers: list<Ast\AstNode>} $comp
  */
-function listCompBindingDoc(string $head, array $comp): Doc
+function listCompBindingDoc(Doc $head, array $comp): Doc
 {
-    $inline = $head . ' = ' . renderFlat(listCompInlineDoc($comp, false));
-    if (! comprehensionHeaderComments($comp) && displayWidth($inline) <= WIDTH) {
-        return Doc::text($inline);
+    if (! $head->hasHardLine && ! comprehensionHeaderComments($comp)) {
+        $inline = renderFlat($head) . ' = ' . renderFlat(listCompInlineDoc($comp, false));
+        if (displayWidth($inline) <= WIDTH) {
+            return Doc::text($inline);
+        }
     }
 
     return Doc::concat([
-        Doc::text($head . ' ='),
+        $head,
+        Doc::text(' ='),
         Doc::nest(2, Doc::concat([
             Doc::line(),
             comprehensionDoc($comp, 2),
@@ -2952,12 +3186,24 @@ function inlineSequenceDoc(string $open, string $separator, string $close, array
  */
 function keepsGroupingWithoutParens(Ast\Infix $operand, ?string $parentOperator, bool $left): bool
 {
-    if ($operand->operator !== $parentOperator) {
+    if ($operand->operator === $parentOperator) {
+        $assoc = Operators::assoc($parentOperator);
+
+        return $assoc !== null && ($left ? $assoc === 'infixl' : $assoc === 'infixr');
+    }
+
+    $parentPrecedence = Operators::precedence($parentOperator);
+    $operandPrecedence = Operators::precedence($operand->operator);
+    if ($parentPrecedence === null || $operandPrecedence === null) {
         return false;
+    }
+    if ($operandPrecedence !== $parentPrecedence) {
+        return $operandPrecedence > $parentPrecedence;
     }
 
     $assoc = Operators::assoc($parentOperator);
-    if ($assoc === null) {
+    $operandAssoc = Operators::assoc($operand->operator);
+    if ($assoc === null || $operandAssoc === null || $assoc === 'infix' || $operandAssoc === 'infix') {
         return false;
     }
 
@@ -2975,7 +3221,7 @@ function isAtomicExpression(Ast\AstNode $expression): bool
     }
 
     return $expression instanceof Ast\Variable || $expression instanceof Ast\ConstructorRef
-        || $expression instanceof Ast\QualifiedRef
+        || $expression instanceof Ast\QualifiedRef || $expression instanceof Ast\OperatorRef
         || $expression instanceof Ast\IntegerLit || $expression instanceof Ast\DoubleLit
         || $expression instanceof Ast\StringLit || $expression instanceof Ast\CharLit
         || $expression instanceof Ast\ExprHole || $expression instanceof Ast\Tuple
@@ -2986,9 +3232,10 @@ function isAtomicExpression(Ast\AstNode $expression): bool
 /**
  * An operand of an infix, parenthesized where dropping the grouping would change the parse.
  *
- * The tree records the grouping but not the operators' precedence, so a chain can only be reprinted
- * without parentheses when it is the left operand of its own operator: `a + b + c` parses back to
- * `(a + b) + c`, while `a + (b + c)` and any other operator have to keep theirs.
+ * An operand binds tighter than the operator around it and needs no parentheses. At the same
+ * precedence the parent's associativity decides the nesting side: `a + b + c` parses back to
+ * `(a + b) + c`, while `a + (b + c)` does not. An operand that binds looser, or whose fixity is
+ * unknown, keeps its parentheses: that is what the source meant.
  */
 function infixOperand(Ast\AstNode $operand, ?string $parentOperator = null, bool $left = false): string
 {
@@ -3050,6 +3297,9 @@ function argumentNeedsParens(Ast\AstNode $argument): bool
         return true;
     }
     if ($argument instanceof Ast\Lambda && $argument->section) {
+        return false;
+    }
+    if ($argument instanceof Ast\OperatorRef) {
         return false;
     }
     if ($argument->listComp() !== null) {
