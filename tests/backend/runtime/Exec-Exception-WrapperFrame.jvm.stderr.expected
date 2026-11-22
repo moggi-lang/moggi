@@ -1,9 +1,9 @@
 moggi: Uncaught exception base:Moggi.Exception.Type.ArithException:
 
 arithmetic overflow
-  at Moggi.Exception.throw (libraries/base/src/Moggi/Exception.mog:28:11)
-  at Data.Bits.bitsNegativeShiftError (libraries/base/src/Data/Bits.mog:239:26)
-  at Data.Bits.__ev_Bits_Int_shiftL (libraries/base/src/Data/Bits.mog:623:16)
+  at Moggi.Exception.throw (libraries/base/src/Moggi/Exception.mog:29:11)
+  at Data.Bits.bitsNegativeShiftError (libraries/base/src/Data/Bits.mog:235:26)
+  at Data.Bits.__ev_Bits_Int_shiftL (libraries/base/src/Data/Bits.mog:611:16)
   at Main.go (tests/backend/runtime/Exec-Exception-WrapperFrame.mog:9:10)
   at Main.boom (tests/backend/runtime/Exec-Exception-WrapperFrame.mog:12:8)
   at Main.main (tests/backend/runtime/Exec-Exception-WrapperFrame.mog:15:8)

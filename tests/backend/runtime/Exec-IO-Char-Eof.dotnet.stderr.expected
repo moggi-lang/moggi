@@ -3,7 +3,7 @@ moggi: Uncaught exception base:Moggi.Exception.Type.ErrorCall:
 hGetChar: end of input
 
 CallStack (from HasCallStack):
-  at Moggi.Err.error (libraries/base/src/Moggi/Err.mog:8:13)
-  at System.IO.hGetChar (libraries/base/src/System/IO/DotNet.mog:160:6)
-  at System.IO.getChar (libraries/base/src/System/IO/DotNet.mog:175:11)
+  at Moggi.Err.error (libraries/base/src/Moggi/Err.mog:13:13)
+  at System.IO.hGetChar (libraries/base/src/System/IO/DotNet.mog:162:10)
+  at System.IO.getChar (libraries/base/src/System/IO/DotNet.mog:178:11)
   at Main.main (tests/backend/runtime/Exec-IO-Char-Eof.mog:8:8)
