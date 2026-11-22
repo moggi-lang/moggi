@@ -1,3 +1,5 @@
+module Main (main) where
+
 import Prelude hiding (id, (.), map)
 import Control.Arrow (Kleisli(Kleisli), runKleisli)
 import Control.Category
@@ -74,11 +76,11 @@ implIdentityRightBack x = all (\f -> (f <<< idFn) x == f x) implFns
 
 implAssociativity :: Int -> Bool
 implAssociativity x =
-  all (\f -> all (\g -> all (\h -> ((f >>> g) >>> h) x == (f >>> (g >>> h)) x) implFns) implFns) implFns
+  all (\f -> all (\g -> all (\h -> ((f >>> g) >>> h) x == (f >>> g >>> h) x) implFns) implFns) implFns
 
 implAssociativityBack :: Int -> Bool
 implAssociativityBack x =
-  all (\f -> all (\g -> all (\h -> ((f <<< g) <<< h) x == (f <<< (g <<< h)) x) implFns) implFns) implFns
+  all (\f -> all (\g -> all (\h -> ((f <<< g) <<< h) x == (f <<< g <<< h) x) implFns) implFns) implFns
 
 funIdentityLeft :: Int -> Bool
 funIdentityLeft x = all (\f -> runFun (funIdentity >>> f) x == runFun f x) funFns
@@ -88,7 +90,10 @@ funIdentityRight x = all (\f -> runFun (f >>> funIdentity) x == runFun f x) funF
 
 funAssociativity :: Int -> Bool
 funAssociativity x =
-  all (\f -> all (\g -> all (\h -> runFun ((f >>> g) >>> h) x == runFun (f >>> (g >>> h)) x) funFns) funFns) funFns
+  all
+    (\f ->
+      all (\g -> all (\h -> runFun ((f >>> g) >>> h) x == runFun (f >>> g >>> h) x) funFns) funFns)
+    funFns
 
 kleisliIdentityLeft :: Int -> Bool
 kleisliIdentityLeft x = runKleisli (identity >>> increment) x == runKleisli increment x
@@ -96,9 +101,9 @@ kleisliIdentityLeft x = runKleisli (identity >>> increment) x == runKleisli incr
 kleisliAssociativity :: Int -> Bool
 kleisliAssociativity x =
   runKleisli ((increment >>> identity) >>> increment) x
-    == runKleisli (increment >>> (identity >>> increment)) x
+  == runKleisli (increment >>> identity >>> increment) x
     && runKleisli ((identity >>> increment) >>> failAt) x
-      == runKleisli (identity >>> (increment >>> failAt)) x
+    == runKleisli (identity >>> increment >>> failAt) x
 
 main :: IO ()
 main = do

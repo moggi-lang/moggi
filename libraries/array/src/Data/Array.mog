@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Immutable boxed arrays: an 'Array' is a fixed-size table from an 'Ix'
 -- index range to values, built all at once and read with '(!)'.
 --
@@ -77,7 +78,9 @@ array :: Ix i => (i, i) -> [(i, e)] -> Array i e
 array bnds ies = runST (do
   let n = safeRangeSize bnds
   marr <- newSTArray# bnds n
-  sequence_ (map (\assoc -> case assoc of (i, e) -> writeSTArray# marr (safeIndex bnds n i) e) ies)
+  sequence_ (map (\assoc ->
+    case assoc of
+      (i, e) -> writeSTArray# marr (safeIndex bnds n i) e) ies)
   unsafeFreezeSTArray# marr)
 
 -- | Build an array from bounds and values in index order. A short list
@@ -87,7 +90,9 @@ listArray bnds es =
   let n = safeRangeSize bnds
   in runST (do
     marr <- newSTArray# bnds n
-    sequence_ (map (\assoc -> case assoc of (off, v) -> writeSTArray# marr off v) (zip [0 .. n - 1] es))
+    sequence_ (map (\assoc ->
+      case assoc of
+        (off, v) -> writeSTArray# marr off v) (zip ([0 .. n - 1]) es))
     unsafeFreezeSTArray# marr)
 
 -- | Build an array by accumulating associations: every slot starts at the
@@ -99,7 +104,9 @@ accumArray f initial bnds ies = runST (do
   let n = safeRangeSize bnds
   marr <- newSTArray# bnds n
   sequence_ [writeSTArray# marr off initial | off <- [0 .. n - 1]]
-  sequence_ (map (\assoc -> case assoc of (i, x) -> accumOne marr (safeIndex bnds n i) x) ies)
+  sequence_ (map (\assoc ->
+    case assoc of
+      (i, x) -> accumOne marr (safeIndex bnds n i) x) ies)
   unsafeFreezeSTArray# marr)
   where
     accumOne marr off x = do
@@ -120,7 +127,9 @@ arr // ies =
       n = safeRangeSize bnds
   in runST (do
     marr <- thawArray# arr
-    sequence_ (map (\assoc -> case assoc of (i, e) -> writeSTArray# marr (safeIndex bnds n i) e) ies)
+    sequence_ (map (\assoc ->
+      case assoc of
+        (i, e) -> writeSTArray# marr (safeIndex bnds n i) e) ies)
     unsafeFreezeSTArray# marr)
 
 -- | Accumulate associations into a copy, strictly in each updated slot.
@@ -130,12 +139,14 @@ accum f arr ies =
       n = safeRangeSize bnds
   in runST (do
     marr <- thawArray# arr
-    sequence_ (map (\assoc -> case assoc of (i, x) -> accumOne marr (safeIndex bnds n i) x) ies)
+    sequence_ (map (\assoc ->
+      case assoc of
+        (i, x) -> accumOne marr (safeIndex bnds n i) x) ies)
     unsafeFreezeSTArray# marr)
-  where
-    accumOne marr off x = do
-      old <- readSTArray# marr off
-      writeSTArray# marr off (f old x)
+    where
+      accumOne marr off x = do
+        old <- readSTArray# marr off
+        writeSTArray# marr off (f old x)
 
 -- | The indices of the array in ascending order.
 indices :: Ix i => Array i e -> [i]
@@ -185,4 +196,6 @@ instance (Ix i, Ord e) => Ord (Array i e) where
 -- for pairs and lists, so @read@ could not name the bounds or the
 -- associations. The instance belongs here once base grows those.
 instance (Ix i, Show i, Show e) => Show (Array i e) where
-  showsPrec p arr = showParen (p > 10) (showString "array " . showsPrec 11 (bounds arr) . showChar ' ' . showsPrec 11 (assocs arr))
+  showsPrec p arr =
+    showParen (p > 10)
+      (showString "array " . showsPrec 11 (bounds arr) . showChar ' ' . showsPrec 11 (assocs arr))

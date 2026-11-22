@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- |
--- Basic arrow definitions, based on
+
+-- | Basic arrow definitions, based on
 --
 --  * /Generalising Monads to Arrows/, by John Hughes,
 --    /Science of Computer Programming/ 37, pp67-111, May 2000.
@@ -11,29 +11,29 @@
 --    Firenze, Italy, pp229-240.
 module Control.Arrow
   ( -- *  Arrows
-    Arrow(..),
-    Kleisli(..),
+    Arrow(..)
+  , Kleisli(..)
     -- **  Derived combinators
-    returnA,
-    (^>>),
-    (>>^),
-    (>>>),
-    (<<<),
+  , returnA
+  , (^>>)
+  , (>>^)
+  , (>>>)
+  , (<<<)
     -- **  Right-to-left variants
-    (<<^),
-    (^<<),
+  , (<<^)
+  , (^<<)
     -- *  Monoid operations
-    ArrowZero(..),
-    ArrowPlus(..),
+  , ArrowZero(..)
+  , ArrowPlus(..)
     -- *  Conditionals
-    ArrowChoice(..),
+  , ArrowChoice(..)
     -- *  Arrow application
-    ArrowApply(..),
-    ArrowMonad(..),
-    leftApp,
+  , ArrowApply(..)
+  , ArrowMonad(..)
+  , leftApp
     -- *  Feedback
-    ArrowLoop(..)
-    ) where
+  , ArrowLoop(..)
+  ) where
 
 import Control.Applicative
 import Control.Category
@@ -81,21 +81,17 @@ infixr 1 ^<<, <<^
 class Category a => Arrow a where
   -- | Lift a pure function into the arrow.
   arr :: (b -> c) -> a b c
-
   -- | Apply the arrow to the first component of a pair and copy the second
   -- component through unchanged.
   first :: a b c -> a (b, d) (c, d)
   first f = f *** id
-
   -- | Apply the arrow to the second component of a pair and copy the first
   -- component through unchanged.
   second :: a b c -> a (d, b) (d, c)
   second f = id *** f
-
   -- | Run two arrows on the two components of a pair.
   (***) :: a b c -> a b' c' -> a (b, b') (c, c')
   f *** g = first f >>> arr arrowSwap >>> first g >>> arr arrowSwap
-
   -- | Feed one input to both arrows and pair their results.
   (&&&) :: a b c -> a b c' -> a b (c, c')
   f &&& g = arr (\b -> (b, b)) >>> f *** g
@@ -139,15 +135,16 @@ instance Monad m => Category (Kleisli m) where
 
 instance Monad m => Arrow (Kleisli m) where
   arr f = Kleisli (\b -> pure (f b))
-  first (Kleisli f) = Kleisli (\pair -> case pair of
-    (b, d) -> f b >>= (\c -> pure (c, d)))
-  second (Kleisli f) = Kleisli (\pair -> case pair of
-    (d, b) -> f b >>= (\c -> pure (d, c)))
-  (***) (Kleisli f) (Kleisli g) =
-    Kleisli (\pair -> case pair of
+  first (Kleisli f) = Kleisli (\pair ->
+    case pair of
+      (b, d) -> f b >>= (\c -> pure (c, d)))
+  second (Kleisli f) = Kleisli (\pair ->
+    case pair of
+      (d, b) -> f b >>= (\c -> pure (d, c)))
+  (***) (Kleisli f) (Kleisli g) = Kleisli (\pair ->
+    case pair of
       (b, b') -> f b >>= (\c -> g b' >>= (\c' -> pure (c, c'))))
-  (&&&) (Kleisli f) (Kleisli g) =
-    Kleisli (\b -> f b >>= (\c -> g b >>= (\c' -> pure (c, c'))))
+  (&&&) (Kleisli f) (Kleisli g) = Kleisli (\b -> f b >>= (\c -> g b >>= (\c' -> pure (c, c'))))
 
 -- | An arrow whose result can fail.
 class Arrow a => ArrowZero a where
@@ -193,14 +190,12 @@ class Arrow a => ArrowChoice a where
   --   rest through unchanged to the output.
   left :: a b c -> a (Either b d) (Either c d)
   left f = f +++ id
-
   -- | A mirror image of 'left'.
   --
   --   The default definition may be overridden with a more efficient
   --   version if desired.
   right :: a b c -> a (Either d b) (Either d c)
   right f = id +++ f
-
   -- | Split the input between the two argument arrows, retagging
   --   and merging their outputs.
   --   Note that this is in general not a functor.
@@ -209,7 +204,6 @@ class Arrow a => ArrowChoice a where
   --   version if desired.
   (+++) :: a b c -> a b' c' -> a (Either b b') (Either c c')
   f +++ g = left f >>> arr arrowMirror >>> left g >>> arr arrowMirror
-
   -- | Fanin: Split the input between the two argument arrows and
   --   merge their outputs.
   --
@@ -232,20 +226,20 @@ arrowUntag value = case value of
   Right a -> a
 
 instance Monad m => ArrowChoice (Kleisli m) where
-  left (Kleisli f) =
-    Kleisli (\value -> case value of
+  left (Kleisli f) = Kleisli (\value ->
+    case value of
       Left b -> f b >>= (\c -> pure (Left c))
       Right d -> pure (Right d))
-  right (Kleisli f) =
-    Kleisli (\value -> case value of
+  right (Kleisli f) = Kleisli (\value ->
+    case value of
       Left d -> pure (Left d)
       Right b -> f b >>= (\c -> pure (Right c)))
-  (+++) (Kleisli f) (Kleisli g) =
-    Kleisli (\value -> case value of
+  (+++) (Kleisli f) (Kleisli g) = Kleisli (\value ->
+    case value of
       Left b -> f b >>= (\c -> pure (Left c))
       Right b' -> g b' >>= (\c' -> pure (Right c')))
-  (|||) (Kleisli f) (Kleisli g) =
-    Kleisli (\value -> case value of
+  (|||) (Kleisli f) (Kleisli g) = Kleisli (\value ->
+    case value of
       Left b -> f b
       Right c -> g c)
 
@@ -264,8 +258,9 @@ class Arrow a => ArrowApply a where
   app :: a (a b c, b) c
 
 instance Monad m => ArrowApply (Kleisli m) where
-  app = Kleisli (\pair -> case pair of
-    (Kleisli f, x) -> f x)
+  app = Kleisli (\pair ->
+    case pair of
+      (Kleisli f, x) -> f x)
 
 -- | An arrow turned into a monad: run it with the unit value as input.
 newtype ArrowMonad (a :: Type -> Type -> Type) b = ArrowMonad (a () b)
@@ -275,19 +270,20 @@ instance Arrow a => Functor (ArrowMonad a) where
 
 instance Arrow a => Applicative (ArrowMonad a) where
   pure x = ArrowMonad (arr (\_ -> x))
-  (<*>) (ArrowMonad f) (ArrowMonad x) =
-    ArrowMonad ((f &&& x) >>> arr (\pair -> case pair of
-      (g, y) -> g y))
+  (<*>) (ArrowMonad f) (ArrowMonad x) = ArrowMonad (f &&& x >>> (arr (\pair ->
+    case pair of
+      (g, y) -> g y)))
 
 instance ArrowApply a => Monad (ArrowMonad a) where
-  (>>=) (ArrowMonad m) f =
-    ArrowMonad (m >>> arr (\x -> case f x of ArrowMonad h -> (h, ())) >>> app)
+  (>>=) (ArrowMonad m) f = ArrowMonad (m >>> ((arr (\x ->
+    case f x of
+      ArrowMonad h -> (h, ()))) >>> app))
 
 instance ArrowPlus a => Alternative (ArrowMonad a) where
   empty = ArrowMonad zeroArrow
   (<|>) (ArrowMonad x) (ArrowMonad y) = ArrowMonad (x <+> y)
 
-instance (ArrowApply a, ArrowPlus a) => MonadPlus (ArrowMonad a)
+instance (ArrowApply a, ArrowPlus a) => MonadPlus (ArrowMonad a) where
 
 -- | The identity arrow.
 returnA :: Arrow a => a b b
@@ -318,40 +314,47 @@ instance Category (->) where
 
 instance Arrow (->) where
   arr f = f
-  first f = \pair -> case pair of
-    (b, d) -> (f b, d)
-  second f = \pair -> case pair of
-    (d, b) -> (d, f b)
-  (***) f g = \pair -> case pair of
-    (b, b') -> (f b, g b')
+  first f = \pair ->
+    case pair of
+      (b, d) -> (f b, d)
+  second f = \pair ->
+    case pair of
+      (d, b) -> (d, f b)
+  (***) f g = \pair ->
+    case pair of
+      (b, b') -> (f b, g b')
   (&&&) f g = \b -> (f b, g b)
 
 instance ArrowChoice (->) where
-  left f = \value -> case value of
-    Left b -> Left (f b)
-    Right d -> Right d
-  right f = \value -> case value of
-    Left d -> Left d
-    Right b -> Right (f b)
-  (+++) f g = \value -> case value of
-    Left b -> Left (f b)
-    Right b' -> Right (g b')
-  (|||) f g = \value -> case value of
-    Left b -> f b
-    Right c -> g c
+  left f = \value ->
+    case value of
+      Left b -> Left (f b)
+      Right d -> Right d
+  right f = \value ->
+    case value of
+      Left d -> Left d
+      Right b -> Right (f b)
+  (+++) f g = \value ->
+    case value of
+      Left b -> Left (f b)
+      Right b' -> Right (g b')
+  (|||) f g = \value ->
+    case value of
+      Left b -> f b
+      Right c -> g c
 
 instance ArrowApply (->) where
-  app = \pair -> case pair of
-    (f, x) -> f x
+  app = \pair ->
+    case pair of
+      (f, x) -> f x
 
 -- | Any 'ArrowApply' arrow can choose on 'Either' with this definition of
 -- 'left'.
 leftApp :: ArrowApply a => a b c -> a (Either b d) (Either c d)
-leftApp f =
-  arr (\value -> case value of
+leftApp f = (arr (\value ->
+  case value of
     Left b -> (arr (\_ -> b) >>> f >>> arr Left, ())
-    Right d -> (arr (\_ -> d) >>> arr Right, ()))
-  >>> app
+    Right d -> (arr (\_ -> d) >>> arr Right, ()))) >>> app
 
 -- | The 'loop' operator expresses computations in which an output value
 -- is fed back as input, although the computation occurs only once.
@@ -391,9 +394,9 @@ instance Arrow a => Functor (WrappedArrow a b) where
 
 instance Arrow a => Applicative (WrappedArrow a b) where
   pure x = WrapArrow (arr (\_ -> x))
-  liftA2 f (WrapArrow g) (WrapArrow h) =
-    WrapArrow ((g &&& h) >>> arr (\pair -> case pair of
-      (x, y) -> f x y))
+  liftA2 f (WrapArrow g) (WrapArrow h) = WrapArrow (g &&& h >>> (arr (\pair ->
+    case pair of
+      (x, y) -> f x y)))
 
 instance (ArrowZero a, ArrowPlus a) => Alternative (WrappedArrow a b) where
   empty = WrapArrow zeroArrow

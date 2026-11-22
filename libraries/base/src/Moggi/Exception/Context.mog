@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Context-aware exception views and combinators.
 --
 -- A context rides in slot five of the runtime's @SomeException#@ value; slot
@@ -40,7 +41,7 @@ instance Show a => Show (ExceptionWithContext a) where
 
 instance Exception a => Exception (ExceptionWithContext a) where
   toException (ExceptionWithContext ctx e) = setExceptionContext ctx (toException e)
-  fromException se = case (fromException se :: Maybe a) of
+  fromException se = case (fromException se) :: Maybe a of
     Just e -> Just (ExceptionWithContext (someExceptionContext se) e)
     Nothing -> Nothing
   displayException (ExceptionWithContext _ e) = displayException e
@@ -56,7 +57,7 @@ instance Show e => Show (NoBacktrace e) where
 
 instance Exception e => Exception (NoBacktrace e) where
   toException (NoBacktrace e) = toException e
-  fromException se = case (fromException se :: Maybe e) of
+  fromException se = case (fromException se) :: Maybe e of
     Just e -> Just (NoBacktrace e)
     Nothing -> Nothing
   backtraceDesired _ = False
@@ -80,24 +81,19 @@ indentContinuation text = case lines text of
 continuationLines :: [String] -> String
 continuationLines ss = case ss of
   [] -> ""
-  line : rest ->
-    (case null line of
-      True -> "  |"
-      False -> "  | " <> line)
-      <> "\n"
-      <> continuationLines rest
+  line : rest -> (case null line of
+    True -> "  |"
+    False -> "  | " <> line) <> "\n" <> continuationLines rest
 
 -- | Attach a context together with its already-rendered display text. The
 -- text is only produced on exception paths, never on the happy path.
 setExceptionContext :: ExceptionContext -> SomeException -> SomeException
-setExceptionContext ctx se =
-  exceptionAddContext# ctx (displayExceptionContext ctx) se
+setExceptionContext ctx se = exceptionAddContext# ctx (displayExceptionContext ctx) se
 
 -- | Add an annotation to an exception's context.
 addExceptionContext :: ExceptionAnnotation a => a -> SomeException -> SomeException
 addExceptionContext a se =
-  let ctx = addExceptionAnnotation a (someExceptionContext se)
-  in setExceptionContext ctx se
+  let ctx = addExceptionAnnotation a (someExceptionContext se) in setExceptionContext ctx se
 
 -- | The context attached to an exception, or the empty context.
 someExceptionContext :: SomeException -> ExceptionContext
@@ -108,24 +104,20 @@ someExceptionContext se = case exceptionContext# se of
 -- | Run an action, adding an annotation to any synchronous exception it
 -- throws. Asynchronous exceptions are not decorated.
 annotateIO :: ExceptionAnnotation e => e -> IO a -> IO a
-annotateIO annotation action =
-  exceptionCatch# action (annotateHandler annotation)
+annotateIO annotation action = exceptionCatch# action (annotateHandler annotation)
 
 annotateHandler :: ExceptionAnnotation e => e -> SomeException -> IO a
-annotateHandler annotation se =
-  exceptionThrowIo# (addExceptionContext annotation se)
+annotateHandler annotation se = exceptionThrowIo# (addExceptionContext annotation se)
 
 -- | Rethrow an exception with the context it was caught with, adding a
 -- 'WhileHandling' annotation for this rethrow.
 rethrowIO :: Exception e => ExceptionWithContext e -> IO a
-rethrowIO (ExceptionWithContext ctx e) =
-  exceptionThrowIo# (setExceptionContext ctx (toException e))
+rethrowIO (ExceptionWithContext ctx e) = exceptionThrowIo# (setExceptionContext ctx (toException e))
 
 -- | Catch an exception, passing the handler its context, and rethrow without
 -- adding the handler's context if the type does not match.
 catchNoPropagate :: Exception e => IO a -> (ExceptionWithContext e -> IO a) -> IO a
-catchNoPropagate action handler =
-  exceptionCatch# action (catchNoPropagateHandler handler)
+catchNoPropagate action handler = exceptionCatch# action (catchNoPropagateHandler handler)
 
 catchNoPropagateHandler :: Exception e => (ExceptionWithContext e -> IO a) -> SomeException -> IO a
 catchNoPropagateHandler handler se = case fromException se of
@@ -135,8 +127,7 @@ catchNoPropagateHandler handler se = case fromException se of
 -- | Like 'Control.Exception.try', but return the caught exception with its
 -- context.
 tryWithContext :: Exception e => IO a -> IO (Either (ExceptionWithContext e) a)
-tryWithContext action =
-  exceptionCatch# (tryContextSuccess action) tryContextFailure
+tryWithContext action = exceptionCatch# (tryContextSuccess action) tryContextFailure
 
 tryContextSuccess :: IO a -> IO (Either e a)
 tryContextSuccess action = do
@@ -155,5 +146,5 @@ displayExceptionWithInfo se =
   let ctx = someExceptionContext se
       msg = exceptionType# se <> ":\n\n" <> displayException se
   in case displayExceptionContext ctx of
-       "" -> msg
-       rendered -> msg <> "\n\n" <> rendered
+    "" -> msg
+    rendered -> msg <> "\n\n" <> rendered

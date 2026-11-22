@@ -1,5 +1,4 @@
--- |
--- Multi-way trees and forests (rose trees), following 'Data.Tree'.
+-- | Multi-way trees and forests (rose trees), following 'Data.Tree'.
 --
 -- Deviations from the reference, all forced by the language, none by taste:
 --
@@ -13,7 +12,6 @@
 --   the ASCII drawing shifts lines explicitly ('repeat' does not exist).
 -- * There is no 'Forest' synonym: a forest is '[Tree a]', because a type
 --   synonym cannot be declared in terms of a type declared after it.
---
 module Data.Tree
   ( Tree(..)
   , PostOrder(..)
@@ -41,16 +39,53 @@ import Data.Bool
 import Data.Eq
 import Data.Foldable hiding (null, length, toList)
 import Data.Functor
-import Data.List hiding (
-  map, filter, null, length, lookup, take, drop, splitAt, reverse,
-  sort, sortBy, sortOn, zip, zipWith, unzip, tails, inits, replicate,
-  iterate, cycle, chunksOf, scanl, scanr, intersperse, concatMap, maximum, minimum, sum,
-  singleton
+import Data.List hiding
+  ( map
+  , filter
+  , null
+  , length
+  , lookup
+  , take
+  , drop
+  , splitAt
+  , reverse
+  , sort
+  , sortBy
+  , sortOn
+  , zip
+  , zipWith
+  , unzip
+  , tails
+  , inits
+  , replicate
+  , iterate
+  , cycle
+  , chunksOf
+  , scanl
+  , scanr
+  , intersperse
+  , concatMap
+  , maximum
+  , minimum
+  , sum
+  , singleton
   )
 import Data.Maybe
 import Data.Ord
 import Data.List.NonEmpty (NonEmpty((:|)))
-import Data.Sequence (Seq, empty, singleton, (<|), (><), fromList, toList, viewl, viewr, ViewL(..), ViewR(..))
+import Data.Sequence
+  ( Seq
+  , empty
+  , singleton
+  , (<|)
+  , (><)
+  , fromList
+  , toList
+  , viewl
+  , viewr
+  , ViewL(..)
+  , ViewR(..)
+  )
 import Data.String (lines, unlines)
 import Data.Traversable hiding (mapAccumL, mapAccumR)
 import Data.Word (Word)
@@ -61,10 +96,7 @@ import Moggi.Internal.Prim
 import Text.Show
 
 -- | Non-empty multi-way trees; also known as /rose trees/.
-data Tree a = Node
-  { rootLabel :: a
-  , subForest :: [Tree a]
-  }
+data Tree a = Node { rootLabel :: a, subForest :: [Tree a] }
   deriving (Eq, Ord, Show, Generic1)
 
 -- | Post-order traversal wrapper: folding a 'PostOrder' visits children
@@ -143,18 +175,16 @@ draw t = case t of
 
 drawSubTrees :: [Tree String] -> [String]
 drawSubTrees [] = []
-drawSubTrees [t] =
-  "|" : shiftLines "`- " "   " (draw t)
-drawSubTrees (t : ts) =
-  "|" : shiftLines "+- " "|  " (draw t) ++ drawSubTrees ts
+drawSubTrees (t : []) = "|" : shiftLines "`- " "   " (draw t)
+drawSubTrees (t : ts) = "|" : shiftLines "+- " "|  " (draw t) ++ drawSubTrees ts
 
 shiftLines :: String -> String -> [String] -> [String]
 shiftLines _ _ [] = []
-shiftLines first other (x : xs) = (first <> x) : shiftOther other xs
+shiftLines first other (x : xs) = first <> x : shiftOther other xs
 
 shiftOther :: String -> [String] -> [String]
 shiftOther _ [] = []
-shiftOther other (x : xs) = (other <> x) : shiftOther other xs
+shiftOther other (x : xs) = other <> x : shiftOther other xs
 
 -- | The elements of a tree in pre-order. @flatten == toList@.
 flatten :: Tree a -> [a]
@@ -201,7 +231,7 @@ unfoldTreeM f b = do
       pure (Node a ts)
 
 -- | Monadic forest builder, in depth-first order.
-unfoldForestM :: Monad m => (b -> m (a, [b])) -> [b] -> m ([Tree a])
+unfoldForestM :: Monad m => (b -> m (a, [b])) -> [b] -> m [Tree a]
 unfoldForestM f bs = mapM (unfoldTreeM f) bs
 
 -- | Monadic tree builder, in breadth-first order (Okasaki's algorithm).
@@ -213,7 +243,7 @@ unfoldTreeM_BF f b = do
     EmptyL -> error "unfoldTreeM_BF"
 
 -- | Monadic forest builder, in breadth-first order.
-unfoldForestM_BF :: Monad m => (b -> m (a, [b])) -> [b] -> m ([Tree a])
+unfoldForestM_BF :: Monad m => (b -> m (a, [b])) -> [b] -> m [Tree a]
 unfoldForestM_BF f bs = do
   xs <- unfoldForestQ f (fromList bs)
   pure (toList xs)
@@ -227,7 +257,7 @@ unfoldForestQ f qs = case viewl qs of
       (b, seeds) -> do
         tQ <- unfoldForestQ f (appendSeeds rest seeds)
         case splitOnto [] seeds tQ of
-          (tQ2, ts) -> pure ((Node b ts) <| tQ2)
+          (tQ2, ts) -> pure (Node b ts <| tQ2)
 
 appendSeeds :: Seq b -> [b] -> Seq b
 appendSeeds qs [] = qs

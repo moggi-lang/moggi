@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Standard IO Errors.
 module System.IO.Error
   ( -- *  I\/O errors
@@ -74,7 +75,7 @@ import System.IO.Types (Handle)
 -- Non-I\/O exceptions are not caught by this variant; to catch all
 -- exceptions, use 'Control.Exception.try' from "Control.Exception".
 tryIOError :: IO a -> IO (Either IOError a)
-tryIOError action = catch (tryIOErrorRun action) (tryIOErrorLeft)
+tryIOError action = catch (tryIOErrorRun action) tryIOErrorLeft
 
 tryIOErrorRun :: IO a -> IO (Either IOError a)
 tryIOErrorRun action = do
@@ -91,14 +92,15 @@ tryIOErrorLeft e = pure (Left e)
 -- contain the file handle and file path of the file involved in the
 -- error if applicable.
 mkIOError :: IOErrorType -> String -> Maybe Handle -> Maybe String -> IOError
-mkIOError ty location hdl filename = IOError
-  { ioe_type = ty
-  , ioe_location = location
-  , ioe_description = ""
-  , ioe_errno = Nothing
-  , ioe_handle = hdl
-  , ioe_filename = filename
-  }
+mkIOError ty location hdl filename =
+  IOError
+    { ioe_type = ty
+    , ioe_location = location
+    , ioe_description = ""
+    , ioe_errno = Nothing
+    , ioe_handle = hdl
+    , ioe_filename = filename
+    }
 
 -- | An error indicating that an 'IO' operation failed because one of its
 -- arguments already exists.
@@ -267,54 +269,59 @@ ioeGetFileName :: IOError -> Maybe String
 ioeGetFileName e = ioe_filename e
 
 ioeSetErrorType :: IOError -> IOErrorType -> IOError
-ioeSetErrorType e ty = IOError
-  { ioe_handle = ioe_handle e
-  , ioe_type = ty
-  , ioe_location = ioe_location e
-  , ioe_description = ioe_description e
-  , ioe_errno = ioe_errno e
-  , ioe_filename = ioe_filename e
-  }
+ioeSetErrorType e ty =
+  IOError
+    { ioe_handle = ioe_handle e
+    , ioe_type = ty
+    , ioe_location = ioe_location e
+    , ioe_description = ioe_description e
+    , ioe_errno = ioe_errno e
+    , ioe_filename = ioe_filename e
+    }
 
 ioeSetErrorString :: IOError -> String -> IOError
-ioeSetErrorString e str = IOError
-  { ioe_handle = ioe_handle e
-  , ioe_type = ioe_type e
-  , ioe_location = ioe_location e
-  , ioe_description = str
-  , ioe_errno = ioe_errno e
-  , ioe_filename = ioe_filename e
-  }
+ioeSetErrorString e str =
+  IOError
+    { ioe_handle = ioe_handle e
+    , ioe_type = ioe_type e
+    , ioe_location = ioe_location e
+    , ioe_description = str
+    , ioe_errno = ioe_errno e
+    , ioe_filename = ioe_filename e
+    }
 
 ioeSetLocation :: IOError -> String -> IOError
-ioeSetLocation e str = IOError
-  { ioe_handle = ioe_handle e
-  , ioe_type = ioe_type e
-  , ioe_location = str
-  , ioe_description = ioe_description e
-  , ioe_errno = ioe_errno e
-  , ioe_filename = ioe_filename e
-  }
+ioeSetLocation e str =
+  IOError
+    { ioe_handle = ioe_handle e
+    , ioe_type = ioe_type e
+    , ioe_location = str
+    , ioe_description = ioe_description e
+    , ioe_errno = ioe_errno e
+    , ioe_filename = ioe_filename e
+    }
 
 ioeSetHandle :: IOError -> Handle -> IOError
-ioeSetHandle e hdl = IOError
-  { ioe_handle = Just hdl
-  , ioe_type = ioe_type e
-  , ioe_location = ioe_location e
-  , ioe_description = ioe_description e
-  , ioe_errno = ioe_errno e
-  , ioe_filename = ioe_filename e
-  }
+ioeSetHandle e hdl =
+  IOError
+    { ioe_handle = Just hdl
+    , ioe_type = ioe_type e
+    , ioe_location = ioe_location e
+    , ioe_description = ioe_description e
+    , ioe_errno = ioe_errno e
+    , ioe_filename = ioe_filename e
+    }
 
 ioeSetFileName :: IOError -> String -> IOError
-ioeSetFileName e filename = IOError
-  { ioe_handle = ioe_handle e
-  , ioe_type = ioe_type e
-  , ioe_location = ioe_location e
-  , ioe_description = ioe_description e
-  , ioe_errno = ioe_errno e
-  , ioe_filename = Just filename
-  }
+ioeSetFileName e filename =
+  IOError
+    { ioe_handle = ioe_handle e
+    , ioe_type = ioe_type e
+    , ioe_location = ioe_location e
+    , ioe_description = ioe_description e
+    , ioe_errno = ioe_errno e
+    , ioe_filename = Just filename
+    }
 
 -- | Catch any 'IOError' that occurs in the computation and throw a modified
 -- version.
@@ -346,15 +353,8 @@ catchIOError action handler = catch action handler
 -- 'IOError'. If any of the file handle or file path is not given the
 -- corresponding value in the 'IOError' remains unaltered.
 annotateIOError :: IOError -> String -> Maybe Handle -> Maybe String -> IOError
-annotateIOError ioe loc hdl path = IOError
-  { ioe_handle = case hdl of
-      Just h -> Just h
-      Nothing -> ioe_handle ioe
-  , ioe_type = ioe_type ioe
-  , ioe_location = loc
-  , ioe_description = ioe_description ioe
-  , ioe_errno = ioe_errno ioe
-  , ioe_filename = case path of
-      Just name -> Just name
-      Nothing -> ioe_filename ioe
-  }
+annotateIOError ioe loc hdl path = IOError { ioe_handle = case hdl of
+  Just h -> Just h
+  Nothing -> ioe_handle ioe, ioe_type = ioe_type ioe, ioe_location = loc, ioe_description = ioe_description ioe, ioe_errno = ioe_errno ioe, ioe_filename = case path of
+  Just name -> Just name
+  Nothing -> ioe_filename ioe }

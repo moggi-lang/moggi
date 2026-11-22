@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | IO-related exception types and functions.
 --
 -- `IOException` is the type behind `IOError`: it records a more specific error
@@ -38,7 +39,7 @@ import System.IO.Types (Handle)
 
 -- | An abstract type that contains a value for each variant of 'IOError'.
 data IOErrorType
-  -- The portable set:
+    -- The portable set:
   = AlreadyExists
   | NoSuchThing
   | ResourceBusy
@@ -47,7 +48,7 @@ data IOErrorType
   | IllegalOperation
   | PermissionDenied
   | UserError
-  -- Additional variants:
+    -- Additional variants:
   | UnsatisfiedConstraints
   | SystemError
   | ProtocolError
@@ -201,23 +202,30 @@ instance Eq IOException where
 -- the ordinary `Eq` methods rather than back to the instance being defined.
 ioErrorEq :: IOException -> IOException -> Bool
 ioErrorEq a b =
-  ioe_type a == ioe_type b
-    && ioe_description a == ioe_description b
-    && ioe_handle a == ioe_handle b
-    && ioe_location a == ioe_location b
-    && ioe_errno a == ioe_errno b
-    && ioe_filename a == ioe_filename b
+  ioe_type a
+  == ioe_type b
+    && ioe_description a
+    == ioe_description b
+    && ioe_handle a
+    == ioe_handle b
+    && ioe_location a
+    == ioe_location b
+    && ioe_errno a
+    == ioe_errno b
+    && ioe_filename a
+    == ioe_filename b
 
 instance Exception IOException where
-  toException e = exceptionWrap# "IOException" (displayException e) (show e) (exceptionTypeDisplay e) e
+  toException e =
+    exceptionWrap# "IOException" (displayException e) (show e) (exceptionTypeDisplay e) e
   fromException se = exceptionUnwrap# "IOException" se
 
 instance Show HostException where
-  show (HostException be nativeTy msg) =
-    be <> "/" <> nativeTy <> ": " <> msg
+  show (HostException be nativeTy msg) = be <> "/" <> nativeTy <> ": " <> msg
 
 instance Exception HostException where
-  toException e = exceptionWrap# "HostException" (displayException e) (show e) (exceptionTypeDisplay e) e
+  toException e =
+    exceptionWrap# "HostException" (displayException e) (show e) (exceptionTypeDisplay e) e
   fromException se = exceptionUnwrap# "HostException" se
   displayException (HostException _be _nativeTy msg) = msg
 

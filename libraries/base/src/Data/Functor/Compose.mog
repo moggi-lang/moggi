@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Composition of functors: @Compose f g a@ is @f@ of @g@ of @a@. The
 -- composition of applicative functors is always applicative, but the
 -- composition of monads is not always a monad, so there is no 'Monad'
@@ -9,9 +10,7 @@
 --
 -- >>> Compose (Just [1, 2, 3]) <> Compose Nothing
 -- Compose (Just [1,2,3])
-module Data.Functor.Compose (
-    Compose(..),
-  ) where
+module Data.Functor.Compose (Compose(..)) where
 
 import Control.Applicative
 import Data.Bool

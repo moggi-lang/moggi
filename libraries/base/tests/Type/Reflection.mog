@@ -16,7 +16,20 @@ import Data.Monoid (First, Last) qualified as Monoid
 import Data.Ord (Down)
 import Data.Proxy (Proxy(..))
 import Data.Real (Ratio)
-import Data.Semigroup (Min, Max, First, Last, Arg, WrappedMonoid, Dual, Endo, Sum, Product, All, Any)
+import Data.Semigroup
+  ( Min
+  , Max
+  , First
+  , Last
+  , Arg
+  , WrappedMonoid
+  , Dual
+  , Endo
+  , Sum
+  , Product
+  , All
+  , Any
+  )
 import Data.Semigroup (First, Last) qualified as Semigroup
 import Data.String (pack, unpack)
 import Data.Tuple (Solo)
@@ -31,9 +44,13 @@ import Type.Reflection
 import Unsafe.Coerce (UnsafeEquality)
 
 report :: Typeable a => Proxy a -> String -> IO ()
-report _ label = putStrLn (pack (intercalate (unpack " ")
-  (case splitApps (typeRep :: TypeRep a) of
-     (tc, args) -> [unpack label, unpack (show (typeRep :: TypeRep a)), unpack (tyConName tc), unpack (show (length args))])))
+report _ label = putStrLn (pack (intercalate (unpack " ") (case splitApps (typeRep :: TypeRep a) of
+  (tc, args) ->
+    [ unpack label
+    , unpack (show (typeRep :: TypeRep a))
+    , unpack (tyConName tc)
+    , unpack (show (length args))
+    ])))
 
 main :: IO ()
 main = do
@@ -53,10 +70,12 @@ main = do
   putStrLn (tyConModule (typeRepTyCon (typeRep :: TypeRep (Monoid.Last Int))))
   putStrLn (show (typeRep :: TypeRep (Int, Bool)))
   putStrLn (tyConName (typeRepTyCon (typeRep :: TypeRep (Int, Bool))))
-  putStrLn (case splitApps (typeRep :: TypeRep (Int, Bool)) of (_, args) -> show (length args))
+  putStrLn (case splitApps (typeRep :: TypeRep (Int, Bool)) of
+    (_, args) -> show (length args))
   putStrLn (show (typeRep :: TypeRep (IO ())))
   putStrLn (tyConName (typeRepTyCon (typeRep :: TypeRep (IO ()))))
-  putStrLn (case splitApps (typeRep :: TypeRep (IO ())) of (_, args) -> show (length args))
+  putStrLn (case splitApps (typeRep :: TypeRep (IO ())) of
+    (_, args) -> show (length args))
   putStrLn (show (typeRep :: TypeRep Int8))
   putStrLn (show (typeRep :: TypeRep Word64))
   putStrLn (show (typeRep :: TypeRep Integer))
@@ -68,13 +87,16 @@ main = do
   putStrLn (show (typeRep :: TypeRep SomeTypeRep))
   putStrLn (show (typeRep :: TypeRep (Either Int Bool)))
   putStrLn (tyConName (typeRepTyCon (typeRep :: TypeRep (Either Int Bool))))
-  putStrLn (case splitApps (typeRep :: TypeRep (Either Int Bool)) of (_, args) -> show (length args))
+  putStrLn (case splitApps (typeRep :: TypeRep (Either Int Bool)) of
+    (_, args) -> show (length args))
   putStrLn (show (typeRep :: TypeRep (Int, Bool, Char)))
   putStrLn (tyConName (typeRepTyCon (typeRep :: TypeRep (Int, Bool, Char))))
-  putStrLn (case splitApps (typeRep :: TypeRep (Int, Bool, Char)) of (_, args) -> show (length args))
+  putStrLn (case splitApps (typeRep :: TypeRep (Int, Bool, Char)) of
+    (_, args) -> show (length args))
   putStrLn (show (typeRep :: TypeRep (Int, Bool, Char, Int, Bool, Char, Int)))
   putStrLn (tyConName (typeRepTyCon (typeRep :: TypeRep (Int, Bool, Char, Int, Bool, Char, Int))))
-  putStrLn (case splitApps (typeRep :: TypeRep (Int, Bool, Char, Int, Bool, Char, Int)) of (_, args) -> show (length args))
+  putStrLn (case splitApps (typeRep :: TypeRep (Int, Bool, Char, Int, Bool, Char, Int)) of
+    (_, args) -> show (length args))
   putStrLn (show (typeRep :: TypeRep Double))
   putStrLn (show (typeRep :: TypeRep Int16))
   putStrLn (show (typeRep :: TypeRep Int32))
@@ -87,11 +109,14 @@ main = do
   putStrLn (show (typeRep :: TypeRep (NonEmpty Int)))
   putStrLn (show (typeRep :: TypeRep (Int :~: Int)))
   putStrLn (tyConName (typeRepTyCon (typeRep :: TypeRep (Int :~: Int))))
-  putStrLn (case splitApps (typeRep :: TypeRep (Int :~: Int)) of (_, args) -> show (length args))
+  putStrLn (case splitApps (typeRep :: TypeRep (Int :~: Int)) of
+    (_, args) -> show (length args))
   putStrLn (show (typeRep :: TypeRep (Int :~~: Int)))
-  putStrLn (case splitApps (typeRep :: TypeRep (Int :~~: Int)) of (_, args) -> show (length args))
+  putStrLn (case splitApps (typeRep :: TypeRep (Int :~~: Int)) of
+    (_, args) -> show (length args))
   putStrLn (show (typeRep :: TypeRep (UnsafeEquality Int Bool)))
-  putStrLn (case splitApps (typeRep :: TypeRep (UnsafeEquality Int Bool)) of (_, args) -> show (length args))
+  putStrLn (case splitApps (typeRep :: TypeRep (UnsafeEquality Int Bool)) of
+    (_, args) -> show (length args))
   report (Proxy :: Proxy (Int, Bool)) "pair"
   report (Proxy :: Proxy (IO ())) "io"
   report (Proxy :: Proxy (Maybe Int)) "maybe"
@@ -146,5 +171,9 @@ main = do
   report (Proxy :: Proxy (TypeRep Int)) "typeRep"
   report (Proxy :: Proxy ()) "unit"
   report (Proxy :: Proxy (Int, Int, Int, Int, Int, Int, Int, Int)) "tuple8"
-  report (Proxy :: Proxy (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)) "tuple15"
-  report (Proxy :: Proxy (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)) "tuple64"
+  report (Proxy :: Proxy (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int))
+    "tuple15"
+  report
+    (Proxy
+       :: Proxy (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int))
+    "tuple64"

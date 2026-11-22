@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The combinators for this flavour of HTML, generated from the same
 -- specification these attributes are generated from.
 -- Note: upstream's @pattern@ attribute is spelled @pattern_@ here, because
@@ -182,16 +183,14 @@ module Text.Blaze.XHtml5.Attributes
   ) where
 
 import Control.Monad ((>>))
-import Data.Bool (Bool (..))
+import Data.Bool (Bool(..))
 import Data.Monoid (mempty)
 import Data.Semigroup ((<>))
 import Text.Blaze.Html
-import Text.Blaze.Internal (MarkupM (..), attribute, external)
+import Text.Blaze.Internal (MarkupM(..), attribute, external)
 
 -- src/Util/GenerateHtmlCombinators.hs:100
 --
-
-
 -- src/Util/GenerateHtmlCombinators.hs:250
 --
 -- | Combinator for the @accept@ attribute.
@@ -203,7 +202,6 @@ import Text.Blaze.Internal (MarkupM (..), attribute, external)
 -- Result:
 --
 -- > <div accept="bar">Hello.</div>
---
 accept :: AttributeValue -> Attribute
 accept = attribute "accept" " accept=\""
 
@@ -218,7 +216,6 @@ accept = attribute "accept" " accept=\""
 -- Result:
 --
 -- > <div accept-charset="bar">Hello.</div>
---
 acceptCharset :: AttributeValue -> Attribute
 acceptCharset = attribute "accept-charset" " accept-charset=\""
 
@@ -233,7 +230,6 @@ acceptCharset = attribute "accept-charset" " accept-charset=\""
 -- Result:
 --
 -- > <div accesskey="bar">Hello.</div>
---
 accesskey :: AttributeValue -> Attribute
 accesskey = attribute "accesskey" " accesskey=\""
 
@@ -248,7 +244,6 @@ accesskey = attribute "accesskey" " accesskey=\""
 -- Result:
 --
 -- > <div action="bar">Hello.</div>
---
 action :: AttributeValue -> Attribute
 action = attribute "action" " action=\""
 
@@ -263,7 +258,6 @@ action = attribute "action" " action=\""
 -- Result:
 --
 -- > <div alt="bar">Hello.</div>
---
 alt :: AttributeValue -> Attribute
 alt = attribute "alt" " alt=\""
 
@@ -278,7 +272,6 @@ alt = attribute "alt" " alt=\""
 -- Result:
 --
 -- > <div async="bar">Hello.</div>
---
 async :: AttributeValue -> Attribute
 async = attribute "async" " async=\""
 
@@ -293,7 +286,6 @@ async = attribute "async" " async=\""
 -- Result:
 --
 -- > <div autocomplete="bar">Hello.</div>
---
 autocomplete :: AttributeValue -> Attribute
 autocomplete = attribute "autocomplete" " autocomplete=\""
 
@@ -308,7 +300,6 @@ autocomplete = attribute "autocomplete" " autocomplete=\""
 -- Result:
 --
 -- > <div autofocus="bar">Hello.</div>
---
 autofocus :: AttributeValue -> Attribute
 autofocus = attribute "autofocus" " autofocus=\""
 
@@ -323,7 +314,6 @@ autofocus = attribute "autofocus" " autofocus=\""
 -- Result:
 --
 -- > <div autoplay="bar">Hello.</div>
---
 autoplay :: AttributeValue -> Attribute
 autoplay = attribute "autoplay" " autoplay=\""
 
@@ -338,7 +328,6 @@ autoplay = attribute "autoplay" " autoplay=\""
 -- Result:
 --
 -- > <div challenge="bar">Hello.</div>
---
 challenge :: AttributeValue -> Attribute
 challenge = attribute "challenge" " challenge=\""
 
@@ -353,7 +342,6 @@ challenge = attribute "challenge" " challenge=\""
 -- Result:
 --
 -- > <div charset="bar">Hello.</div>
---
 charset :: AttributeValue -> Attribute
 charset = attribute "charset" " charset=\""
 
@@ -368,7 +356,6 @@ charset = attribute "charset" " charset=\""
 -- Result:
 --
 -- > <div checked="bar">Hello.</div>
---
 checked :: AttributeValue -> Attribute
 checked = attribute "checked" " checked=\""
 
@@ -383,7 +370,6 @@ checked = attribute "checked" " checked=\""
 -- Result:
 --
 -- > <div cite="bar">Hello.</div>
---
 cite :: AttributeValue -> Attribute
 cite = attribute "cite" " cite=\""
 
@@ -398,7 +384,6 @@ cite = attribute "cite" " cite=\""
 -- Result:
 --
 -- > <div class="bar">Hello.</div>
---
 class_ :: AttributeValue -> Attribute
 class_ = attribute "class" " class=\""
 
@@ -413,7 +398,6 @@ class_ = attribute "class" " class=\""
 -- Result:
 --
 -- > <div cols="bar">Hello.</div>
---
 cols :: AttributeValue -> Attribute
 cols = attribute "cols" " cols=\""
 
@@ -428,7 +412,6 @@ cols = attribute "cols" " cols=\""
 -- Result:
 --
 -- > <div colspan="bar">Hello.</div>
---
 colspan :: AttributeValue -> Attribute
 colspan = attribute "colspan" " colspan=\""
 
@@ -443,7 +426,6 @@ colspan = attribute "colspan" " colspan=\""
 -- Result:
 --
 -- > <div content="bar">Hello.</div>
---
 content :: AttributeValue -> Attribute
 content = attribute "content" " content=\""
 
@@ -458,7 +440,6 @@ content = attribute "content" " content=\""
 -- Result:
 --
 -- > <div contenteditable="bar">Hello.</div>
---
 contenteditable :: AttributeValue -> Attribute
 contenteditable = attribute "contenteditable" " contenteditable=\""
 
@@ -473,7 +454,6 @@ contenteditable = attribute "contenteditable" " contenteditable=\""
 -- Result:
 --
 -- > <div contextmenu="bar">Hello.</div>
---
 contextmenu :: AttributeValue -> Attribute
 contextmenu = attribute "contextmenu" " contextmenu=\""
 
@@ -488,7 +468,6 @@ contextmenu = attribute "contextmenu" " contextmenu=\""
 -- Result:
 --
 -- > <div controls="bar">Hello.</div>
---
 controls :: AttributeValue -> Attribute
 controls = attribute "controls" " controls=\""
 
@@ -503,7 +482,6 @@ controls = attribute "controls" " controls=\""
 -- Result:
 --
 -- > <div coords="bar">Hello.</div>
---
 coords :: AttributeValue -> Attribute
 coords = attribute "coords" " coords=\""
 
@@ -518,7 +496,6 @@ coords = attribute "coords" " coords=\""
 -- Result:
 --
 -- > <div data="bar">Hello.</div>
---
 data_ :: AttributeValue -> Attribute
 data_ = attribute "data" " data=\""
 
@@ -533,7 +510,6 @@ data_ = attribute "data" " data=\""
 -- Result:
 --
 -- > <div datetime="bar">Hello.</div>
---
 datetime :: AttributeValue -> Attribute
 datetime = attribute "datetime" " datetime=\""
 
@@ -548,7 +524,6 @@ datetime = attribute "datetime" " datetime=\""
 -- Result:
 --
 -- > <div defer="bar">Hello.</div>
---
 defer :: AttributeValue -> Attribute
 defer = attribute "defer" " defer=\""
 
@@ -563,7 +538,6 @@ defer = attribute "defer" " defer=\""
 -- Result:
 --
 -- > <div dir="bar">Hello.</div>
---
 dir :: AttributeValue -> Attribute
 dir = attribute "dir" " dir=\""
 
@@ -578,7 +552,6 @@ dir = attribute "dir" " dir=\""
 -- Result:
 --
 -- > <div disabled="bar">Hello.</div>
---
 disabled :: AttributeValue -> Attribute
 disabled = attribute "disabled" " disabled=\""
 
@@ -593,7 +566,6 @@ disabled = attribute "disabled" " disabled=\""
 -- Result:
 --
 -- > <div download="bar">Hello.</div>
---
 download :: AttributeValue -> Attribute
 download = attribute "download" " download=\""
 
@@ -608,7 +580,6 @@ download = attribute "download" " download=\""
 -- Result:
 --
 -- > <div draggable="bar">Hello.</div>
---
 draggable :: AttributeValue -> Attribute
 draggable = attribute "draggable" " draggable=\""
 
@@ -623,7 +594,6 @@ draggable = attribute "draggable" " draggable=\""
 -- Result:
 --
 -- > <div enctype="bar">Hello.</div>
---
 enctype :: AttributeValue -> Attribute
 enctype = attribute "enctype" " enctype=\""
 
@@ -638,7 +608,6 @@ enctype = attribute "enctype" " enctype=\""
 -- Result:
 --
 -- > <div for="bar">Hello.</div>
---
 for :: AttributeValue -> Attribute
 for = attribute "for" " for=\""
 
@@ -653,7 +622,6 @@ for = attribute "for" " for=\""
 -- Result:
 --
 -- > <div form="bar">Hello.</div>
---
 form :: AttributeValue -> Attribute
 form = attribute "form" " form=\""
 
@@ -668,7 +636,6 @@ form = attribute "form" " form=\""
 -- Result:
 --
 -- > <div formaction="bar">Hello.</div>
---
 formaction :: AttributeValue -> Attribute
 formaction = attribute "formaction" " formaction=\""
 
@@ -683,7 +650,6 @@ formaction = attribute "formaction" " formaction=\""
 -- Result:
 --
 -- > <div formenctype="bar">Hello.</div>
---
 formenctype :: AttributeValue -> Attribute
 formenctype = attribute "formenctype" " formenctype=\""
 
@@ -698,7 +664,6 @@ formenctype = attribute "formenctype" " formenctype=\""
 -- Result:
 --
 -- > <div formmethod="bar">Hello.</div>
---
 formmethod :: AttributeValue -> Attribute
 formmethod = attribute "formmethod" " formmethod=\""
 
@@ -713,7 +678,6 @@ formmethod = attribute "formmethod" " formmethod=\""
 -- Result:
 --
 -- > <div formnovalidate="bar">Hello.</div>
---
 formnovalidate :: AttributeValue -> Attribute
 formnovalidate = attribute "formnovalidate" " formnovalidate=\""
 
@@ -728,7 +692,6 @@ formnovalidate = attribute "formnovalidate" " formnovalidate=\""
 -- Result:
 --
 -- > <div formtarget="bar">Hello.</div>
---
 formtarget :: AttributeValue -> Attribute
 formtarget = attribute "formtarget" " formtarget=\""
 
@@ -743,7 +706,6 @@ formtarget = attribute "formtarget" " formtarget=\""
 -- Result:
 --
 -- > <div headers="bar">Hello.</div>
---
 headers :: AttributeValue -> Attribute
 headers = attribute "headers" " headers=\""
 
@@ -758,7 +720,6 @@ headers = attribute "headers" " headers=\""
 -- Result:
 --
 -- > <div height="bar">Hello.</div>
---
 height :: AttributeValue -> Attribute
 height = attribute "height" " height=\""
 
@@ -773,7 +734,6 @@ height = attribute "height" " height=\""
 -- Result:
 --
 -- > <div hidden="bar">Hello.</div>
---
 hidden :: AttributeValue -> Attribute
 hidden = attribute "hidden" " hidden=\""
 
@@ -788,7 +748,6 @@ hidden = attribute "hidden" " hidden=\""
 -- Result:
 --
 -- > <div high="bar">Hello.</div>
---
 high :: AttributeValue -> Attribute
 high = attribute "high" " high=\""
 
@@ -803,7 +762,6 @@ high = attribute "high" " high=\""
 -- Result:
 --
 -- > <div href="bar">Hello.</div>
---
 href :: AttributeValue -> Attribute
 href = attribute "href" " href=\""
 
@@ -818,7 +776,6 @@ href = attribute "href" " href=\""
 -- Result:
 --
 -- > <div hreflang="bar">Hello.</div>
---
 hreflang :: AttributeValue -> Attribute
 hreflang = attribute "hreflang" " hreflang=\""
 
@@ -833,7 +790,6 @@ hreflang = attribute "hreflang" " hreflang=\""
 -- Result:
 --
 -- > <div http-equiv="bar">Hello.</div>
---
 httpEquiv :: AttributeValue -> Attribute
 httpEquiv = attribute "http-equiv" " http-equiv=\""
 
@@ -848,7 +804,6 @@ httpEquiv = attribute "http-equiv" " http-equiv=\""
 -- Result:
 --
 -- > <div icon="bar">Hello.</div>
---
 icon :: AttributeValue -> Attribute
 icon = attribute "icon" " icon=\""
 
@@ -863,7 +818,6 @@ icon = attribute "icon" " icon=\""
 -- Result:
 --
 -- > <div id="bar">Hello.</div>
---
 id :: AttributeValue -> Attribute
 id = attribute "id" " id=\""
 
@@ -878,7 +832,6 @@ id = attribute "id" " id=\""
 -- Result:
 --
 -- > <div ismap="bar">Hello.</div>
---
 ismap :: AttributeValue -> Attribute
 ismap = attribute "ismap" " ismap=\""
 
@@ -893,7 +846,6 @@ ismap = attribute "ismap" " ismap=\""
 -- Result:
 --
 -- > <div item="bar">Hello.</div>
---
 item :: AttributeValue -> Attribute
 item = attribute "item" " item=\""
 
@@ -908,7 +860,6 @@ item = attribute "item" " item=\""
 -- Result:
 --
 -- > <div itemprop="bar">Hello.</div>
---
 itemprop :: AttributeValue -> Attribute
 itemprop = attribute "itemprop" " itemprop=\""
 
@@ -923,7 +874,6 @@ itemprop = attribute "itemprop" " itemprop=\""
 -- Result:
 --
 -- > <div itemscope="bar">Hello.</div>
---
 itemscope :: AttributeValue -> Attribute
 itemscope = attribute "itemscope" " itemscope=\""
 
@@ -938,7 +888,6 @@ itemscope = attribute "itemscope" " itemscope=\""
 -- Result:
 --
 -- > <div itemtype="bar">Hello.</div>
---
 itemtype :: AttributeValue -> Attribute
 itemtype = attribute "itemtype" " itemtype=\""
 
@@ -953,7 +902,6 @@ itemtype = attribute "itemtype" " itemtype=\""
 -- Result:
 --
 -- > <div keytype="bar">Hello.</div>
---
 keytype :: AttributeValue -> Attribute
 keytype = attribute "keytype" " keytype=\""
 
@@ -968,7 +916,6 @@ keytype = attribute "keytype" " keytype=\""
 -- Result:
 --
 -- > <div label="bar">Hello.</div>
---
 label :: AttributeValue -> Attribute
 label = attribute "label" " label=\""
 
@@ -983,7 +930,6 @@ label = attribute "label" " label=\""
 -- Result:
 --
 -- > <div lang="bar">Hello.</div>
---
 lang :: AttributeValue -> Attribute
 lang = attribute "lang" " lang=\""
 
@@ -998,7 +944,6 @@ lang = attribute "lang" " lang=\""
 -- Result:
 --
 -- > <div list="bar">Hello.</div>
---
 list :: AttributeValue -> Attribute
 list = attribute "list" " list=\""
 
@@ -1013,7 +958,6 @@ list = attribute "list" " list=\""
 -- Result:
 --
 -- > <div loop="bar">Hello.</div>
---
 loop :: AttributeValue -> Attribute
 loop = attribute "loop" " loop=\""
 
@@ -1028,7 +972,6 @@ loop = attribute "loop" " loop=\""
 -- Result:
 --
 -- > <div low="bar">Hello.</div>
---
 low :: AttributeValue -> Attribute
 low = attribute "low" " low=\""
 
@@ -1043,7 +986,6 @@ low = attribute "low" " low=\""
 -- Result:
 --
 -- > <div manifest="bar">Hello.</div>
---
 manifest :: AttributeValue -> Attribute
 manifest = attribute "manifest" " manifest=\""
 
@@ -1058,7 +1000,6 @@ manifest = attribute "manifest" " manifest=\""
 -- Result:
 --
 -- > <div max="bar">Hello.</div>
---
 max :: AttributeValue -> Attribute
 max = attribute "max" " max=\""
 
@@ -1073,7 +1014,6 @@ max = attribute "max" " max=\""
 -- Result:
 --
 -- > <div maxlength="bar">Hello.</div>
---
 maxlength :: AttributeValue -> Attribute
 maxlength = attribute "maxlength" " maxlength=\""
 
@@ -1088,7 +1028,6 @@ maxlength = attribute "maxlength" " maxlength=\""
 -- Result:
 --
 -- > <div media="bar">Hello.</div>
---
 media :: AttributeValue -> Attribute
 media = attribute "media" " media=\""
 
@@ -1103,7 +1042,6 @@ media = attribute "media" " media=\""
 -- Result:
 --
 -- > <div method="bar">Hello.</div>
---
 method :: AttributeValue -> Attribute
 method = attribute "method" " method=\""
 
@@ -1118,7 +1056,6 @@ method = attribute "method" " method=\""
 -- Result:
 --
 -- > <div min="bar">Hello.</div>
---
 min :: AttributeValue -> Attribute
 min = attribute "min" " min=\""
 
@@ -1133,7 +1070,6 @@ min = attribute "min" " min=\""
 -- Result:
 --
 -- > <div minlength="bar">Hello.</div>
---
 minlength :: AttributeValue -> Attribute
 minlength = attribute "minlength" " minlength=\""
 
@@ -1148,7 +1084,6 @@ minlength = attribute "minlength" " minlength=\""
 -- Result:
 --
 -- > <div multiple="bar">Hello.</div>
---
 multiple :: AttributeValue -> Attribute
 multiple = attribute "multiple" " multiple=\""
 
@@ -1163,7 +1098,6 @@ multiple = attribute "multiple" " multiple=\""
 -- Result:
 --
 -- > <div muted="bar">Hello.</div>
---
 muted :: AttributeValue -> Attribute
 muted = attribute "muted" " muted=\""
 
@@ -1178,7 +1112,6 @@ muted = attribute "muted" " muted=\""
 -- Result:
 --
 -- > <div name="bar">Hello.</div>
---
 name :: AttributeValue -> Attribute
 name = attribute "name" " name=\""
 
@@ -1193,7 +1126,6 @@ name = attribute "name" " name=\""
 -- Result:
 --
 -- > <div novalidate="bar">Hello.</div>
---
 novalidate :: AttributeValue -> Attribute
 novalidate = attribute "novalidate" " novalidate=\""
 
@@ -1208,7 +1140,6 @@ novalidate = attribute "novalidate" " novalidate=\""
 -- Result:
 --
 -- > <div onbeforeonload="bar">Hello.</div>
---
 onbeforeonload :: AttributeValue -> Attribute
 onbeforeonload = attribute "onbeforeonload" " onbeforeonload=\""
 
@@ -1223,7 +1154,6 @@ onbeforeonload = attribute "onbeforeonload" " onbeforeonload=\""
 -- Result:
 --
 -- > <div onbeforeprint="bar">Hello.</div>
---
 onbeforeprint :: AttributeValue -> Attribute
 onbeforeprint = attribute "onbeforeprint" " onbeforeprint=\""
 
@@ -1238,7 +1168,6 @@ onbeforeprint = attribute "onbeforeprint" " onbeforeprint=\""
 -- Result:
 --
 -- > <div onblur="bar">Hello.</div>
---
 onblur :: AttributeValue -> Attribute
 onblur = attribute "onblur" " onblur=\""
 
@@ -1253,7 +1182,6 @@ onblur = attribute "onblur" " onblur=\""
 -- Result:
 --
 -- > <div oncanplay="bar">Hello.</div>
---
 oncanplay :: AttributeValue -> Attribute
 oncanplay = attribute "oncanplay" " oncanplay=\""
 
@@ -1268,7 +1196,6 @@ oncanplay = attribute "oncanplay" " oncanplay=\""
 -- Result:
 --
 -- > <div oncanplaythrough="bar">Hello.</div>
---
 oncanplaythrough :: AttributeValue -> Attribute
 oncanplaythrough = attribute "oncanplaythrough" " oncanplaythrough=\""
 
@@ -1283,7 +1210,6 @@ oncanplaythrough = attribute "oncanplaythrough" " oncanplaythrough=\""
 -- Result:
 --
 -- > <div onchange="bar">Hello.</div>
---
 onchange :: AttributeValue -> Attribute
 onchange = attribute "onchange" " onchange=\""
 
@@ -1298,7 +1224,6 @@ onchange = attribute "onchange" " onchange=\""
 -- Result:
 --
 -- > <div onclick="bar">Hello.</div>
---
 onclick :: AttributeValue -> Attribute
 onclick = attribute "onclick" " onclick=\""
 
@@ -1313,7 +1238,6 @@ onclick = attribute "onclick" " onclick=\""
 -- Result:
 --
 -- > <div oncontextmenu="bar">Hello.</div>
---
 oncontextmenu :: AttributeValue -> Attribute
 oncontextmenu = attribute "oncontextmenu" " oncontextmenu=\""
 
@@ -1328,7 +1252,6 @@ oncontextmenu = attribute "oncontextmenu" " oncontextmenu=\""
 -- Result:
 --
 -- > <div ondblclick="bar">Hello.</div>
---
 ondblclick :: AttributeValue -> Attribute
 ondblclick = attribute "ondblclick" " ondblclick=\""
 
@@ -1343,7 +1266,6 @@ ondblclick = attribute "ondblclick" " ondblclick=\""
 -- Result:
 --
 -- > <div ondrag="bar">Hello.</div>
---
 ondrag :: AttributeValue -> Attribute
 ondrag = attribute "ondrag" " ondrag=\""
 
@@ -1358,7 +1280,6 @@ ondrag = attribute "ondrag" " ondrag=\""
 -- Result:
 --
 -- > <div ondragend="bar">Hello.</div>
---
 ondragend :: AttributeValue -> Attribute
 ondragend = attribute "ondragend" " ondragend=\""
 
@@ -1373,7 +1294,6 @@ ondragend = attribute "ondragend" " ondragend=\""
 -- Result:
 --
 -- > <div ondragenter="bar">Hello.</div>
---
 ondragenter :: AttributeValue -> Attribute
 ondragenter = attribute "ondragenter" " ondragenter=\""
 
@@ -1388,7 +1308,6 @@ ondragenter = attribute "ondragenter" " ondragenter=\""
 -- Result:
 --
 -- > <div ondragleave="bar">Hello.</div>
---
 ondragleave :: AttributeValue -> Attribute
 ondragleave = attribute "ondragleave" " ondragleave=\""
 
@@ -1403,7 +1322,6 @@ ondragleave = attribute "ondragleave" " ondragleave=\""
 -- Result:
 --
 -- > <div ondragover="bar">Hello.</div>
---
 ondragover :: AttributeValue -> Attribute
 ondragover = attribute "ondragover" " ondragover=\""
 
@@ -1418,7 +1336,6 @@ ondragover = attribute "ondragover" " ondragover=\""
 -- Result:
 --
 -- > <div ondragstart="bar">Hello.</div>
---
 ondragstart :: AttributeValue -> Attribute
 ondragstart = attribute "ondragstart" " ondragstart=\""
 
@@ -1433,7 +1350,6 @@ ondragstart = attribute "ondragstart" " ondragstart=\""
 -- Result:
 --
 -- > <div ondrop="bar">Hello.</div>
---
 ondrop :: AttributeValue -> Attribute
 ondrop = attribute "ondrop" " ondrop=\""
 
@@ -1448,7 +1364,6 @@ ondrop = attribute "ondrop" " ondrop=\""
 -- Result:
 --
 -- > <div ondurationchange="bar">Hello.</div>
---
 ondurationchange :: AttributeValue -> Attribute
 ondurationchange = attribute "ondurationchange" " ondurationchange=\""
 
@@ -1463,7 +1378,6 @@ ondurationchange = attribute "ondurationchange" " ondurationchange=\""
 -- Result:
 --
 -- > <div onemptied="bar">Hello.</div>
---
 onemptied :: AttributeValue -> Attribute
 onemptied = attribute "onemptied" " onemptied=\""
 
@@ -1478,7 +1392,6 @@ onemptied = attribute "onemptied" " onemptied=\""
 -- Result:
 --
 -- > <div onended="bar">Hello.</div>
---
 onended :: AttributeValue -> Attribute
 onended = attribute "onended" " onended=\""
 
@@ -1493,7 +1406,6 @@ onended = attribute "onended" " onended=\""
 -- Result:
 --
 -- > <div onerror="bar">Hello.</div>
---
 onerror :: AttributeValue -> Attribute
 onerror = attribute "onerror" " onerror=\""
 
@@ -1508,7 +1420,6 @@ onerror = attribute "onerror" " onerror=\""
 -- Result:
 --
 -- > <div onfocus="bar">Hello.</div>
---
 onfocus :: AttributeValue -> Attribute
 onfocus = attribute "onfocus" " onfocus=\""
 
@@ -1523,7 +1434,6 @@ onfocus = attribute "onfocus" " onfocus=\""
 -- Result:
 --
 -- > <div onformchange="bar">Hello.</div>
---
 onformchange :: AttributeValue -> Attribute
 onformchange = attribute "onformchange" " onformchange=\""
 
@@ -1538,7 +1448,6 @@ onformchange = attribute "onformchange" " onformchange=\""
 -- Result:
 --
 -- > <div onforminput="bar">Hello.</div>
---
 onforminput :: AttributeValue -> Attribute
 onforminput = attribute "onforminput" " onforminput=\""
 
@@ -1553,7 +1462,6 @@ onforminput = attribute "onforminput" " onforminput=\""
 -- Result:
 --
 -- > <div onhaschange="bar">Hello.</div>
---
 onhaschange :: AttributeValue -> Attribute
 onhaschange = attribute "onhaschange" " onhaschange=\""
 
@@ -1568,7 +1476,6 @@ onhaschange = attribute "onhaschange" " onhaschange=\""
 -- Result:
 --
 -- > <div oninput="bar">Hello.</div>
---
 oninput :: AttributeValue -> Attribute
 oninput = attribute "oninput" " oninput=\""
 
@@ -1583,7 +1490,6 @@ oninput = attribute "oninput" " oninput=\""
 -- Result:
 --
 -- > <div oninvalid="bar">Hello.</div>
---
 oninvalid :: AttributeValue -> Attribute
 oninvalid = attribute "oninvalid" " oninvalid=\""
 
@@ -1598,7 +1504,6 @@ oninvalid = attribute "oninvalid" " oninvalid=\""
 -- Result:
 --
 -- > <div onkeydown="bar">Hello.</div>
---
 onkeydown :: AttributeValue -> Attribute
 onkeydown = attribute "onkeydown" " onkeydown=\""
 
@@ -1613,7 +1518,6 @@ onkeydown = attribute "onkeydown" " onkeydown=\""
 -- Result:
 --
 -- > <div onkeypress="bar">Hello.</div>
---
 onkeypress :: AttributeValue -> Attribute
 onkeypress = attribute "onkeypress" " onkeypress=\""
 
@@ -1628,7 +1532,6 @@ onkeypress = attribute "onkeypress" " onkeypress=\""
 -- Result:
 --
 -- > <div onkeyup="bar">Hello.</div>
---
 onkeyup :: AttributeValue -> Attribute
 onkeyup = attribute "onkeyup" " onkeyup=\""
 
@@ -1643,7 +1546,6 @@ onkeyup = attribute "onkeyup" " onkeyup=\""
 -- Result:
 --
 -- > <div onload="bar">Hello.</div>
---
 onload :: AttributeValue -> Attribute
 onload = attribute "onload" " onload=\""
 
@@ -1658,7 +1560,6 @@ onload = attribute "onload" " onload=\""
 -- Result:
 --
 -- > <div onloadeddata="bar">Hello.</div>
---
 onloadeddata :: AttributeValue -> Attribute
 onloadeddata = attribute "onloadeddata" " onloadeddata=\""
 
@@ -1673,7 +1574,6 @@ onloadeddata = attribute "onloadeddata" " onloadeddata=\""
 -- Result:
 --
 -- > <div onloadedmetadata="bar">Hello.</div>
---
 onloadedmetadata :: AttributeValue -> Attribute
 onloadedmetadata = attribute "onloadedmetadata" " onloadedmetadata=\""
 
@@ -1688,7 +1588,6 @@ onloadedmetadata = attribute "onloadedmetadata" " onloadedmetadata=\""
 -- Result:
 --
 -- > <div onloadstart="bar">Hello.</div>
---
 onloadstart :: AttributeValue -> Attribute
 onloadstart = attribute "onloadstart" " onloadstart=\""
 
@@ -1703,7 +1602,6 @@ onloadstart = attribute "onloadstart" " onloadstart=\""
 -- Result:
 --
 -- > <div onmessage="bar">Hello.</div>
---
 onmessage :: AttributeValue -> Attribute
 onmessage = attribute "onmessage" " onmessage=\""
 
@@ -1718,7 +1616,6 @@ onmessage = attribute "onmessage" " onmessage=\""
 -- Result:
 --
 -- > <div onmousedown="bar">Hello.</div>
---
 onmousedown :: AttributeValue -> Attribute
 onmousedown = attribute "onmousedown" " onmousedown=\""
 
@@ -1733,7 +1630,6 @@ onmousedown = attribute "onmousedown" " onmousedown=\""
 -- Result:
 --
 -- > <div onmousemove="bar">Hello.</div>
---
 onmousemove :: AttributeValue -> Attribute
 onmousemove = attribute "onmousemove" " onmousemove=\""
 
@@ -1748,7 +1644,6 @@ onmousemove = attribute "onmousemove" " onmousemove=\""
 -- Result:
 --
 -- > <div onmouseout="bar">Hello.</div>
---
 onmouseout :: AttributeValue -> Attribute
 onmouseout = attribute "onmouseout" " onmouseout=\""
 
@@ -1763,7 +1658,6 @@ onmouseout = attribute "onmouseout" " onmouseout=\""
 -- Result:
 --
 -- > <div onmouseover="bar">Hello.</div>
---
 onmouseover :: AttributeValue -> Attribute
 onmouseover = attribute "onmouseover" " onmouseover=\""
 
@@ -1778,7 +1672,6 @@ onmouseover = attribute "onmouseover" " onmouseover=\""
 -- Result:
 --
 -- > <div onmouseup="bar">Hello.</div>
---
 onmouseup :: AttributeValue -> Attribute
 onmouseup = attribute "onmouseup" " onmouseup=\""
 
@@ -1793,7 +1686,6 @@ onmouseup = attribute "onmouseup" " onmouseup=\""
 -- Result:
 --
 -- > <div onmousewheel="bar">Hello.</div>
---
 onmousewheel :: AttributeValue -> Attribute
 onmousewheel = attribute "onmousewheel" " onmousewheel=\""
 
@@ -1808,7 +1700,6 @@ onmousewheel = attribute "onmousewheel" " onmousewheel=\""
 -- Result:
 --
 -- > <div ononline="bar">Hello.</div>
---
 ononline :: AttributeValue -> Attribute
 ononline = attribute "ononline" " ononline=\""
 
@@ -1823,7 +1714,6 @@ ononline = attribute "ononline" " ononline=\""
 -- Result:
 --
 -- > <div onpagehide="bar">Hello.</div>
---
 onpagehide :: AttributeValue -> Attribute
 onpagehide = attribute "onpagehide" " onpagehide=\""
 
@@ -1838,7 +1728,6 @@ onpagehide = attribute "onpagehide" " onpagehide=\""
 -- Result:
 --
 -- > <div onpageshow="bar">Hello.</div>
---
 onpageshow :: AttributeValue -> Attribute
 onpageshow = attribute "onpageshow" " onpageshow=\""
 
@@ -1853,7 +1742,6 @@ onpageshow = attribute "onpageshow" " onpageshow=\""
 -- Result:
 --
 -- > <div onpause="bar">Hello.</div>
---
 onpause :: AttributeValue -> Attribute
 onpause = attribute "onpause" " onpause=\""
 
@@ -1868,7 +1756,6 @@ onpause = attribute "onpause" " onpause=\""
 -- Result:
 --
 -- > <div onplay="bar">Hello.</div>
---
 onplay :: AttributeValue -> Attribute
 onplay = attribute "onplay" " onplay=\""
 
@@ -1883,7 +1770,6 @@ onplay = attribute "onplay" " onplay=\""
 -- Result:
 --
 -- > <div onplaying="bar">Hello.</div>
---
 onplaying :: AttributeValue -> Attribute
 onplaying = attribute "onplaying" " onplaying=\""
 
@@ -1898,7 +1784,6 @@ onplaying = attribute "onplaying" " onplaying=\""
 -- Result:
 --
 -- > <div onprogress="bar">Hello.</div>
---
 onprogress :: AttributeValue -> Attribute
 onprogress = attribute "onprogress" " onprogress=\""
 
@@ -1913,7 +1798,6 @@ onprogress = attribute "onprogress" " onprogress=\""
 -- Result:
 --
 -- > <div onpropstate="bar">Hello.</div>
---
 onpropstate :: AttributeValue -> Attribute
 onpropstate = attribute "onpropstate" " onpropstate=\""
 
@@ -1928,7 +1812,6 @@ onpropstate = attribute "onpropstate" " onpropstate=\""
 -- Result:
 --
 -- > <div onratechange="bar">Hello.</div>
---
 onratechange :: AttributeValue -> Attribute
 onratechange = attribute "onratechange" " onratechange=\""
 
@@ -1943,7 +1826,6 @@ onratechange = attribute "onratechange" " onratechange=\""
 -- Result:
 --
 -- > <div onreadystatechange="bar">Hello.</div>
---
 onreadystatechange :: AttributeValue -> Attribute
 onreadystatechange = attribute "onreadystatechange" " onreadystatechange=\""
 
@@ -1958,7 +1840,6 @@ onreadystatechange = attribute "onreadystatechange" " onreadystatechange=\""
 -- Result:
 --
 -- > <div onredo="bar">Hello.</div>
---
 onredo :: AttributeValue -> Attribute
 onredo = attribute "onredo" " onredo=\""
 
@@ -1973,7 +1854,6 @@ onredo = attribute "onredo" " onredo=\""
 -- Result:
 --
 -- > <div onresize="bar">Hello.</div>
---
 onresize :: AttributeValue -> Attribute
 onresize = attribute "onresize" " onresize=\""
 
@@ -1988,7 +1868,6 @@ onresize = attribute "onresize" " onresize=\""
 -- Result:
 --
 -- > <div onscroll="bar">Hello.</div>
---
 onscroll :: AttributeValue -> Attribute
 onscroll = attribute "onscroll" " onscroll=\""
 
@@ -2003,7 +1882,6 @@ onscroll = attribute "onscroll" " onscroll=\""
 -- Result:
 --
 -- > <div onseeked="bar">Hello.</div>
---
 onseeked :: AttributeValue -> Attribute
 onseeked = attribute "onseeked" " onseeked=\""
 
@@ -2018,7 +1896,6 @@ onseeked = attribute "onseeked" " onseeked=\""
 -- Result:
 --
 -- > <div onseeking="bar">Hello.</div>
---
 onseeking :: AttributeValue -> Attribute
 onseeking = attribute "onseeking" " onseeking=\""
 
@@ -2033,7 +1910,6 @@ onseeking = attribute "onseeking" " onseeking=\""
 -- Result:
 --
 -- > <div onselect="bar">Hello.</div>
---
 onselect :: AttributeValue -> Attribute
 onselect = attribute "onselect" " onselect=\""
 
@@ -2048,7 +1924,6 @@ onselect = attribute "onselect" " onselect=\""
 -- Result:
 --
 -- > <div onstalled="bar">Hello.</div>
---
 onstalled :: AttributeValue -> Attribute
 onstalled = attribute "onstalled" " onstalled=\""
 
@@ -2063,7 +1938,6 @@ onstalled = attribute "onstalled" " onstalled=\""
 -- Result:
 --
 -- > <div onstorage="bar">Hello.</div>
---
 onstorage :: AttributeValue -> Attribute
 onstorage = attribute "onstorage" " onstorage=\""
 
@@ -2078,7 +1952,6 @@ onstorage = attribute "onstorage" " onstorage=\""
 -- Result:
 --
 -- > <div onsubmit="bar">Hello.</div>
---
 onsubmit :: AttributeValue -> Attribute
 onsubmit = attribute "onsubmit" " onsubmit=\""
 
@@ -2093,7 +1966,6 @@ onsubmit = attribute "onsubmit" " onsubmit=\""
 -- Result:
 --
 -- > <div onsuspend="bar">Hello.</div>
---
 onsuspend :: AttributeValue -> Attribute
 onsuspend = attribute "onsuspend" " onsuspend=\""
 
@@ -2108,7 +1980,6 @@ onsuspend = attribute "onsuspend" " onsuspend=\""
 -- Result:
 --
 -- > <div ontimeupdate="bar">Hello.</div>
---
 ontimeupdate :: AttributeValue -> Attribute
 ontimeupdate = attribute "ontimeupdate" " ontimeupdate=\""
 
@@ -2123,7 +1994,6 @@ ontimeupdate = attribute "ontimeupdate" " ontimeupdate=\""
 -- Result:
 --
 -- > <div onundo="bar">Hello.</div>
---
 onundo :: AttributeValue -> Attribute
 onundo = attribute "onundo" " onundo=\""
 
@@ -2138,7 +2008,6 @@ onundo = attribute "onundo" " onundo=\""
 -- Result:
 --
 -- > <div onunload="bar">Hello.</div>
---
 onunload :: AttributeValue -> Attribute
 onunload = attribute "onunload" " onunload=\""
 
@@ -2153,7 +2022,6 @@ onunload = attribute "onunload" " onunload=\""
 -- Result:
 --
 -- > <div onvolumechange="bar">Hello.</div>
---
 onvolumechange :: AttributeValue -> Attribute
 onvolumechange = attribute "onvolumechange" " onvolumechange=\""
 
@@ -2168,7 +2036,6 @@ onvolumechange = attribute "onvolumechange" " onvolumechange=\""
 -- Result:
 --
 -- > <div onwaiting="bar">Hello.</div>
---
 onwaiting :: AttributeValue -> Attribute
 onwaiting = attribute "onwaiting" " onwaiting=\""
 
@@ -2183,7 +2050,6 @@ onwaiting = attribute "onwaiting" " onwaiting=\""
 -- Result:
 --
 -- > <div open="bar">Hello.</div>
---
 open :: AttributeValue -> Attribute
 open = attribute "open" " open=\""
 
@@ -2198,7 +2064,6 @@ open = attribute "open" " open=\""
 -- Result:
 --
 -- > <div optimum="bar">Hello.</div>
---
 optimum :: AttributeValue -> Attribute
 optimum = attribute "optimum" " optimum=\""
 
@@ -2213,7 +2078,6 @@ optimum = attribute "optimum" " optimum=\""
 -- Result:
 --
 -- > <div pattern="bar">Hello.</div>
---
 pattern_ :: AttributeValue -> Attribute
 pattern_ = attribute "pattern" " pattern=\""
 
@@ -2228,7 +2092,6 @@ pattern_ = attribute "pattern" " pattern=\""
 -- Result:
 --
 -- > <div ping="bar">Hello.</div>
---
 ping :: AttributeValue -> Attribute
 ping = attribute "ping" " ping=\""
 
@@ -2243,7 +2106,6 @@ ping = attribute "ping" " ping=\""
 -- Result:
 --
 -- > <div placeholder="bar">Hello.</div>
---
 placeholder :: AttributeValue -> Attribute
 placeholder = attribute "placeholder" " placeholder=\""
 
@@ -2258,7 +2120,6 @@ placeholder = attribute "placeholder" " placeholder=\""
 -- Result:
 --
 -- > <div poster="bar">Hello.</div>
---
 poster :: AttributeValue -> Attribute
 poster = attribute "poster" " poster=\""
 
@@ -2273,7 +2134,6 @@ poster = attribute "poster" " poster=\""
 -- Result:
 --
 -- > <div preload="bar">Hello.</div>
---
 preload :: AttributeValue -> Attribute
 preload = attribute "preload" " preload=\""
 
@@ -2288,7 +2148,6 @@ preload = attribute "preload" " preload=\""
 -- Result:
 --
 -- > <div property="bar">Hello.</div>
---
 property :: AttributeValue -> Attribute
 property = attribute "property" " property=\""
 
@@ -2303,7 +2162,6 @@ property = attribute "property" " property=\""
 -- Result:
 --
 -- > <div pubdate="bar">Hello.</div>
---
 pubdate :: AttributeValue -> Attribute
 pubdate = attribute "pubdate" " pubdate=\""
 
@@ -2318,7 +2176,6 @@ pubdate = attribute "pubdate" " pubdate=\""
 -- Result:
 --
 -- > <div radiogroup="bar">Hello.</div>
---
 radiogroup :: AttributeValue -> Attribute
 radiogroup = attribute "radiogroup" " radiogroup=\""
 
@@ -2333,7 +2190,6 @@ radiogroup = attribute "radiogroup" " radiogroup=\""
 -- Result:
 --
 -- > <div readonly="bar">Hello.</div>
---
 readonly :: AttributeValue -> Attribute
 readonly = attribute "readonly" " readonly=\""
 
@@ -2348,7 +2204,6 @@ readonly = attribute "readonly" " readonly=\""
 -- Result:
 --
 -- > <div rel="bar">Hello.</div>
---
 rel :: AttributeValue -> Attribute
 rel = attribute "rel" " rel=\""
 
@@ -2363,7 +2218,6 @@ rel = attribute "rel" " rel=\""
 -- Result:
 --
 -- > <div required="bar">Hello.</div>
---
 required :: AttributeValue -> Attribute
 required = attribute "required" " required=\""
 
@@ -2378,7 +2232,6 @@ required = attribute "required" " required=\""
 -- Result:
 --
 -- > <div reversed="bar">Hello.</div>
---
 reversed :: AttributeValue -> Attribute
 reversed = attribute "reversed" " reversed=\""
 
@@ -2393,7 +2246,6 @@ reversed = attribute "reversed" " reversed=\""
 -- Result:
 --
 -- > <div role="bar">Hello.</div>
---
 role :: AttributeValue -> Attribute
 role = attribute "role" " role=\""
 
@@ -2408,7 +2260,6 @@ role = attribute "role" " role=\""
 -- Result:
 --
 -- > <div rows="bar">Hello.</div>
---
 rows :: AttributeValue -> Attribute
 rows = attribute "rows" " rows=\""
 
@@ -2423,7 +2274,6 @@ rows = attribute "rows" " rows=\""
 -- Result:
 --
 -- > <div rowspan="bar">Hello.</div>
---
 rowspan :: AttributeValue -> Attribute
 rowspan = attribute "rowspan" " rowspan=\""
 
@@ -2438,7 +2288,6 @@ rowspan = attribute "rowspan" " rowspan=\""
 -- Result:
 --
 -- > <div sandbox="bar">Hello.</div>
---
 sandbox :: AttributeValue -> Attribute
 sandbox = attribute "sandbox" " sandbox=\""
 
@@ -2453,7 +2302,6 @@ sandbox = attribute "sandbox" " sandbox=\""
 -- Result:
 --
 -- > <div scope="bar">Hello.</div>
---
 scope :: AttributeValue -> Attribute
 scope = attribute "scope" " scope=\""
 
@@ -2468,7 +2316,6 @@ scope = attribute "scope" " scope=\""
 -- Result:
 --
 -- > <div scoped="bar">Hello.</div>
---
 scoped :: AttributeValue -> Attribute
 scoped = attribute "scoped" " scoped=\""
 
@@ -2483,7 +2330,6 @@ scoped = attribute "scoped" " scoped=\""
 -- Result:
 --
 -- > <div seamless="bar">Hello.</div>
---
 seamless :: AttributeValue -> Attribute
 seamless = attribute "seamless" " seamless=\""
 
@@ -2498,7 +2344,6 @@ seamless = attribute "seamless" " seamless=\""
 -- Result:
 --
 -- > <div selected="bar">Hello.</div>
---
 selected :: AttributeValue -> Attribute
 selected = attribute "selected" " selected=\""
 
@@ -2513,7 +2358,6 @@ selected = attribute "selected" " selected=\""
 -- Result:
 --
 -- > <div shape="bar">Hello.</div>
---
 shape :: AttributeValue -> Attribute
 shape = attribute "shape" " shape=\""
 
@@ -2528,7 +2372,6 @@ shape = attribute "shape" " shape=\""
 -- Result:
 --
 -- > <div size="bar">Hello.</div>
---
 size :: AttributeValue -> Attribute
 size = attribute "size" " size=\""
 
@@ -2543,7 +2386,6 @@ size = attribute "size" " size=\""
 -- Result:
 --
 -- > <div sizes="bar">Hello.</div>
---
 sizes :: AttributeValue -> Attribute
 sizes = attribute "sizes" " sizes=\""
 
@@ -2558,7 +2400,6 @@ sizes = attribute "sizes" " sizes=\""
 -- Result:
 --
 -- > <div span="bar">Hello.</div>
---
 span :: AttributeValue -> Attribute
 span = attribute "span" " span=\""
 
@@ -2573,7 +2414,6 @@ span = attribute "span" " span=\""
 -- Result:
 --
 -- > <div spellcheck="bar">Hello.</div>
---
 spellcheck :: AttributeValue -> Attribute
 spellcheck = attribute "spellcheck" " spellcheck=\""
 
@@ -2588,7 +2428,6 @@ spellcheck = attribute "spellcheck" " spellcheck=\""
 -- Result:
 --
 -- > <div src="bar">Hello.</div>
---
 src :: AttributeValue -> Attribute
 src = attribute "src" " src=\""
 
@@ -2603,7 +2442,6 @@ src = attribute "src" " src=\""
 -- Result:
 --
 -- > <div srcdoc="bar">Hello.</div>
---
 srcdoc :: AttributeValue -> Attribute
 srcdoc = attribute "srcdoc" " srcdoc=\""
 
@@ -2618,7 +2456,6 @@ srcdoc = attribute "srcdoc" " srcdoc=\""
 -- Result:
 --
 -- > <div start="bar">Hello.</div>
---
 start :: AttributeValue -> Attribute
 start = attribute "start" " start=\""
 
@@ -2633,7 +2470,6 @@ start = attribute "start" " start=\""
 -- Result:
 --
 -- > <div step="bar">Hello.</div>
---
 step :: AttributeValue -> Attribute
 step = attribute "step" " step=\""
 
@@ -2648,7 +2484,6 @@ step = attribute "step" " step=\""
 -- Result:
 --
 -- > <div style="bar">Hello.</div>
---
 style :: AttributeValue -> Attribute
 style = attribute "style" " style=\""
 
@@ -2663,7 +2498,6 @@ style = attribute "style" " style=\""
 -- Result:
 --
 -- > <div subject="bar">Hello.</div>
---
 subject :: AttributeValue -> Attribute
 subject = attribute "subject" " subject=\""
 
@@ -2678,7 +2512,6 @@ subject = attribute "subject" " subject=\""
 -- Result:
 --
 -- > <div summary="bar">Hello.</div>
---
 summary :: AttributeValue -> Attribute
 summary = attribute "summary" " summary=\""
 
@@ -2693,7 +2526,6 @@ summary = attribute "summary" " summary=\""
 -- Result:
 --
 -- > <div tabindex="bar">Hello.</div>
---
 tabindex :: AttributeValue -> Attribute
 tabindex = attribute "tabindex" " tabindex=\""
 
@@ -2708,7 +2540,6 @@ tabindex = attribute "tabindex" " tabindex=\""
 -- Result:
 --
 -- > <div target="bar">Hello.</div>
---
 target :: AttributeValue -> Attribute
 target = attribute "target" " target=\""
 
@@ -2723,7 +2554,6 @@ target = attribute "target" " target=\""
 -- Result:
 --
 -- > <div title="bar">Hello.</div>
---
 title :: AttributeValue -> Attribute
 title = attribute "title" " title=\""
 
@@ -2738,7 +2568,6 @@ title = attribute "title" " title=\""
 -- Result:
 --
 -- > <div type="bar">Hello.</div>
---
 type_ :: AttributeValue -> Attribute
 type_ = attribute "type" " type=\""
 
@@ -2753,7 +2582,6 @@ type_ = attribute "type" " type=\""
 -- Result:
 --
 -- > <div usemap="bar">Hello.</div>
---
 usemap :: AttributeValue -> Attribute
 usemap = attribute "usemap" " usemap=\""
 
@@ -2768,7 +2596,6 @@ usemap = attribute "usemap" " usemap=\""
 -- Result:
 --
 -- > <div value="bar">Hello.</div>
---
 value :: AttributeValue -> Attribute
 value = attribute "value" " value=\""
 
@@ -2783,7 +2610,6 @@ value = attribute "value" " value=\""
 -- Result:
 --
 -- > <div width="bar">Hello.</div>
---
 width :: AttributeValue -> Attribute
 width = attribute "width" " width=\""
 
@@ -2798,7 +2624,6 @@ width = attribute "width" " width=\""
 -- Result:
 --
 -- > <div wrap="bar">Hello.</div>
---
 wrap :: AttributeValue -> Attribute
 wrap = attribute "wrap" " wrap=\""
 
@@ -2813,6 +2638,5 @@ wrap = attribute "wrap" " wrap=\""
 -- Result:
 --
 -- > <div xmlns="bar">Hello.</div>
---
 xmlns :: AttributeValue -> Attribute
 xmlns = attribute "xmlns" " xmlns=\""

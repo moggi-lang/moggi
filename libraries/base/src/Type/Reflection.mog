@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- |
--- Module      :  Type.Reflection
+
+-- | Module      :  Type.Reflection
 -- Stability   :  stable
 -- Portability :  non-portable (requires GADTs and compiler support)
 --
@@ -13,13 +13,11 @@ module Type.Reflection
   , typeRep
   , withTypeable
   , typeOf
-
     -- * Propositional equality
   , (:~:)(Refl)
   , (:~~:)(HRefl)
-
     -- * Type representations
-  ,    TypeRep
+  , TypeRep
   , pattern TypeRep
   , typeRepTyCon
   , rnfTypeRep
@@ -27,26 +25,22 @@ module Type.Reflection
   , decTypeRep
   , typeRepKind
   , splitApps
-
     -- ** Quantified
   , SomeTypeRep(..)
   , someTypeRep
   , someTypeRepTyCon
   , rnfSomeTypeRep
-
     -- * Pattern synonyms
   , pattern App
   , pattern Con
   , pattern Con'
   , pattern Fun
-
     -- * Type constructors
   , TyCon
   , tyConPackage
   , tyConModule
   , tyConName
   , rnfTyCon
-
     -- * Module names
   , Module
   , moduleName
@@ -55,12 +49,35 @@ module Type.Reflection
   ) where
 
 import Moggi.Internal.Type.Reflection
-  ( Typeable, typeRep, withTypeable, typeOf
-  , (:~:)(Refl), (:~~:)(HRefl)
-  , TypeRep, pattern TypeRep, typeRepTyCon, rnfTypeRep, eqTypeRep, decTypeRep
-  , typeRepKind, splitApps
-  , SomeTypeRep(..), someTypeRep, someTypeRepTyCon, rnfSomeTypeRep
-  , pattern App, pattern Con, pattern Con', pattern Fun
-  , TyCon, tyConPackage, tyConModule, tyConName, rnfTyCon
-  , Module, moduleName, modulePackage, rnfModule
+  ( Typeable
+  , typeRep
+  , withTypeable
+  , typeOf
+  , (:~:)(Refl)
+  , (:~~:)(HRefl)
+  , TypeRep
+  , pattern TypeRep
+  , typeRepTyCon
+  , rnfTypeRep
+  , eqTypeRep
+  , decTypeRep
+  , typeRepKind
+  , splitApps
+  , SomeTypeRep(..)
+  , someTypeRep
+  , someTypeRepTyCon
+  , rnfSomeTypeRep
+  , pattern App
+  , pattern Con
+  , pattern Con'
+  , pattern Fun
+  , TyCon
+  , tyConPackage
+  , tyConModule
+  , tyConName
+  , rnfTyCon
+  , Module
+  , moduleName
+  , modulePackage
+  , rnfModule
   )

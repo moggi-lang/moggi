@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Conversions from the primitives of "Data.ByteString.Builder.Prim" to the
 -- 'Write' type, as upstream: a write is the encoded chunk together with the
 -- size the primitive declares.
@@ -8,7 +9,7 @@ module Blaze.ByteString.Builder.Compat.Write
   , writePrimBounded
   ) where
 
-import Blaze.ByteString.Builder.Internal (Write (..), writeByteString)
+import Blaze.ByteString.Builder.Internal (Write(..), writeByteString)
 import Data.ByteString.Builder.Internal qualified as BI
 import Data.ByteString.Builder.Prim (primFixed)
 import Data.ByteString.Builder.Prim.Internal (BoundedPrim, FixedPrim, runB, sizeBound)

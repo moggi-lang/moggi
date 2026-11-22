@@ -1,7 +1,12 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Data.Function
   ( -- * "Prelude" re-exports
-    id, const, (.), flip, ($)
+    id
+  , const
+  , (.)
+  , flip
+  , ($)
   , asTypeOf
     -- * Other combinators
   , (&)
@@ -23,7 +28,6 @@ infixr 0 $
 ----------------------------------------------
 -- The function type
 ----------------------------------------------
-
 -- | @'asTypeOf' x y@ returns @x@. The second argument is only there for its
 -- type: @'asTypeOf' x y@ pins @y@ to the type of @x@, which is how a value is
 -- attached to an expected type in an expression that has nothing else to say
@@ -86,7 +90,7 @@ const x _ = x
 -- 30
 -- Make sure it has TWO args only on the left, so that it inlines
 -- when applied to two functions, even if there is no final argument
-(.)    :: (b -> c) -> (a -> b) -> a -> c
+(.) :: (b -> c) -> (a -> b) -> a -> c
 (.) f g = \x -> f (g x)
 
 -- | @'flip' f@ takes its (first) two arguments in the reverse order of @f@.
@@ -267,5 +271,5 @@ until p f x = case p x of
 --
 -- * @applyWhen 'False' f = 'id'@
 applyWhen :: Bool -> (a -> a) -> a -> a
-applyWhen True  f x = f x
+applyWhen True f x = f x
 applyWhen False _ x = x

@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Threads and the communication abstractions built on MVars.
 --
 -- Every host gives every Moggi thread a real OS thread: the JVM uses
@@ -14,70 +15,64 @@
 -- thread could be interrupted. The masked and capability names are exact,
 -- because this machine either has no asynchronous exceptions to mask or
 -- models every thread as an OS thread.
-module Control.Concurrent (
-        -- * Concurrent Moggi
-
-        -- $conc_intro
-
-        -- * Basic concurrency operations
-
-        ThreadId,
-        myThreadId,
-
-        forkIO,
-        forkFinally,
-        forkIOWithUnmask,
-        killThread,
-        throwTo,
-
-        -- ** Threads with affinity
-        forkOn,
-        forkOnWithUnmask,
-        getNumCapabilities,
-        setNumCapabilities,
-        threadCapability,
-
-        -- * Scheduling
-
-        -- $conc_scheduling
-        yield,
-
-        -- ** Blocking
-
-        -- $blocking
-
-        -- ** Waiting
-        threadDelay,
-        threadWaitRead,
-        threadWaitWrite,
-        threadWaitReadSTM,
-        threadWaitWriteSTM,
-
-        -- * Communication abstractions
-
-        module Control.Concurrent.MVar,
-        module Control.Concurrent.Chan,
-        module Control.Concurrent.QSem,
-        module Control.Concurrent.QSemN,
-
-        -- * Bound Threads
-        -- $boundthreads
-        rtsSupportsBoundThreads,
-        forkOS,
-        forkOSWithUnmask,
-        isCurrentThreadBound,
-        runInBoundThread,
-        runInUnboundThread,
-
-        -- * Weak references to ThreadIds
-        mkWeakThreadId,
-) where
+module Control.Concurrent
+  ( -- * Concurrent Moggi
+    -- $conc_intro
+    -- * Basic concurrency operations
+    ThreadId
+  , myThreadId
+  , forkIO
+  , forkFinally
+  , forkIOWithUnmask
+  , killThread
+  , throwTo
+    -- ** Threads with affinity
+  , forkOn
+  , forkOnWithUnmask
+  , getNumCapabilities
+  , setNumCapabilities
+  , threadCapability
+    -- * Scheduling
+    -- $conc_scheduling
+  , yield
+    -- ** Blocking
+    -- $blocking
+    -- ** Waiting
+  , threadDelay
+  , threadWaitRead
+  , threadWaitWrite
+  , threadWaitReadSTM
+  , threadWaitWriteSTM
+    -- * Communication abstractions
+  , module Control.Concurrent.MVar
+  , module Control.Concurrent.Chan
+  , module Control.Concurrent.QSem
+  , module Control.Concurrent.QSemN
+    -- * Bound Threads
+    -- $boundthreads
+  , rtsSupportsBoundThreads
+  , forkOS
+  , forkOSWithUnmask
+  , isCurrentThreadBound
+  , runInBoundThread
+  , runInUnboundThread
+    -- * Weak references to ThreadIds
+  , mkWeakThreadId
+  ) where
 
 import Control.Applicative
 import Control.Concurrent.Chan
 import Control.Concurrent.QSem
 import Control.Concurrent.QSemN
-import Control.Exception (AsyncException(..), ErrorCall(..), Exception, SomeException, throwIO, throwTo, try)
+import Control.Exception
+  ( AsyncException(..)
+  , ErrorCall(..)
+  , Exception
+  , SomeException
+  , throwIO
+  , throwTo
+  , try
+  )
 import Control.Monad
 import Data.Either
 import Data.Function (id)
@@ -225,8 +220,7 @@ mkWeakThreadId tid = mkWeak tid tid Nothing
 -- | Fail explicitly for a name whose @base@ semantics need machinery this
 -- runtime does not have.
 unsupported :: String -> IO a
-unsupported name =
-  throwIO (ErrorCall (name <> " is not supported by the Moggi runtime"))
+unsupported name = throwIO (ErrorCall (name <> " is not supported by the Moggi runtime"))
 
 -- $conc_intro
 --

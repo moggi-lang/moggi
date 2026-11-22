@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Exception context: a list of 'SomeExceptionAnnotation' values attached to
 -- an exception. The constructor is public, as in @base@.
 module Control.Exception.Context
@@ -25,8 +26,7 @@ emptyExceptionContext = ExceptionContext []
 
 -- | Add one annotation to a context.
 addExceptionAnnotation :: ExceptionAnnotation a => a -> ExceptionContext -> ExceptionContext
-addExceptionAnnotation a (ExceptionContext xs) =
-  ExceptionContext (SomeExceptionAnnotation a : xs)
+addExceptionAnnotation a (ExceptionContext xs) = ExceptionContext (SomeExceptionAnnotation a : xs)
 
 -- | Retrieve the annotations of one type from a context.
 getExceptionAnnotations :: forall t. ExceptionAnnotation t => ExceptionContext -> [t]
@@ -35,10 +35,9 @@ getExceptionAnnotations (ExceptionContext xs) = getAnnotations xs
 getAnnotations :: forall t. ExceptionAnnotation t => [SomeExceptionAnnotation] -> [t]
 getAnnotations xs = case xs of
   [] -> []
-  SomeExceptionAnnotation a : rest ->
-    case (fromDynamic (toDyn a) :: Maybe t) of
-      Just found -> found : getAnnotations rest
-      Nothing -> getAnnotations rest
+  SomeExceptionAnnotation a : rest -> case (fromDynamic (toDyn a)) :: Maybe t of
+    Just found -> found : getAnnotations rest
+    Nothing -> getAnnotations rest
 
 -- | Every annotation in a context, with its type erased.
 getAllExceptionAnnotations :: ExceptionContext -> [SomeExceptionAnnotation]
@@ -51,8 +50,7 @@ displayExceptionContext (ExceptionContext xs) = displayAnnotations xs
 displayAnnotations :: [SomeExceptionAnnotation] -> String
 displayAnnotations xs = case xs of
   [] -> ""
-  SomeExceptionAnnotation a : rest ->
-    displayExceptionAnnotation a <> displayRest rest
+  SomeExceptionAnnotation a : rest -> displayExceptionAnnotation a <> displayRest rest
 
 displayRest :: [SomeExceptionAnnotation] -> String
 displayRest xs = case xs of

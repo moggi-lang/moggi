@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | BlazeMarkup: markup combinators embedded in the language, with the value
 -- classes that let one function convert many types.
 --
@@ -11,31 +12,25 @@ module Text.Blaze
   , Tag
   , Attribute
   , AttributeValue
-
   , dataAttribute
   , customAttribute
-
-  , ToMarkup (..)
+  , ToMarkup(..)
   , text
   , preEscapedText
   , string
   , preEscapedString
   , unsafeByteString
-
   , textComment
   , stringComment
   , unsafeByteStringComment
-
   , textTag
   , stringTag
-
-  , ToValue (..)
+  , ToValue(..)
   , textValue
   , preEscapedTextValue
   , stringValue
   , preEscapedStringValue
   , unsafeByteStringValue
-
   , (!)
   , (!?)
   , contents
@@ -48,7 +43,7 @@ import Data.Double (Double)
 import Data.Int (Int, Int32, Int64)
 import Data.Integer (Integer)
 import Data.List ((:), foldr, map)
-import Data.List.NonEmpty (NonEmpty ((:|)))
+import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.Monoid (mconcat)
 import Data.String (String, singleton)
 import Data.String qualified as S
@@ -57,7 +52,7 @@ import Text.Blaze.Internal
   ( Attribute
   , AttributeValue
   , Markup
-  , MarkupM (..)
+  , MarkupM(..)
   , Tag
   , contents
   , customAttribute

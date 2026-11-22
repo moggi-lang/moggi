@@ -1,6 +1,5 @@
 -- `allowOmittedFields`: whether a record decode may omit an absent optional field.
 -- The generic decoder lives in `Types.mog` for the same reason the encoders do.
-
 module AllowFields (allowFieldsSuite) where
 
 import Data.JSON
@@ -16,7 +15,7 @@ noAllowOpts = allowOmittedFields False defaultOptions
 showConfig :: Either String Config -> String
 showConfig e = case e of
   Left _ -> "bad"
-  Right c -> case c == (Config 8080 Nothing) of
+  Right c -> case c == Config 8080 Nothing of
     True -> "ok"
     False -> "bad"
 

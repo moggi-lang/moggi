@@ -1,15 +1,18 @@
+module Main (main) where
+
+import Data.List (sortBy)
+import Data.Ord (Down(Down), comparing, getDown)
+
 -- Data.Ord: `compare` plus the class defaults `< <= > >= min max`, on a derived
 -- instance and on a hand-written one. The defaults dispatch through the instance
 -- dictionary, so both instances must answer the same way.
 -- `Down`, the reversed-ordering wrapper, and `comparing` are exercised on the
 -- same values at the end.
+data Pair a b = Pair a b
+  deriving (Eq, Ord, Show)
 
-import Data.List (sortBy)
-import Data.Ord (Down(Down), comparing, getDown)
-
-data Pair a b = Pair a b deriving (Eq, Ord, Show)
-
-data Ver = Ver Int Int deriving (Show)
+data Ver = Ver Int Int
+  deriving (Show)
 
 instance Eq Ver where
   (==) (Ver a b) (Ver c d) = a == c && b == d
@@ -22,10 +25,7 @@ instance Ord Ver where
 
 main :: IO ()
 main = do
-  let p = Pair 1 2
-      q = Pair 3 4
-      v = Ver 1 2
-      w = Ver 3 4
+  let p = Pair 1 2; q = Pair 3 4; v = Ver 1 2; w = Ver 3 4
   putStrLn (show (p < q))
   putStrLn (show (p <= q))
   putStrLn (show (q > p))
@@ -50,5 +50,5 @@ main = do
   putStrLn (show (minBound :: Down Int))
   putStrLn (show (maxBound :: Down Int))
   putStrLn (show (Down True > Down False))
-  putStrLn (show (succ (Down 5 :: Down Int)))
+  putStrLn (show (succ ((Down 5) :: Down Int)))
   putStrLn (show (fromEnum (Down True)))

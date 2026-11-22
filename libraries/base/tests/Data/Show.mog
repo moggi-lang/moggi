@@ -1,7 +1,4 @@
--- `Show`: the constructor form a value renders as, and the parentheses a nested
--- value needs. A nullary constructor never takes parentheses, a prefix or infix
--- constructor is rendered at its own precedence, a record as `C {f = v}` with
--- fields at precedence 0.
+module Main (main) where
 
 import Data.Char
 import Data.String qualified as S
@@ -13,25 +10,29 @@ import Data.Semigroup
 import Data.Tuple
 import Data.Word (Word8)
 
-data Ack = Ack
-  deriving Show
-
-data Leaf = Leaf Int
-  deriving Show
-
-data Tree = Tip | Node Tree Tree
-  deriving Show
-
-data Pair a = a :*: a
-  deriving Show
-
 infixr 6 :*:
 
+-- `Show`: the constructor form a value renders as, and the parentheses a nested
+-- value needs. A nullary constructor never takes parentheses, a prefix or infix
+-- constructor is rendered at its own precedence, a record as `C {f = v}` with
+-- fields at precedence 0.
+data Ack = Ack
+  deriving (Show)
+
+data Leaf = Leaf Int
+  deriving (Show)
+
+data Tree = Tip | Node Tree Tree
+  deriving (Show)
+
+data Pair a = a :*: a
+  deriving (Show)
+
 data Point = Point { px :: Int, py :: Bool }
-  deriving Show
+  deriving (Show)
 
 data Wrapped = Wrapped { unwrapped :: Leaf }
-  deriving Show
+  deriving (Show)
 
 nested :: Maybe (Maybe Int)
 nested = Just Nothing
@@ -52,7 +53,7 @@ main = do
   putStrLn (show (Just (Node Tip Tip)))
   putStrLn (show (1 :*: 2))
   putStrLn (show (Just (1 :*: 2)))
-  putStrLn (show ((1 :*: 2) :*: (3 :*: 4)))
+  putStrLn (show ((1 :*: 2) :*: 3 :*: 4))
   putStrLn (show (Point 1 True))
   putStrLn (show (Just (Point 1 True)))
   putStrLn (show (Wrapped (Leaf 3)))
@@ -77,7 +78,6 @@ main = do
   putStrLn (show (compare leftVal rightVal))
   putStrLn (show (leftVal <> rightVal))
   putStrLn (show (rightVal <> Right 3))
-
   -- `show` for Char and String: printable characters stand for themselves,
   -- control characters use the named or `NUL`..`US` escapes, characters above
   -- `DEL` their decimal code, and a `\&` disambiguates a decimal escape from a

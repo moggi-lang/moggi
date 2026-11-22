@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Ordered types: the 'Ord' class ('compare', the comparison operators,
 -- 'max', 'min'), the 'Ordering' type, the 'Down' newtype for reverse sorts,
 -- and the 'comparing' and 'clamp' combinators.
@@ -56,8 +57,7 @@ instance Functor Down where
   map f d = Down (f (getDown d))
 
 instance Show a => Show (Down a) where
-  showsPrec d (Down x) = showParen (d > 10)
-    (\r -> showString "Down " (showsPrec 11 x r))
+  showsPrec d (Down x) = showParen (d > 10) (\r -> showString "Down " (showsPrec 11 x r))
 
 -- | Restrict a value to be within the given lower and upper bounds.
 clamp :: Ord a => (a, a) -> a -> a

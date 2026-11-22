@@ -1,7 +1,4 @@
-module System.Info.JVM
-  ( os
-  , arch
-  ) where
+module System.Info.JVM (os, arch) where
 
 import Data.String (isPrefixOf)
 

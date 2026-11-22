@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module System.IO.DotNet
   ( stdin
   , stdout
@@ -157,7 +158,9 @@ hGetChar :: Handle -> IO Char
 hGetChar h = do
   n <- textReaderRead h
   let i = int32ToInt# n
-  if i == -1 then error "hGetChar: end of input" else pure (chr i)
+  if i == -1
+    then error "hGetChar: end of input"
+    else pure (chr i)
 
 hFlush h = rawFlush h
 

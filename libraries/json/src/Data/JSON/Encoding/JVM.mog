@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | JVM backend: Encoding is the JSON *value tree* host representation.
 --
 -- Heterogeneous JSON is stored as {@code java.lang.Object} (Boolean / Long /
@@ -66,92 +67,161 @@ foreign jvm type Encoding "java.lang.Object"
 -- Collection interfaces used in keySet/values/iterator chains are named to
 -- avoid clashing with Moggi ADTs / other modules (Data.Set; FS Iterator/Writer).
 foreign jvm type JsonFactory "com.fasterxml.jackson.core.JsonFactory"
+
 foreign jvm type JsonParser "com.fasterxml.jackson.core.JsonParser"
+
 foreign jvm type JsonGenerator "com.fasterxml.jackson.core.JsonGenerator"
+
 foreign jvm type JsonToken "com.fasterxml.jackson.core.JsonToken"
+
 foreign jvm type JsonParserNumberType "com.fasterxml.jackson.core.JsonParser$NumberType"
+
 foreign jvm type StringWriter "java.io.StringWriter"
+
 -- Distinct program-global name: host types share one namespace per program.
 foreign jvm type JsonWriter "java.io.Writer"
+
 foreign jvm type Class "java.lang.Class"
+
 -- Distinct from Data.Set (project-global type name).
 foreign jvm type JsonSet "interface java.util.Set"
+
 foreign jvm type Collection "interface java.util.Collection"
+
 -- Distinct program-global name for the same reason.
 foreign jvm type JsonIterator "interface java.util.Iterator"
+
 -- Method owners below name these interfaces, so the backend emits
 -- invokeinterface for them; without the declaration they would compile to
 -- invokevirtual against an interface and die with IncompatibleClassChangeError.
 foreign jvm type JsonList "interface java.util.List"
+
 foreign jvm type JsonMap "interface java.util.Map"
 
 foreign jvm function objectsIsNull "java.util.Objects:isNull" :: Encoding -> Bool
+
 foreign jvm function tokenIsNull "java.util.Objects:isNull" :: JsonToken -> Bool
+
 foreign jvm function classIsInstance "java.lang.Class.isInstance" :: Class -> Encoding -> Bool
+
 foreign jvm function classForName "java.lang.Class:forName" :: String -> Class
 
 foreign jvm function stringValueOf "java.lang.String:valueOf" :: Encoding -> String
+
 foreign jvm function booleanValue "java.lang.Boolean.booleanValue" :: Encoding -> Bool
+
 foreign jvm function longValue "java.lang.Number.longValue" :: Encoding -> Int
+
 foreign jvm function doubleValue "java.lang.Number.doubleValue" :: Encoding -> Double
+
 foreign jvm function biToString "java.math.BigInteger.toString" :: Integer -> String
+
 foreign jvm function biValueOfLong "java.math.BigInteger:valueOf" :: Int -> Integer
+
 foreign jvm function biFromDigits "java.math.BigInteger:__con" :: String -> Integer
+
 foreign jvm function biLongValue "java.math.BigInteger.longValue" :: Integer -> Int
+
 foreign jvm function rawBiCompareTo "java.math.BigInteger.compareTo" :: Integer -> Integer -> Int32
+
 -- Constructors (not valueOf): return type is Encoding (JSON tree Object), while
 -- valueOf's binary return is the concrete boxed class.
 foreign jvm function boxLong "java.lang.Long:__con" :: Int -> Encoding
+
 foreign jvm function boxDouble "java.lang.Double:__con" :: Double -> Encoding
+
 foreign jvm function boxBool "java.lang.Boolean:__con" :: Bool -> Encoding
+
 foreign jvm function stringCtor "java.lang.String:__con" :: String -> Encoding
+
 foreign jvm function biCtorEnc "java.math.BigInteger:__con" :: String -> Encoding
 
 -- ArrayList / LinkedHashMap are JSON array/object nodes; expose as Encoding.
 foreign jvm function newArrayList "java.util.ArrayList:__con" :: Encoding
+
 foreign jvm function alAdd "java.util.ArrayList.add" :: Encoding -> Encoding -> Bool
+
 foreign jvm function newLinkedHashMap "java.util.LinkedHashMap:__con" :: Encoding
+
 foreign jvm function mapPut "java.util.HashMap.put" :: Encoding -> Encoding -> Encoding -> Encoding
+
 foreign jvm function rawListSize "java.util.List.size" :: Encoding -> Int32
+
 foreign jvm function rawListGet "java.util.List.get" :: Encoding -> Int32 -> Encoding
+
 foreign jvm function mapContainsKey "java.util.Map.containsKey" :: Encoding -> Encoding -> Bool
+
 foreign jvm function mapGet "java.util.Map.get" :: Encoding -> Encoding -> Encoding
+
 foreign jvm function mapKeySet "java.util.Map.keySet" :: Encoding -> JsonSet
+
 foreign jvm function mapValuesColl "java.util.Map.values" :: Encoding -> Collection
+
 foreign jvm function setIterator "java.util.Set.iterator" :: JsonSet -> JsonIterator
+
 foreign jvm function collIterator "java.util.Collection.iterator" :: Collection -> JsonIterator
+
 foreign jvm function iterHasNext "java.util.Iterator.hasNext" :: JsonIterator -> Bool
+
 foreign jvm function iterNext "java.util.Iterator.next" :: JsonIterator -> Encoding
 
 -- Jackson Core (streaming parse + generate) — ordinary FFI only
 foreign jvm function newJsonFactory "com.fasterxml.jackson.core.JsonFactory:__con" :: JsonFactory
+
 foreign jvm function createParser "com.fasterxml.jackson.core.JsonFactory.createParser" :: JsonFactory -> String -> IO JsonParser
+
 foreign jvm function createGenerator "com.fasterxml.jackson.core.JsonFactory.createGenerator" :: JsonFactory -> JsonWriter -> JsonGenerator
+
 foreign jvm function newStringWriter "java.io.StringWriter:__con" :: StringWriter
+
 foreign jvm function swAsWriter "java.util.Objects:requireNonNull" :: StringWriter -> JsonWriter
+
 foreign jvm function swToString "java.io.StringWriter.toString" :: StringWriter -> String
+
 foreign jvm function genWriteNull "com.fasterxml.jackson.core.JsonGenerator.writeNull" :: JsonGenerator -> ()
+
 foreign jvm function genWriteBoolean "com.fasterxml.jackson.core.JsonGenerator.writeBoolean" :: JsonGenerator -> Bool -> ()
+
 foreign jvm function genWriteString "com.fasterxml.jackson.core.JsonGenerator.writeString" :: JsonGenerator -> String -> ()
+
 foreign jvm function genWriteLong "com.fasterxml.jackson.core.JsonGenerator.writeNumber" :: JsonGenerator -> Int -> ()
+
 foreign jvm function genWriteDouble "com.fasterxml.jackson.core.JsonGenerator.writeNumber" :: JsonGenerator -> Double -> ()
+
 foreign jvm function genWriteBigInt "com.fasterxml.jackson.core.JsonGenerator.writeNumber" :: JsonGenerator -> Integer -> ()
+
 foreign jvm function genWriteStartArray "com.fasterxml.jackson.core.JsonGenerator.writeStartArray" :: JsonGenerator -> ()
+
 foreign jvm function genWriteEndArray "com.fasterxml.jackson.core.JsonGenerator.writeEndArray" :: JsonGenerator -> ()
+
 foreign jvm function genWriteStartObject "com.fasterxml.jackson.core.JsonGenerator.writeStartObject" :: JsonGenerator -> ()
+
 foreign jvm function genWriteEndObject "com.fasterxml.jackson.core.JsonGenerator.writeEndObject" :: JsonGenerator -> ()
+
 foreign jvm function genWriteFieldName "com.fasterxml.jackson.core.JsonGenerator.writeFieldName" :: JsonGenerator -> String -> ()
+
 foreign jvm function genFlush "com.fasterxml.jackson.core.JsonGenerator.flush" :: JsonGenerator -> ()
+
 foreign jvm function genClose "com.fasterxml.jackson.core.JsonGenerator.close" :: JsonGenerator -> ()
+
 foreign jvm function nextToken "com.fasterxml.jackson.core.JsonParser.nextToken" :: JsonParser -> JsonToken
+
 foreign jvm function nextTokenIO "com.fasterxml.jackson.core.JsonParser.nextToken" :: JsonParser -> IO JsonToken
+
 foreign jvm function rawCurrentTokenId "com.fasterxml.jackson.core.JsonParser.currentTokenId" :: JsonParser -> Int32
+
 foreign jvm function parserGetText "com.fasterxml.jackson.core.JsonParser.getText" :: JsonParser -> String
+
 foreign jvm function parserGetLong "com.fasterxml.jackson.core.JsonParser.getLongValue" :: JsonParser -> Int
+
 foreign jvm function parserGetDouble "com.fasterxml.jackson.core.JsonParser.getDoubleValue" :: JsonParser -> Double
+
 foreign jvm function parserGetBigInt "com.fasterxml.jackson.core.JsonParser.getBigIntegerValue" :: JsonParser -> Integer
+
 foreign jvm function parserGetNumberType "com.fasterxml.jackson.core.JsonParser.getNumberType" :: JsonParser -> JsonParserNumberType
+
 foreign jvm function parserClose "com.fasterxml.jackson.core.JsonParser.close" :: JsonParser -> ()
+
 foreign jvm function enumName "java.lang.Enum.name" :: JsonParserNumberType -> String
 
 -- Int-width adapters: JDK collection/parser APIs are int32-based.
@@ -168,24 +238,34 @@ bsToStr b = decodeUtf8 b
 -- Class tokens (CAFs): Class.forName once per type, not per encKind call.
 booleanClass :: Class
 booleanClass = classForName "java.lang.Boolean"
+
 stringClass :: Class
 stringClass = classForName "java.lang.String"
+
 longClass :: Class
 longClass = classForName "java.lang.Long"
+
 integerClass :: Class
 integerClass = classForName "java.lang.Integer"
+
 shortClass :: Class
 shortClass = classForName "java.lang.Short"
+
 byteClass :: Class
 byteClass = classForName "java.lang.Byte"
+
 doubleClass :: Class
 doubleClass = classForName "java.lang.Double"
+
 floatClass :: Class
 floatClass = classForName "java.lang.Float"
+
 listClass :: Class
 listClass = classForName "java.util.List"
+
 mapClass :: Class
 mapClass = classForName "java.util.Map"
+
 bigIntegerClass :: Class
 bigIntegerClass = classForName "java.math.BigInteger"
 
@@ -202,29 +282,38 @@ sharedJsonFactory = newJsonFactory
 -- JsonTokenId (jackson-core)
 tokenStartObject :: Int
 tokenStartObject = 1
+
 tokenEndObject :: Int
 tokenEndObject = 2
+
 tokenStartArray :: Int
 tokenStartArray = 3
+
 tokenEndArray :: Int
 tokenEndArray = 4
+
 tokenFieldName :: Int
 tokenFieldName = 5
+
 tokenString :: Int
 tokenString = 6
+
 tokenNumberInt :: Int
 tokenNumberInt = 7
+
 tokenNumberFloat :: Int
 tokenNumberFloat = 8
+
 tokenTrue :: Int
 tokenTrue = 9
+
 tokenFalse :: Int
 tokenFalse = 10
+
 tokenNull :: Int
 tokenNull = 11
 
 -- Public Encoding API
-
 encodeEncoding :: Encoding -> ByteString
 encodeEncoding enc = encodeUtf8 (encodeToString enc)
 
@@ -317,7 +406,7 @@ encDouble :: Double -> Encoding
 encDouble d = boxDouble d
 
 encArray :: [Encoding] -> Encoding
-encArray xs = fillArrayList (newArrayList) xs
+encArray xs = fillArrayList newArrayList xs
 
 -- `alAdd` mutates its receiver and returns Bool. Always keep the receiver
 -- reference; do not thread alAdd's Bool (or rematerialize newArrayList) as the
@@ -331,7 +420,7 @@ alAddKeep acc x = case alAdd acc x of
   _ -> acc
 
 encObject :: [String] -> [Encoding] -> Encoding
-encObject ks vs = fillLinkedHashMap (newLinkedHashMap) ks vs
+encObject ks vs = fillLinkedHashMap newLinkedHashMap ks vs
 
 -- `mapPut` mutates its receiver and returns the previous mapping (often null).
 -- Always keep the receiver reference; do not thread mapPut's return as the map.
@@ -394,8 +483,8 @@ lookupField enc key = case encKind enc of
 
 lookupMapField :: Encoding -> String -> Maybe Encoding
 lookupMapField enc key =
-  let k = encString key in
-  case mapContainsKey enc k of
+  let k = encString key
+  in case mapContainsKey enc k of
     True -> Just (mapGet enc k)
     False -> Nothing
 
@@ -448,31 +537,30 @@ mapKeysToStrings (k : ks) = stringValueOf k : mapKeysToStrings ks
 
 encFromBigInteger :: Integer -> Encoding
 encFromBigInteger n =
-  let lo = biFromDigits "-9223372036854775808" in
-  let hi = biFromDigits "9223372036854775807" in
-  case intCompare# (biCompareTo n lo) 0 of
-    LT -> integerAsEnc n
-    _ -> case intCompare# (biCompareTo n hi) 0 of
-      GT -> integerAsEnc n
-      _ -> boxLong (biLongValue n)
+  let lo = biFromDigits "-9223372036854775808"
+  in let hi = biFromDigits "9223372036854775807"
+     in case intCompare# (biCompareTo n lo) 0 of
+       LT -> integerAsEnc n
+       _ -> case intCompare# (biCompareTo n hi) 0 of
+         GT -> integerAsEnc n
+         _ -> boxLong (biLongValue n)
 
 unitVal :: ()
 unitVal = ()
 
 -- Decode via Jackson JsonParser. The first nextToken runs in IO (inside
 -- `try`); the tree walk uses the same pure FFI as encode.
-
 finishParse :: JsonParser -> Encoding
 finishParse p =
-  let enc = readValue p in
-  case expectEnd p of
+  let enc = readValue p
+  in case expectEnd p of
     () -> case parserClose p of
       () -> enc
 
 expectEnd :: JsonParser -> ()
 expectEnd p =
-  let t = nextToken p in
-  case tokenIsNull t of
+  let t = nextToken p
+  in case tokenIsNull t of
     True -> unitVal
     False -> error "trailing junk after JSON value"
 
@@ -503,18 +591,18 @@ readValueIdNonNull tid p = case intCompare# tid tokenTrue of
 
 readIntNumber :: JsonParser -> Encoding
 readIntNumber p =
-  let nt = enumName (parserGetNumberType p) in
-  case stringEq# nt "BIG_INTEGER" of
+  let nt = enumName (parserGetNumberType p)
+  in case stringEq# nt "BIG_INTEGER" of
     True -> integerAsEnc (parserGetBigInt p)
     False -> boxLong (parserGetLong p)
 
 readArray :: JsonParser -> Encoding
-readArray p = fillArrayFromParser p (newArrayList)
+readArray p = fillArrayFromParser p newArrayList
 
 fillArrayFromParser :: JsonParser -> Encoding -> Encoding
 fillArrayFromParser p acc =
-  let t = nextToken p in
-  case tokenIsNull t of
+  let t = nextToken p
+  in case tokenIsNull t of
     True -> error "unclosed JSON array"
     False -> fillArrayFromToken p acc (currentTokenId p)
 
@@ -532,12 +620,12 @@ fillArrayAfterAdd :: JsonParser -> Encoding -> Encoding
 fillArrayAfterAdd p acc = fillArrayFromParser p acc
 
 readObject :: JsonParser -> Encoding
-readObject p = fillObjectFromParser p (newLinkedHashMap)
+readObject p = fillObjectFromParser p newLinkedHashMap
 
 fillObjectFromParser :: JsonParser -> Encoding -> Encoding
 fillObjectFromParser p acc =
-  let t = nextToken p in
-  case tokenIsNull t of
+  let t = nextToken p
+  in case tokenIsNull t of
     True -> error "unclosed JSON object"
     False -> fillObjectFromToken p acc (currentTokenId p)
 
@@ -550,7 +638,7 @@ fillObjectFromToken p acc tid = case intCompare# tid tokenEndObject of
 
 fillObjectField :: JsonParser -> Encoding -> String -> Encoding
 fillObjectField p acc key =
-  let t = nextToken p in
-  case tokenIsNull t of
+  let t = nextToken p
+  in case tokenIsNull t of
     True -> error "expected value after field name"
     False -> fillObjectFromParser p (mapPutKeep acc (encString key) (readValue p))

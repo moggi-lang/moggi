@@ -1,8 +1,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Builders and writes for HTML escaped, UTF-8 encoded characters.
 module Blaze.ByteString.Builder.Html.Utf8
   ( module Blaze.ByteString.Builder.Char.Utf8
-
   , writeHtmlEscapedChar
   , fromHtmlEscapedChar
   , fromHtmlEscapedString
@@ -13,7 +13,7 @@ module Blaze.ByteString.Builder.Html.Utf8
 
 import Blaze.ByteString.Builder.Char.Utf8
 import Blaze.ByteString.Builder.Internal (Builder, Write, toByteString, writeByteString)
-import Data.Bool (Bool (..))
+import Data.Bool (Bool(..))
 import Data.Char (Char)
 import Data.Eq
 import Data.List (map)
@@ -25,12 +25,17 @@ import Text.Show (Show, show)
 -- | The escape of one character, or the character itself.
 escapedChar :: Char -> Builder
 escapedChar c =
-  if c == '<' then fromString "&lt;"
-  else if c == '>' then fromString "&gt;"
-  else if c == '&' then fromString "&amp;"
-  else if c == '"' then fromString "&quot;"
-  else if c == '\'' then fromString "&#39;"
-  else fromChar c
+  if c == '<'
+    then fromString "&lt;"
+    else if c == '>'
+      then fromString "&gt;"
+      else if c == '&'
+        then fromString "&amp;"
+        else if c == '"'
+          then fromString "&quot;"
+          else if c == '\''
+            then fromString "&#39;"
+            else fromChar c
 
 -- | Write an HTML escaped, UTF-8 encoded character.
 writeHtmlEscapedChar :: Char -> Write

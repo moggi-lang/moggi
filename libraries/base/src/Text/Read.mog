@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Converting strings to values: the 'Read' class and the functions around it.
 --
 -- The class methods are 'readsPrec' and 'readList', and 'reads', 'read',
@@ -8,17 +9,14 @@
 -- 'readPrec' is the method an instance writes when the parser is the easier
 -- form.
 module Text.Read
-  (
-    -- * The 'Read' class
+  ( -- * The 'Read' class
     Read(..)
   , ReadS
-
     -- * Operations
   , reads
   , read
   , readParen
   , lex
-
     -- * New parsing functions
   , module Text.ParserCombinators.ReadPrec
   , Lexeme(..)
@@ -57,7 +55,6 @@ import Moggi.Err
 import Moggi.Internal.Base hiding (take, drop, unpack)
 import Moggi.Internal.Prim
 
-
 -- | A parse of @a@ from the front of a string: the value and the rest.
 type ReadS a = String -> [(a, String)]
 
@@ -85,38 +82,28 @@ mapParses f pairs = case pairs of
 -- below keeps them working.
 class Read a where
   {-# MINIMAL readsPrec | readPrec | read #-}
-
   -- | Parse a value at the given precedence, with the input that follows it.
   readsPrec :: Int -> ReadS a
-
+  readsPrec _ s = [(read s, "")]
   -- | Parse a list of values, which is the rendering 'Text.Show.showList'
   -- produces.
   readList :: ReadS [a]
-
+  readList s = readListDefault s
   -- | Parse a value out of a string, failing unless the string is one.
   read :: String -> a
-
-  -- | Parse a value at the given precedence, as a composed parser.
-  readPrec :: ReadPrec a
-
-  -- | Parse a list of values, as a composed parser.
-  readListPrec :: ReadPrec [a]
-
-  readsPrec _ s = [(read s, "")]
-
-  readList s = readListDefault s
-
-  readPrec = readS_to_Prec readsPrec
-
-  readListPrec = readListPrecDefault
-
-  -- Parsing goes through 'readPrec' rather than 'readsPrec': an instance may
-  -- define either one, and the default for the other has to terminate. With
-  -- 'readsPrec' here, an instance that defines only 'readPrec' would come back
-  -- through this default to 'readsPrec', whose default reads a whole string.
   read s = case readPrec_to_S readPrec 0 s of
+    -- Parsing goes through 'readPrec' rather than 'readsPrec': an instance may
+    -- define either one, and the default for the other has to terminate. With
+    -- 'readsPrec' here, an instance that defines only 'readPrec' would come back
+    -- through this default to 'readsPrec', whose default reads a whole string.
     [] -> error "Prelude.read: no parse"
     (x, _) : _ -> x
+  -- | Parse a value at the given precedence, as a composed parser.
+  readPrec :: ReadPrec a
+  readPrec = readS_to_Prec readsPrec
+  -- | Parse a list of values, as a composed parser.
+  readListPrec :: ReadPrec [a]
+  readListPrec = readListPrecDefault
 
 -- | What 'readListPrec' does by default: the @[a,b]@ form the 'Show' instance
 -- for lists renders, with each element read at precedence zero.
@@ -210,8 +197,24 @@ stringLexeme tok = case stringBody (pack (dropChars 1 (unpack tok))) of
 -- | Punctuation: the characters that are lexemes of their own.
 isPunctuationChar :: Char -> Bool
 isPunctuationChar c =
-  c == '(' || c == ')' || c == '[' || c == ']' || c == ',' || c == ';'
-  || c == '`' || c == '{' || c == '}'
+  c
+  == '('
+    || c
+    == ')'
+    || c
+    == '['
+    || c
+    == ']'
+    || c
+    == ','
+    || c
+    == ';'
+    || c
+    == '`'
+    || c
+    == '{'
+    || c
+    == '}'
 
 -- | 'readsPrec' at precedence zero.
 reads :: Read a => ReadS a
@@ -348,10 +351,46 @@ isIdentifierChar c = isAlpha c || isDigit c || c == '_' || c == '\''
 -- constructor comes back whole.
 isSymbolChar :: Char -> Bool
 isSymbolChar c =
-  c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '*'
-  || c == '+' || c == '.' || c == '/' || c == '<' || c == '=' || c == '>'
-  || c == '?' || c == '@' || c == '^' || c == '|' || c == '~' || c == ':'
-  || c == '-' || c == '\\'
+  c
+  == '!'
+    || c
+    == '#'
+    || c
+    == '$'
+    || c
+    == '%'
+    || c
+    == '&'
+    || c
+    == '*'
+    || c
+    == '+'
+    || c
+    == '.'
+    || c
+    == '/'
+    || c
+    == '<'
+    || c
+    == '='
+    || c
+    == '>'
+    || c
+    == '?'
+    || c
+    == '@'
+    || c
+    == '^'
+    || c
+    == '|'
+    || c
+    == '~'
+    || c
+    == ':'
+    || c
+    == '-'
+    || c
+    == '\\'
 
 takeWhileChars :: (Char -> Bool) -> [Char] -> [Char]
 takeWhileChars p cs = case cs of
@@ -506,7 +545,8 @@ foldDigitsInteger :: [Char] -> Integer -> Integer
 foldDigitsInteger cs acc = case cs of
   [] -> acc
   d : rest ->
-    foldDigitsInteger rest (integerAdd (integerMul acc (integerFromInt 10)) (integerFromInt (digitToInt d)))
+    foldDigitsInteger rest
+      (integerAdd (integerMul acc (integerFromInt 10)) (integerFromInt (digitToInt d)))
 
 doubleParses :: [Char] -> [(Double, String)]
 doubleParses cs = case signOf cs of
@@ -697,8 +737,7 @@ instance (Read a, Read b) => Read (a, b) where
   readsPrec _ = afterOpen pairFields
 
 pairFields :: (Read a, Read b) => String -> [((a, b), String)]
-pairFields =
-  readThen reads (\x t -> readThen (skipComma reads) (\y u -> closeParsed u (x, y)) t)
+pairFields = readThen reads (\x t -> readThen (skipComma reads) (\y u -> closeParsed u (x, y)) t)
 
 -- | Reads what 'Show' writes for a triple.
 instance (Read a, Read b, Read c) => Read (a, b, c) where
@@ -706,9 +745,11 @@ instance (Read a, Read b, Read c) => Read (a, b, c) where
 
 tripleFields :: (Read a, Read b, Read c) => String -> [((a, b, c), String)]
 tripleFields =
-  readThen reads (\x t ->
-    readThen (skipComma reads) (\y u ->
-      readThen (skipComma reads) (\z v -> closeParsed v (x, y, z)) u) t)
+  readThen reads
+    (\x t ->
+      readThen (skipComma reads)
+        (\y u -> readThen (skipComma reads) (\z v -> closeParsed v (x, y, z)) u)
+        t)
 
 -- | Reads what 'Show' writes for a 4-tuple.
 instance (Read a, Read b, Read c, Read d) => Read (a, b, c, d) where
@@ -716,10 +757,14 @@ instance (Read a, Read b, Read c, Read d) => Read (a, b, c, d) where
 
 quadFields :: (Read a, Read b, Read c, Read d) => String -> [((a, b, c, d), String)]
 quadFields =
-  readThen reads (\x t ->
-    readThen (skipComma reads) (\y u ->
-      readThen (skipComma reads) (\z v ->
-        readThen (skipComma reads) (\w r -> closeParsed r (x, y, z, w)) v) u) t)
+  readThen reads
+    (\x t ->
+      readThen (skipComma reads)
+        (\y u ->
+          readThen (skipComma reads)
+            (\z v -> readThen (skipComma reads) (\w r -> closeParsed r (x, y, z, w)) v)
+            u)
+        t)
 
 -- | Reads what 'Show' writes: @Left x@ or @Right y@.
 instance (Read a, Read b) => Read (Either a b) where

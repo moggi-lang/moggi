@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | A type @a@ is a 'Semigroup' if it provides an associative function ('<>')
 -- that lets you combine any two values of type @a@ into one. Where being
 -- associative means that the following must always hold:
@@ -49,29 +50,29 @@
 -- requires the presence of a neutral element ('mempty') in addition to the associative
 -- operator. The requirement for a neutral element prevents many types from being a full Monoid,
 -- like "Data.List.NonEmpty.NonEmpty".
-module Data.Semigroup (
-    Semigroup(..)
+module Data.Semigroup
+  ( Semigroup(..)
   , stimesMonoid
   , stimesIdempotent
   , stimesIdempotentMonoid
   , mtimesDefault
-  -- * Semigroups
+    -- * Semigroups
   , Min(..)
   , Max(..)
   , First(..)
   , Last(..)
   , WrappedMonoid(..)
-  -- * Re-exported monoids
+    -- * Re-exported monoids
   , Dual(..)
   , Endo(..)
   , All(..)
   , Any(..)
   , Sum(..)
   , Product(..)
-  -- * Difference lists of a semigroup
+    -- * Difference lists of a semigroup
   , diff
   , cycle1
-  -- * ArgMin, ArgMax
+    -- * ArgMin, ArgMax
   , Arg(..)
   , ArgMin
   , ArgMax

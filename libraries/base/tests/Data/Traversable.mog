@@ -1,20 +1,22 @@
--- Data.Traversable: the traversals plus the mapAccum family, which base exports
--- from this module — `import Data.List` only re-exports `mapAccumL`/`mapAccumR`,
--- so importing both must stay clash-free.
+module Main (main) where
+
 import Data.List
 import Data.Traversable
 
+-- Data.Traversable: the traversals plus the mapAccum family, which base exports
+-- from this module — `import Data.List` only re-exports `mapAccumL`/`mapAccumR`,
+-- so importing both must stay clash-free.
 main :: IO ()
 main = do
-  putStrLn (show (mapAccumL (\a b -> (a + b, a)) 0 [1 .. 10]))
-  putStrLn (show (mapAccumR (\a b -> (a + b, a)) 0 [1 .. 10]))
-  putStrLn (show (mapAccumL (\a b -> (a <> show b, a)) "0" [1 .. 5]))
-  putStrLn (show (mapAccumR (\a b -> (a <> show b, a)) "0" [1 .. 5]))
+  putStrLn (show (mapAccumL (\a b -> (a + b, a)) 0 ([1 .. 10])))
+  putStrLn (show (mapAccumR (\a b -> (a + b, a)) 0 ([1 .. 10])))
+  putStrLn (show (mapAccumL (\a b -> (a <> show b, a)) "0" ([1 .. 5])))
+  putStrLn (show (mapAccumR (\a b -> (a <> show b, a)) "0" ([1 .. 5])))
   putStrLn (show (mapAccumL (\a b -> (a + b, a)) 0 (Just 5)))
   putStrLn (show (mapAccumR (\a b -> (a + b, a)) 0 (Just 5)))
   putStrLn (show (mapAccumL (\a b -> (a + b, a)) 0 (Nothing :: Maybe Int)))
-  putStrLn (show (mapAccumL (\a b -> (a + b, a)) 0 (Right 5 :: Either String Int)))
-  putStrLn (show (mapAccumR (\a b -> (a + b, a)) 0 (Right 5 :: Either String Int)))
+  putStrLn (show (mapAccumL (\a b -> (a + b, a)) 0 ((Right 5) :: Either String Int)))
+  putStrLn (show (mapAccumR (\a b -> (a + b, a)) 0 ((Right 5) :: Either String Int)))
   putStrLn (show (traverse (\x -> Just (x + 1)) [1, 2, 3]))
   putStrLn (show (traverse (\x -> Just (x + 1)) (Nothing :: Maybe Int)))
   putStrLn (show (sequenceA [Just 1, Just 2]))

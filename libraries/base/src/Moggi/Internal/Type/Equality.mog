@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The equality witnesses, below the reflection layer.
 --
 -- `Data.Type.Equality` also carries its `Read`/`Enum` instances, and those
@@ -19,7 +20,7 @@ data (:~:) a b where
 
 -- | Kind-heterogeneous propositional equality.
 data (:~~:) (a :: k1) (b :: k2) where
-  HRefl :: (:~~:) a a
+  HRefl :: a :~~: a
 
 -- | Types whose terms can decide equality of their type arguments.
 class TestEquality f where

@@ -1,6 +1,5 @@
 -- Data.Time.Calendar: Modified Julian Days, Gregorian conversion, arithmetic,
 -- leap years and the Show/Enum instances.
-
 module CalendarSuite (calendarSuite) where
 
 import Data.Time.Calendar
@@ -21,7 +20,8 @@ calendarSuite = do
   expect "invalid leap day" (show (fromGregorianValid 2023 2 29)) "Nothing"
   expect "invalid month" (show (fromGregorianValid 2024 13 1)) "Nothing"
   expect "diffDays" (show (diffDays (fromGregorian 1970 1 2) (fromGregorian 1970 1 1))) "1"
-  expect "diffDays negative" (show (diffDays (fromGregorian 1969 12 31) (fromGregorian 1970 1 1))) "-1"
+  expect "diffDays negative" (show (diffDays (fromGregorian 1969 12 31) (fromGregorian 1970 1 1)))
+    "-1"
   expect "addDays" (show (addDays 30 (fromGregorian 2024 1 1))) "2024-01-31"
   expect "addDays negative" (show (addDays (-1) (fromGregorian 1970 1 1))) "1969-12-31"
   expect "leap 2000" (show (isLeapYear 2000)) "True"
@@ -31,5 +31,5 @@ calendarSuite = do
   expect "Feb leap length" (show (gregorianMonthLength 2024 2)) "29"
   expect "Feb plain length" (show (gregorianMonthLength 2023 2)) "28"
   expect "succ over leap day" (show (succ (fromGregorian 2024 2 28))) "2024-02-29"
-  expect "fromEnum" (show ((toEnum 40587 :: Day))) "1970-01-01"
+  expect "fromEnum" (show ((toEnum 40587) :: Day)) "1970-01-01"
   assertTrue "Eq" (fromGregorian 2024 1 1 == fromGregorian 2024 1 1)

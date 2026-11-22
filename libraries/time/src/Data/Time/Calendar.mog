@@ -1,5 +1,4 @@
--- |
--- Gregorian dates, following the 'Data.Time.Calendar'.
+-- | Gregorian dates, following the 'Data.Time.Calendar'.
 --
 -- A 'Day' counts whole days as a Modified Julian Day number (the number of
 -- days since 1858-11-17), so date arithmetic is integer arithmetic and the
@@ -13,7 +12,6 @@
 -- leap years and month lengths. The @time@ package's optional calendar
 -- variants (week dates, ordinal dates, quarters, months, Julian, Easter) are
 -- not defined here; they arrive when a program needs them.
---
 module Data.Time.Calendar
   ( Day(..)
   , toModifiedJulianDay
@@ -149,52 +147,36 @@ gregorianMonthLength y m = case m of
 civilToMjd :: Integer -> Int -> Int -> Int
 civilToMjd y m d = fromInteger (era * 146097 + doe - 719468 + 40587)
   where
-    y0 :: Integer
-    y0 = case m <= 2 of
+    y0 = (case m <= 2 of
       True -> y - 1
-      False -> y
-    era :: Integer
-    era = case y0 >= 0 of
+      False -> y) :: Integer
+    era = (case y0 >= 0 of
       True -> div y0 400
-      False -> quot (y0 - 399) 400
-    yoe :: Integer
-    yoe = y0 - era * 400
-    mp :: Integer
-    mp = case m > 2 of
+      False -> quot (y0 - 399) 400) :: Integer
+    yoe = (y0 - era * 400) :: Integer
+    mp = (case m > 2 of
       True -> toInteger m - 3
-      False -> toInteger m + 9
-    doy :: Integer
-    doy = div (153 * mp + 2) 5 + toInteger d - 1
-    doe :: Integer
-    doe = yoe * 365 + div yoe 4 - div yoe 100 + doy
+      False -> toInteger m + 9) :: Integer
+    doy = (div (153 * mp + 2) 5 + toInteger d - 1) :: Integer
+    doe = (yoe * 365 + div yoe 4 - div yoe 100 + doy) :: Integer
 
 -- The civil date of a Modified Julian Day number (Hinnant's civil_from_days).
 mjdToCivil :: Int -> (Integer, Int, Int)
 mjdToCivil mjd = (year, month, day)
   where
-    z :: Integer
-    z = toInteger mjd - 40587 + 719468
-    era :: Integer
-    era = case z >= 0 of
+    z = (toInteger mjd - 40587 + 719468) :: Integer
+    era = (case z >= 0 of
       True -> div z 146097
-      False -> quot (z - 146096) 146097
-    doe :: Integer
-    doe = z - era * 146097
-    yoe :: Integer
-    yoe = div (doe - div doe 1460 + div doe 36524 - div doe 146096) 365
-    y :: Integer
-    y = yoe + era * 400
-    doy :: Integer
-    doy = doe - (365 * yoe + div yoe 4 - div yoe 100)
-    mp :: Integer
-    mp = div (5 * doy + 2) 153
-    day :: Int
-    day = fromInteger (doy - div (153 * mp + 2) 5 + 1)
-    month :: Int
-    month = case mp < 10 of
+      False -> quot (z - 146096) 146097) :: Integer
+    doe = (z - era * 146097) :: Integer
+    yoe = (div (doe - div doe 1460 + div doe 36524 - div doe 146096) 365) :: Integer
+    y = (yoe + era * 400) :: Integer
+    doy = (doe - (365 * yoe + div yoe 4 - div yoe 100)) :: Integer
+    mp = (div (5 * doy + 2) 153) :: Integer
+    day = (fromInteger (doy - div (153 * mp + 2) 5 + 1)) :: Int
+    month = (case mp < 10 of
       True -> fromInteger (mp + 3)
-      False -> fromInteger (mp - 9)
-    year :: Integer
-    year = case month <= 2 of
+      False -> fromInteger (mp - 9)) :: Int
+    year = (case month <= 2 of
       True -> y + 1
-      False -> y
+      False -> y) :: Integer

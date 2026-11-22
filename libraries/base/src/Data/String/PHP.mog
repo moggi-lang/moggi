@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Data.String.PHP
   ( singleton
   , pack
@@ -26,7 +27,6 @@ import Moggi.Internal.Prim
 
 -- Scalar-aware String ops via PHP mbstring / IntlChar foreigns + Moggi.
 -- No custom PHP helpers.
-
 foreign php function mbStrLen "mb_strlen" :: String -> String -> Int
 
 foreign php function mbStrSplit "mb_str_split" :: String -> Int -> String -> [String]
@@ -68,14 +68,14 @@ isSuffixOf suffix s = rawEndsWith s suffix
 splitOn :: String -> String -> [String]
 splitOn sep s = rawExplode sep s
 
-lines "" = ([] :: [String])
+lines "" = [] :: [String]
 lines s = L.reverse (L.dropWhile (\x -> x == "") (L.reverse (splitOn "\n" s)))
 
-words s = (L.filter (\w -> w /= "") (splitOn " " s) :: [String])
+words s = (L.filter (\w -> w /= "") (splitOn " " s)) :: [String]
 
 unlines [] = ""
 unlines (line : rest) = line <> "\n" <> unlines rest
 
 unwords [] = ""
-unwords [x] = x
+unwords (x : []) = x
 unwords (x : rest) = x <> " " <> unwords rest

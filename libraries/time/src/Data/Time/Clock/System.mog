@@ -3,8 +3,8 @@
   jvm = Data.Time.Clock.System.JVM
   dotnet = Data.Time.Clock.System.DotNet
 #-}
--- |
--- System wall-clock time, following the 'Data.Time.Clock.System'.
+
+-- | System wall-clock time, following the 'Data.Time.Clock.System'.
 --
 -- 'SystemTime' is whole seconds plus nanoseconds since the unix epoch, as
 -- the host reports it: microsecond resolution on PHP (via @microtime@),
@@ -12,7 +12,6 @@
 -- @DateTimeOffset@). 'systemToUTCTime' keeps every picosecond the host gave
 -- (nanos become thousands of picos); 'utcToSystemTime' truncates toward the
 -- past.
---
 module Data.Time.Clock.System
   ( SystemTime(..)
   , systemSeconds
@@ -75,22 +74,21 @@ getSystemTime = do
 
 -- | View system time as UTC (exact: nanoseconds become picoseconds).
 systemToUTCTime :: SystemTime -> UTCTime
-systemToUTCTime t = utcTime (ModifiedJulianDay (40587 + fromInteger dayNum)) (picosecondsToDiffTime dayPicos)
+systemToUTCTime t =
+  utcTime (ModifiedJulianDay (40587 + fromInteger dayNum)) (picosecondsToDiffTime dayPicos)
   where
-    totalPicos :: Integer
-    totalPicos = toInteger (systemSeconds t) * 1000000000000 + toInteger (systemNanoseconds t) * 1000
-    dayNum :: Integer
-    dayNum = div totalPicos 86400000000000000
-    dayPicos :: Integer
-    dayPicos = mod totalPicos 86400000000000000
+    totalPicos =
+      (toInteger (systemSeconds t) * 1000000000000 + toInteger (systemNanoseconds t) * 1000) :: Integer
+    dayNum = (div totalPicos 86400000000000000) :: Integer
+    dayPicos = (mod totalPicos 86400000000000000) :: Integer
 
 -- | View UTC as system time, truncating sub-nanosecond parts.
 utcToSystemTime :: UTCTime -> SystemTime
 utcToSystemTime t = MkSystemTime (fromInteger secs) (fromInteger nanos)
   where
-    totalPicos :: Integer
-    totalPicos = toInteger (toModifiedJulianDay (utctDay t) - 40587) * 86400000000000000 + diffTimeToPicoseconds (utctDayTime t)
-    secs :: Integer
-    secs = div totalPicos 1000000000000
-    nanos :: Integer
-    nanos = div (mod totalPicos 1000000000000) 1000
+    totalPicos =
+      (toInteger (toModifiedJulianDay (utctDay t) - 40587)
+      * 86400000000000000
+        + diffTimeToPicoseconds (utctDayTime t)) :: Integer
+    secs = (div totalPicos 1000000000000) :: Integer
+    nanos = (div (mod totalPicos 1000000000000) 1000) :: Integer

@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Builders and writes for HTML escaped bytes, taken as Latin-1 characters.
 --
 -- The escaping is upstream's, byte for byte: the five entities for @<@, @>@,
@@ -18,7 +19,7 @@ module Blaze.ByteString.Builder.Html.Word
 import Blaze.ByteString.Builder.Char8 (fromString)
 import Blaze.ByteString.Builder.Compat.Write (Write, writePrimBounded)
 import Blaze.ByteString.Builder.Internal (Builder, fromByteString)
-import Data.Bool (Bool (..))
+import Data.Bool (Bool(..))
 import Data.ByteString (ByteString, pack)
 import Data.ByteString.Builder.Prim
   ( BoundedPrim
@@ -40,18 +41,29 @@ single w = fromByteString (pack (w : []))
 -- | The escaped form of a byte.
 escapeWord :: Word8 -> Builder
 escapeWord w =
-  if w > 62 then
-    if w == 127 then mempty else single w
-  else if w == 60 then fromString "&lt;"
-  else if w == 62 then fromString "&gt;"
-  else if w == 38 then fromString "&amp;"
-  else if w == 34 then fromString "&quot;"
-  else if w == 39 then fromString "&#39;"
-  else if w >= 32 then single w
-  else if w == 9 then single w
-  else if w == 10 then single w
-  else if w == 13 then single w
-  else mempty
+  if w > 62
+    then if w == 127
+      then mempty
+      else single w
+    else if w == 60
+      then fromString "&lt;"
+      else if w == 62
+        then fromString "&gt;"
+        else if w == 38
+          then fromString "&amp;"
+          else if w == 34
+            then fromString "&quot;"
+            else if w == 39
+              then fromString "&#39;"
+              else if w >= 32
+                then single w
+                else if w == 9
+                  then single w
+                  else if w == 10
+                    then single w
+                    else if w == 13
+                      then single w
+                      else mempty
 
 -- | The HTML escaping of one byte, bounded by the longest entity.
 wordHtmlEscaped :: BoundedPrim Word8

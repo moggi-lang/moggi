@@ -1,6 +1,5 @@
 -- Data.Graph: bounds, construction, queries, transposition, topological
 -- sorting, connected components, strongly connected components and reachability.
-
 module GraphSuite (graphSuite) where
 
 import Data.Graph

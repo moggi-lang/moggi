@@ -1,13 +1,12 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The identity functor and monad: 'Identity' holds one value, and every
 -- functor, applicative and monadic operation works on that value directly.
 --
 -- It serves two purposes: it can be passed to a function that is parameterised
 -- by a functor or monad, and it can be the base monad of a stack of monad
 -- transformers.
-module Data.Functor.Identity
-    (Identity(..)
-     ) where
+module Data.Functor.Identity (Identity(..)) where
 
 import Control.Applicative
 import Control.Monad
@@ -25,17 +24,10 @@ import Data.Real (Floating(..), Fractional(..), Integral(..))
 import Text.Show (Show(..), showParen, showString)
 
 -- | Identity functor and monad.
-newtype Identity a = Identity { runIdentity :: a }
-    deriving newtype ( Bounded
-                     , Enum
-                     , Eq
-                     , Floating
-                     , Fractional
-                     , Semigroup
-                     , Monoid
-                     , Num
-                     , Ord
-                     )
+newtype Identity a = Identity
+  { runIdentity :: a
+  }
+  deriving newtype (Bounded, Enum, Eq, Floating, Fractional, Semigroup, Monoid, Num, Ord)
 
 -- 'quotRem' and 'divMod' answer a pair, which a coercion cannot lift: the pair
 -- holds the wrapper, not the wrapped value, so they are written out.

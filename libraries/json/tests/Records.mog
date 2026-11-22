@@ -1,6 +1,5 @@
 -- Records: a unary record encodes as an object, a field may not be missing, and
 -- a value of the wrong shape is refused.
-
 module Records (recordsSuite) where
 
 import Data.ByteString.Char8 qualified as C

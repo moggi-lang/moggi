@@ -1,4 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
+module Main (main) where
+
 import Control.Monad
 import Data.Bits
 import Data.Bool
@@ -20,7 +23,6 @@ import System.IO
 -- past the width of `Word64`, and the operations whose result could be
 -- negative yield `Nothing` (minusNaturalMaybe) or fail (the underflow and
 -- complement fixtures).
-
 nat :: Int -> Natural
 nat x = fromIntegral x
 
@@ -41,13 +43,11 @@ main = do
   putStrLn (show (nat 5))
   putStrLn (show (z (integerFromInt 12345)))
   putStrLn (show (nat 1000000000 * nat 1000000000 * nat 1000000000 * nat 1000000000))
-
   -- Exact arithmetic beyond any fixed width (2^64 and 2^70 do not overflow).
   putStrLn (show (nat 4294967296 * nat 4294967296))
   putStrLn (show (nat 1024 * nat 1024 * nat 1024 * nat 1024 * nat 1024 * nat 1024 * nat 1024))
   putStrLn (show (nat 1000000007 * nat 1000000007 + nat 1))
   putStrLn (show (nat 5 + nat 7 - nat 3))
-
   -- Division: every operand is non-negative, so quot and div agree.
   putStrLn (show (nat 1000 `quot` nat 7))
   putStrLn (show (nat 1000 `rem` nat 7))
@@ -59,7 +59,6 @@ main = do
   putStrLn (show (snd (nat 1000 `divMod` nat 7)))
   putStrLn (show (toInteger (nat 42)))
   putStrLn (show (toInteger (nat 4294967296 * nat 4294967296)))
-
   -- Num and Ord.
   putStrLn (show (negate (nat 0)))
   putStrLn (show (abs (nat 0)))
@@ -67,21 +66,19 @@ main = do
   putStrLn (show (signum (nat 9)))
   putStrLn (show (nat 3 < nat 4))
   putStrLn (show (max (nat 3) (nat 4)))
-
   -- Enum.
   putStrLn (show (succ (nat 5)))
   putStrLn (show (pred (nat 5)))
   putStrLn (show (toNat 7))
   putStrLn (show (fromEnum (nat 7)))
   putStrLn (show (enumFromTo (nat 2) (nat 5)))
-
   -- Bits: unbounded, so a shift never wraps and rotate is shift.
   putStrLn (show (nat 171 .&. nat 18))
   putStrLn (show (nat 171 .|. nat 18))
   putStrLn (show (nat 171 `xor` nat 18))
   putStrLn (show (nat 1 `shiftL` 70))
   putStrLn (show (nat 1 `shiftL` 0))
-  putStrLn (show ((nat 1 `shiftL` 70) `shiftR` 65))
+  putStrLn (show (nat 1 `shiftL` 70 `shiftR` 65))
   putStrLn (show (nat 171 `shiftR` 4))
   putStrLn (show (nat 5 `rotate` 3))
   putStrLn (show (bitNat 70))
@@ -96,18 +93,16 @@ main = do
   putStrLn (show (zeroBits :: Natural))
   putStrLn (show (bitSizeMaybe (nat 0)))
   putStrLn (show (isSigned (nat 0)))
-
   -- Subtraction that stays inside the type.
   putStrLn (show (nat 7 - nat 3))
   putStrLn (show (minusNaturalMaybe (nat 7) (nat 3)))
   putStrLn (show (minusNaturalMaybe (nat 3) (nat 7)))
   putStrLn (show (minusNaturalMaybe (nat 7) (nat 7)))
-
   -- Conversions in both directions, including the ones that cannot fit.
-  putStrLn (show (toIntegralSized (nat 100) :: Maybe Int))
-  putStrLn (show (toIntegralSized (nat 300) :: Maybe Word8))
-  putStrLn (show (toIntegralSized (nat 200) :: Maybe Word8))
-  putStrLn (show (toIntegralSized (nat 1 `shiftL` 70) :: Maybe Word64))
-  putStrLn (show (toIntegralSized (nat 1 `shiftL` 40) :: Maybe Word64))
-  putStrLn (show (toIntegralSized (100 :: Int) :: Maybe Natural))
-  putStrLn (show (toIntegralSized (negate 5 :: Int) :: Maybe Natural))
+  putStrLn (show ((toIntegralSized (nat 100)) :: Maybe Int))
+  putStrLn (show ((toIntegralSized (nat 300)) :: Maybe Word8))
+  putStrLn (show ((toIntegralSized (nat 200)) :: Maybe Word8))
+  putStrLn (show ((toIntegralSized (nat 1 `shiftL` 70)) :: Maybe Word64))
+  putStrLn (show ((toIntegralSized (nat 1 `shiftL` 40)) :: Maybe Word64))
+  putStrLn (show ((toIntegralSized (100 :: Int)) :: Maybe Natural))
+  putStrLn (show ((toIntegralSized ((negate 5) :: Int)) :: Maybe Natural))

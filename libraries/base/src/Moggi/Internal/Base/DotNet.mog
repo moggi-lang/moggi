@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Moggi.Internal.Base.DotNet
   ( unpack
   , take
@@ -9,7 +10,6 @@ import Moggi.Internal.Prim
 
 -- Ordinary BCL FFI only (no Moggi.Rt.StringOps).
 -- Width-exact signatures: BCL String/Char APIs are int32/UTF-16-char based.
-
 foreign dotnet function rawUtf16Length "System.String.get_Length" :: String -> Int32
 
 foreign dotnet function rawConvertToUtf32At "System.Char:ConvertToUtf32" :: String -> Int32 -> Int32
@@ -88,9 +88,7 @@ codePointCountGo s i endBound acc = case intCompare# i endBound of
   LT -> codePointCountGo s (intAdd# i (utf16WidthAt s i)) endBound (intAdd# acc 1)
 
 take :: Int -> String -> String
-take n s =
-  let end = offsetByCodePoints s 0 n
-  in substringLen s 0 end
+take n s = let end = offsetByCodePoints s 0 n in substringLen s 0 end
 
 drop :: Int -> String -> String
 drop n s =

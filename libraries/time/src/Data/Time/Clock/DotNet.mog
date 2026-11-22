@@ -16,7 +16,9 @@ import Moggi.Internal.Prim
 foreign dotnet type DateTimeOffset "System.DateTimeOffset"
 
 foreign dotnet function dtoUtcNow "System.DateTimeOffset:get_UtcNow" :: IO DateTimeOffset
+
 foreign dotnet function dtoToUnixTimeSeconds "System.DateTimeOffset.ToUnixTimeSeconds" :: DateTimeOffset -> Int
+
 -- TickCount64 is a static Int64 property (no value-type boxing issues).
 foreign dotnet function envTickCount64 "System.Environment:get_TickCount64" :: IO Int
 

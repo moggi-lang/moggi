@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The HTML flavour of the markup combinators: the same trees as "Text.Blaze",
 -- under the name a page is written with.
 module Text.Blaze.Html
@@ -6,35 +7,28 @@ module Text.Blaze.Html
   , Tag
   , Attribute
   , AttributeValue
-
   , dataAttribute
   , customAttribute
-
-  , ToMarkup (..)
+  , ToMarkup(..)
   , text
   , preEscapedText
   , string
   , preEscapedString
   , unsafeByteString
-
   , textComment
   , stringComment
   , unsafeByteStringComment
-
   , textTag
   , stringTag
-
-  , ToValue (..)
+  , ToValue(..)
   , textValue
   , preEscapedTextValue
   , stringValue
   , preEscapedStringValue
   , unsafeByteStringValue
-
   , (!)
   , (!?)
   , contents
-
   , Html
   , toHtml
   , preEscapedToHtml
@@ -45,8 +39,8 @@ import Text.Blaze
   , AttributeValue
   , Markup
   , Tag
-  , ToMarkup (..)
-  , ToValue (..)
+  , ToMarkup(..)
+  , ToValue(..)
   , contents
   , customAttribute
   , dataAttribute

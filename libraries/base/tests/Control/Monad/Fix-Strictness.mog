@@ -1,3 +1,5 @@
+module Main (main) where
+
 import Control.Exception (ErrorCall(..), try)
 import Control.Monad.Fix (mfix)
 import System.IO
@@ -6,9 +8,10 @@ import System.IO
 -- publisher only runs once the action has returned its result, so the read
 -- happens too early and reports the black hole.
 strictAction :: IO (Int -> Int)
-strictAction = mfix (\rec -> do
-  y <- pure (rec 5)
-  pure (\x -> y + x))
+strictAction = mfix (\rec ->
+  do
+    y <- pure (rec 5)
+    pure (\x -> y + x))
 
 -- The report goes to the caller as an 'ErrorCall' instead of ending the
 -- program, so the message can be checked without the frames a backend adds.

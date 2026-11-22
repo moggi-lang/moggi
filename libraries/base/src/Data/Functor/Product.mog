@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Products, lifted to functors: @'Pair' x y@ holds one value of each functor,
 -- and a function mapped over the pair runs in both halves.
 --
@@ -7,15 +8,21 @@
 --
 -- >>> Pair "Hello, " (Left 'x') <> Pair "World" (Right 'y')
 -- Pair "Hello, World" (Right 'y')
-module Data.Functor.Product (
-    Product(..),
-  ) where
+module Data.Functor.Product (Product(..)) where
 
 import Control.Applicative
 import Control.Monad (Monad, MonadPlus(mplus, mzero), (>>=))
 import Control.Monad.Zip (MonadZip(mzipWith))
 import Data.Bool
-import Data.Data (Data(..), DataType, Constr, Fixity(Prefix), mkAlgDataType, mkConstrTag, constrIndex)
+import Data.Data
+  ( Data(..)
+  , DataType
+  , Constr
+  , Fixity(Prefix)
+  , mkAlgDataType
+  , mkConstrTag
+  , constrIndex
+  )
 import Data.Foldable (Foldable(foldl, foldMap, foldr))
 import Data.Functor (Functor(map))
 import Data.Functor.Classes
@@ -113,7 +120,8 @@ pairConstr :: Constr
 pairConstr = mkConstrTag productType "Pair" 1 [] Prefix
 
 instance (Typeable a, Typeable f, Typeable g, Data (f a), Data (g a)) => Data (Product f g a) where
-  gfoldl k z p = case p of Pair x y -> z Pair `k` x `k` y
+  gfoldl k z p = case p of
+    Pair x y -> (z Pair `k` x) `k` y
   toConstr _ = pairConstr
   gunfold k z c = case constrIndex c of
     1 -> k (k (z Pair))

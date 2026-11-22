@@ -1,9 +1,11 @@
--- System.Clock: the monotonic counter only moves forward, and a busy interval
--- reads longer than the empty interval around it.
+module Main (main) where
+
 import Data.Ord
 import Data.Word (Word64)
 import System.Clock
 
+-- System.Clock: the monotonic counter only moves forward, and a busy interval
+-- reads longer than the empty interval around it.
 burn :: Int -> Int -> Int
 burn n acc = case n of
   0 -> acc

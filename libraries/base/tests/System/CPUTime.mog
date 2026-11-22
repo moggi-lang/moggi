@@ -1,9 +1,11 @@
--- System.CPUTime: the unit a reading is counted in, and the two properties a
--- CPU clock has to have -- it never runs backwards and it accounts for work the
--- process actually did.
+module Main (main) where
+
 import Data.Ord
 import System.CPUTime
 
+-- System.CPUTime: the unit a reading is counted in, and the two properties a
+-- CPU clock has to have -- it never runs backwards and it accounts for work the
+-- process actually did.
 -- A strict accumulator loop: the result is observable, so the work is real
 -- rather than something an optimizer can drop.
 burn :: Int -> Int -> Int
@@ -38,7 +40,9 @@ main = do
   mid <- getCPUTime
   putStrLn (show (mid >= start))
   later <- busier start 100
-  putStrLn (show (case later of (t, _) -> t > start))
-  putStrLn (show (case later of (_, w) -> w))
+  putStrLn (show (case later of
+    (t, _) -> t > start))
+  putStrLn (show (case later of
+    (_, w) -> w))
   end <- getCPUTime
   putStrLn (show (end >= mid))

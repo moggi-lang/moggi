@@ -1,7 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-module Data.Eq
-  ( Eq(..)
-  ) where
+
+module Data.Eq (Eq(..)) where
 
 import Data.Bool
 import Moggi.Internal.Base

@@ -4,7 +4,6 @@
 -- `readInteger`, and the `Char`-taking wrappers (`cons`/`map`/`filter`/
 -- `elem`/`replicate`). One assertion per behaviour, in the order the sections
 -- below are described.
-
 module Char8 (char8Suite) where
 
 import Data.Bool (Bool(True, False))
@@ -73,7 +72,7 @@ char8Suite = do
       _ -> False
     _ -> False)
   assertTrue "readInt reads a negative" (case C.readInt (C.pack "-7") of
-    Just pair -> case (fst pair == (0 - 7), C.null (snd pair)) of
+    Just pair -> case (fst pair == 0 - 7, C.null (snd pair)) of
       (True, True) -> True
       _ -> False
     _ -> False)

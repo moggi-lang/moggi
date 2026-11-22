@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Internal definition of the exception-annotation existential.
 --
 -- 'Control.Exception.Annotation' re-exports the type and its constructor, as

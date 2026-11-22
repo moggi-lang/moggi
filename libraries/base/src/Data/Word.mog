@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- |
--- Unsigned integers at several fixed widths: @'Word'@ is 64 bits wide, on every
+
+-- | Unsigned integers at several fixed widths: @'Word'@ is 64 bits wide, on every
 -- backend, and @Word8@/@Word16@/@Word32@/@Word64@ are 8, 16, 32 and 64 bits wide
 -- on every backend. Nothing here has a sign, so the range of a width starts at
 -- zero and ends at all-ones: @'maxBound' :: Word8@ is 255, and arithmetic wraps
@@ -18,18 +18,17 @@
 -- value - setting, testing and counting bits, shifts and rotates - are in
 -- 'Data.Bits'.
 module Data.Word
-  (
-    -- * Unsigned integral types
+  ( -- * Unsigned integral types
     Word
   , Word8
   , Word16
   , Word32
   , Word64
-  -- * byte swapping
+    -- * byte swapping
   , byteSwap16
   , byteSwap32
   , byteSwap64
-  -- * bit reversal
+    -- * bit reversal
   , bitReverse8
   , bitReverse16
   , bitReverse32
@@ -40,7 +39,6 @@ import Data.Bool
 import Data.Bounded
 import Data.Enum
 import Data.Eq
--- For `Show Int` (the `Enum` error messages render an `Int` tag).
 import Data.Int
 import Data.Semigroup
 import Data.Real
@@ -53,17 +51,27 @@ import Moggi.Exception
 import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
+-- For `Show Int` (the `Enum` error messages render an `Int` tag).
 wordZero = wordFromInt# 0
+
 wordOne = wordFromInt# 1
 
 word8Zero = word8FromInt# 0
+
 word8One = word8FromInt# 1
+
 word16Zero = word16FromInt# 0
+
 word16One = word16FromInt# 1
+
 word32Zero = word32FromInt# 0
+
 word32One = word32FromInt# 1
+
 word64Zero = word64FromInt# 0
+
 word64One = word64FromInt# 1
+
 word64Max = word64FromInt# (intNegate# 1)
 
 -- | Reverse order of bytes in 'Word16'.
@@ -147,22 +155,38 @@ instance Bounded Word64 where
 -- instances import cannot use `show` on an `Int`, which is the instance this
 -- module defines).
 enumSuccError :: String -> a
-enumSuccError ty = error ("Enum.succ{" <> ty <> "}: tried to take `succ' of last tag in enumeration")
+enumSuccError ty =
+  error ("Enum.succ{" <> ty <> "}: tried to take `succ' of last tag in enumeration")
 
 enumPredError :: String -> a
-enumPredError ty = error ("Enum.pred{" <> ty <> "}: tried to take `pred' of first tag in enumeration")
+enumPredError ty =
+  error ("Enum.pred{" <> ty <> "}: tried to take `pred' of first tag in enumeration")
 
 -- The bounds arrive already rendered: a `Word64` bound does not fit in an `Int`,
 -- and the message has to name the type's own extremes either way.
 enumToEnumError :: String -> Int -> String -> String -> a
 enumToEnumError ty i lo hi =
-  error ("Enum.toEnum{" <> ty <> "}: tag (" <> show i <> ") is outside of enumeration's range (" <> lo <> "," <> hi <> ")")
+  error
+    ("Enum.toEnum{"
+      <> ty
+      <> "}: tag ("
+      <> show i
+      <> ") is outside of enumeration's range ("
+      <> lo
+      <> ","
+      <> hi
+      <> ")")
 
 -- `show` is the `Word64`'s own; the `Int` bounds in the message are the two
 -- fixed i64 extremes, which no `Int` value in the message needs to be built from.
 enumFromEnumError :: String -> Word64 -> a
 enumFromEnumError ty x =
-  error ("Enum.fromEnum{" <> ty <> "}: value (" <> show x <> ") is outside of Int's bounds (-9223372036854775808,9223372036854775807)")
+  error
+    ("Enum.fromEnum{"
+      <> ty
+      <> "}: value ("
+      <> show x
+      <> ") is outside of Int's bounds (-9223372036854775808,9223372036854775807)")
 
 -- A tag is an `Int`; the unsigned widths are all narrower than `Int`, so the
 -- range decides both the error and the conversion.
@@ -232,9 +256,9 @@ instance Enum Word64 where
   toEnum n = case enumTagNonNegative n of
     True -> word64FromInt# n
     False -> enumToEnumError "Word64" n "0" (show word64Max)
-  -- `Int` cannot hold every `Word64`; one that does not fit is an error, not a
-  -- wrap. The bound is `maxBound :: Int` (`Int` is 64-bit on every backend).
   fromEnum n = case word64Compare# n (word64FromInt# 9223372036854775807) of
+    -- `Int` cannot hold every `Word64`; one that does not fit is an error, not a
+    -- wrap. The bound is `maxBound :: Int` (`Int` is 64-bit on every backend).
     GT -> enumFromEnumError "Word64" n
     _ -> word64ToInt# n
 
@@ -312,7 +336,8 @@ instance Integral Word8 where
 
 instance Integral Word16 where
   quot a b = word16FromInt# (wordQuotChecked (word16ToInt# a) (word16ToInt# b))
-  rem a b = word16FromInt# (intSub# (word16ToInt# a) (intMul# (word16ToInt# (quot a b)) (word16ToInt# b)))
+  rem a b =
+    word16FromInt# (intSub# (word16ToInt# a) (intMul# (word16ToInt# (quot a b)) (word16ToInt# b)))
   quotRem a b = (quot a b, rem a b)
   div = quot
   mod = rem
@@ -321,7 +346,8 @@ instance Integral Word16 where
 
 instance Integral Word32 where
   quot a b = word32FromInt# (wordQuotChecked (word32ToInt# a) (word32ToInt# b))
-  rem a b = word32FromInt# (intSub# (word32ToInt# a) (intMul# (word32ToInt# (quot a b)) (word32ToInt# b)))
+  rem a b =
+    word32FromInt# (intSub# (word32ToInt# a) (intMul# (word32ToInt# (quot a b)) (word32ToInt# b)))
   quotRem a b = (quot a b, rem a b)
   div = quot
   mod = rem
@@ -356,7 +382,6 @@ instance Show Word64 where
   show w = word64Show# w
 
 -- Helper functions
-
 showNonNegInt :: Int -> String
 showNonNegInt n = case orderingIsGt# (intCompare# n 9) of
   True -> showNonNegIntGo n

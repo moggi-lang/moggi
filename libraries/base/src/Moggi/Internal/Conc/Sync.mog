@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The names @base@'s concurrency API mentions but does not export.
 module Moggi.Internal.Conc.Sync (STM) where
 

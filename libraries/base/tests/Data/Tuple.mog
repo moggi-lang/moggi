@@ -1,7 +1,4 @@
--- Data.Tuple: Eq and Ord for tuples answer through the element's own instances,
--- so a type with a custom Eq/Ord (`Tag` compares case-insensitively) behaves the
--- same inside a pair or triple, and a derived record holding tuple fields
--- follows those instances too.
+module Main (main) where
 
 import Data.Char qualified as C
 import Data.List qualified as L
@@ -9,10 +6,15 @@ import Data.String (String)
 import Data.String qualified as S
 import Data.Tuple (Tuple2, Tuple3, Tuple4)
 
-data Tag = Tag String deriving (Show)
+-- Data.Tuple: Eq and Ord for tuples answer through the element's own instances,
+-- so a type with a custom Eq/Ord (`Tag` compares case-insensitively) behaves the
+-- same inside a pair or triple, and a derived record holding tuple fields
+-- follows those instances too.
+data Tag = Tag String
+  deriving (Show)
 
 tagKey :: Tag -> String
-tagKey (Tag s) = S.pack (L.map C.toLower (S.unpack s))
+tagKey (Tag s) = S.pack (L.map (C.toLower) (S.unpack s))
 
 instance Eq Tag where
   (==) a b = tagKey a == tagKey b
@@ -23,7 +25,8 @@ instance Eq Tag where
 instance Ord Tag where
   compare a b = compare (tagKey a) (tagKey b)
 
-data Rec = Rec { recPair :: (Tag, Tag), recTriple :: (Tag, Tag, Tag) } deriving (Eq, Ord, Show)
+data Rec = Rec { recPair :: (Tag, Tag), recTriple :: (Tag, Tag, Tag) }
+  deriving (Eq, Ord, Show)
 
 main :: IO ()
 main = do
@@ -36,5 +39,11 @@ main = do
   putStrLn (show ((Tag "a", Tag "b", Tag "c") == (Tag "a", Tag "b", Tag "C")))
   putStrLn (show (compare (Tag "a", Tag "b", Tag "c") (Tag "a", Tag "b", Tag "A")))
   putStrLn (show ((Tag "a", Tag "b", Tag "c", Tag "d") == (Tag "A", Tag "B", Tag "C", Tag "D")))
-  putStrLn (show (Rec (Tag "a", Tag "b") (Tag "x", Tag "y", Tag "z") == Rec (Tag "A", Tag "B") (Tag "X", Tag "Y", Tag "Z")))
-  putStrLn (show (compare (Rec (Tag "a", Tag "b") (Tag "x", Tag "y", Tag "z")) (Rec (Tag "a", Tag "A") (Tag "x", Tag "y", Tag "z"))))
+  putStrLn
+    (show
+      (Rec (Tag "a", Tag "b") (Tag "x", Tag "y", Tag "z")
+        == Rec (Tag "A", Tag "B") (Tag "X", Tag "Y", Tag "Z")))
+  putStrLn
+    (show
+      (compare (Rec (Tag "a", Tag "b") (Tag "x", Tag "y", Tag "z"))
+        (Rec (Tag "a", Tag "A") (Tag "x", Tag "y", Tag "z"))))

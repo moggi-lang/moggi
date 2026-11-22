@@ -3,8 +3,8 @@
   jvm = System.Clock.JVM
   dotnet = System.Clock.DotNet
 #-}
--- |
--- Monotonic elapsed time: a clock that only moves forward, for measuring how
+
+-- | Monotonic elapsed time: a clock that only moves forward, for measuring how
 -- long something took. Unlike wall-clock time it does not jump when the host
 -- adjusts its clock, so differences of two readings are trustworthy even across
 -- a daylight-saving change or an NTP correction.
@@ -14,9 +14,7 @@
 -- backend reads its host's own monotonic source: @hrtime@ on PHP,
 -- @System.nanoTime@ on the JVM, and the @Stopwatch@ timestamp on .NET, which is
 -- scaled by its frequency to nanoseconds.
-module System.Clock
-  ( getMonotonicTimeNSec
-  ) where
+module System.Clock (getMonotonicTimeNSec) where
 
 import Control.Applicative
 import Control.Monad

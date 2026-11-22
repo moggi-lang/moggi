@@ -14,13 +14,11 @@ import Data.Either (Either(Left, Right))
 
 class Bifoldable t => Bifoldable1 t where
   {-# MINIMAL bifoldMap1 #-}
-
   -- | Fold the last two parameters of the structure into one value. Unlike
   -- 'bifold', this uses the structure's own combining operation, so it needs no
   -- monoidal identity and no empty case.
   bifold1 :: Semigroup m => t m m -> m
   bifold1 = bifoldMap1 id id
-
   -- | Map both parameters into one 'Semigroup' and combine them.
   bifoldMap1 :: Semigroup m => (a -> m) -> (b -> m) -> t a b -> m
 

@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Builders and writes for strict bytestrings. A byte string here is strict,
 -- so the lazy variants of the upstream library are spelled with the same type.
 module Blaze.ByteString.Builder.ByteString

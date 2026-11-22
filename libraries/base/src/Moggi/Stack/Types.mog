@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Type definitions for implicit call stacks.
 --
 -- 'CallStack' is @base@'s structure: a list of call sites ordered with the most
@@ -41,10 +42,7 @@ data SrcLoc = SrcLoc
 --
 -- The constructors match @base@'s, including the frozen form: pushing onto a
 -- frozen stack leaves it unchanged.
-data CallStack
-  = EmptyCallStack
-  | PushCallStack String SrcLoc CallStack
-  | FreezeCallStack CallStack
+data CallStack = EmptyCallStack | PushCallStack String SrcLoc CallStack | FreezeCallStack CallStack
 
 -- @base@ shows the underlying call-site list here; 'prettyCallStack' is the
 -- separate human-readable rendering.

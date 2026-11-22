@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Folding structures with two element types: 'Bifoldable' is 'Foldable'
 -- with a left and a right side ('Either' and pairs are the canonical
 -- examples), and this module carries the combinators built on it
@@ -53,7 +54,24 @@ import Data.Function (flip, id)
 import Data.Functor (Functor(map))
 import Data.Functor.Const (Const(Const))
 import Data.Maybe (Maybe(Nothing, Just))
-import Data.Monoid (Monoid(mempty), (<>), First(First), getFirst, All(All), getAll, Any(Any), getAny, Sum(Sum), getSum, Product(Product), getProduct, Dual(Dual), getDual, Endo(Endo), appEndo)
+import Data.Monoid
+  ( Monoid(mempty)
+  , (<>)
+  , First(First)
+  , getFirst
+  , All(All)
+  , getAll
+  , Any(Any)
+  , getAny
+  , Sum(Sum)
+  , getSum
+  , Product(Product)
+  , getProduct
+  , Dual(Dual)
+  , getDual
+  , Endo(Endo)
+  , appEndo
+  )
 import Data.Num
 import Data.Ord
 import Data.Semigroup (Arg(Arg))
@@ -79,23 +97,19 @@ import Moggi.Internal.Prim
 -- @
 class (forall a. Foldable (p a)) => Bifoldable (p :: Type -> Type -> Type) where
   {-# MINIMAL bifoldr | bifoldMap #-}
-
   -- | Combine the elements of a structure using a monoid.
   bifold :: Monoid m => p m m -> m
   bifold = bifoldMap id id
-
   -- | Map both sides into a monoid and combine the results.
   bifoldMap :: Monoid m => (a -> m) -> (b -> m) -> p a b -> m
   bifoldMap f g = bifoldr (\x acc -> f x <> acc) (\x acc -> g x <> acc) mempty
-
   -- | Right-associative fold: the left elements come before the right ones.
   bifoldr :: (a -> c -> c) -> (b -> c -> c) -> c -> p a b -> c
   bifoldr f g z t = appEndo (bifoldMap (\x -> Endo (f x)) (\x -> Endo (g x)) t) z
-
   -- | Left-associative fold: the left elements come before the right ones.
   bifoldl :: (c -> a -> c) -> (c -> b -> c) -> c -> p a b -> c
-  bifoldl f g z t = appEndo (getDual (bifoldMap (\x -> Dual (Endo (flip f x))) (\x -> Dual (Endo (flip g x))) t)) z
-
+  bifoldl f g z t =
+    appEndo (getDual (bifoldMap (\x -> Dual (Endo (flip f x))) (\x -> Dual (Endo (flip g x))) t)) z
 
 -- | A variant of 'bifoldr' with no base case; only for non-empty structures.
 bifoldr1 :: Bifoldable t => (a -> a -> a) -> t a a -> a
@@ -106,8 +120,8 @@ bifoldr1 f xs = case biList xs of
 -- | Right-associative monadic bifold. Goes through 'bifoldr' at the monadic
 -- result type: @join (map (f x))@ sequences each step's action after the rest.
 bifoldrM :: (Bifoldable t, Monad m) => (a -> c -> m c) -> (b -> c -> m c) -> c -> t a b -> m c
-bifoldrM f g z0 t = bifoldr (\x acc -> join (map (f x) acc)) (\y acc -> join (map (g y) acc)) (pure z0) t
-
+bifoldrM f g z0 t =
+  bifoldr (\x acc -> join (map (f x) acc)) (\y acc -> join (map (g y) acc)) (pure z0) t
 
 -- | A variant of 'bifoldl' with no base case; only for non-empty structures.
 bifoldl1 :: Bifoldable t => (a -> a -> a) -> t a a -> a
@@ -118,7 +132,8 @@ bifoldl1 f xs = case biList xs of
 -- | Left-associative monadic bifold. Goes through 'bifoldl' at the monadic
 -- result type, like 'bifoldrM'.
 bifoldlM :: (Bifoldable t, Monad m) => (a -> b -> m a) -> (a -> c -> m a) -> a -> t b c -> m a
-bifoldlM f g z0 t = bifoldl (\acc x -> join (map (flip f x) acc)) (\acc y -> join (map (flip g y) acc)) (pure z0) t
+bifoldlM f g z0 t =
+  bifoldl (\acc x -> join (map (flip f x) acc)) (\acc y -> join (map (flip g y) acc)) (pure z0) t
 
 -- | Map both sides to actions, evaluate left to right, and ignore the results.
 bitraverse_ :: (Bifoldable t, Applicative f) => (a -> f c) -> (b -> f d) -> t a b -> f ()
@@ -253,7 +268,6 @@ bifind p t = getFirst (bifoldMap finder finder t)
       False -> Nothing)
 
 -- Instances live at the bottom of the module, after all functions.
-
 instance Bifoldable Either where
   bifoldMap f _ (Left a) = f a
   bifoldMap _ g (Right b) = g b

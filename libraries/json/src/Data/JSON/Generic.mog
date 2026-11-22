@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Data.JSON.Generic
   ( GToJSON(..)
   , GFromJSON(..)
@@ -26,11 +27,9 @@ import Moggi.Internal.Prim (listAppend#)
 -- the `ToJSON` / `FromJSON` Generic defaults (the compiler has no JSON
 -- knowledge). They are re-exported from there; this module provides their
 -- structural instances.
-
 -- ---------------------------------------------------------------------------
 -- Helpers (disambiguate recursive class methods)
 -- ---------------------------------------------------------------------------
-
 class GRecordToPairs f where
   gRecordPairs :: Options -> f p -> [Pair]
 
@@ -62,7 +61,6 @@ parsePrefixInner opts xs = parsePrefix opts xs
 -- ---------------------------------------------------------------------------
 -- U1 / K1
 -- ---------------------------------------------------------------------------
-
 instance GToJSON U1 where
   gToJSON ignored U1 = Array []
 
@@ -111,10 +109,15 @@ instance (Selector s, ToJSON a) => GRecordToPairs (M1 S s (K1 i (Maybe a))) wher
 
 instance (Selector s, FromJSON a) => GRecordFromObject (M1 S s (K1 i (Maybe a))) where
   gParseRecord opts m =
-    let key = modifyFieldLabel opts (selName MetaProxy) in
-    parseMaybeRecordField opts key (lookup key m)
+    let key = modifyFieldLabel opts (selName MetaProxy)
+    in parseMaybeRecordField opts key (lookup key m)
 
-parseMaybeRecordField :: FromJSON a => Options -> String -> Maybe Value -> Parser (M1 S s (K1 i (Maybe a)) p)
+parseMaybeRecordField
+  :: FromJSON a
+  => Options
+  -> String
+  -> Maybe Value
+  -> Parser (M1 S s (K1 i (Maybe a)) p)
 parseMaybeRecordField opts key mv = case mv of
   Nothing -> parseOmittedMaybeField opts key
   Just v -> parseMaybeField v
@@ -159,8 +162,8 @@ instance (Selector s, ToJSON a) => GRecordToPairs (M1 S s (K1 i a)) where
 
 instance (Selector s, FromJSON a) => GRecordFromObject (M1 S s (K1 i a)) where
   gParseRecord opts m =
-    let key = modifyFieldLabel opts (selName MetaProxy) in
-    case lookup key m of
+    let key = modifyFieldLabel opts (selName MetaProxy)
+    in case lookup key m of
       Nothing -> Left ("missing field " <> key)
       Just v -> parseSelK1 v
 
@@ -170,8 +173,7 @@ parseSelK1 v = case parseJSON v of
   Right x -> Right (M1 (K1 x))
 
 instance (GRecordToPairs f, GRecordToPairs g) => GRecordToPairs (f :*: g) where
-  gRecordPairs opts (a :*: b) =
-    appendPairs (gRecordPairsLeft opts a) (gRecordPairsRight opts b)
+  gRecordPairs opts (a :*: b) = appendPairs (gRecordPairsLeft opts a) (gRecordPairsRight opts b)
 
 instance (GRecordFromObject f, GRecordFromObject g) => GRecordFromObject (f :*: g) where
   gParseRecord opts m = case parseRecordLeft opts m of
@@ -198,7 +200,6 @@ appendPairs xs ys = listAppend# xs ys
 -- ---------------------------------------------------------------------------
 -- Products (:*:) — positional arrays (Aeson WriteProduct / ProductFromJSON)
 -- ---------------------------------------------------------------------------
-
 instance ToJSON a => GProductValues (K1 i a) where
   gProductValues ignored (K1 x) = toJSON x : []
 
@@ -209,8 +210,7 @@ instance GProductValues f => GProductValues (M1 i c f) where
   gProductValues opts (M1 x) = gProductValues opts x
 
 instance (GProductValues f, GProductValues g) => GProductValues (f :*: g) where
-  gProductValues opts (a :*: b) =
-    appendVals (gProductValuesLeft opts a) (gProductValuesRight opts b)
+  gProductValues opts (a :*: b) = appendVals (gProductValuesLeft opts a) (gProductValuesRight opts b)
 
 gProductValuesLeft :: GProductValues f => Options -> f p -> [Value]
 gProductValuesLeft opts x = gProductValues opts x
@@ -219,8 +219,7 @@ gProductValuesRight :: GProductValues g => Options -> g p -> [Value]
 gProductValuesRight opts x = gProductValues opts x
 
 instance (GProductValues f, GProductValues g) => GToJSON (f :*: g) where
-  gToJSON opts (a :*: b) =
-    Array (appendVals (gProductValuesLeft opts a) (gProductValuesRight opts b))
+  gToJSON opts (a :*: b) = Array (appendVals (gProductValuesLeft opts a) (gProductValuesRight opts b))
 
 instance (GFromJSON f, GFromJSON g, GParsePrefix f, GParsePrefix g) => GFromJSON (f :*: g) where
   gParseJSON opts v = case v of
@@ -249,7 +248,11 @@ bindPrefix2 p1 opts = case p1 of
 instance (GParsePrefix f, GParsePrefix g) => GParsePrefix (f :*: g) where
   parsePrefix opts xs = bindPrefixPair (parseLeftPrefix opts xs) opts
 
-bindPrefixPair :: GParsePrefix g => Parser (f p, [Value]) -> Options -> Parser ((f :*: g) p, [Value])
+bindPrefixPair
+  :: GParsePrefix g
+  => Parser (f p, [Value])
+  -> Options
+  -> Parser ((f :*: g) p, [Value])
 bindPrefixPair p1 opts = case p1 of
   Left err -> Left err
   Right pr1 -> case parsePrefix opts (snd pr1) of
@@ -263,7 +266,6 @@ appendVals (x : xs) ys = x : appendVals xs ys
 -- ---------------------------------------------------------------------------
 -- Selectors (S1)
 -- ---------------------------------------------------------------------------
-
 instance (Selector s, GToJSON f) => GToJSON (M1 S s f) where
   gToJSON opts (M1 x) = gToJSONInner opts x
 
@@ -284,12 +286,12 @@ instance FromJSON a => GParsePrefix (M1 S s (K1 i a)) where
 -- ---------------------------------------------------------------------------
 -- Constructors (C1)
 -- ---------------------------------------------------------------------------
-
 instance (Constructor c, GToJSON f, GRecordToPairs f) => GToJSON (M1 C c f) where
   gToJSON opts (M1 x) =
-    let isRec = conIsRecord MetaProxy in
-    let unwrap = andBool (getUnwrapUnaryRecords opts) (conArity MetaProxy == 1) in
-    encodeC1Body isRec unwrap opts x
+    let isRec = conIsRecord MetaProxy
+    in
+      let unwrap = andBool (getUnwrapUnaryRecords opts) (conArity MetaProxy == 1)
+      in encodeC1Body isRec unwrap opts x
 
 encodeC1Body :: (GToJSON f, GRecordToPairs f) => Bool -> Bool -> Options -> f p -> Value
 encodeC1Body isRec unwrap opts x = case isRec of
@@ -300,13 +302,19 @@ encodeC1Body isRec unwrap opts x = case isRec of
 
 instance (Constructor c, GFromJSON f, GRecordFromObject f) => GFromJSON (M1 C c f) where
   gParseJSON opts v =
-    let isRec = conIsRecord MetaProxy in
-    let unwrap = andBool (getUnwrapUnaryRecords opts) (conArity MetaProxy == 1) in
-    case parseC1Body isRec unwrap opts v of
-      Left err -> Left err
-      Right x -> Right (M1 x)
+    let isRec = conIsRecord MetaProxy
+    in let unwrap = andBool (getUnwrapUnaryRecords opts) (conArity MetaProxy == 1)
+       in case parseC1Body isRec unwrap opts v of
+         Left err -> Left err
+         Right x -> Right (M1 x)
 
-parseC1Body :: (GFromJSON f, GRecordFromObject f) => Bool -> Bool -> Options -> Value -> Parser (f p)
+parseC1Body
+  :: (GFromJSON f, GRecordFromObject f)
+  => Bool
+  -> Bool
+  -> Options
+  -> Value
+  -> Parser (f p)
 parseC1Body isRec unwrap opts v = case isRec of
   False -> gParseJSONInner opts v
   True -> case unwrap of
@@ -329,11 +337,10 @@ instance GParsePrefix f => GParsePrefix (M1 C c f) where
 -- ---------------------------------------------------------------------------
 -- Tagged constructors (sums)
 -- ---------------------------------------------------------------------------
-
 instance (Constructor c, GToJSON f, GFromJSON f, GRecordToPairs f, GRecordFromObject f) => GTagged (M1 C c f) where
   gTagged opts (M1 x) =
-    let name = modifyConstructorTag opts (conName MetaProxy) in
-    case conIsRecord MetaProxy of
+    let name = modifyConstructorTag opts (conName MetaProxy)
+    in case conIsRecord MetaProxy of
       True -> taggedRecord opts name (gRecordPairs opts x)
       False -> taggedContents opts name (gToJSONInner opts x)
   gParseTagged opts name contents = case name == "" of
@@ -342,11 +349,14 @@ instance (Constructor c, GToJSON f, GFromJSON f, GRecordToPairs f, GRecordFromOb
       False -> Left ("unexpected constructor " <> name)
       True -> parseC1Payload opts contents
 
-parseC1Payload :: (Constructor c, GFromJSON f, GRecordFromObject f) => Options -> Maybe Value -> Parser (M1 C c f p)
-parseC1Payload opts contents = case
-  (case conIsRecord MetaProxy of
-    True -> parseTaggedRecordPayload opts contents
-    False -> gParseJSONInner opts (positionalPayload contents)) of
+parseC1Payload
+  :: (Constructor c, GFromJSON f, GRecordFromObject f)
+  => Options
+  -> Maybe Value
+  -> Parser (M1 C c f p)
+parseC1Payload opts contents = case (case conIsRecord MetaProxy of
+  True -> parseTaggedRecordPayload opts contents
+  False -> gParseJSONInner opts (positionalPayload contents)) of
   Left err -> Left err
   Right x -> Right (M1 x)
 
@@ -425,7 +435,6 @@ taggedRecord opts name pairs = case getSumEncoding opts of
 -- ---------------------------------------------------------------------------
 -- AND Options.allNullaryToStringTag with Datatype.isAllNullary MetaProxy.
 -- Bare MetaProxy is typed from the instance head (same pattern as conName MetaProxy).
-
 andBool :: Bool -> Bool -> Bool
 andBool a b = case a of
   False -> False
@@ -434,12 +443,10 @@ andBool a b = case a of
 instance (Datatype d, GToJSON f, GTagged f) => GToJSON (M1 D d f) where
   gToJSON opts (M1 x) =
     let opts2 =
-          allNullaryToStringTag
-            (andBool (getAllNullaryToStringTag opts) (isAllNullary MetaProxy))
-            opts in
-    let isSumTy = isSum MetaProxy in
-    let tagSingle = getTagSingleConstructors opts2 in
-    encodeD1Body isSumTy tagSingle opts2 x
+      allNullaryToStringTag (andBool (getAllNullaryToStringTag opts) (isAllNullary MetaProxy)) opts
+    in
+      let isSumTy = isSum MetaProxy
+      in let tagSingle = getTagSingleConstructors opts2 in encodeD1Body isSumTy tagSingle opts2 x
 
 encodeD1Body :: (GToJSON f, GTagged f) => Bool -> Bool -> Options -> f p -> Value
 encodeD1Body isSumTy tagSingle opts x = case isSumTy of
@@ -450,15 +457,12 @@ encodeD1Body isSumTy tagSingle opts x = case isSumTy of
 
 instance (Datatype d, GFromJSON f, GTagged f) => GFromJSON (M1 D d f) where
   gParseJSON opts v =
-    let opts2 =
-          allNullaryToStringTag
-            (andBool (getAllNullaryToStringTag opts) (isAllNullary MetaProxy))
-            opts in
-    let isSumTy = isSum MetaProxy in
-    let tagSingle = getTagSingleConstructors opts2 in
-    case parseD1Body isSumTy tagSingle opts2 v of
-      Left err -> Left err
-      Right x -> Right (M1 x)
+    let opts2 = allNullaryToStringTag (andBool (getAllNullaryToStringTag opts) (isAllNullary MetaProxy)) opts
+    in let isSumTy = isSum MetaProxy
+       in let tagSingle = getTagSingleConstructors opts2
+          in case parseD1Body isSumTy tagSingle opts2 v of
+            Left err -> Left err
+            Right x -> Right (M1 x)
 
 parseD1Body :: (GFromJSON f, GTagged f) => Bool -> Bool -> Options -> Value -> Parser (f p)
 parseD1Body isSumTy tagSingle opts v = case isSumTy of
@@ -509,7 +513,6 @@ parseSingleFieldObject opts m = case toList m of
 -- ---------------------------------------------------------------------------
 -- Sums (:+:)
 -- ---------------------------------------------------------------------------
-
 instance (GTagged f, GTagged g) => GToJSON (f :+: g) where
   gToJSON opts s = case s of
     L1 x -> gTaggedLeft opts x
@@ -569,7 +572,11 @@ parseSumSingleField opts v = case v of
   Bool ignored -> Left "expected single-field object for sum"
   Null -> Left "expected single-field object for sum"
 
-parseSumSingleFieldObject :: (GTagged f, GTagged g) => Options -> Map String Value -> Parser ((f :+: g) p)
+parseSumSingleFieldObject
+  :: (GTagged f, GTagged g)
+  => Options
+  -> Map String Value
+  -> Parser ((f :+: g) p)
 parseSumSingleFieldObject opts m = case toList m of
   (name, payload) : [] -> parseSumTagged opts name (Just payload)
   _ -> Left "expected single-field object for sum"
@@ -577,7 +584,11 @@ parseSumSingleFieldObject opts m = case toList m of
 parseSumUntagged :: (GTagged f, GTagged g) => Options -> Value -> Parser ((f :+: g) p)
 parseSumUntagged opts v = parseSumTagged opts "" (Just v)
 
-parseSumObjectOrReject :: (GTagged f, GTagged g) => Options -> Map String Value -> Parser ((f :+: g) p)
+parseSumObjectOrReject
+  :: (GTagged f, GTagged g)
+  => Options
+  -> Map String Value
+  -> Parser ((f :+: g) p)
 parseSumObjectOrReject opts m = case getAllNullaryToStringTag opts of
   True -> Left "expected string tag for all-nullary sum"
   False -> parseSumObject opts m
@@ -593,12 +604,22 @@ parseSumObject opts m = case getSumEncoding opts of
   TaggedObject tag ignored -> parseSumObjectLookup opts m tag
   _ -> parseSumObjectLookup opts m "tag"
 
-parseSumObjectLookup :: (GTagged f, GTagged g) => Options -> Map String Value -> String -> Parser ((f :+: g) p)
+parseSumObjectLookup
+  :: (GTagged f, GTagged g)
+  => Options
+  -> Map String Value
+  -> String
+  -> Parser ((f :+: g) p)
 parseSumObjectLookup opts m tag = case lookup tag m of
   Nothing -> Left "missing tag field"
   Just tagV -> parseSumTagValue opts m tagV
 
-parseSumTagValue :: (GTagged f, GTagged g) => Options -> Map String Value -> Value -> Parser ((f :+: g) p)
+parseSumTagValue
+  :: (GTagged f, GTagged g)
+  => Options
+  -> Map String Value
+  -> Value
+  -> Parser ((f :+: g) p)
 parseSumTagValue opts m (String name) = case contentsFieldName opts of
   contentsKey -> case lookup contentsKey m of
     Just contents -> parseSumTagged opts name (Just contents)

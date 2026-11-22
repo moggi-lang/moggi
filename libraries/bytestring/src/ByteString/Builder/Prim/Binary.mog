@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Fixed-size encodings of numbers as their binary representation.
 --
 -- Each encoder is a 'FixedPrim', so a builder is 'primFixed' of it, exactly as
@@ -48,7 +49,7 @@ import Data.Integer (Integer)
 import Data.List ((:))
 import Data.List qualified as L
 import Data.Num ((*), (-))
-import Data.Real (Integral (div, mod, toInteger), fromIntegral)
+import Data.Real (Integral(div, mod, toInteger), fromIntegral)
 import Data.Word (Word, Word16, Word32, Word64, Word8)
 
 -- | The bytes of a value, most significant first, cut to the given width.

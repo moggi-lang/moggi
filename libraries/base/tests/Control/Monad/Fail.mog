@@ -1,3 +1,5 @@
+module Main (main) where
+
 import Control.Monad.Fail
 
 softFail :: MonadFail m => m Int
@@ -7,4 +9,4 @@ main :: IO ()
 main = do
   putStrLn (show (softFail :: Maybe Int))
   putStrLn (show (softFail :: [Int]))
-  putStrLn (show (fail "nope" :: Maybe Int))
+  putStrLn (show ((fail "nope") :: Maybe Int))

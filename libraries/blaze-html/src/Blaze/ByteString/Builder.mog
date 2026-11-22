@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The main module to import as a user of the builder half: a 'Builder' that
 -- denotes a sequence of bytes, the functions that execute it, and the
 -- predefined encoders.

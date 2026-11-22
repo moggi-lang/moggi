@@ -3,8 +3,8 @@
   jvm = System.Exit.JVM
   dotnet = System.Exit.DotNet
 #-}
--- |
--- Ending a program with a result the shell can read.
+
+-- | Ending a program with a result the shell can read.
 --
 -- 'ExitCode' is the status the process leaves behind: 'ExitSuccess' is the
 -- conventional zero, 'ExitFailure' carries the number the program chose. The

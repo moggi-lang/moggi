@@ -4,8 +4,8 @@
   jvm = Data.Int.JVM
   dotnet = Data.Int.DotNet
 #-}
--- |
--- Signed integers available at several fixed widths: @'Int'@ is 64 bits wide,
+
+-- | Signed integers available at several fixed widths: @'Int'@ is 64 bits wide,
 -- on every backend, and @Int8@/@Int16@/@Int32@/@Int64@ are 8, 16, 32 and 64
 -- bits wide on every backend. Each of the four is the same underlying machine integer
 -- with a smaller stated range, so arithmetic that leaves that range keeps the
@@ -23,8 +23,7 @@
 -- another: the values share the host's machine integer, and the width is
 -- imposed after every operation.
 module Data.Int
-  (
-    -- * Signed integer types
+  ( -- * Signed integer types
     Int(..)
   , Int8(..)
   , Int16(..)
@@ -103,16 +102,27 @@ intEnumReplicate n x = case n <= 0 of
   False -> x : intEnumReplicate (n - 1) x
 
 enumSuccError :: String -> a
-enumSuccError ty = error ("Enum.succ{" <> ty <> "}: tried to take `succ' of last tag in enumeration")
+enumSuccError ty =
+  error ("Enum.succ{" <> ty <> "}: tried to take `succ' of last tag in enumeration")
 
 enumPredError :: String -> a
-enumPredError ty = error ("Enum.pred{" <> ty <> "}: tried to take `pred' of first tag in enumeration")
+enumPredError ty =
+  error ("Enum.pred{" <> ty <> "}: tried to take `pred' of first tag in enumeration")
 
 -- The bounds arrive already rendered: a `Word64` bound does not fit in an `Int`,
 -- and the message has to name the type's own extremes either way.
 enumToEnumError :: String -> Int -> String -> String -> a
 enumToEnumError ty i lo hi =
-  error ("Enum.toEnum{" <> ty <> "}: tag (" <> show i <> ") is outside of enumeration's range (" <> lo <> "," <> hi <> ")")
+  error
+    ("Enum.toEnum{"
+      <> ty
+      <> "}: tag ("
+      <> show i
+      <> ") is outside of enumeration's range ("
+      <> lo
+      <> ","
+      <> hi
+      <> ")")
 
 -- A fixed-width `toEnum` takes an `Int` tag; the fixed widths are all narrower
 -- than `Int`, so the range check decides both the error and the conversion.
@@ -138,7 +148,7 @@ intQuotChecked a b = case intEq# b 0 of
 
 instance Integral Int where
   quot a b = intQuotChecked a b
-  rem a b = a - (quot a b) * b
+  rem a b = a - quot a b * b
   quotRem a b = (quot a b, rem a b)
   divMod a b =
     let qr = quotRem a b
@@ -161,10 +171,12 @@ instance Show Int where
 -- ---------------------------------------------------------------------------
 -- Fixed-width signed ints
 -- ---------------------------------------------------------------------------
-
 int8Zero = int8FromInt# 0
+
 int16Zero = int16FromInt# 0
+
 int32Zero = int32FromInt# 0
+
 int64Zero = int64FromInt# 0
 
 instance Eq Int8 where
@@ -208,10 +220,10 @@ instance Bounded Int32 where
   maxBound = int32FromInt# 2147483647
 
 instance Bounded Int64 where
-  -- 2^63 is not host-int-representable on every backend; compute from maxBound.
   minBound = int64FromInt# (intSub# (intNegate# 9223372036854775807) 1)
   maxBound = int64FromInt# 9223372036854775807
 
+-- 2^63 is not host-int-representable on every backend; compute from maxBound.
 instance Num Int8 where
   (+) a b = int8Add# a b
   (-) a b = int8Sub# a b
@@ -252,9 +264,9 @@ instance Num Int64 where
   (+) a b = int64Add# a b
   (-) a b = int64Sub# a b
   (*) a b = int64Mul# a b
-  -- negate/abs via wrapping sub: -minBound overflows host negation (PHP float).
   negate a = int64Zero - a
   abs a = case int64Compare# a int64Zero of
+    -- negate/abs via wrapping sub: -minBound overflows host negation (PHP float).
     LT -> int64Zero - a
     _ -> a
   signum a = case int64Compare# a int64Zero of
@@ -306,13 +318,13 @@ instance Enum Int64 where
   pred n = case int64Compare# n minBound of
     EQ -> enumPredError "Int64"
     _ -> int64FromInt# (intSub# (int64ToInt# n) 1)
-  -- `Int` is itself i64, so every `Int` is a representable tag here.
   toEnum n = int64FromInt# n
   fromEnum n = int64ToInt# n
 
+-- `Int` is itself i64, so every `Int` is a representable tag here.
 instance Integral Int8 where
   quot a b = int8FromInt# (intQuotChecked (int8ToInt# a) (int8ToInt# b))
-  rem a b = a - (quot a b) * b
+  rem a b = a - quot a b * b
   quotRem a b = (quot a b, rem a b)
   divMod a b =
     let qr = quotRem a b
@@ -327,7 +339,7 @@ instance Integral Int8 where
 
 instance Integral Int16 where
   quot a b = int16FromInt# (intQuotChecked (int16ToInt# a) (int16ToInt# b))
-  rem a b = a - (quot a b) * b
+  rem a b = a - quot a b * b
   quotRem a b = (quot a b, rem a b)
   divMod a b =
     let qr = quotRem a b
@@ -342,7 +354,7 @@ instance Integral Int16 where
 
 instance Integral Int32 where
   quot a b = int32FromInt# (intQuotChecked (int32ToInt# a) (int32ToInt# b))
-  rem a b = a - (quot a b) * b
+  rem a b = a - quot a b * b
   quotRem a b = (quot a b, rem a b)
   divMod a b =
     let qr = quotRem a b
@@ -357,7 +369,7 @@ instance Integral Int32 where
 
 instance Integral Int64 where
   quot a b = int64FromInt# (intQuotChecked (int64ToInt# a) (int64ToInt# b))
-  rem a b = a - (quot a b) * b
+  rem a b = a - quot a b * b
   quotRem a b = (quot a b, rem a b)
   divMod a b =
     let qr = quotRem a b

@@ -1,12 +1,10 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | A renderer that produces indented HTML, meant for reading rather than for
 -- sending.
-module Text.Blaze.Renderer.Pretty
-  ( renderMarkup
-  , renderHtml
-  ) where
+module Text.Blaze.Renderer.Pretty (renderMarkup, renderHtml) where
 
-import Data.Bool (Bool (..))
+import Data.Bool (Bool(..))
 import Data.Char (Char)
 import Data.Int (Int)
 import Data.List ((:), replicate)
@@ -14,7 +12,7 @@ import Data.Num
 import Data.Semigroup ((<>))
 import Data.String (String)
 import Data.String qualified as S
-import Text.Blaze.Internal (Markup, MarkupM (..), getString)
+import Text.Blaze.Internal (Markup, MarkupM(..), getString)
 import Text.Blaze.Renderer.String (fromChoiceString)
 
 -- | One indentation step.
@@ -38,22 +36,29 @@ renderString markup k = go 0 (\x -> x) markup k
 go :: Int -> (String -> String) -> MarkupM a -> String -> String
 go i attrs m k = case m of
   Parent _ open close content ->
-    ind i (getString open (attrs (">\n" <> go (inc i) (\x -> x) content
-      (ind i (getString close (consChar '\n' k))))))
+    ind i
+      (getString open
+        (attrs (">\n" <> go (inc i) (\x -> x) content (ind i (getString close (consChar '\n' k))))))
   CustomParent tag content ->
-    ind i (consChar '<' (fromChoiceString tag
-      (attrs (">\n" <> go (inc i) (\x -> x) content
-        (ind i ("</" <> fromChoiceString tag (">\n" <> k)))))))
-  Leaf _ begin end _ ->
-    ind i (getString begin (attrs (getString end (consChar '\n' k))))
-  CustomLeaf tag close _ ->
-    ind i (consChar '<' (fromChoiceString tag
-      (attrs (if close then " />\n" <> k else ">\n" <> k))))
+    ind i
+      (consChar '<'
+        (fromChoiceString tag
+          (attrs
+            (">\n"
+              <> go (inc i) (\x -> x) content (ind i ("</" <> fromChoiceString tag (">\n" <> k)))))))
+  Leaf _ begin end _ -> ind i (getString begin (attrs (getString end (consChar '\n' k))))
+  CustomLeaf tag close _ -> ind i (consChar '<' (fromChoiceString tag (attrs (if close
+    then " />\n" <> k
+    else ">\n" <> k))))
   AddAttribute _ key value h ->
     go i (\inner -> getString key (fromChoiceString value (consChar '"' (attrs inner)))) h k
   AddCustomAttribute key value h ->
-    go i (\inner -> consChar ' ' (fromChoiceString key
-      ("=\"" <> fromChoiceString value (consChar '"' (attrs inner))))) h k
+    go i
+      (\inner ->
+        consChar ' '
+          (fromChoiceString key ("=\"" <> fromChoiceString value (consChar '"' (attrs inner)))))
+      h
+      k
   Content content _ -> ind i (fromChoiceString content (consChar '\n' k))
   Comment comment _ -> ind i ("<!-- " <> fromChoiceString comment (" -->\n" <> k))
   Append h1 h2 -> go i attrs h1 (go i attrs h2 k)

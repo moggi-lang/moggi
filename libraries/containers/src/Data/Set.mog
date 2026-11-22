@@ -1,5 +1,4 @@
--- |
--- A set of values, kept as a sorted list ordered by the values themselves:
+-- | A set of values, kept as a sorted list ordered by the values themselves:
 -- membership and construction walk the list, and 'toList' hands back the
 -- elements in ascending order.
 --
@@ -14,7 +13,6 @@
 -- by key alongside a combining function, and the strictly ordered variants of
 -- the traversals are not defined here. Add what a program needs rather than
 -- assuming the rest exist.
---
 module Data.Set
   ( Set
   , empty

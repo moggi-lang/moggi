@@ -1,3 +1,5 @@
+module Main (main) where
+
 import Data.Type.Coercion
 import Data.Bool (Bool(..))
 import Data.Bounded (minBound)
@@ -15,10 +17,11 @@ import Text.Show
 -- `coerceWith` casts through the proof and `sym`/`trans` move it about without
 -- inspecting the value. `repr` promotes nominal equality, and the derived
 -- instances read the proof as the single value it is.
+newtype Age = Age Int
+  deriving (Show)
 
-newtype Age = Age Int deriving (Show)
-
-newtype TTL = TTL Int deriving (Show)
+newtype TTL = TTL Int
+  deriving (Show)
 
 ageProof :: Coercion Age Int
 ageProof = Coercion
@@ -54,5 +57,5 @@ main = do
   putStrLn (show (compare ageProof ageProof))
   putStrLn (show (fromEnum ageProof))
   putStrLn (show (minBound :: Coercion Age Int))
-  putStrLn (show (toEnum 0 :: Coercion Age Int))
-  putStrLn (show (read "Coercion" :: Coercion Age Int))
+  putStrLn (show ((toEnum 0) :: Coercion Age Int))
+  putStrLn (show ((read "Coercion") :: Coercion Age Int))

@@ -1,33 +1,42 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- |
--- A C @printf(3)@-like formatter. It supports extensible formatting for new
+
+-- | A C @printf(3)@-like formatter. It supports extensible formatting for new
 -- datatypes, and almost all C @printf(3)@ syntax.
-module Text.Printf(
--- * Printing Functions
-   printf, hPrintf,
--- * Extending To New Types
---
-   PrintfArg(..),
-   FieldFormatter,
-   FieldFormat(..),
-   FormatAdjustment(..), FormatSign(..),
-   vFmt,
--- ** Handling Type-specific Modifiers
---
-   ModifierParser, FormatParse(..),
--- ** Standard Formatters
---
-   formatString, formatChar, formatInt,
-   formatInteger, formatRealFloat,
--- ** Raising Errors
---
-  errorBadFormat, errorShortFormat, errorMissingArgument,
-  errorBadArgument,
-  perror,
--- * Implementation Internals
-  PrintfType, HPrintfType,
-  IsChar(..)
-) where
+module Text.Printf
+  ( -- * Printing Functions
+    printf
+  , hPrintf
+    -- * Extending To New Types
+    --
+  , PrintfArg(..)
+  , FieldFormatter
+  , FieldFormat(..)
+  , FormatAdjustment(..)
+  , FormatSign(..)
+  , vFmt
+    -- ** Handling Type-specific Modifiers
+    --
+  , ModifierParser
+  , FormatParse(..)
+    -- ** Standard Formatters
+    --
+  , formatString
+  , formatChar
+  , formatInt
+  , formatInteger
+  , formatRealFloat
+    -- ** Raising Errors
+    --
+  , errorBadFormat
+  , errorShortFormat
+  , errorMissingArgument
+  , errorBadArgument
+  , perror
+    -- * Implementation Internals
+  , PrintfType
+  , HPrintfType
+  , IsChar(..)
+  ) where
 
 import Data.Bool
 import Data.Bounded
@@ -74,11 +83,7 @@ data FieldFormat = FieldFormat
 -- | What a type's 'parseFormat' found: the modifiers it accepted, the
 -- conversion character that ends the directive, and the rest of the format
 -- string after it.
-data FormatParse = FormatParse
-  { fpModifiers :: String
-  , fpChar :: Char
-  , fpRest :: String
-  }
+data FormatParse = FormatParse { fpModifiers :: String, fpChar :: Char, fpRest :: String }
 
 -- | One value rendered into the field a directive asked for.
 type FieldFormatter = FieldFormat -> ShowS
@@ -104,7 +109,6 @@ intModifierMap =
 -- characters the type accepts.
 class PrintfArg a where
   formatArg :: a -> FieldFormatter
-
   parseFormat :: a -> ModifierParser
   parseFormat _ cf = defaultModifierParser cf
 
@@ -126,7 +130,7 @@ class PrintfType r where
 class HPrintfType r where
   hspr :: Handle -> String -> [UPrintf] -> r
 
-instance (IsChar c) => PrintfType [c] where
+instance IsChar c => PrintfType [c] where
   spr fmts args = map fromChar (S.unpack (uprintf fmts (reverse args)))
 
 instance PrintfType String where
@@ -211,7 +215,8 @@ truncateText precision s = case precision of
 -- | Render a character: @%c@ as the character itself, and any integral
 -- conversion as its code point.
 formatChar :: Char -> FieldFormatter
-formatChar x ufmt = formatIntegral (Just (integerFromInt 0)) (integerFromInt (ord x)) (vFmt 'c' ufmt)
+formatChar x ufmt =
+  formatIntegral (Just (integerFromInt 0)) (integerFromInt (ord x)) (vFmt 'c' ufmt)
 
 -- | Render an integral value at its own type's width; a negative operand under
 -- an unsigned conversion is read back through that width.
@@ -220,8 +225,8 @@ formatInt x ufmt =
   let lowerBound = toInteger (lowerBoundOf x)
       m = fixupMods ufmt (Just lowerBound)
       ufmt' = case integerCompare lowerBound (integerFromInt 0) of
-        EQ -> vFmt 'u' ufmt
-        _ -> ufmt
+    EQ -> vFmt 'u' ufmt
+    _ -> ufmt
   in formatIntegral m (toInteger x) ufmt'
 
 lowerBoundOf :: Bounded a => a -> a
@@ -325,9 +330,12 @@ integerText i = S.pack (integerDigits i)
 integerDigits :: Integer -> [Char]
 integerDigits n = go n []
   where
-    go = \m acc -> case integerCompare m (integerFromInt 10) of
-      LT -> chr' (integerToInt m) : acc
-      _ -> go (integerQuot m (integerFromInt 10)) (chr' (integerToInt (integerRem m (integerFromInt 10))) : acc)
+    go = \m acc ->
+      case integerCompare m (integerFromInt 10) of
+        LT -> chr' (integerToInt m) : acc
+        _ ->
+          go (integerQuot m (integerFromInt 10))
+            (chr' (integerToInt (integerRem m (integerFromInt 10))) : acc)
 
 chr' :: Int -> Char
 chr' n = intToDigit n
@@ -350,7 +358,7 @@ fmtu base Nothing prec0 m0 i0 = case fmtuDigits base prec0 m0 i0 of
 fmtuDigits :: Integer -> Maybe Int -> Maybe Integer -> Integer -> Maybe String
 fmtuDigits base prec m i = case m of
   Just lower -> case integerCompare i (integerFromInt 0) of
-    LT -> fmtuDigits base prec Nothing ((-2) * lower + i)
+    LT -> fmtuDigits base prec Nothing (-2 * lower + i)
     _ -> fmtuNonNegative base prec i
   Nothing -> fmtuNonNegative base prec i
 
@@ -367,9 +375,10 @@ integerInBase base n = S.pack (integerDigitsIn base n)
 integerDigitsIn :: Integer -> Integer -> [Char]
 integerDigitsIn base n = go n []
   where
-    go = \m acc -> case integerCompare m base of
-      LT -> digitChar (integerToInt m) : acc
-      _ -> go (integerQuot m base) (digitChar (integerToInt (integerRem m base)) : acc)
+    go = \m acc ->
+      case integerCompare m base of
+        LT -> digitChar (integerToInt m) : acc
+        _ -> go (integerQuot m base) (digitChar (integerToInt (integerRem m base)) : acc)
 
 digitChar :: Int -> Char
 digitChar n = intToDigit n
@@ -399,10 +408,10 @@ adjust ufmt pair =
       str = snd pair
       naturalWidth = S.length pre + S.length str
       fill = case fmtWidth ufmt of
-        Nothing -> ""
-        Just width -> case naturalWidth < width of
-          True -> S.pack (replicate (width - naturalWidth) (fillChar ufmt))
-          False -> ""
+    Nothing -> ""
+    Just width -> case naturalWidth < width of
+      True -> S.pack (replicate (width - naturalWidth) (fillChar ufmt))
+      False -> ""
   in case isLeftAdjust ufmt of
     True -> pre <> str <> fill
     False -> case isZeroPad ufmt of
@@ -447,7 +456,14 @@ fieldChars cs0 us0 acc = case getSpecs False False Nothing False cs0 us0 of
 
 -- | Read one directive's flags, width, precision and modifiers, up to and
 -- including its conversion character.
-getSpecs :: Bool -> Bool -> Maybe FormatSign -> Bool -> [Char] -> [UPrintf] -> (FieldFormat, [Char], [UPrintf])
+getSpecs
+  :: Bool
+  -> Bool
+  -> Maybe FormatSign
+  -> Bool
+  -> [Char]
+  -> [UPrintf]
+  -> (FieldFormat, [Char], [UPrintf])
 getSpecs l z s a cs0 us = case cs0 of
   '-' : rest -> getSpecs True z s a rest us
   '+' : rest -> getSpecs l z (Just SignPlus) a rest us
@@ -463,12 +479,26 @@ getSpecs l z s a cs0 us = case cs0 of
     False -> specFromArgs Nothing Nothing l z s a cs0 us
   [] -> errorShortFormat
 
-starWidthSpecs :: Bool -> Bool -> Maybe FormatSign -> Bool -> [Char] -> [UPrintf] -> (FieldFormat, [Char], [UPrintf])
+starWidthSpecs
+  :: Bool
+  -> Bool
+  -> Maybe FormatSign
+  -> Bool
+  -> [Char]
+  -> [UPrintf]
+  -> (FieldFormat, [Char], [UPrintf])
 starWidthSpecs l z s a cs0 us =
-  let starred = getStar us
-  in widthSpecs (Just (abs (snd starred))) l z s a cs0 (fst starred)
+  let starred = getStar us in widthSpecs (Just (abs (snd starred))) l z s a cs0 (fst starred)
 
-widthSpecs :: Maybe Int -> Bool -> Bool -> Maybe FormatSign -> Bool -> [Char] -> [UPrintf] -> (FieldFormat, [Char], [UPrintf])
+widthSpecs
+  :: Maybe Int
+  -> Bool
+  -> Bool
+  -> Maybe FormatSign
+  -> Bool
+  -> [Char]
+  -> [UPrintf]
+  -> (FieldFormat, [Char], [UPrintf])
 widthSpecs width l z s a cs0 us = case cs0 of
   '.' : '*' : r -> case getStar us of
     (us', p) -> specFromArgs width (Just p) l z s a r us'
@@ -476,24 +506,48 @@ widthSpecs width l z s a cs0 us = case cs0 of
     (p, r') -> specFromArgs width (Just p) l z s a r' us
   _ -> specFromArgs width Nothing l z s a cs0 us
 
-precisionSpecs :: Bool -> Bool -> Maybe FormatSign -> Bool -> [Char] -> [UPrintf] -> (FieldFormat, [Char], [UPrintf])
+precisionSpecs
+  :: Bool
+  -> Bool
+  -> Maybe FormatSign
+  -> Bool
+  -> [Char]
+  -> [UPrintf]
+  -> (FieldFormat, [Char], [UPrintf])
 precisionSpecs l z s a cs0 us = case cs0 of
   '*' : r -> case getStar us of
     (us', p) -> specFromArgs Nothing (Just p) l z s a r us'
   _ -> case stringToDigits cs0 of
     (p, r) -> specFromArgs Nothing (Just p) l z s a r us
 
-digitWidthSpecs :: Bool -> Bool -> Maybe FormatSign -> Bool -> [Char] -> [UPrintf] -> (FieldFormat, [Char], [UPrintf])
+digitWidthSpecs
+  :: Bool
+  -> Bool
+  -> Maybe FormatSign
+  -> Bool
+  -> [Char]
+  -> [UPrintf]
+  -> (FieldFormat, [Char], [UPrintf])
 digitWidthSpecs l z s a cs0 us = case stringToDigits cs0 of
   (n, cs) -> widthSpecs (Just (abs n)) l z s a cs us
 
 -- | The field once its width and precision are known: the next argument's
 -- 'parseFormat' reads the modifiers and the conversion character.
-specFromArgs :: Maybe Int -> Maybe Int -> Bool -> Bool -> Maybe FormatSign -> Bool -> [Char] -> [UPrintf] -> (FieldFormat, [Char], [UPrintf])
+specFromArgs
+  :: Maybe Int
+  -> Maybe Int
+  -> Bool
+  -> Bool
+  -> Maybe FormatSign
+  -> Bool
+  -> [Char]
+  -> [UPrintf]
+  -> (FieldFormat, [Char], [UPrintf])
 specFromArgs width prec l z s a cs us = case us of
   [] -> errorMissingArgument
   (ufmt, _) : _ -> case ufmt (S.pack cs) of
-    FormatParse ms c cs' -> (FieldFormat width prec (adjustment width prec l z) s a ms c, S.unpack cs', us)
+    FormatParse ms c cs' ->
+      (FieldFormat width prec (adjustment width prec l z) s a ms c, S.unpack cs', us)
 
 adjustment :: Maybe Int -> Maybe Int -> Bool -> Bool -> Maybe FormatAdjustment
 adjustment width _ l z = case width of
@@ -526,16 +580,15 @@ stringToInt s = case S.unpack s of
 digitsToInt :: [Char] -> Int
 digitsToInt cs = go 0 cs
   where
-    go = \acc rest -> case rest of
-      [] -> acc
-      c : more -> case isDigit c of
-        True -> go (10 * acc + digitToInt c) more
-        False -> go acc more
+    go = \acc rest ->
+      case rest of
+        [] -> acc
+        c : more -> case isDigit c of
+          True -> go (10 * acc + digitToInt c) more
+          False -> go acc more
 
 stringToDigits :: [Char] -> (Int, [Char])
-stringToDigits cs =
-  let taken = span isDigit cs
-  in (digitsToInt (fst taken), snd taken)
+stringToDigits cs = let taken = span isDigit cs in (digitsToInt (fst taken), snd taken)
 
 -- | A real float as its sign and digits, in the notation its conversion names.
 -- 'Nothing' precision means as many digits as the value needs, and the
@@ -543,13 +596,13 @@ stringToDigits cs =
 dfmt :: Char -> Maybe Int -> Bool -> Double -> (String, String)
 dfmt c p a d =
   let notation = case toLower c of
-        'f' -> FFFixed
-        'g' -> FFGeneric
-        _ -> FFExponent
+    'f' -> FFFixed
+    'g' -> FFGeneric
+    _ -> FFExponent
       raw = Double.formatRealFloatAlt notation p a d
       cased = case isUpper c of
-        True -> S.map toUpper raw
-        False -> raw
+    True -> S.map toUpper raw
+    False -> raw
   in case S.unpack cased of
     '-' : cs -> ("-", S.pack cs)
     _ -> ("", cased)
@@ -578,7 +631,7 @@ instance PrintfArg Char where
   formatArg = formatChar
   parseFormat _ = parseIntFormat (1 :: Int)
 
-instance (IsChar c) => PrintfArg [c] where
+instance IsChar c => PrintfArg [c] where
   formatArg = formatString
 
 instance PrintfArg String where

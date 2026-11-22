@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Mutable references in 'IO': an 'IORef' holds a single value that an
 -- 'IO' action can replace.
 --
@@ -11,8 +12,7 @@
 -- There are no atomic variants: the machine exposes no atomic
 -- read-modify-write over a cell.
 module Data.IORef
-  (
-    -- * IORefs
+  ( -- * IORefs
     IORef
   , newIORef
   , readIORef

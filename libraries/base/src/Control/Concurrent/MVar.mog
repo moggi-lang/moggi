@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | An @'MVar' t@ is a mutable synchronization variable that is either
 -- empty or contains a value of type @t@. It provides two fundamental
 -- operations: 'putMVar', which fills an empty @MVar@ and blocks if it
@@ -182,11 +183,12 @@ isEmptyMVar mvar = isEmptyMVar# mvar
 -- | Run an action on the contents, putting the value back afterwards, even
 -- when the action throws.
 withMVar :: MVar a -> (a -> IO b) -> IO b
-withMVar mvar action = mask (\restore -> do
-  value <- takeMVar mvar
-  result <- onException (restore (action value)) (putMVar mvar value)
-  putMVar mvar value
-  pure result)
+withMVar mvar action = mask (\restore ->
+  do
+    value <- takeMVar mvar
+    result <- onException (restore (action value)) (putMVar mvar value)
+    putMVar mvar value
+    pure result)
 
 -- | 'withMVar' with asynchronous exceptions masked.
 withMVarMasked :: MVar a -> (a -> IO b) -> IO b
@@ -199,20 +201,22 @@ withMVarMasked mvar action = mask_ (do
 -- | Replace the contents with the result of the action. If the action throws,
 -- the original value is put back.
 modifyMVar_ :: MVar a -> (a -> IO a) -> IO ()
-modifyMVar_ mvar action = mask (\restore -> do
-  old <- takeMVar mvar
-  new <- onException (restore (action old)) (putMVar mvar old)
-  putMVar mvar new)
+modifyMVar_ mvar action = mask (\restore ->
+  do
+    old <- takeMVar mvar
+    new <- onException (restore (action old)) (putMVar mvar old)
+    putMVar mvar new)
 
 -- | Like 'modifyMVar_', but also return a value from the action.
 modifyMVar :: MVar a -> (a -> IO (a, b)) -> IO b
-modifyMVar mvar action = mask (\restore -> do
-  old <- takeMVar mvar
-  result <- onException (restore (action old)) (putMVar mvar old)
-  case result of
-    (new, answer) -> do
-      putMVar mvar new
-      pure answer)
+modifyMVar mvar action = mask (\restore ->
+  do
+    old <- takeMVar mvar
+    result <- onException (restore (action old)) (putMVar mvar old)
+    case result of
+      (new, answer) -> do
+        putMVar mvar new
+        pure answer)
 
 -- | 'modifyMVar_' with asynchronous exceptions masked.
 modifyMVarMasked_ :: MVar a -> (a -> IO a) -> IO ()

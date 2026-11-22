@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- |
--- Two related descriptions of a type of actions.
+
+-- | Two related descriptions of a type of actions.
 --
 -- An 'Applicative' describes an action that produces a value: 'pure' builds the
 -- action that produces a value without doing anything, and '(<*>)' runs a
@@ -13,25 +13,18 @@
 -- nothing, and '(<|>)' picks the first of two actions that succeeds. Everything
 -- else in this module that mentions 'Alternative' is built from those two.
 module Control.Applicative
-  (
-    -- * Applicative functors
+  ( -- * Applicative functors
     Applicative(pure, (<*>), liftA2, (*>), (<*))
-
-  -- * Alternatives
+    -- * Alternatives
   , Alternative(empty, (<|>), some, many)
-
-  -- * Instances
+    -- * Instances
   , WrappedArrow(..)
-
-  -- * Utility functions
+    -- * Utility functions
   , (<**>)
   , liftA
   , liftA3
   , optional
   ) where
-
--- asum is defined in Data.Foldable. Control.Applicative cannot
--- re-export it here: Foldable already imports this module.
 
 import Data.Bool
 import Data.Function (const, id)
@@ -45,17 +38,17 @@ import Moggi.Internal.Prim
 infixl 4 <*>, <*, *>, <**>
 infixl 3 <|>
 
+-- asum is defined in Data.Foldable. Control.Applicative cannot
+-- re-export it here: Foldable already imports this module.
 -- | Actions that produce a value.
 class Functor f => Applicative f where
   -- | The action that produces @x@ and does nothing else.
   pure :: a -> f a
-
   -- | Run two actions in order and apply the function the first one produced to
   -- the value the second one produced. The association is left to right, so an
   -- instance is free to define only this method and let the rest follow.
   (<*>) :: f (a -> b) -> f a -> f b
   (<*>) = liftA2 id
-
   -- | Lift a two-argument function over two actions, running them in order.
   -- A method (rather than a top-level function) so instances with a faster
   -- shape can override it; the default runs 'pure' and '(<*>)'.
@@ -65,42 +58,35 @@ class Functor f => Applicative f where
   -- @
   liftA2 :: (a -> b -> c) -> f a -> f b -> f c
   liftA2 f x y = map f x <*> y
-
   -- | Run both actions in order and keep the value of the second: @fa *> fb@
   -- is the effect of both, with @fb@'s result.
   (*>) :: f a -> f b -> f b
-  (*>) a1 a2 = (id <$ a1) <*> a2
-
+  (*>) a1 a2 = id <$ a1 <*> a2
   -- | Run both actions in order and keep the value of the first: @fa <* fb@
   -- is the effect of both, with @fa@'s result.
   (<*) :: f a -> f b -> f a
   (<*) = liftA2 const
-
   {-# MINIMAL pure, (<*>) | pure, liftA2 #-}
 
 -- | Actions that can fail or succeed at nothing, with a choice between two.
 class Applicative f => Alternative f where
   -- | The action that succeeds at nothing.
   empty :: f a
-
   -- | Choose between two actions: the result is the first one that does not
   -- come out empty. The choice is left to right, so the right operand is only
   -- tried when the left one is 'empty'.
   (<|>) :: f a -> f a -> f a
-
   -- | Run an action as often as it succeeds and collect the results in a
   -- list, but require it to succeed at least once: this is 'many' without
   -- the case that yields the empty list.
   some :: f a -> f [a]
   some v = liftA2 (\x xs -> x : xs) v (many v)
-
   -- | Run an action as often as it succeeds, and collect the results in a
   -- list. The list is empty when the action is 'empty' straight away, which
   -- is also the case that ends the repetition; on an action that always
   -- succeeds the repetition never ends.
   many :: f a -> f [a]
   many v = some v <|> pure []
-
   {-# MINIMAL empty, (<|>) #-}
 
 -- | Apply a produced function to a produced value, where the value is the
@@ -117,14 +103,13 @@ liftA :: Applicative f => (a -> b) -> f a -> f b
 liftA f fa = pure f <*> fa
 
 -- | Lift a three-argument function over three actions, running them in order.
---
 liftA3 :: Applicative f => (a -> b -> c -> d) -> f a -> f b -> f c -> f d
 liftA3 f a b c = liftA2 f a b <*> c
 
 -- | Turn an action that may come out 'empty' into one that produces 'Nothing'
 -- in that case and @'Just' x@ when it produces @x@.
 optional :: Alternative f => f a -> f (Maybe a)
-optional v = (Just <$> v) <|> pure Nothing
+optional v = Just <$> v <|> pure Nothing
 
 -- | Pointwise, like the wrapped type: only the 'Ord' is reversed.
 instance Applicative Down where

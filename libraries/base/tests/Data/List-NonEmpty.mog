@@ -1,9 +1,10 @@
--- Data.List.NonEmpty: the `:|` type, its indexing (`!!`, the same name base
--- uses), the total `head`/`tail`/`last`/`init`, the conversions, and the
--- `Show` that renders `:|` infix.
+module Main (main) where
 
 import Data.List.NonEmpty
 
+-- Data.List.NonEmpty: the `:|` type, its indexing (`!!`, the same name base
+-- uses), the total `head`/`tail`/`last`/`init`, the conversions, and the
+-- `Show` that renders `:|` infix.
 xs :: NonEmpty Int
 xs = 1 :| [2, 3, 4]
 
@@ -26,8 +27,8 @@ main = do
   putStrLn (show (zip xs (fromList ['a', 'b', 'c'])))
   putStrLn (show (unzip ((1, 'a') :| [(2, 'b')])))
   putStrLn (show (toList xs))
-  putStrLn (show (fromList [7, 8] :: NonEmpty Int))
+  putStrLn (show ((fromList [7, 8]) :: NonEmpty Int))
   putStrLn (show (intersperse 0 xs))
-  putStrLn (show (xs == (1 :| [2, 3, 4])))
+  putStrLn (show (xs == 1 :| [2, 3, 4]))
   putStrLn (show (compare (1 :| []) (1 :| [2])))
   putStrLn (show (sconcat (([1, 2] :| [[3], [4, 5]]) :: NonEmpty [Int])))

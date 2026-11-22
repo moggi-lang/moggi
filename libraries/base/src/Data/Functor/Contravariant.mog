@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | 'Contravariant' functors: a functor that consumes its values instead of
 -- producing them, so 'contramap' precomposes the function on the way in. A
 -- predicate @a -> Bool@ is the canonical example: given a predicate on
@@ -7,22 +8,24 @@
 --
 -- >>> getPredicate (contramap length (Predicate (> 3))) "abcde"
 -- True
-module Data.Functor.Contravariant (
-  -- * Contravariant Functors
+module Data.Functor.Contravariant
+  ( -- * Contravariant Functors
     Contravariant(..)
   , phantom
-  -- * Operators
-  , (>$<), (>$$<), ($<)
-  -- * Predicates
+    -- * Operators
+  , (>$<)
+  , (>$$<)
+  , ($<)
+    -- * Predicates
   , Predicate(..)
-  -- * Comparisons
+    -- * Comparisons
   , Comparison(..)
   , defaultComparison
-  -- * Equivalence Relations
+    -- * Equivalence Relations
   , Equivalence(..)
   , defaultEquivalence
   , comparisonEquivalence
-  -- * Dual arrows
+    -- * Dual arrows
   , Op(..)
   ) where
 
@@ -49,7 +52,6 @@ infixl 4 >$, $<, >$<, >$$<
 -- result.
 class Contravariant f where
   contramap :: (a -> b) -> f b -> f a
-
   -- | Replace every location in the input with the same value.
   (>$) :: b -> f b -> f a
   (>$) b f = contramap (const b) f

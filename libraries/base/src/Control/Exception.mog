@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Throwing, catching and bracketing exceptions.
 --
 -- The export list is @base-4.22@'s. Synchronous delivery is exact; there is no
@@ -100,8 +101,7 @@ data Handler a where
 -- | Catch the first exception whose handler type matches. If none does, the
 -- exception is rethrown.
 catches :: IO a -> [Handler a] -> IO a
-catches action handlers =
-  catchNoPropagate action (runHandlers handlers)
+catches action handlers = catchNoPropagate action (runHandlers handlers)
 
 runHandlers :: [Handler a] -> ExceptionWithContext SomeException -> IO a
 runHandlers handlers (ExceptionWithContext ctx se) = case handlers of

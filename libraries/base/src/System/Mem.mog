@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- |
--- Garbage collection control.
+
+-- | Garbage collection control.
 --
 -- The actions here ask the host to reclaim unreachable heap objects now. They
 -- are hints, not guarantees: a collector may ignore a request, and a run may
@@ -8,8 +8,7 @@
 -- a particular point; use a weak pointer when the question is whether an object
 -- has become unreachable.
 module System.Mem
-  (
-    -- * Garbage collection
+  ( -- * Garbage collection
     performGC
   , performMajorGC
   ) where

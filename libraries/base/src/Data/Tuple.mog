@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Data.Tuple
   ( fst
   , snd
@@ -8,7 +9,7 @@ module Data.Tuple
   , Tuple0
   , Tuple1
   , Unit(..)
-  , Solo (Solo, MkSolo)
+  , Solo(Solo, MkSolo)
   , getSolo
   , Tuple2(..)
   , Tuple3(..)
@@ -124,13 +125,12 @@ uncurry f p = f (fst p) (snd p)
 swap (x, y) = (y, x)
 
 -- ---------------------------------------------------------------------------
-
 -- Shared Show helper: keeps instance methods shallow (O(1) nest) so parse/TC
 -- stay near-linear in arity instead of building depth-2N stringAppend trees.
 tupleShowParts :: [String] -> String
 tupleShowParts [] = ""
-tupleShowParts [x] = x
-tupleShowParts (x:xs) = stringAppend# x (stringAppend# "," (tupleShowParts xs))
+tupleShowParts (x : []) = x
+tupleShowParts (x : xs) = stringAppend# x (stringAppend# "," (tupleShowParts xs))
 
 tupleShow :: [String] -> String
 tupleShow xs = stringAppend# "(" (stringAppend# (tupleShowParts xs) ")")
@@ -144,7 +144,6 @@ showOne x = show x
 -- the LAST type parameter; Foldable uses wildcards for leading components.
 -- Unit/Tuple0 have kind * and are not Functor. Eq and Ord are declared below, for
 -- the same arities.
-
 instance Applicative Solo where
   pure x = MkSolo x
   (<*>) f x = case f of
@@ -165,8 +164,7 @@ instance Traversable Solo where
   traverse f (MkSolo a) = MkSolo <$> f a
 
 instance Show a => Show (Solo a) where
-  showsPrec d (MkSolo a) =
-    showParen (d > 10) (\r -> showString "MkSolo " (showsPrec 11 a r))
+  showsPrec d (MkSolo a) = showParen (d > 10) (\r -> showString "MkSolo " (showsPrec 11 a r))
 
 instance Functor (Tuple2 a1) where
   map f t = case t of
@@ -246,7 +244,8 @@ instance Traversable (Tuple6 a1 a2 a3 a4 a5) where
 
 instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6) => Show (Tuple6 a1 a2 a3 a4 a5 a6) where
   show t = case t of
-    (x1, x2, x3, x4, x5, x6) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6]
+    (x1, x2, x3, x4, x5, x6) ->
+      tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6]
 
 instance Functor (Tuple7 a1 a2 a3 a4 a5 a6) where
   map f t = case t of
@@ -262,7 +261,8 @@ instance Traversable (Tuple7 a1 a2 a3 a4 a5 a6) where
 
 instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7) => Show (Tuple7 a1 a2 a3 a4 a5 a6 a7) where
   show t = case t of
-    (x1, x2, x3, x4, x5, x6, x7) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7]
+    (x1, x2, x3, x4, x5, x6, x7) ->
+      tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7]
 
 instance Functor (Tuple8 a1 a2 a3 a4 a5 a6 a7) where
   map f t = case t of
@@ -278,7 +278,17 @@ instance Traversable (Tuple8 a1 a2 a3 a4 a5 a6 a7) where
 
 instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8) => Show (Tuple8 a1 a2 a3 a4 a5 a6 a7 a8) where
   show t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7, showOne x8]
+    (x1, x2, x3, x4, x5, x6, x7, x8) ->
+      tupleShow
+        [ showOne x1
+        , showOne x2
+        , showOne x3
+        , showOne x4
+        , showOne x5
+        , showOne x6
+        , showOne x7
+        , showOne x8
+        ]
 
 instance Functor (Tuple9 a1 a2 a3 a4 a5 a6 a7 a8) where
   map f t = case t of
@@ -290,11 +300,23 @@ instance Foldable (Tuple9 a1 a2 a3 a4 a5 a6 a7 a8) where
 
 instance Traversable (Tuple9 a1 a2 a3 a4 a5 a6 a7 a8) where
   traverse f t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9) -> pure (\y9 -> (x1, x2, x3, x4, x5, x6, x7, x8, y9)) <*> f x9
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9) ->
+      pure (\y9 -> (x1, x2, x3, x4, x5, x6, x7, x8, y9)) <*> f x9
 
 instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8, Show a9) => Show (Tuple9 a1 a2 a3 a4 a5 a6 a7 a8 a9) where
   show t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7, showOne x8, showOne x9]
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9) ->
+      tupleShow
+        [ showOne x1
+        , showOne x2
+        , showOne x3
+        , showOne x4
+        , showOne x5
+        , showOne x6
+        , showOne x7
+        , showOne x8
+        , showOne x9
+        ]
 
 instance Functor (Tuple10 a1 a2 a3 a4 a5 a6 a7 a8 a9) where
   map f t = case t of
@@ -306,11 +328,24 @@ instance Foldable (Tuple10 a1 a2 a3 a4 a5 a6 a7 a8 a9) where
 
 instance Traversable (Tuple10 a1 a2 a3 a4 a5 a6 a7 a8 a9) where
   traverse f t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) -> pure (\y10 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, y10)) <*> f x10
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) ->
+      pure (\y10 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, y10)) <*> f x10
 
 instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8, Show a9, Show a10) => Show (Tuple10 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10) where
   show t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7, showOne x8, showOne x9, showOne x10]
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) ->
+      tupleShow
+        [ showOne x1
+        , showOne x2
+        , showOne x3
+        , showOne x4
+        , showOne x5
+        , showOne x6
+        , showOne x7
+        , showOne x8
+        , showOne x9
+        , showOne x10
+        ]
 
 instance Functor (Tuple11 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10) where
   map f t = case t of
@@ -322,15 +357,30 @@ instance Foldable (Tuple11 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10) where
 
 instance Traversable (Tuple11 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10) where
   traverse f t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11) -> pure (\y11 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, y11)) <*> f x11
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11) ->
+      pure (\y11 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, y11)) <*> f x11
 
 instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8, Show a9, Show a10, Show a11) => Show (Tuple11 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11) where
   show t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7, showOne x8, showOne x9, showOne x10, showOne x11]
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11) ->
+      tupleShow
+        [ showOne x1
+        , showOne x2
+        , showOne x3
+        , showOne x4
+        , showOne x5
+        , showOne x6
+        , showOne x7
+        , showOne x8
+        , showOne x9
+        , showOne x10
+        , showOne x11
+        ]
 
 instance Functor (Tuple12 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11) where
   map f t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12) -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, f x12)
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12) ->
+      (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, f x12)
 
 instance Foldable (Tuple12 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11) where
   foldr f z t = case t of
@@ -338,15 +388,31 @@ instance Foldable (Tuple12 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11) where
 
 instance Traversable (Tuple12 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11) where
   traverse f t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12) -> pure (\y12 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, y12)) <*> f x12
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12) ->
+      pure (\y12 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, y12)) <*> f x12
 
 instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8, Show a9, Show a10, Show a11, Show a12) => Show (Tuple12 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12) where
   show t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7, showOne x8, showOne x9, showOne x10, showOne x11, showOne x12]
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12) ->
+      tupleShow
+        [ showOne x1
+        , showOne x2
+        , showOne x3
+        , showOne x4
+        , showOne x5
+        , showOne x6
+        , showOne x7
+        , showOne x8
+        , showOne x9
+        , showOne x10
+        , showOne x11
+        , showOne x12
+        ]
 
 instance Functor (Tuple13 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12) where
   map f t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13) -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, f x13)
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13) ->
+      (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, f x13)
 
 instance Foldable (Tuple13 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12) where
   foldr f z t = case t of
@@ -354,15 +420,32 @@ instance Foldable (Tuple13 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12) where
 
 instance Traversable (Tuple13 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12) where
   traverse f t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13) -> pure (\y13 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, y13)) <*> f x13
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13) ->
+      pure (\y13 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, y13)) <*> f x13
 
 instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8, Show a9, Show a10, Show a11, Show a12, Show a13) => Show (Tuple13 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13) where
   show t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7, showOne x8, showOne x9, showOne x10, showOne x11, showOne x12, showOne x13]
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13) ->
+      tupleShow
+        [ showOne x1
+        , showOne x2
+        , showOne x3
+        , showOne x4
+        , showOne x5
+        , showOne x6
+        , showOne x7
+        , showOne x8
+        , showOne x9
+        , showOne x10
+        , showOne x11
+        , showOne x12
+        , showOne x13
+        ]
 
 instance Functor (Tuple14 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13) where
   map f t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14) -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, f x14)
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14) ->
+      (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, f x14)
 
 instance Foldable (Tuple14 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13) where
   foldr f z t = case t of
@@ -370,15 +453,33 @@ instance Foldable (Tuple14 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13) where
 
 instance Traversable (Tuple14 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13) where
   traverse f t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14) -> pure (\y14 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, y14)) <*> f x14
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14) ->
+      pure (\y14 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, y14)) <*> f x14
 
 instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8, Show a9, Show a10, Show a11, Show a12, Show a13, Show a14) => Show (Tuple14 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14) where
   show t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7, showOne x8, showOne x9, showOne x10, showOne x11, showOne x12, showOne x13, showOne x14]
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14) ->
+      tupleShow
+        [ showOne x1
+        , showOne x2
+        , showOne x3
+        , showOne x4
+        , showOne x5
+        , showOne x6
+        , showOne x7
+        , showOne x8
+        , showOne x9
+        , showOne x10
+        , showOne x11
+        , showOne x12
+        , showOne x13
+        , showOne x14
+        ]
 
 instance Functor (Tuple15 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14) where
   map f t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, f x15)
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) ->
+      (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, f x15)
 
 instance Foldable (Tuple15 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14) where
   foldr f z t = case t of
@@ -386,11 +487,29 @@ instance Foldable (Tuple15 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14) where
 
 instance Traversable (Tuple15 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14) where
   traverse f t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) -> pure (\y15 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, y15)) <*> f x15
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) ->
+      pure (\y15 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, y15)) <*> f x15
 
 instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8, Show a9, Show a10, Show a11, Show a12, Show a13, Show a14, Show a15) => Show (Tuple15 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15) where
   show t = case t of
-    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7, showOne x8, showOne x9, showOne x10, showOne x11, showOne x12, showOne x13, showOne x14, showOne x15]
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) ->
+      tupleShow
+        [ showOne x1
+        , showOne x2
+        , showOne x3
+        , showOne x4
+        , showOne x5
+        , showOne x6
+        , showOne x7
+        , showOne x8
+        , showOne x9
+        , showOne x10
+        , showOne x11
+        , showOne x12
+        , showOne x13
+        , showOne x14
+        , showOne x15
+        ]
 
 -- ---------------------------------------------------------------------------
 -- Eq and Ord for Unit, Solo and Tuple2..Tuple15.
@@ -400,7 +519,6 @@ instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8
 -- error -- arity 16 tuples included, exactly as in base. `(==)` compares components left
 -- to right and stops at the first difference, `compare` is lexicographic: the code base's
 -- own deriving produces (`x1 == y1 && x2 == y2`, `compare x1 y1 <> compare x2 y2 <> ...`).
-
 instance Eq () where
   (==) _ _ = True
 
@@ -475,7 +593,8 @@ instance (Eq a1, Eq a2, Eq a3, Eq a4, Eq a5) => Eq (Tuple5 a1 a2 a3 a4 a5) where
 instance (Ord a1, Ord a2, Ord a3, Ord a4, Ord a5) => Ord (Tuple5 a1 a2 a3 a4 a5) where
   compare a b = case a of
     (x1, x2, x3, x4, x5) -> case b of
-      (y1, y2, y3, y4, y5) -> compare x1 y1 <> compare x2 y2 <> compare x3 y3 <> compare x4 y4 <> compare x5 y5
+      (y1, y2, y3, y4, y5) ->
+        compare x1 y1 <> compare x2 y2 <> compare x3 y3 <> compare x4 y4 <> compare x5 y5
 
 instance (Eq a1, Eq a2, Eq a3, Eq a4, Eq a5, Eq a6) => Eq (Tuple6 a1 a2 a3 a4 a5 a6) where
   (==) a b = case a of
@@ -485,94 +604,369 @@ instance (Eq a1, Eq a2, Eq a3, Eq a4, Eq a5, Eq a6) => Eq (Tuple6 a1 a2 a3 a4 a5
 instance (Ord a1, Ord a2, Ord a3, Ord a4, Ord a5, Ord a6) => Ord (Tuple6 a1 a2 a3 a4 a5 a6) where
   compare a b = case a of
     (x1, x2, x3, x4, x5, x6) -> case b of
-      (y1, y2, y3, y4, y5, y6) -> compare x1 y1 <> compare x2 y2 <> compare x3 y3 <> compare x4 y4 <> compare x5 y5 <> compare x6 y6
+      (y1, y2, y3, y4, y5, y6) ->
+        compare x1 y1
+          <> compare x2 y2
+          <> compare x3 y3
+          <> compare x4 y4
+          <> compare x5 y5
+          <> compare x6 y6
 
 instance (Eq a1, Eq a2, Eq a3, Eq a4, Eq a5, Eq a6, Eq a7) => Eq (Tuple7 a1 a2 a3 a4 a5 a6 a7) where
   (==) a b = case a of
     (x1, x2, x3, x4, x5, x6, x7) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7) -> x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5 && x6 == y6 && x7 == y7
+      (y1, y2, y3, y4, y5, y6, y7) ->
+        x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5 && x6 == y6 && x7 == y7
 
 instance (Ord a1, Ord a2, Ord a3, Ord a4, Ord a5, Ord a6, Ord a7) => Ord (Tuple7 a1 a2 a3 a4 a5 a6 a7) where
   compare a b = case a of
     (x1, x2, x3, x4, x5, x6, x7) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7) -> compare x1 y1 <> compare x2 y2 <> compare x3 y3 <> compare x4 y4 <> compare x5 y5 <> compare x6 y6 <> compare x7 y7
+      (y1, y2, y3, y4, y5, y6, y7) ->
+        compare x1 y1
+          <> compare x2 y2
+          <> compare x3 y3
+          <> compare x4 y4
+          <> compare x5 y5
+          <> compare x6 y6
+          <> compare x7 y7
 
 instance (Eq a1, Eq a2, Eq a3, Eq a4, Eq a5, Eq a6, Eq a7, Eq a8) => Eq (Tuple8 a1 a2 a3 a4 a5 a6 a7 a8) where
   (==) a b = case a of
     (x1, x2, x3, x4, x5, x6, x7, x8) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7, y8) -> x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5 && x6 == y6 && x7 == y7 && x8 == y8
+      (y1, y2, y3, y4, y5, y6, y7, y8) ->
+        x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5 && x6 == y6 && x7 == y7 && x8 == y8
 
 instance (Ord a1, Ord a2, Ord a3, Ord a4, Ord a5, Ord a6, Ord a7, Ord a8) => Ord (Tuple8 a1 a2 a3 a4 a5 a6 a7 a8) where
   compare a b = case a of
     (x1, x2, x3, x4, x5, x6, x7, x8) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7, y8) -> compare x1 y1 <> compare x2 y2 <> compare x3 y3 <> compare x4 y4 <> compare x5 y5 <> compare x6 y6 <> compare x7 y7 <> compare x8 y8
+      (y1, y2, y3, y4, y5, y6, y7, y8) ->
+        compare x1 y1
+          <> compare x2 y2
+          <> compare x3 y3
+          <> compare x4 y4
+          <> compare x5 y5
+          <> compare x6 y6
+          <> compare x7 y7
+          <> compare x8 y8
 
 instance (Eq a1, Eq a2, Eq a3, Eq a4, Eq a5, Eq a6, Eq a7, Eq a8, Eq a9) => Eq (Tuple9 a1 a2 a3 a4 a5 a6 a7 a8 a9) where
   (==) a b = case a of
     (x1, x2, x3, x4, x5, x6, x7, x8, x9) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7, y8, y9) -> x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5 && x6 == y6 && x7 == y7 && x8 == y8 && x9 == y9
+      (y1, y2, y3, y4, y5, y6, y7, y8, y9) ->
+        x1
+        == y1
+          && x2
+          == y2
+          && x3
+          == y3
+          && x4
+          == y4
+          && x5
+          == y5
+          && x6
+          == y6
+          && x7
+          == y7
+          && x8
+          == y8
+          && x9
+          == y9
 
 instance (Ord a1, Ord a2, Ord a3, Ord a4, Ord a5, Ord a6, Ord a7, Ord a8, Ord a9) => Ord (Tuple9 a1 a2 a3 a4 a5 a6 a7 a8 a9) where
   compare a b = case a of
     (x1, x2, x3, x4, x5, x6, x7, x8, x9) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7, y8, y9) -> compare x1 y1 <> compare x2 y2 <> compare x3 y3 <> compare x4 y4 <> compare x5 y5 <> compare x6 y6 <> compare x7 y7 <> compare x8 y8 <> compare x9 y9
+      (y1, y2, y3, y4, y5, y6, y7, y8, y9) ->
+        compare x1 y1
+          <> compare x2 y2
+          <> compare x3 y3
+          <> compare x4 y4
+          <> compare x5 y5
+          <> compare x6 y6
+          <> compare x7 y7
+          <> compare x8 y8
+          <> compare x9 y9
 
 instance (Eq a1, Eq a2, Eq a3, Eq a4, Eq a5, Eq a6, Eq a7, Eq a8, Eq a9, Eq a10) => Eq (Tuple10 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10) where
   (==) a b = case a of
     (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10) -> x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5 && x6 == y6 && x7 == y7 && x8 == y8 && x9 == y9 && x10 == y10
+      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10) ->
+        x1
+        == y1
+          && x2
+          == y2
+          && x3
+          == y3
+          && x4
+          == y4
+          && x5
+          == y5
+          && x6
+          == y6
+          && x7
+          == y7
+          && x8
+          == y8
+          && x9
+          == y9
+          && x10
+          == y10
 
 instance (Ord a1, Ord a2, Ord a3, Ord a4, Ord a5, Ord a6, Ord a7, Ord a8, Ord a9, Ord a10) => Ord (Tuple10 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10) where
   compare a b = case a of
     (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10) -> compare x1 y1 <> compare x2 y2 <> compare x3 y3 <> compare x4 y4 <> compare x5 y5 <> compare x6 y6 <> compare x7 y7 <> compare x8 y8 <> compare x9 y9 <> compare x10 y10
+      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10) ->
+        compare x1 y1
+          <> compare x2 y2
+          <> compare x3 y3
+          <> compare x4 y4
+          <> compare x5 y5
+          <> compare x6 y6
+          <> compare x7 y7
+          <> compare x8 y8
+          <> compare x9 y9
+          <> compare x10 y10
 
 instance (Eq a1, Eq a2, Eq a3, Eq a4, Eq a5, Eq a6, Eq a7, Eq a8, Eq a9, Eq a10, Eq a11) => Eq (Tuple11 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11) where
   (==) a b = case a of
     (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11) -> x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5 && x6 == y6 && x7 == y7 && x8 == y8 && x9 == y9 && x10 == y10 && x11 == y11
+      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11) ->
+        x1
+        == y1
+          && x2
+          == y2
+          && x3
+          == y3
+          && x4
+          == y4
+          && x5
+          == y5
+          && x6
+          == y6
+          && x7
+          == y7
+          && x8
+          == y8
+          && x9
+          == y9
+          && x10
+          == y10
+          && x11
+          == y11
 
 instance (Ord a1, Ord a2, Ord a3, Ord a4, Ord a5, Ord a6, Ord a7, Ord a8, Ord a9, Ord a10, Ord a11) => Ord (Tuple11 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11) where
   compare a b = case a of
     (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11) -> compare x1 y1 <> compare x2 y2 <> compare x3 y3 <> compare x4 y4 <> compare x5 y5 <> compare x6 y6 <> compare x7 y7 <> compare x8 y8 <> compare x9 y9 <> compare x10 y10 <> compare x11 y11
+      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11) ->
+        compare x1 y1
+          <> compare x2 y2
+          <> compare x3 y3
+          <> compare x4 y4
+          <> compare x5 y5
+          <> compare x6 y6
+          <> compare x7 y7
+          <> compare x8 y8
+          <> compare x9 y9
+          <> compare x10 y10
+          <> compare x11 y11
 
 instance (Eq a1, Eq a2, Eq a3, Eq a4, Eq a5, Eq a6, Eq a7, Eq a8, Eq a9, Eq a10, Eq a11, Eq a12) => Eq (Tuple12 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12) where
   (==) a b = case a of
     (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12) -> x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5 && x6 == y6 && x7 == y7 && x8 == y8 && x9 == y9 && x10 == y10 && x11 == y11 && x12 == y12
+      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12) ->
+        x1
+        == y1
+          && x2
+          == y2
+          && x3
+          == y3
+          && x4
+          == y4
+          && x5
+          == y5
+          && x6
+          == y6
+          && x7
+          == y7
+          && x8
+          == y8
+          && x9
+          == y9
+          && x10
+          == y10
+          && x11
+          == y11
+          && x12
+          == y12
 
 instance (Ord a1, Ord a2, Ord a3, Ord a4, Ord a5, Ord a6, Ord a7, Ord a8, Ord a9, Ord a10, Ord a11, Ord a12) => Ord (Tuple12 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12) where
   compare a b = case a of
     (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12) -> compare x1 y1 <> compare x2 y2 <> compare x3 y3 <> compare x4 y4 <> compare x5 y5 <> compare x6 y6 <> compare x7 y7 <> compare x8 y8 <> compare x9 y9 <> compare x10 y10 <> compare x11 y11 <> compare x12 y12
+      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12) ->
+        compare x1 y1
+          <> compare x2 y2
+          <> compare x3 y3
+          <> compare x4 y4
+          <> compare x5 y5
+          <> compare x6 y6
+          <> compare x7 y7
+          <> compare x8 y8
+          <> compare x9 y9
+          <> compare x10 y10
+          <> compare x11 y11
+          <> compare x12 y12
 
 instance (Eq a1, Eq a2, Eq a3, Eq a4, Eq a5, Eq a6, Eq a7, Eq a8, Eq a9, Eq a10, Eq a11, Eq a12, Eq a13) => Eq (Tuple13 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13) where
   (==) a b = case a of
     (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13) -> x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5 && x6 == y6 && x7 == y7 && x8 == y8 && x9 == y9 && x10 == y10 && x11 == y11 && x12 == y12 && x13 == y13
+      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13) ->
+        x1
+        == y1
+          && x2
+          == y2
+          && x3
+          == y3
+          && x4
+          == y4
+          && x5
+          == y5
+          && x6
+          == y6
+          && x7
+          == y7
+          && x8
+          == y8
+          && x9
+          == y9
+          && x10
+          == y10
+          && x11
+          == y11
+          && x12
+          == y12
+          && x13
+          == y13
 
 instance (Ord a1, Ord a2, Ord a3, Ord a4, Ord a5, Ord a6, Ord a7, Ord a8, Ord a9, Ord a10, Ord a11, Ord a12, Ord a13) => Ord (Tuple13 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13) where
   compare a b = case a of
     (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13) -> compare x1 y1 <> compare x2 y2 <> compare x3 y3 <> compare x4 y4 <> compare x5 y5 <> compare x6 y6 <> compare x7 y7 <> compare x8 y8 <> compare x9 y9 <> compare x10 y10 <> compare x11 y11 <> compare x12 y12 <> compare x13 y13
+      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13) ->
+        compare x1 y1
+          <> compare x2 y2
+          <> compare x3 y3
+          <> compare x4 y4
+          <> compare x5 y5
+          <> compare x6 y6
+          <> compare x7 y7
+          <> compare x8 y8
+          <> compare x9 y9
+          <> compare x10 y10
+          <> compare x11 y11
+          <> compare x12 y12
+          <> compare x13 y13
 
 instance (Eq a1, Eq a2, Eq a3, Eq a4, Eq a5, Eq a6, Eq a7, Eq a8, Eq a9, Eq a10, Eq a11, Eq a12, Eq a13, Eq a14) => Eq (Tuple14 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14) where
   (==) a b = case a of
     (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13, y14) -> x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5 && x6 == y6 && x7 == y7 && x8 == y8 && x9 == y9 && x10 == y10 && x11 == y11 && x12 == y12 && x13 == y13 && x14 == y14
+      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13, y14) ->
+        x1
+        == y1
+          && x2
+          == y2
+          && x3
+          == y3
+          && x4
+          == y4
+          && x5
+          == y5
+          && x6
+          == y6
+          && x7
+          == y7
+          && x8
+          == y8
+          && x9
+          == y9
+          && x10
+          == y10
+          && x11
+          == y11
+          && x12
+          == y12
+          && x13
+          == y13
+          && x14
+          == y14
 
 instance (Ord a1, Ord a2, Ord a3, Ord a4, Ord a5, Ord a6, Ord a7, Ord a8, Ord a9, Ord a10, Ord a11, Ord a12, Ord a13, Ord a14) => Ord (Tuple14 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14) where
   compare a b = case a of
     (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13, y14) -> compare x1 y1 <> compare x2 y2 <> compare x3 y3 <> compare x4 y4 <> compare x5 y5 <> compare x6 y6 <> compare x7 y7 <> compare x8 y8 <> compare x9 y9 <> compare x10 y10 <> compare x11 y11 <> compare x12 y12 <> compare x13 y13 <> compare x14 y14
+      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13, y14) ->
+        compare x1 y1
+          <> compare x2 y2
+          <> compare x3 y3
+          <> compare x4 y4
+          <> compare x5 y5
+          <> compare x6 y6
+          <> compare x7 y7
+          <> compare x8 y8
+          <> compare x9 y9
+          <> compare x10 y10
+          <> compare x11 y11
+          <> compare x12 y12
+          <> compare x13 y13
+          <> compare x14 y14
 
 instance (Eq a1, Eq a2, Eq a3, Eq a4, Eq a5, Eq a6, Eq a7, Eq a8, Eq a9, Eq a10, Eq a11, Eq a12, Eq a13, Eq a14, Eq a15) => Eq (Tuple15 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15) where
   (==) a b = case a of
     (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13, y14, y15) -> x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5 && x6 == y6 && x7 == y7 && x8 == y8 && x9 == y9 && x10 == y10 && x11 == y11 && x12 == y12 && x13 == y13 && x14 == y14 && x15 == y15
+      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13, y14, y15) ->
+        x1
+        == y1
+          && x2
+          == y2
+          && x3
+          == y3
+          && x4
+          == y4
+          && x5
+          == y5
+          && x6
+          == y6
+          && x7
+          == y7
+          && x8
+          == y8
+          && x9
+          == y9
+          && x10
+          == y10
+          && x11
+          == y11
+          && x12
+          == y12
+          && x13
+          == y13
+          && x14
+          == y14
+          && x15
+          == y15
 
 instance (Ord a1, Ord a2, Ord a3, Ord a4, Ord a5, Ord a6, Ord a7, Ord a8, Ord a9, Ord a10, Ord a11, Ord a12, Ord a13, Ord a14, Ord a15) => Ord (Tuple15 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15) where
   compare a b = case a of
     (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) -> case b of
-      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13, y14, y15) -> compare x1 y1 <> compare x2 y2 <> compare x3 y3 <> compare x4 y4 <> compare x5 y5 <> compare x6 y6 <> compare x7 y7 <> compare x8 y8 <> compare x9 y9 <> compare x10 y10 <> compare x11 y11 <> compare x12 y12 <> compare x13 y13 <> compare x14 y14 <> compare x15 y15
+      (y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13, y14, y15) ->
+        compare x1 y1
+          <> compare x2 y2
+          <> compare x3 y3
+          <> compare x4 y4
+          <> compare x5 y5
+          <> compare x6 y6
+          <> compare x7 y7
+          <> compare x8 y8
+          <> compare x9 y9
+          <> compare x10 y10
+          <> compare x11 y11
+          <> compare x12 y12
+          <> compare x13 y13
+          <> compare x14 y14
+          <> compare x15 y15

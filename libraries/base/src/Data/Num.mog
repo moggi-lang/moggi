@@ -1,15 +1,16 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Basic numeric operations: the 'Num' class ('+', '-', '*', 'negate',
 -- 'abs', 'signum', 'fromInteger') and 'subtract'.
-module Data.Num
-  ( Num(..)
-  , subtract
-  ) where
+module Data.Num (Num(..), subtract) where
 
 import Data.Bool
 import Data.Ord
 import Moggi.Internal.Base
 import Moggi.Internal.Prim
+
+infixl 6 +, -
+infixl 7 *
 
 -- Integer is a bootstrap primitive synonym; this module does not import the
 -- module that defines `Integer`'s operations, so `Data.Integer` can
@@ -18,20 +19,19 @@ import Moggi.Internal.Prim
 --   * Num         -- arithmetic shared by Int, Integer, Double
 --   * Integral    -- integer division (Int, Integer)   [Data.Real]
 --   * Fractional  -- real division (Double)            [Data.Real]
-
-infixl 6 +, -
-infixl 7 *
-
 class Num a where
-  (+), (-), (*) :: a -> a -> a
-  negate, abs, signum :: a -> a
+  (+) :: a -> a -> a
+  (-) :: a -> a -> a
+  x - y = x + negate y
+  (*) :: a -> a -> a
+  negate :: a -> a
+  negate x = 0 - x
+  abs :: a -> a
+  signum :: a -> a
   fromInteger :: Integer -> a
 
-  -- Subtraction and negation are each written with the other, so an instance
-  -- may skip either one.
-  x - y = x + negate y
-  negate x = 0 - x
-
+-- Subtraction and negation are each written with the other, so an instance
+-- may skip either one.
 -- The machine integers' (`Int` and `Word`, both 64-bit) instances live with the
 -- class: `Int` and `Word` are the widths the library's own low-level code is
 -- written at -- `Data.Foldable`'s `length`, `Control.Monad`'s

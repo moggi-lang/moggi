@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module System.IO.JVM
   ( stdin
   , stdout
@@ -48,7 +49,6 @@ foreign jvm type StandardCharsets "java.nio.charset.StandardCharsets"
 foreign jvm type Closeable "interface java.io.Closeable"
 
 foreign jvm type RawFile "java.io.File"
-
 
 foreign jvm const rawStdout "java.lang.System:out" :: Handle
 
@@ -125,8 +125,7 @@ openMode pathStr mode = case mode of
   ReadWriteMode -> error "openFile: ReadWriteMode is not supported on JVM"
 
 openFileFailed :: String -> IOMode -> HostException -> IO Handle
-openFileFailed hp mode _ =
-  ioError (mkIOError (openErrorType hp mode) "openFile" Nothing (Just hp))
+openFileFailed hp mode _ = ioError (mkIOError (openErrorType hp mode) "openFile" Nothing (Just hp))
 
 -- | Java reports every failed open as `FileNotFoundException`, whichever way it
 -- failed, so the error type is read from the path.
@@ -158,12 +157,10 @@ openReadMode pathStr =
   pure (newBufferedReader (newInputStreamReader (newFileInputStream pathStr) rawUTF8))
 
 openWriteMode :: String -> IO Handle
-openWriteMode pathStr =
-  pure (newPrintStream (newFileOutputStream pathStr False) True rawUTF8)
+openWriteMode pathStr = pure (newPrintStream (newFileOutputStream pathStr False) True rawUTF8)
 
 openAppendMode :: String -> IO Handle
-openAppendMode pathStr =
-  pure (newPrintStream (newFileOutputStream pathStr True) True rawUTF8)
+openAppendMode pathStr = pure (newPrintStream (newFileOutputStream pathStr True) True rawUTF8)
 
 hClose :: Handle -> IO ()
 hClose h = closeableClose h
@@ -197,7 +194,9 @@ hGetChar :: Handle -> IO Char
 hGetChar h = do
   n <- brRead h
   let i = int32ToInt# n
-  if i == -1 then error "hGetChar: end of input" else pure (chr i)
+  if i == -1
+    then error "hGetChar: end of input"
+    else pure (chr i)
 
 hFlush h = rawFlush h
 
@@ -222,7 +221,6 @@ putStr s = hPutStr stdout s
 putStrLn s = hPutStrLn stdout s
 
 -- Internal helpers
-
 hGetLineFile :: Handle -> IO (Maybe String)
 hGetLineFile h = do
   isEof <- hIsEOFFile h
@@ -244,8 +242,7 @@ hIsEOFFile h = do
 -- file exists before it is opened, so opening for writing only truncates what
 -- is already empty.
 openTempFile :: FilePath -> String -> IO (FilePath, Handle)
-openTempFile dir template =
-  catch (openTempFileGen dir template) (tempOpenFailed dir)
+openTempFile dir template = catch (openTempFileGen dir template) (tempOpenFailed dir)
 
 openTempFileGen :: FilePath -> String -> IO (FilePath, Handle)
 openTempFileGen dir template = do
@@ -255,8 +252,7 @@ openTempFileGen dir template = do
   pure (path, h)
 
 tempOpenFailed :: FilePath -> HostException -> IO (FilePath, Handle)
-tempOpenFailed dir _ =
-  ioError (mkIOError (tempDirError dir) "openTempFile" Nothing (Just dir))
+tempOpenFailed dir _ = ioError (mkIOError (tempDirError dir) "openTempFile" Nothing (Just dir))
 
 tempDirError :: String -> IOErrorType
 tempDirError hp = case rawFileExists (newRawFile hp) of

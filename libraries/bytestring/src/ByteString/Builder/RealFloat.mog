@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Decimal formatting of floating point numbers.
 --
 -- A 'Double' is written either in fixed-point notation, in exponent notation,
@@ -19,9 +20,9 @@ module Data.ByteString.Builder.RealFloat
   ) where
 
 import Data.ByteString.Builder.Internal (Builder, string7)
-import Data.Double (Double, FFFormat (..), formatRealFloat)
+import Data.Double (Double, FFFormat(..), formatRealFloat)
 import Data.Int (Int)
-import Data.Maybe (Maybe (..))
+import Data.Maybe (Maybe(..))
 import Text.Show (show)
 
 data FormatMode = FScientific | FStandard | FGeneric
@@ -47,8 +48,7 @@ generic = MkFloatFormat FGeneric Nothing
 
 -- | Format a 'Double' with the given format.
 formatDouble :: FloatFormat -> Double -> Builder
-formatDouble (MkFloatFormat mode places) d =
-  string7 (formatRealFloat (ffOf mode) places d)
+formatDouble (MkFloatFormat mode places) d = string7 (formatRealFloat (ffOf mode) places d)
 
 ffOf :: FormatMode -> FFFormat
 ffOf mode = case mode of

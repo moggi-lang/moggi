@@ -1,9 +1,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | 'MonadFail': the 'fail' an action runs when a pattern match does not
 -- match, or when the action decides to give up.
-module Control.Monad.Fail
-  ( MonadFail(fail)
-  ) where
+module Control.Monad.Fail (MonadFail(fail)) where
 
 import Control.Monad
 import Data.List

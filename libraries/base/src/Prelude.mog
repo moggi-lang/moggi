@@ -1,6 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The Prelude - the standard module.
--- 
+--
 -- The Prelude is imported by default into all Moggi modules unless either there
 -- is an explicit import statement for it, or NoImplicitPrelude is enabled.
 module Prelude
@@ -166,7 +167,6 @@ import Data.Ord
 import Data.Enum
 import Data.Bounded
 import Data.Function (id, const, (.), flip, ($), until, asTypeOf)
-
 import Data.Bool
 import Data.Char (Char)
 import Data.Int
@@ -179,16 +179,16 @@ import Data.Traversable
 import Data.Tuple (fst, snd, curry, uncurry)
 import Data.Word (Word)
 import Moggi.Err
-import Data.List hiding (
-  uncons,
-  unsnoc,
-  subsequences,
-  permutations,
-  intercalate,
-  transpose,
-  intersperse,
-  find
-)
+import Data.List hiding
+  ( uncons
+  , unsnoc
+  , subsequences
+  , permutations
+  , intercalate
+  , transpose
+  , intersperse
+  , find
+  )
 import System.IO
   ( IO
   , putChar

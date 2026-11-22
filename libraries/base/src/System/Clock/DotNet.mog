@@ -1,6 +1,4 @@
-module System.Clock.DotNet
-  ( monotonicNanos
-  ) where
+module System.Clock.DotNet (monotonicNanos) where
 
 import Control.Applicative
 import Control.Monad
@@ -11,6 +9,7 @@ import Moggi.Internal.Prim
 import System.IO.Base (IO)
 
 foreign dotnet function stopwatchTimestamp "System.Diagnostics.Stopwatch:GetTimestamp" :: IO Int
+
 -- `Frequency` is a static field of the stopwatch, not a property.
 foreign dotnet const stopwatchFrequency "System.Diagnostics.Stopwatch:Frequency" :: Int
 

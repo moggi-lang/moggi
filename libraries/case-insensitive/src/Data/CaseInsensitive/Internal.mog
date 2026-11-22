@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- |
--- Module      :  Data.CaseInsensitive.Internal
+
+-- | Module      :  Data.CaseInsensitive.Internal
 -- Copyright   :  (c) 2011-2013 Bas van Dijk
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Bas van Dijk <v.dijk.bas@gmail.com>
@@ -50,20 +50,17 @@ import Text.Show (Show(..))
 --------------------------------------------------------------------------------
 -- Case Insensitive Strings
 --------------------------------------------------------------------------------
-
-{-| A @CI s@ provides /C/ase /I/nsensitive comparison for the string-like type
-@s@ (for example: 'String', 'B.ByteString', etc.).
-
-Note that @CI s@ has an instance for 'IsString' which together with the
-overloaded string literals allows you to write case insensitive
-string literals as in:
-
-@
-\> (\"Content-Type\" :: 'CI' 'String') == (\"CONTENT-TYPE\" :: 'CI' 'String')
-True
-@
-
--}
+-- | A @CI s@ provides /C/ase /I/nsensitive comparison for the string-like type
+-- @s@ (for example: 'String', 'B.ByteString', etc.).
+--
+-- Note that @CI s@ has an instance for 'IsString' which together with the
+-- overloaded string literals allows you to write case insensitive
+-- string literals as in:
+--
+-- @
+-- \> (\"Content-Type\" :: 'CI' 'String') == (\"CONTENT-TYPE\" :: 'CI' 'String')
+-- True
+-- @
 data CI s = CI { original :: s, foldedCase :: s }
 
 -- | Make the given string-like value case insensitive.
@@ -80,7 +77,7 @@ unsafeMk :: FoldCase s => s -> CI s
 unsafeMk s = CI s s
 
 -- | Transform the original string-like value but keep it case insensitive.
-map :: FoldCase s2 => (s1 -> s2) -> (CI s1 -> CI s2)
+map :: FoldCase s2 => (s1 -> s2) -> CI s1 -> CI s2
 map f ci = mk (f (original ci))
 
 -- | Transform the original string-like value but keep it case insensitive.
@@ -115,14 +112,12 @@ instance Show s => Show (CI s) where
 --------------------------------------------------------------------------------
 -- Folding (lowering) cases
 --------------------------------------------------------------------------------
-
 -- | Class of string-like types that support folding cases.
 --
 -- /Note/: In some languages, case conversion is a locale- and context-dependent
 -- operation. The @foldCase@ method is /not/ intended to be locale sensitive.
 class FoldCase s where
   foldCase :: s -> s
-
   foldCaseList :: [s] -> [s]
   foldCaseList = L.map foldCase
 
@@ -147,6 +142,6 @@ instance FoldCase (CI s) where
 
 toLower8 :: Word8 -> Word8
 toLower8 w =
-  if (65 <= w && w <= 90) || (192 <= w && w <= 214) || (216 <= w && w <= 222)
+  if 65 <= w && w <= 90 || 192 <= w && w <= 214 || 216 <= w && w <= 222
     then w + 32
     else w

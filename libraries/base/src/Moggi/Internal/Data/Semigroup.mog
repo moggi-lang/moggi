@@ -1,34 +1,35 @@
 -- | The kernel of @Data.Semigroup@ and @Data.Monoid@: the classes, the
 -- wrapper types and their instances. Public modules re-export from here, the
 -- way the class modules above them need the names.
-module Moggi.Internal.Data.Semigroup (
-    Semigroup(..)
+module Moggi.Internal.Data.Semigroup
+  ( Semigroup(..)
   , Monoid(..)
   , stimesMonoid
   , stimesIdempotent
   , stimesIdempotentMonoid
   , mtimesDefault
-  -- * Semigroups
+    -- * Semigroups
   , Min(..)
   , Max(..)
   , First(..)
   , Last(..)
   , WrappedMonoid(..)
-  -- * Re-exported monoids
+    -- * Re-exported monoids
   , Dual(..)
   , Endo(..)
   , All(..)
   , Any(..)
   , Sum(..)
   , Product(..)
-  -- * Difference lists of a semigroup
+    -- * Difference lists of a semigroup
   , diff
   , cycle1
-  -- * ArgMin, ArgMax
+    -- * ArgMin, ArgMax
   , Arg(..)
   , ArgMin
   , ArgMax
   ) where
+
 import Moggi.Err
 import Data.Bool
 import Data.Bounded
@@ -48,39 +49,36 @@ infixr 6 <>
 class Semigroup a where
   (<>) :: a -> a -> a
   a <> b = sconcat (a :| [b])
-
   sconcat :: NonEmpty a -> a
   sconcat (a :| as) = go a as
     where
-      go b (c : cs) = b <> go c cs
-      go b [] = b
-
+      go b _p1 = case (b, _p1) of
+        (b, c : cs) -> b <> go c cs
+        (b, []) -> b
   stimes :: Integral b => b -> a -> a
   stimes y0 x0
     | y0 <= 0 = errorWithoutStackTrace "stimes: positive multiplier expected"
-    | otherwise = f x0 y0
-    where
-      f x y
-        | y `rem` 2 == 0 = f (x <> x) (y `quot` 2)
-        | y == 1 = x
-        | otherwise = g (x <> x) (y `quot` 2) x
-      g x y z
-        | y `rem` 2 == 0 = g (x <> x) (y `quot` 2) z
-        | y == 1 = x <> z
-        | otherwise = g (x <> x) (y `quot` 2) (x <> z)
-
+    | otherwise =
+      f x0 y0
+        where
+          f x y
+            | y `rem` 2 == 0 = f (x <> x) (y `quot` 2)
+            | y == 1 = x
+            | otherwise = g (x <> x) (y `quot` 2) x
+          g x y z
+            | y `rem` 2 == 0 = g (x <> x) (y `quot` 2) z
+            | y == 1 = x <> z
+            | otherwise = g (x <> x) (y `quot` 2) (x <> z)
   {-# MINIMAL (<>) | sconcat #-}
 
 class Semigroup a => Monoid a where
   {-# MINIMAL mempty | mconcat #-}
-
   mempty :: a
   mempty = mconcat []
-
-  -- Spelled out rather than folded with 'foldr' so this module stays below
-  -- 'Data.Foldable': the fold lives above the monoids, not beneath them.
   mconcat :: [a] -> a
   mconcat xs = case xs of
+    -- Spelled out rather than folded with 'foldr' so this module stays below
+    -- 'Data.Foldable': the fold lives above the monoids, not beneath them.
     [] -> mempty
     x : rest -> x <> mconcat rest
 
@@ -181,7 +179,6 @@ cycle1 :: Semigroup m => m -> m
 cycle1 xs = xs <> cycle1 xs
 
 -- Min / Max wrapper types
-
 newtype Min a = Min { getMin :: a }
 
 getMin :: Min a -> a
@@ -208,8 +205,8 @@ instance Ord a => Ord (Min a) where
   compare a b = compare (getMin a) (getMin b)
 
 instance Show a => Show (Min a) where
-  showsPrec d m = showParen (d > 10)
-    (\r -> showString "Min {getMin = " (showsPrec 0 (getMin m) (showString "}" r)))
+  showsPrec d m =
+    showParen (d > 10) (\r -> showString "Min {getMin = " (showsPrec 0 (getMin m) (showString "}" r)))
 
 instance Bounded a => Bounded (Min a) where
   minBound = Min minBound
@@ -241,8 +238,8 @@ instance Ord a => Ord (Max a) where
   compare a b = compare (getMax a) (getMax b)
 
 instance Show a => Show (Max a) where
-  showsPrec d m = showParen (d > 10)
-    (\r -> showString "Max {getMax = " (showsPrec 0 (getMax m) (showString "}" r)))
+  showsPrec d m =
+    showParen (d > 10) (\r -> showString "Max {getMax = " (showsPrec 0 (getMax m) (showString "}" r)))
 
 instance Bounded a => Bounded (Max a) where
   minBound = Max minBound
@@ -286,8 +283,9 @@ instance Ord a => Ord (First a) where
   compare a b = compare (getFirst a) (getFirst b)
 
 instance Show a => Show (First a) where
-  showsPrec d f = showParen (d > 10)
-    (\r -> showString "First {getFirst = " (showsPrec 0 (getFirst f) (showString "}" r)))
+  showsPrec d f =
+    showParen (d > 10)
+      (\r -> showString "First {getFirst = " (showsPrec 0 (getFirst f) (showString "}" r)))
 
 instance Bounded a => Bounded (First a) where
   minBound = First minBound
@@ -329,8 +327,8 @@ instance Ord a => Ord (Last a) where
   compare a b = compare (getLast a) (getLast b)
 
 instance Show a => Show (Last a) where
-  showsPrec d l = showParen (d > 10)
-    (\r -> showString "Last {getLast = " (showsPrec 0 (getLast l) (showString "}" r)))
+  showsPrec d l =
+    showParen (d > 10) (\r -> showString "Last {getLast = " (showsPrec 0 (getLast l) (showString "}" r)))
 
 instance Bounded a => Bounded (Last a) where
   minBound = Last minBound
@@ -357,9 +355,6 @@ instance Functor (Arg a) where
 
 -- The 'Bifunctor' instance lives in Data.Bifunctor: this module cannot import
 -- it (Bifunctor -> Either -> Foldable -> Monoid -> Semigroup).
-
-
-
 -- | 'Down' combines the way the wrapped type does; only the 'Ord' is
 -- reversed, so these live here (where 'Semigroup' and 'Monoid' are defined)
 -- rather than in 'Data.Ord', which sits below this module.
@@ -368,8 +363,8 @@ instance Semigroup a => Semigroup (Down a) where
 
 instance Monoid a => Monoid (Down a) where
   mempty = Down mempty
--- WrappedMonoid
 
+-- WrappedMonoid
 -- | Any 'Monoid' as a 'Semigroup' (a formality now that 'Semigroup' is a
 -- superclass, kept for the same combinators existing code uses).
 newtype WrappedMonoid m = WrapMonoid { unwrapMonoid :: m }
@@ -400,7 +395,6 @@ instance Enum a => Enum (WrappedMonoid a) where
 --
 -- These live beside the classes rather than in @Data.Monoid@: the module
 -- defines 'Monoid', and @Data.Monoid@ re-exports them from here.
-
 -- | A monoid on @a@ whose combination runs the other way round.
 newtype Dual a = Dual { getDual :: a }
   deriving (Eq, Ord, Bounded)
@@ -421,8 +415,8 @@ instance Functor Dual where
   map f d = Dual (f (getDual d))
 
 instance Show a => Show (Dual a) where
-  showsPrec d x = showParen (d > 10)
-    (\r -> showString "Dual {getDual = " (showsPrec 0 (getDual x) (showString "}" r)))
+  showsPrec d x =
+    showParen (d > 10) (\r -> showString "Dual {getDual = " (showsPrec 0 (getDual x) (showString "}" r)))
 
 -- | Endofunctions @a -> a@, composed with '(<>)' the way @(.)@ composes them.
 newtype Endo a = Endo { appEndo :: a -> a }
@@ -470,8 +464,8 @@ instance Ord All where
   compare a b = compare (getAll a) (getAll b)
 
 instance Show All where
-  showsPrec d a = showParen (d > 10)
-    (\r -> showString "All {getAll = " (showsPrec 0 (getAll a) (showString "}" r)))
+  showsPrec d a =
+    showParen (d > 10) (\r -> showString "All {getAll = " (showsPrec 0 (getAll a) (showString "}" r)))
 
 instance Bounded All where
   minBound = All False
@@ -498,8 +492,8 @@ instance Ord Any where
   compare a b = compare (getAny a) (getAny b)
 
 instance Show Any where
-  showsPrec d a = showParen (d > 10)
-    (\r -> showString "Any {getAny = " (showsPrec 0 (getAny a) (showString "}" r)))
+  showsPrec d a =
+    showParen (d > 10) (\r -> showString "Any {getAny = " (showsPrec 0 (getAny a) (showString "}" r)))
 
 instance Bounded Any where
   minBound = Any False
@@ -529,8 +523,8 @@ instance Ord a => Ord (Sum a) where
   compare a b = compare (getSum a) (getSum b)
 
 instance Show a => Show (Sum a) where
-  showsPrec d s = showParen (d > 10)
-    (\r -> showString "Sum {getSum = " (showsPrec 0 (getSum s) (showString "}" r)))
+  showsPrec d s =
+    showParen (d > 10) (\r -> showString "Sum {getSum = " (showsPrec 0 (getSum s) (showString "}" r)))
 
 instance Bounded a => Bounded (Sum a) where
   minBound = Sum minBound
@@ -569,8 +563,9 @@ instance Ord a => Ord (Product a) where
   compare a b = compare (getProduct a) (getProduct b)
 
 instance Show a => Show (Product a) where
-  showsPrec d p = showParen (d > 10)
-    (\r -> showString "Product {getProduct = " (showsPrec 0 (getProduct p) (showString "}" r)))
+  showsPrec d p =
+    showParen (d > 10)
+      (\r -> showString "Product {getProduct = " (showsPrec 0 (getProduct p) (showString "}" r)))
 
 instance Bounded a => Bounded (Product a) where
   minBound = Product minBound

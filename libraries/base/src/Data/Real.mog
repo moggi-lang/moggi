@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Exact and fractional arithmetic: 'Integral' ('quot', 'rem', 'div', 'mod',
 -- 'toInteger'), 'Fractional' ('/', 'recip', 'fromRational'), 'Floating',
 -- 'Real' ('toRational'), 'RealFrac' ('properFraction', 'truncate', 'round',
@@ -50,17 +51,15 @@ infixl 7 %
 
 -- Integer is bootstrap-available; instances live in the module that defines the
 -- type (`Data.Integer`, `Data.Int`).
-
 class Num a => Fractional a where
   (/) :: a -> a -> a
+  x / y = x * recip y
   recip :: a -> a
+  recip x = 1 / x
   fromRational :: Rational -> a
 
-  -- Each of these is written with the other, so an instance may skip either
-  -- one and still be complete with 'fromRational'.
-  recip x = 1 / x
-  x / y = x * recip y
-
+-- Each of these is written with the other, so an instance may skip either
+-- one and still be complete with 'fromRational'.
 -- | Trigonometric and hyperbolic functions and related functions.
 --
 -- These methods have default bodies: @('**')@, @'logBase'@,
@@ -74,39 +73,46 @@ class Fractional a => Floating a where
   log :: a -> a
   -- | @'sqrt' x@ is the square root of @x@.
   sqrt :: a -> a
+  sqrt x = x ** 0.5
   -- | @'x' ** 'y'@ raises @x@ to the power @y@.
   (**) :: a -> a -> a
+  (**) x y = exp (log x * y)
   -- | @'logBase' b x@ is the logarithm of @x@ to base @b@.
   logBase :: a -> a -> a
+  logBase x y = log y / log x
   -- | @'sin'@, @'cos'@ and @'tan'@ are the trigonometric functions.
-  sin, cos, tan :: a -> a
+  sin :: a -> a
+  cos :: a -> a
+  tan :: a -> a
+  tan x = sin x / cos x
   -- | @'asin'@, @'acos'@ and @'atan'@ are the inverse trigonometric functions.
-  asin, acos, atan :: a -> a
+  asin :: a -> a
+  acos :: a -> a
+  atan :: a -> a
   -- | @'sinh'@, @'cosh'@ and @'tanh'@ are the hyperbolic functions.
-  sinh, cosh, tanh :: a -> a
+  sinh :: a -> a
+  cosh :: a -> a
+  tanh :: a -> a
+  tanh x = sinh x / cosh x
   -- | @'asinh'@, @'acosh'@ and @'atanh'@ are the inverse hyperbolic functions.
-  asinh, acosh, atanh :: a -> a
+  asinh :: a -> a
+  acosh :: a -> a
+  atanh :: a -> a
   -- | @'log1p' x@ computes @'log' (1 + x)@, but provides more precise results
   -- for small (absolute) values of @x@ if possible.
   log1p :: a -> a
+  log1p x = log (1 + x)
   -- | @'expm1' x@ computes @'exp' x - 1@, but provides more precise results for
   -- small (absolute) values of @x@ if possible.
   expm1 :: a -> a
+  expm1 x = exp x - 1
   -- | @'log1pexp' x@ computes @'log' (1 + 'exp' x)@, but provides more precise
   -- results if possible.
   log1pexp :: a -> a
+  log1pexp x = log1p (exp x)
   -- | @'log1mexp' x@ computes @'log' (1 - 'exp' x)@, but provides more precise
   -- results if possible.
   log1mexp :: a -> a
-
-  (**) x y = exp (log x * y)
-  logBase x y = log y / log x
-  sqrt x = x ** 0.5
-  tan x = sin x / cos x
-  tanh x = sinh x / cosh x
-  log1p x = log (1 + x)
-  expm1 x = exp x - 1
-  log1pexp x = log1p (exp x)
   log1mexp x = log1p (negate (exp x))
 
 class (Num a, Ord a) => Real a where
@@ -114,24 +120,27 @@ class (Num a, Ord a) => Real a where
   toRational :: a -> Rational
 
 class (Num a, Ord a, Enum a) => Integral a where
-  quot, rem, div, mod :: a -> a -> a
-  quotRem, divMod :: a -> a -> (a, a)
-  toInteger :: a -> Integer
-
-  -- Each division is one half of the pair, and 'divMod' corrects a quotient
-  -- that was truncated towards zero rather than towards negative infinity.
+  quot :: a -> a -> a
   quot n d = case quotRem n d of
+    -- Each division is one half of the pair, and 'divMod' corrects a quotient
+    -- that was truncated towards zero rather than towards negative infinity.
     (q, _) -> q
+  rem :: a -> a -> a
   rem n d = case quotRem n d of
     (_, r) -> r
+  div :: a -> a -> a
   div n d = case divMod n d of
     (q, _) -> q
+  mod :: a -> a -> a
   mod n d = case divMod n d of
     (_, r) -> r
+  quotRem :: a -> a -> (a, a)
+  divMod :: a -> a -> (a, a)
   divMod n d = case quotRem n d of
     (q, r) -> case signum r == negate (signum d) of
       True -> (q - 1, r + d)
       False -> (q, r)
+  toInteger :: a -> Integer
 
 -- | Extracting components of fractions.
 class (Real a, Fractional a) => RealFrac a where
@@ -139,20 +148,18 @@ class (Real a, Fractional a) => RealFrac a where
   -- truncated towards zero and @f@ is the fractional part, so that
   -- @x = n + f@.
   properFraction :: Integral b => a -> (b, a)
-
   -- | @'truncate' x@ returns the integer nearest @x@ between zero and @x@.
   truncate :: Integral b => a -> b
+  truncate = truncateDefault
   -- | @'round' x@ returns the nearest integer to @x@; even integers are
   -- preferred when @x@ is equidistant from two of them.
   round :: Integral b => a -> b
+  round = roundDefault
   -- | @'ceiling' x@ returns the least integer not less than @x@.
   ceiling :: Integral b => a -> b
+  ceiling = ceilingDefault
   -- | @'floor' x@ returns the greatest integer not greater than @x@.
   floor :: Integral b => a -> b
-
-  truncate = truncateDefault
-  round = roundDefault
-  ceiling = ceilingDefault
   floor = floorDefault
 
 truncateDefault :: (RealFrac a, Integral b) => a -> b
@@ -268,19 +275,19 @@ instance Integral a => Enum (Ratio a) where
 ratioEnumFrom :: Integral a => Ratio a -> [Ratio a]
 ratioEnumFrom x = go 0
   where
-    go k = (x + fromInteger k) : go (k + 1)
+    go k = x + fromInteger k : go (k + 1)
 
 ratioEnumFromThen :: Integral a => Ratio a -> Ratio a -> [Ratio a]
 ratioEnumFromThen x y = go 0
   where
     step = y - x
-    go k = (x + fromInteger k * step) : go (k + 1)
+    go k = x + fromInteger k * step : go (k + 1)
 
 ratioEnumFromTo :: Integral a => Ratio a -> Ratio a -> [Ratio a]
 ratioEnumFromTo x limit = go 0
   where
     go k = case x + fromInteger k <= limit of
-      True -> (x + fromInteger k) : go (k + 1)
+      True -> x + fromInteger k : go (k + 1)
       False -> []
 
 ratioEnumFromThenTo :: Integral a => Ratio a -> Ratio a -> Ratio a -> [Ratio a]
@@ -289,10 +296,10 @@ ratioEnumFromThenTo x y limit = go 0
     step = y - x
     go k = case step >= 0 of
       True -> case x + fromInteger k * step <= limit of
-        True -> (x + fromInteger k * step) : go (k + 1)
+        True -> x + fromInteger k * step : go (k + 1)
         False -> []
       False -> case x + fromInteger k * step >= limit of
-        True -> (x + fromInteger k * step) : go (k + 1)
+        True -> x + fromInteger k * step : go (k + 1)
         False -> []
 
 fromIntegral :: (Integral a, Num b) => a -> b
@@ -365,11 +372,12 @@ x ^^ n = case n >= 0 of
 gcd :: Integral a => a -> a -> a
 gcd x y = gcd' (abs x) (abs y)
   where
-    gcd' a 0 = a
-    gcd' a b = gcd' b (a `rem` b)
+    gcd' a _p1 = case (a, _p1) of
+      (a, 0) -> a
+      (a, b) -> gcd' b (a `rem` b)
 
 -- | @'lcm' x y@ is the smallest positive integer that both @x@ and @y@ divide.
 lcm :: Integral a => a -> a -> a
 lcm _ 0 = 0
 lcm 0 _ = 0
-lcm x y = abs ((x `quot` gcd x y) * y)
+lcm x y = abs (x `quot` gcd x y * y)

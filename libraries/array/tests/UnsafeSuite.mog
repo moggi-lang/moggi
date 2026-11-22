@@ -3,7 +3,6 @@
 --
 -- The helpers pin each overloaded conversion to its concrete pair: the
 -- classes have no functional dependencies, so bare uses are ambiguous.
-
 module UnsafeSuite (unsafeSuite) where
 
 import Control.Monad.ST (ST, runST)
@@ -37,9 +36,16 @@ newIOIntList = newListArray
 
 unsafeSuite :: IO ()
 unsafeSuite = do
-  let frozen = runST (do marr <- newSTIntList bndsU [1, 2, 3]; f <- freezeST marr; writeArray marr 0 99; pure f) :: Array Int Int
+  let frozen = (runST (do
+    marr <- newSTIntList bndsU [1, 2, 3]
+    f <- freezeST marr
+    writeArray marr 0 99
+    pure f)) :: Array Int Int
   expect "ST unsafeFreeze copies" (show (elems frozen)) "[1,2,3]"
-  let vals = runST (do marr <- thawSTU frozen; writeArray marr 1 88; getElems marr) :: [Int]
+  let vals = (runST (do
+    marr <- thawSTU frozen
+    writeArray marr 1 88
+    getElems marr)) :: [Int]
   expect "ST unsafeThaw copies" (show vals) "[1,88,3]"
   expect "ST original untouched" (show (elems frozen)) "[1,2,3]"
   marr <- newIOIntList bndsU [4, 5, 6]
@@ -51,4 +57,6 @@ unsafeSuite = do
   expect "IO original untouched" (show (elems frozenIO)) "[4,5,6]"
   v <- readArray marrT 2
   expect "IO thawed is writable" (show v) "66"
-  assertTrue "frozen equals source" (frozen == (runST (do m <- newSTIntList bndsU [1, 2, 3]; freezeST m) :: Array Int Int))
+  assertTrue "frozen equals source" (frozen == ((runST (do
+    m <- newSTIntList bndsU [1, 2, 3]
+    freezeST m)) :: Array Int Int))

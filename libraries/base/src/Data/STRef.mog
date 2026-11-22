@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Mutable cells for state threads: an 'STRef' holds one value that an
 -- 'ST' action can replace.
 --
@@ -8,8 +9,7 @@
 -- cell would leave it. Reading and writing sequence in bind order with the
 -- allocations around them.
 module Data.STRef
-  (
-    -- * STRefs
+  ( -- * STRefs
     STRef
   , newSTRef
   , readSTRef

@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Data.String.JVM
   ( singleton
   , pack
@@ -26,7 +27,6 @@ import Moggi.Internal.Prim
 
 -- Ordinary JDK FFI only (no moggi.rt.StringOps).
 -- Width-exact signatures: JDK String/Character APIs are int32-based.
-
 -- Character.toString(int) — codepoint overload (Char is a Unicode scalar).
 foreign jvm function rawSingleton "java.lang.Character:toString" :: Int32 -> String
 
@@ -108,5 +108,5 @@ unlines (line : rest) = line <> "\n" <> unlines rest
 
 unwords :: [String] -> String
 unwords [] = ""
-unwords [x] = x
+unwords (x : []) = x
 unwords (x : rest) = x <> " " <> unwords rest

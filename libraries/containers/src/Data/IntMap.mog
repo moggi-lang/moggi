@@ -1,12 +1,10 @@
--- |
--- A map with 'Int' keys, following the 'Data.IntMap'.
+-- | A map with 'Int' keys, following the 'Data.IntMap'.
 --
 -- This is a thin wrapper around 'Data.Map Int': keys are 'Int' so no 'Ord'
 -- constraint appears in the signatures, but the representation is the same
 -- sorted association list and every operation costs what the same operation
 -- costs on 'Data.Map'. The exported API is the subset a program reaches for
 -- most often; anything beyond it is added when a program needs it.
---
 module Data.IntMap
   ( IntMap
   , empty
@@ -62,7 +60,7 @@ newtype IntMap v = MkIntMap (Map Int v)
   deriving (Eq, Show)
 
 empty :: IntMap v
-empty = MkIntMap M.empty
+empty = MkIntMap (M.empty)
 
 singleton :: Int -> v -> IntMap v
 singleton k v = MkIntMap (M.singleton k v)
@@ -129,8 +127,9 @@ unions :: [IntMap v] -> IntMap v
 unions ms = MkIntMap (M.unions (unionsGo ms))
   where
     unionsGo :: [IntMap v] -> [Map Int v]
-    unionsGo [] = []
-    unionsGo (MkIntMap m2 : rest) = m2 : unionsGo rest
+    unionsGo _p0 = case _p0 of
+      [] -> []
+      MkIntMap m2 : rest -> m2 : unionsGo rest
 
 difference :: IntMap v -> IntMap w -> IntMap v
 difference a b = case a of

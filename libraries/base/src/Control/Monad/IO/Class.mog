@@ -1,13 +1,12 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Monads that can embed an 'IO' action: 'liftIO' runs an 'IO' computation at
 -- the monad that asked for it, which is what a function written against the
 -- general class needs when it is called from 'IO' itself.
 --
 -- A monad transformer satisfies the class by running the action in its base
 -- monad; at 'IO' the lift is the action itself.
-module Control.Monad.IO.Class
-  ( MonadIO(liftIO)
-  ) where
+module Control.Monad.IO.Class (MonadIO(liftIO)) where
 
 import Control.Monad
 import Data.Function (id)

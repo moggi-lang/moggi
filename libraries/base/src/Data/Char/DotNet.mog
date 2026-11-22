@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Data.Char.DotNet
   ( isControl
   , isSpace
@@ -174,23 +175,15 @@ gteInt a b = case intCompare# a b of
 inRange lo hi n = gteInt n lo && lteInt n hi
 
 -- Category ints are System.Globalization.UnicodeCategory enum ordinals.
-isNumber c =
-  let t = getType c
-  in intEq t 8 || intEq t 9 || intEq t 10
+isNumber c = let t = getType c in intEq t 8 || intEq t 9 || intEq t 10
 
-isSymbol c =
-  let t = getType c
-  in intEq t 25 || intEq t 26 || intEq t 27 || intEq t 28
+isSymbol c = let t = getType c in intEq t 25 || intEq t 26 || intEq t 27 || intEq t 28
 
-isSeparator c =
-  let t = getType c
-  in intEq t 11 || intEq t 12 || intEq t 13
+isSeparator c = let t = getType c in intEq t 11 || intEq t 12 || intEq t 13
 
 -- Category ints are System.Globalization.UnicodeCategory enum ordinals:
 -- 5 = 5, 6 = 6, 7 = 7.
-isMark c =
-  let t = getType c
-  in intEq t 5 || intEq t 6 || intEq t 7
+isMark c = let t = getType c in intEq t 5 || intEq t 6 || intEq t 7
 
 isPunctuation c =
   let t = getType c
@@ -198,19 +191,16 @@ isPunctuation c =
 
 digitToIntUnicode c = getNumericValue c
 
-digitToIntHexUpper n c =
-  case inRange 65 70 n of
-    True -> n - 55
-    False -> digitToIntUnicode c
+digitToIntHexUpper n c = case inRange 65 70 n of
+  True -> n - 55
+  False -> digitToIntUnicode c
 
-digitToIntHexLower n c =
-  case inRange 97 102 n of
-    True -> n - 87
-    False -> digitToIntHexUpper n c
+digitToIntHexLower n c = case inRange 97 102 n of
+  True -> n - 87
+  False -> digitToIntHexUpper n c
 
-digitToIntFromOrd n c =
-  case inRange 48 57 n of
-    True -> n - 48
-    False -> digitToIntHexLower n c
+digitToIntFromOrd n c = case inRange 48 57 n of
+  True -> n - 48
+  False -> digitToIntHexLower n c
 
 digitToInt c = digitToIntFromOrd (charToInt# c) c

@@ -94,7 +94,7 @@ instance Alternative Proxy where
 instance Monad Proxy where
   (>>=) _ _ = Proxy
 
-instance MonadPlus Proxy
+instance MonadPlus Proxy where
 
 instance Foldable Proxy where
   foldMap _ _ = mempty

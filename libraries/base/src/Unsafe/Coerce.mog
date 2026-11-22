@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- |
--- The one cast that asks the type system nothing.
+
+-- | The one cast that asks the type system nothing.
 --
 -- A value keeps its representation, so the cast costs nothing at run time. It
 -- is also unchecked: the program decides that the two types have the same

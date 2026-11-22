@@ -1,6 +1,5 @@
 -- Positional products: a multi-field constructor without field labels is an
 -- array, a list field stays a leaf, and products nest.
-
 module Products (productsSuite) where
 
 import Data.ByteString.Char8 qualified as C

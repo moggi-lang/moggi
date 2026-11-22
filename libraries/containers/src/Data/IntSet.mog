@@ -1,12 +1,10 @@
--- |
--- A set of 'Int' values, following the 'Data.IntSet'.
+-- | A set of 'Int' values, following the 'Data.IntSet'.
 --
 -- This is a thin wrapper around 'Data.Set Int': elements are 'Int' so no
 -- 'Ord' constraint appears in the signatures, but the representation is the
 -- same sorted list and every operation costs what the same operation costs
 -- on 'Data.Set'. The exported API is the subset a program reaches for most
 -- often; anything beyond it is added when a program needs it.
---
 module Data.IntSet
   ( IntSet
   , empty
@@ -48,7 +46,7 @@ newtype IntSet = MkIntSet (Set Int)
   deriving (Eq, Ord, Show)
 
 empty :: IntSet
-empty = MkIntSet S.empty
+empty = MkIntSet (S.empty)
 
 singleton :: Int -> IntSet
 singleton x = MkIntSet (S.singleton x)
@@ -86,8 +84,9 @@ unions :: [IntSet] -> IntSet
 unions ss = MkIntSet (S.unions (unionsGo ss))
   where
     unionsGo :: [IntSet] -> [Set Int]
-    unionsGo [] = []
-    unionsGo (MkIntSet s2 : rest) = s2 : unionsGo rest
+    unionsGo _p0 = case _p0 of
+      [] -> []
+      MkIntSet s2 : rest -> s2 : unionsGo rest
 
 difference :: IntSet -> IntSet -> IntSet
 difference a b = case a of

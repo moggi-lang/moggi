@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | A renderer that produces text. Moggi's text type is 'String', so this is
 -- the string renderer with the decoder made explicit: 'renderMarkupWith' takes
 -- what to do with a byte string in the markup.
@@ -13,7 +14,7 @@ module Text.Blaze.Renderer.Text
   , renderHtmlWith
   ) where
 
-import Data.Bool (Bool (..), (&&))
+import Data.Bool (Bool(..), (&&))
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.Char (Char)
@@ -24,7 +25,7 @@ import Data.String (String)
 import Data.String qualified as S
 import Data.String.Encoding (decodeUtf8)
 import Data.Word (Word8)
-import Text.Blaze.Internal (ChoiceString (..), Markup, MarkupM (..), getText)
+import Text.Blaze.Internal (ChoiceString(..), Markup, MarkupM(..), getText)
 
 -- | Escape the five XML entities of a string, then append the second string.
 escapeMarkupEntities :: String -> String -> String
@@ -55,7 +56,9 @@ scanClose :: [Word8] -> Bool
 scanClose ws = case ws of
   [] -> False
   a : rest -> case rest of
-    b : more -> if a == 60 && b == 47 then True else scanClose rest
+    b : more -> if a == 60 && b == 47
+      then True
+      else scanClose rest
     [] -> False
 
 containsCloseString :: String -> Bool
@@ -65,7 +68,9 @@ scanChars :: [Char] -> Bool
 scanChars cs = case cs of
   [] -> False
   a : rest -> case rest of
-    b : more -> if a == '<' && b == '/' then True else scanChars rest
+    b : more -> if a == '<' && b == '/'
+      then True
+      else scanChars rest
     [] -> False
 
 -- | Render a 'ChoiceString' with the given decoder, then append the string.
@@ -80,9 +85,15 @@ fromChoiceString d cs k = case cs of
     Text s -> s <> k
     other -> fromChoiceString d other k
   External x -> case x of
-    String s -> if containsCloseString s then k else s <> k
-    Text s -> if containsCloseString s then k else s <> k
-    ByteString bs -> if containsClose bs then k else d bs <> k
+    String s -> if containsCloseString s
+      then k
+      else s <> k
+    Text s -> if containsCloseString s
+      then k
+      else s <> k
+    ByteString bs -> if containsClose bs
+      then k
+      else d bs <> k
     other -> fromChoiceString d other k
   AppendChoiceString x y -> fromChoiceString d x (fromChoiceString d y k)
   EmptyChoiceString -> k
@@ -93,18 +104,20 @@ go d attrs m k = case m of
   Parent _ open close content ->
     getText open <> attrs <> consChar '>' (go d "" content (getText close <> k))
   CustomParent tag content ->
-    consChar '<' (fromChoiceString d tag
-      (attrs <> consChar '>' (go d "" content
-        ("</" <> fromChoiceString d tag (consChar '>' k)))))
+    consChar '<'
+      (fromChoiceString d tag
+        (attrs <> consChar '>' (go d "" content ("</" <> fromChoiceString d tag (consChar '>' k)))))
   Leaf _ begin end _ -> getText begin <> attrs <> getText end <> k
-  CustomLeaf tag close _ ->
-    consChar '<' (fromChoiceString d tag
-      (attrs <> (if close then " />" <> k else consChar '>' k)))
+  CustomLeaf tag close _ -> consChar '<' (fromChoiceString d tag (attrs <> (if close
+    then " />" <> k
+    else consChar '>' k)))
   AddAttribute _ key value h ->
     go d (getText key <> fromChoiceString d value (consChar '"' attrs)) h k
   AddCustomAttribute key value h ->
-    go d (consChar ' ' (fromChoiceString d key
-      ("=\"" <> fromChoiceString d value (consChar '"' attrs)))) h k
+    go d
+      (consChar ' ' (fromChoiceString d key ("=\"" <> fromChoiceString d value (consChar '"' attrs))))
+      h
+      k
   Content content _ -> fromChoiceString d content k
   Comment comment _ -> "<!-- " <> fromChoiceString d comment (" -->" <> k)
   Append h1 h2 -> go d attrs h1 (go d attrs h2 k)

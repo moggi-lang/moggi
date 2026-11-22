@@ -1,13 +1,10 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- |
--- Monadic fixpoints.
+
+-- | Monadic fixpoints.
 --
 -- For a detailed discussion, see Levent Erkök's thesis,
 -- /Value Recursion in Monadic Computations/, Oregon Graduate Institute, 2002.
-module Control.Monad.Fix
-  ( MonadFix(mfix)
-  , fix
-  ) where
+module Control.Monad.Fix (MonadFix(mfix), fix) where
 
 import Control.Monad (Monad)
 import Data.Bool (Bool(..))
@@ -65,5 +62,6 @@ instance MonadFix (Either e) where
   mfix f = mfixPure# f isRight eitherRight
 
 instance MonadFix Down where
-  mfix f = mfixPure# f (const True) (\value -> case value of
-    Down x -> x)
+  mfix f = mfixPure# f (const True) (\value ->
+    case value of
+      Down x -> x)

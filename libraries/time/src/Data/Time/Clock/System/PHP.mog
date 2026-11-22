@@ -1,6 +1,4 @@
-module Data.Time.Clock.System.PHP
-  ( systemParts
-  ) where
+module Data.Time.Clock.System.PHP (systemParts) where
 
 import Control.Applicative
 import Control.Monad
@@ -27,7 +25,5 @@ systemParts = do
 splitSystem :: Double -> (Int, Int)
 splitSystem d = (secs, nanos)
   where
-    secs :: Int
-    secs = fromEnum d
-    nanos :: Int
-    nanos = fromEnum ((d - fromInteger (toInteger secs)) * 1000000000.0)
+    secs = (fromEnum d) :: Int
+    nanos = (fromEnum ((d - fromInteger (toInteger secs)) * 1000000000.0)) :: Int

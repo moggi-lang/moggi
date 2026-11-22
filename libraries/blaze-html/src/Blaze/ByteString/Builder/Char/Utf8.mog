@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Builders and writes for characters serialized as UTF-8.
 module Blaze.ByteString.Builder.Char.Utf8
   ( writeChar

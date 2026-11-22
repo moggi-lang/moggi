@@ -1,14 +1,11 @@
+module Main (main) where
+
 import Prelude hiding (id)
 import System.Console.GetOpt
 import System.IO
 import Text.Show
 
-data Flag
-  = Verbose
-  | Version
-  | Output String
-  | Name String
-  | Path String
+data Flag = Verbose | Version | Output String | Name String | Path String
   deriving (Eq)
 
 instance Show Flag where

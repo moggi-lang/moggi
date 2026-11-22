@@ -8,10 +8,7 @@
 -- An operation whose mathematical result could be negative fails with an
 -- arithmetic underflow instead: subtraction, @pred@, and @negate@ of anything
 -- but zero.
-module Numeric.Natural
-  ( Natural
-  , minusNaturalMaybe
-  ) where
+module Numeric.Natural (Natural, minusNaturalMaybe) where
 
 import Data.Bits
 import Data.Bool
@@ -110,24 +107,25 @@ instance Bits Natural where
     _ -> integerToNatural# (integerShiftRBits (naturalToInteger# a) i)
   unsafeShiftL a i = shiftL a i
   unsafeShiftR a i = shiftR a i
-  -- A Natural is unbounded, so it never wraps around.
   rotate a i = shift a i
   rotateL a i = rotate a i
   rotateR a i = rotate a (intNegate# i)
   bit i = integerToNatural# (integerBitBits i)
   testBit a i = integerTestBitBits (naturalToInteger# a) i
   zeroBits = integerToNatural# integerBitZeroI
-  -- 'complement' is undefined for a 'Natural', so the three operations that
-  -- would otherwise reach it through a class default are defined here instead:
-  -- each one is the same bit operation on the two's-complement 'Integer' view,
-  -- and stays non-negative for a non-negative argument.
   setBit a i = integerToNatural# (integerOrBits (naturalToInteger# a) (integerBitBits i))
-  clearBit a i = integerToNatural# (integerAndBits (naturalToInteger# a) (integerComplementBits (integerBitBits i)))
+  clearBit a i =
+    integerToNatural# (integerAndBits (naturalToInteger# a) (integerComplementBits (integerBitBits i)))
   complementBit a i = integerToNatural# (integerXorBits (naturalToInteger# a) (integerBitBits i))
   popCount a = integerPopCountNonNeg (naturalToInteger# a)
   bitSizeMaybe _ = Nothing
   bitSize _ = error "Data.Bits.bitSize(Natural)"
   isSigned _ = False
 
+-- A Natural is unbounded, so it never wraps around.
+-- 'complement' is undefined for a 'Natural', so the three operations that
+-- would otherwise reach it through a class default are defined here instead:
+-- each one is the same bit operation on the two's-complement 'Integer' view,
+-- and stays non-negative for a non-negative argument.
 instance Real Natural where
   toRational n = naturalToInteger# n :% 1

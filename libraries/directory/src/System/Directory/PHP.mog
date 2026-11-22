@@ -102,41 +102,41 @@ foreign php function rawTouch "touch" :: String -> Int -> Int -> IO Bool
 foreign php function rawSysTempDir "sys_get_temp_dir" :: IO String
 
 doesPathExist :: FilePath -> IO Bool
-doesPathExist p = rawFileExists (p)
+doesPathExist p = rawFileExists p
 
 doesFileExist :: FilePath -> IO Bool
-doesFileExist p = rawIsFile (p)
+doesFileExist p = rawIsFile p
 
 doesDirectoryExist :: FilePath -> IO Bool
-doesDirectoryExist p = rawIsDir (p)
+doesDirectoryExist p = rawIsDir p
 
 removeFile :: FilePath -> IO ()
 removeFile p = do
-  _ <- rawUnlink (p)
+  _ <- rawUnlink p
   pure ()
 
 copyFile :: FilePath -> FilePath -> IO ()
 copyFile src dst = do
-  _ <- rawCopy (src) (dst)
+  _ <- rawCopy src dst
   pure ()
 
 getFileSize :: FilePath -> IO Integer
 getFileSize p = do
-  n <- rawFilesize (p)
+  n <- rawFilesize p
   pure (integerFromInt n)
 
 -- | Creation with parents is the recursive walk; without, a single `mkdir`
 -- with the failure classified from the path, the way errno would classify it.
 createDirectoryIfMissing :: Bool -> FilePath -> IO ()
 createDirectoryIfMissing parents p = case parents of
-  True -> createTreePath (p)
-  False -> createSingle (p)
+  True -> createTreePath p
+  False -> createSingle p
 
 createSingle :: FilePath -> IO ()
 createSingle p = do
   exists <- rawFileExists p
   case exists of
-    True -> ioError (mkIOError AlreadyExists "createDirectory" Nothing (Just (p)))
+    True -> ioError (mkIOError AlreadyExists "createDirectory" Nothing (Just p))
     False -> do
       ok <- rawMkdir p
       case ok of
@@ -148,12 +148,12 @@ createSingleFailed p = do
   let parent = takeDirectory p
   parentExists <- rawFileExists parent
   case parentExists of
-    False -> ioError (mkIOError NoSuchThing "createDirectory" Nothing (Just (p)))
+    False -> ioError (mkIOError NoSuchThing "createDirectory" Nothing (Just p))
     True -> do
       writable <- rawIsWritable parent
       case writable of
-        False -> ioError (mkIOError PermissionDenied "createDirectory" Nothing (Just (p)))
-        True -> ioError (mkIOError OtherError "createDirectory" Nothing (Just (p)))
+        False -> ioError (mkIOError PermissionDenied "createDirectory" Nothing (Just p))
+        True -> ioError (mkIOError OtherError "createDirectory" Nothing (Just p))
 
 createTreePath :: String -> IO ()
 createTreePath "" = pure ()
@@ -168,11 +168,11 @@ createTreePath dirPath = do
 
 removeDirectory :: FilePath -> IO ()
 removeDirectory p = do
-  _ <- rawRmdir (p)
+  _ <- rawRmdir p
   pure ()
 
 removeDirectoryRecursive :: FilePath -> IO ()
-removeDirectoryRecursive p = removeTreePath (p)
+removeDirectoryRecursive p = removeTreePath p
 
 removeTreePath :: String -> IO ()
 removeTreePath target = do
@@ -258,12 +258,12 @@ filterScandir (x : rest) = x : filterScandir rest
 
 listDirectory :: FilePath -> IO [FilePath]
 listDirectory p = do
-  names <- rawScandir (p)
+  names <- rawScandir p
   pure (filterScandir names)
 
 getDirectoryContents :: FilePath -> IO [FilePath]
 getDirectoryContents p = do
-  names <- rawScandir (p)
+  names <- rawScandir p
   pure ("." : ".." : filterScandir names)
 
 getCurrentDirectory :: IO FilePath
@@ -273,7 +273,7 @@ getCurrentDirectory = do
 
 setCurrentDirectory :: FilePath -> IO ()
 setCurrentDirectory p = do
-  _ <- rawChdir (p)
+  _ <- rawChdir p
   pure ()
 
 getTemporaryDirectory :: IO FilePath
@@ -286,13 +286,13 @@ renameDirectory src dst = do
   isDir <- rawIsDir src
   case isDir of
     True -> renameRaw src dst
-    False -> ioError (mkIOError InappropriateType "renameDirectory" Nothing (Just (src)))
+    False -> ioError (mkIOError InappropriateType "renameDirectory" Nothing (Just src))
 
 renameFile :: FilePath -> FilePath -> IO ()
 renameFile src dst = do
   isDir <- rawIsDir src
   case isDir of
-    True -> ioError (mkIOError InappropriateType "renameFile" Nothing (Just (src)))
+    True -> ioError (mkIOError InappropriateType "renameFile" Nothing (Just src))
     False -> renameRaw src dst
 
 renamePath :: FilePath -> FilePath -> IO ()
@@ -300,7 +300,7 @@ renamePath src dst = renameRaw src dst
 
 renameRaw :: FilePath -> FilePath -> IO ()
 renameRaw src dst = do
-  _ <- rawRename (src) (dst)
+  _ <- rawRename src dst
   pure ()
 
 -- | The host resolves the longest existing prefix; the missing suffix is
@@ -309,57 +309,59 @@ canonicalizePath :: FilePath -> IO FilePath
 canonicalizePath p = do
   exists <- rawFileExists p
   case exists of
-    True -> rawRealpath (p)
+    True -> rawRealpath p
     False -> do
       let parent = takeDirectory p
       case parent == p of
-        True -> rawRealpath (p)
+        True -> rawRealpath p
         False -> do
           base <- canonicalizePath parent
           pure (base </> takeFileName p)
 
 createFileLink :: FilePath -> FilePath -> IO ()
 createFileLink target link = do
-  _ <- rawSymlink (target) (link)
+  _ <- rawSymlink target link
   pure ()
 
 createDirectoryLink :: FilePath -> FilePath -> IO ()
 createDirectoryLink target link = do
-  _ <- rawSymlink (target) (link)
+  _ <- rawSymlink target link
   pure ()
 
 removeDirectoryLink :: FilePath -> IO ()
 removeDirectoryLink p = do
-  _ <- rawRmdir (p)
+  _ <- rawRmdir p
   pure ()
 
 pathIsSymbolicLink :: FilePath -> IO Bool
-pathIsSymbolicLink p = rawIsLink (p)
+pathIsSymbolicLink p = rawIsLink p
 
 getSymbolicLinkTarget :: FilePath -> IO FilePath
 getSymbolicLinkTarget p = do
-  target <- rawReadlink (p)
+  target <- rawReadlink p
   pure target
 
 getPermissions :: FilePath -> IO Permissions
 getPermissions p = do
-  r <- rawIsReadable (p)
-  w <- rawIsWritable (p)
-  x <- rawIsExecutable (p)
-  isDir <- rawIsDir (p)
+  r <- rawIsReadable p
+  w <- rawIsWritable p
+  x <- rawIsExecutable p
+  isDir <- rawIsDir p
   pure (case isDir of
-    True -> Permissions
-      { permissionsReadable = r
-      , permissionsWritable = w
-      , permissionsExecutable = False
-      , permissionsSearchable = r && x
-      }
-    False -> Permissions
-      { permissionsReadable = r
-      , permissionsWritable = w
-      , permissionsExecutable = x
-      , permissionsSearchable = False
-      })
+    True ->
+      Permissions
+        { permissionsReadable = r
+        , permissionsWritable = w
+        , permissionsExecutable = False
+        , permissionsSearchable = r && x
+        }
+    False ->
+      Permissions
+        { permissionsReadable = r
+        , permissionsWritable = w
+        , permissionsExecutable = x
+        , permissionsSearchable = False
+        })
 
 -- | Owner bits only: readable is 0o400, writable 0o200, and executable 0o100;
 -- a searchable directory takes the execute bit.
@@ -367,7 +369,7 @@ setPermissions :: FilePath -> Permissions -> IO ()
 setPermissions p perms = do
   isDir <- rawIsDir p
   let mode = permBit (readable perms) 256 + permBit (writable perms) 128 + execBit isDir perms
-  _ <- rawChmod (p) mode
+  _ <- rawChmod p mode
   pure ()
 
 permBit :: Bool -> Int -> Int
@@ -386,26 +388,26 @@ execBit isDir perms = case isDir of
 
 getAccessTime :: FilePath -> IO UTCTime
 getAccessTime p = do
-  secs <- rawFileatime (p)
+  secs <- rawFileatime p
   pure (utcTimeFromUnix secs)
 
 getModificationTime :: FilePath -> IO UTCTime
 getModificationTime p = do
-  secs <- rawFilemtime (p)
+  secs <- rawFilemtime p
   pure (utcTimeFromUnix secs)
 
 -- | `touch` sets both clocks at once, so the untouched one is read first and
 -- written back unchanged.
 setAccessTime :: FilePath -> UTCTime -> IO ()
 setAccessTime p t = do
-  mtime <- rawFilemtime (p)
-  _ <- rawTouch (p) mtime (utcToUnix t)
+  mtime <- rawFilemtime p
+  _ <- rawTouch p mtime (utcToUnix t)
   pure ()
 
 setModificationTime :: FilePath -> UTCTime -> IO ()
 setModificationTime p t = do
-  atime <- rawFileatime (p)
-  _ <- rawTouch (p) (utcToUnix t) atime
+  atime <- rawFileatime p
+  _ <- rawTouch p (utcToUnix t) atime
   pure ()
 
 utcToUnix :: UTCTime -> Int

@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Data.JSON
   ( -- * Core types
     Number(..)

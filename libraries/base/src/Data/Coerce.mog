@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 ------------------------------------------------------------------------------
 --
 -- Module      :  Data.Coerce
@@ -9,13 +10,13 @@
 -- Stability   :  provisional
 -- Portability :  portable
 --
--- | Safe coercions between data types.
 ------------------------------------------------------------------------------
+-- | Safe coercions between data types.
 module Data.Coerce
-    (-- *  Safe coercions
-     coerce,
-     Coercible
-     ) where
+  ( -- *  Safe coercions
+    coerce
+  , Coercible
+  ) where
 
 import Moggi.Internal.Prim (coerce#)
 
@@ -66,7 +67,7 @@ import Moggi.Internal.Prim (coerce#)
 --      by Joachim Breitner, Richard A. Eisenberg, Simon Peyton Jones and Stephanie Weirich.
 --
 -- @since 0.4.0
-class Coercible (a :: k) (b :: k)
+class Coercible (a :: k) (b :: k) where
 
 -- | The function 'coerce' allows you to safely convert between values of
 -- types that have the same representation with no run-time overhead. In the

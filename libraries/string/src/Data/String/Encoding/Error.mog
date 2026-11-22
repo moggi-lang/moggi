@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The errors a string decoder reports, and the handlers a caller picks from.
 --
 -- A decoder that meets a byte it cannot use asks an 'OnDecodeError' what to do:
@@ -6,9 +7,8 @@
 -- character to put in its place, or 'Nothing' to give up. That is the whole
 -- interface, so a caller can be as strict or as forgiving as its format needs
 -- without the decoder knowing which it is.
---
 module Data.String.Encoding.Error
-  ( UnicodeException (..)
+  ( UnicodeException(..)
   , OnError
   , OnDecodeError
   , OnEncodeError
@@ -19,15 +19,15 @@ module Data.String.Encoding.Error
   , replace
   ) where
 
-import Data.Bool (Bool (..), (&&))
+import Data.Bool (Bool(..), (&&))
 import Data.Char (Char, chr)
 import Data.Enum (fromEnum)
 import Data.Eq ((==))
 import Data.Int (Int)
-import Data.Maybe (Maybe (..))
+import Data.Maybe (Maybe(..))
 import Data.Num ((+))
 import Data.Ord ((<))
-import Data.Real (Integral (div, mod))
+import Data.Real (Integral(div, mod))
 import Data.Semigroup ((<>))
 import Data.String (String)
 import Data.String qualified as S
@@ -37,9 +37,7 @@ import Text.Show
 
 -- | An error in a coding operation: a message, and the value that caused it
 -- when the operation has one to name.
-data UnicodeException
-  = DecodeError String (Maybe Word8)
-  | EncodeError String (Maybe Char)
+data UnicodeException = DecodeError String (Maybe Word8) | EncodeError String (Maybe Char)
 
 instance Eq UnicodeException where
   (==) left right = case left of
@@ -61,10 +59,9 @@ instance Show UnicodeException where
 
 showHex :: Int -> String
 showHex n =
-  if n < 16 then
-    S.singleton (hexDigit n)
-  else
-    showHex (div n 16) <> S.singleton (hexDigit (mod n 16))
+  if n < 16
+    then S.singleton (hexDigit n)
+    else showHex (div n 16) <> S.singleton (hexDigit (mod n 16))
 
 hexDigit :: Int -> Char
 hexDigit n = if n < 10 then chr (48 + n) else chr (87 + n)

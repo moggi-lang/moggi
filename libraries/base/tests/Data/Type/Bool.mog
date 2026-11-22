@@ -1,3 +1,5 @@
+module Main (main) where
+
 import Data.Type.Bool (Not, (&&), (||), If)
 import Data.Type.Equality ((:~:), castWith, Refl)
 import Data.Bool (Bool(..))
@@ -9,7 +11,6 @@ import Text.Show
 -- expected: each of these only typechecks once the equation has reduced. The
 -- `Bool`-kinded results are shown as proofs; `If` returns a type, so its result
 -- is spent on a value with `castWith`.
-
 notProof :: Not 'False :~: 'True
 notProof = Refl
 

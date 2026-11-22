@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | A renderer that produces a 'String', mostly for debugging.
 --
 -- A byte string in the markup is decoded as UTF-8, so what it denotes is what
@@ -9,7 +10,7 @@ module Text.Blaze.Renderer.String
   , renderHtml
   ) where
 
-import Data.Bool (Bool (..), (&&))
+import Data.Bool (Bool(..), (&&))
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.Char (Char)
@@ -20,7 +21,7 @@ import Data.String (String)
 import Data.String qualified as S
 import Data.String.Encoding (decodeUtf8)
 import Data.Word (Word8)
-import Text.Blaze.Internal (ChoiceString (..), Markup, MarkupM (..), getString)
+import Text.Blaze.Internal (ChoiceString(..), Markup, MarkupM(..), getString)
 
 -- | Escape the five XML entities of a string, then append the second string.
 escapeMarkupEntities :: String -> String -> String
@@ -53,7 +54,9 @@ scanClose :: [Word8] -> Bool
 scanClose ws = case ws of
   [] -> False
   a : rest -> case rest of
-    b : more -> if a == 60 && b == 47 then True else scanClose rest
+    b : more -> if a == 60 && b == 47
+      then True
+      else scanClose rest
     [] -> False
 
 -- | Whether the text holds the sequence @</@.
@@ -64,7 +67,9 @@ scanChars :: [Char] -> Bool
 scanChars cs = case cs of
   [] -> False
   a : rest -> case rest of
-    b : more -> if a == '<' && b == '/' then True else scanChars rest
+    b : more -> if a == '<' && b == '/'
+      then True
+      else scanChars rest
     [] -> False
 
 -- | Render a 'ChoiceString', then append the given string.
@@ -79,9 +84,15 @@ fromChoiceString cs k = case cs of
     Text s -> s <> k
     other -> fromChoiceString other k
   External x -> case x of
-    String s -> if containsCloseString s then k else s <> k
-    Text s -> if containsCloseString s then k else s <> k
-    ByteString bs -> if containsClose bs then k else decodeUtf8 bs <> k
+    String s -> if containsCloseString s
+      then k
+      else s <> k
+    Text s -> if containsCloseString s
+      then k
+      else s <> k
+    ByteString bs -> if containsClose bs
+      then k
+      else decodeUtf8 bs <> k
     other -> fromChoiceString other k
   AppendChoiceString x y -> fromChoiceString x (fromChoiceString y k)
   EmptyChoiceString -> k
@@ -93,18 +104,22 @@ go attrs m k = case m of
   Parent _ open close content ->
     getString open (attrs (consChar '>' (go (\x -> x) content (getString close k))))
   CustomParent tag content ->
-    consChar '<' (fromChoiceString tag
-      (attrs (consChar '>' (go (\x -> x) content
-        ("</" <> fromChoiceString tag (consChar '>' k))))))
+    consChar '<'
+      (fromChoiceString tag
+        (attrs (consChar '>' (go (\x -> x) content ("</" <> fromChoiceString tag (consChar '>' k))))))
   Leaf _ begin end _ -> getString begin (attrs (getString end k))
-  CustomLeaf tag close _ ->
-    consChar '<' (fromChoiceString tag
-      (attrs (if close then " />" <> k else consChar '>' k)))
+  CustomLeaf tag close _ -> consChar '<' (fromChoiceString tag (attrs (if close
+    then " />" <> k
+    else consChar '>' k)))
   AddAttribute _ key value h ->
     go (\inner -> getString key (fromChoiceString value (consChar '"' (attrs inner)))) h k
   AddCustomAttribute key value h ->
-    go (\inner -> consChar ' ' (fromChoiceString key
-      ("=\"" <> fromChoiceString value (consChar '"' (attrs inner))))) h k
+    go
+      (\inner ->
+        consChar ' '
+          (fromChoiceString key ("=\"" <> fromChoiceString value (consChar '"' (attrs inner)))))
+      h
+      k
   Content content _ -> fromChoiceString content k
   Comment comment _ -> "<!-- " <> fromChoiceString comment (" -->" <> k)
   Append h1 h2 -> go attrs h1 (go attrs h2 k)

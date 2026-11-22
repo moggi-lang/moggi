@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Byte arrays: fixed-size rows of 'Word8' with an 'Int' offset, split into
 -- the immutable 'ByteArray' and the mutable 'MutableByteArray' that lives in
 -- an 'ST' thread and is frozen once it is complete.
@@ -142,11 +143,24 @@ copyByteArrayFrom dst doff src soff sz i = case i < sz of
 -- The copy runs left to right, so a destination that overlaps the source above
 -- it is overwritten as the copy proceeds; copy through an intermediate array
 -- when that matters.
-unsafeCopyMutableByteArray :: MutableByteArray s -> Int -> MutableByteArray s -> Int -> Int -> ST s ()
+unsafeCopyMutableByteArray
+  :: MutableByteArray s
+  -> Int
+  -> MutableByteArray s
+  -> Int
+  -> Int
+  -> ST s ()
 unsafeCopyMutableByteArray (MutableByteArray dst) doff (MutableByteArray src) soff sz =
   copyMutableByteArrayFrom dst doff src soff sz 0
 
-copyMutableByteArrayFrom :: STArray# s Int Word8 -> Int -> STArray# s Int Word8 -> Int -> Int -> Int -> ST s ()
+copyMutableByteArrayFrom
+  :: STArray# s Int Word8
+  -> Int
+  -> STArray# s Int Word8
+  -> Int
+  -> Int
+  -> Int
+  -> ST s ()
 copyMutableByteArrayFrom dst doff src soff sz i = case i < sz of
   True -> do
     x <- readSTArray# src (soff + i)
@@ -253,8 +267,9 @@ instance Show ByteArray where
 showByteArrayAt :: ByteArray -> Int -> String
 showByteArrayAt arr i = case i < sizeofByteArray arr of
   False -> "]"
-  True -> stringAppend# (showByteArraySeparator i)
-    (stringAppend# (showHexByte (indexByteArray arr i)) (showByteArrayAt arr (i + 1)))
+  True ->
+    stringAppend# (showByteArraySeparator i)
+      (stringAppend# (showHexByte (indexByteArray arr i)) (showByteArrayAt arr (i + 1)))
 
 showByteArraySeparator :: Int -> String
 showByteArraySeparator i = case i == 0 of

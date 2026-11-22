@@ -1,11 +1,9 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | The constant functor: @Const a b@ holds an @a@ and ignores the @b@.
 -- Useful with 'Traversable' machinery to recover folds ('getConst' after a
 -- traversal collects what the applicative action produced).
-module Data.Functor.Const
-  ( Const(Const)
-  , getConst
-  ) where
+module Data.Functor.Const (Const(Const), getConst) where
 
 import Control.Applicative
 import Data.Bifunctor

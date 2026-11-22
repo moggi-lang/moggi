@@ -5,7 +5,6 @@
 -- positional and the selectors are ordinary functions exported by name, which
 -- makes them reachable but easy to leave untested; this module holds them to
 -- the behaviour the record fields give.
-
 module Internals (internalsSuite) where
 
 import Data.ByteString (ByteString, pack)
@@ -17,10 +16,10 @@ import Data.String qualified as S
 import System.IO (IO)
 import Support (assertTrue, expect)
 import Text.Blaze.Internal
-  ( ChoiceString (..)
+  ( ChoiceString(..)
   , Markup
-  , MarkupM (..)
-  , StaticString (..)
+  , MarkupM(..)
+  , StaticString(..)
   , getString
   , getUtf8ByteString
   , getText

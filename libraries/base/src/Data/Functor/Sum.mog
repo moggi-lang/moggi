@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Sums, lifted to functors: a value is one functor's value or the other's,
 -- and a mapped function runs on whichever side is present.
 --
@@ -7,13 +8,19 @@
 --
 -- >>> map (+1) (InR [1, 2, 3]) :: Sum Maybe [Int]
 -- InR [2,3,4]
-module Data.Functor.Sum (
-    Sum(..),
-  ) where
+module Data.Functor.Sum (Sum(..)) where
 
 import Control.Applicative ((<|>), Alternative(empty))
 import Data.Bool
-import Data.Data (Data(..), DataType, Constr, Fixity(Prefix), mkAlgDataType, mkConstrTag, constrIndex)
+import Data.Data
+  ( Data(..)
+  , DataType
+  , Constr
+  , Fixity(Prefix)
+  , mkAlgDataType
+  , mkConstrTag
+  , constrIndex
+  )
 import Data.Foldable (Foldable(foldMap, foldr))
 import Data.Functor (Functor(map))
 import Data.Functor.Classes
@@ -46,9 +53,10 @@ instance (Read1 f, Read1 g) => Read1 (Sum f g) where
   liftReadsPrec rp rl d = readsData (readsSumWith (liftReadsPrec rp rl) (liftReadsPrec rp rl)) d
 
 readsSumWith :: (Int -> ReadS (f a)) -> (Int -> ReadS (g a)) -> String -> ReadS (Sum f g a)
-readsSumWith rpF rpG kw = \s -> case readsUnaryWith rpF "InL" InL kw s of
-  [] -> readsUnaryWith rpG "InR" InR kw s
-  found -> found
+readsSumWith rpF rpG kw = \s ->
+  case readsUnaryWith rpF "InL" InL kw s of
+    [] -> readsUnaryWith rpG "InR" InR kw s
+    found -> found
 
 instance (Show1 f, Show1 g) => Show1 (Sum f g) where
   liftShowsPrec sp sl d (InL x) = showsUnaryWith (liftShowsPrec sp sl) "InL" d x

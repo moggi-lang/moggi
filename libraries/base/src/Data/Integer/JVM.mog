@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 module Data.Integer.JVM
   ( integerAdd
   , integerSub
@@ -23,16 +24,27 @@ import Moggi.Internal.Prim
 
 -- Integer# is java.math.BigInteger on the JVM.
 foreign jvm function biValueOf "java.math.BigInteger:valueOf" :: Int -> Integer
+
 foreign jvm function biAdd "java.math.BigInteger.add" :: Integer -> Integer -> Integer
+
 foreign jvm function biSubtract "java.math.BigInteger.subtract" :: Integer -> Integer -> Integer
+
 foreign jvm function biMultiply "java.math.BigInteger.multiply" :: Integer -> Integer -> Integer
+
 foreign jvm function biNegate "java.math.BigInteger.negate" :: Integer -> Integer
+
 foreign jvm function biAbs "java.math.BigInteger.abs" :: Integer -> Integer
+
 foreign jvm function rawBiSignum "java.math.BigInteger.signum" :: Integer -> Int32
+
 foreign jvm function biDivide "java.math.BigInteger.divide" :: Integer -> Integer -> Integer
+
 foreign jvm function biRemainder "java.math.BigInteger.remainder" :: Integer -> Integer -> Integer
+
 foreign jvm function rawBiCompareTo "java.math.BigInteger.compareTo" :: Integer -> Integer -> Int32
+
 foreign jvm function biToString "java.math.BigInteger.toString" :: Integer -> String
+
 foreign jvm function biLongValue "java.math.BigInteger.longValue" :: Integer -> Int
 
 biSignum a = int32ToInt# (rawBiSignum a)

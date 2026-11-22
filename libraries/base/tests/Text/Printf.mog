@@ -1,3 +1,5 @@
+module Main (main) where
+
 import System.IO
 import Text.Printf
 import Data.Either (Either(..))
@@ -28,15 +30,22 @@ main = do
   putStr (printf "100%%\n")
   putStr (printf "%e %E\n" (1234.5 :: Double) (1234.5 :: Double))
   putStr (printf "%g %G\n" (0.0001 :: Double) (0.0001 :: Double))
-  putStr (printf "%f|%.2f|[%8.2f]|[%-8.2f]|%.12f\n" (2.5 :: Double) (2.5 :: Double) (2.5 :: Double) (2.5 :: Double) (1.5 :: Double))
-  putStr (printf "[%*d] [%.*f] [%*.*f]\n" (6 :: Int) (42 :: Int) (3 :: Int) (2.3456 :: Double) (9 :: Int) (2 :: Int) (2.3456 :: Double))
+  putStr
+    (printf "%f|%.2f|[%8.2f]|[%-8.2f]|%.12f\n" (2.5 :: Double) (2.5 :: Double) (2.5 :: Double)
+      (2.5 :: Double)
+      (1.5 :: Double))
+  putStr
+    (printf "[%*d] [%.*f] [%*.*f]\n" (6 :: Int) (42 :: Int) (3 :: Int) (2.3456 :: Double) (9 :: Int) (2 :: Int)
+      (2.3456 :: Double))
   putStr (printf "%d %s %d %s\n" (1 :: Int) "two" (3 :: Integer) "four")
   putStr (printf "no arguments 100%%\n")
   ioPrintf
   writeToHandle
   putStrLn (printf "%ld%lu\n" (1234567890123 :: Int) (987654321 :: Int))
   putStr (printf "%v %v %v %v\n" (7 :: Int) 'x' (3.5 :: Double) "text")
-  putStr (printf "%hhd %hhu %hu %lu %llu %Lu\n" (300 :: Int) (-1 :: Int) (-1 :: Int) (-1 :: Int) (-1 :: Int) (-1 :: Int))
+  putStr
+    (printf "%hhd %hhu %hu %lu %llu %Lu\n" (300 :: Int) (-1 :: Int) (-1 :: Int) (-1 :: Int) (-1 :: Int)
+      (-1 :: Int))
   putStr (printf "%hhx %hx %lx %llx\n" (255 :: Int) (65535 :: Int) (4294967295 :: Int) (7 :: Int))
   putStr (printf "%u %u\n" (-1 :: Int8) (255 :: Word8))
   putStr (printf "%#f %#g\n" (2.0 :: Double) (100.0 :: Double))
@@ -46,9 +55,14 @@ main = do
   putStrLn (show (fmtChar (vFmt 'd' (FieldFormat Nothing Nothing Nothing Nothing False "" 'v'))))
   putStrLn (show (fmtChar (vFmt 'd' (FieldFormat Nothing Nothing Nothing Nothing False "" 'x'))))
   putStrLn (show (toChar 'q'))
-  putStrLn (show (fromChar 'q' :: Char))
+  putStrLn (show ((fromChar 'q') :: Char))
   putStrLn (formatChar 'A' (FieldFormat (Just 4) Nothing Nothing Nothing False "" 'c') "")
   putStrLn (formatInt (255 :: Int) (FieldFormat Nothing Nothing Nothing Nothing True "" 'x') "")
-  putStrLn (formatInteger (255 :: Integer) (FieldFormat Nothing Nothing Nothing Nothing True "" 'o') "")
-  putStrLn (formatRealFloat (2.5 :: Double) (FieldFormat Nothing (Just 2) Nothing Nothing False "" 'f') "")
-  putStrLn (formatString ['a', 'b', 'c', 'd', 'e', 'f'] (FieldFormat Nothing (Just 3) Nothing Nothing False "" 's') "")
+  putStrLn
+    (formatInteger (255 :: Integer) (FieldFormat Nothing Nothing Nothing Nothing True "" 'o') "")
+  putStrLn
+    (formatRealFloat (2.5 :: Double) (FieldFormat Nothing (Just 2) Nothing Nothing False "" 'f') "")
+  putStrLn
+    (formatString ['a', 'b', 'c', 'd', 'e', 'f']
+      (FieldFormat Nothing (Just 3) Nothing Nothing False "" 's')
+      "")

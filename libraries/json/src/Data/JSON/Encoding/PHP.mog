@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
 -- | PHP backend: Encoding is a native json_decode value.
 --
 -- Host access is ordinary PHP builtins via FFI only — no Host.php adapter,
@@ -55,38 +56,69 @@ import System.IO (IO)
 foreign php type Encoding "mixed"
 
 foreign php function jsonDecode "json_decode" :: String -> Bool -> Int -> Int -> Encoding
+
 foreign php function jsonDecodeIO "json_decode" :: String -> Bool -> Int -> Int -> IO Encoding
+
 foreign php function jsonEncode "json_encode" :: Encoding -> Int -> String
+
 foreign php function jsonLastError "json_last_error" :: IO Int
+
 foreign php function jsonLastErrorMsg "json_last_error_msg" :: IO String
 
 foreign php function isNull "is_null" :: Encoding -> Bool
+
 foreign php function isBool "is_bool" :: Encoding -> Bool
+
 foreign php function isString "is_string" :: Encoding -> Bool
+
 foreign php function isInt "is_int" :: Encoding -> Bool
+
 foreign php function isFloat "is_float" :: Encoding -> Bool
+
 foreign php function isArray "is_array" :: Encoding -> Bool
+
 foreign php function isObject "is_object" :: Encoding -> Bool
+
 foreign php function arrayIsList "array_is_list" :: Encoding -> Bool
+
 foreign php function arrayCombine "array_combine" :: [String] -> [Encoding] -> Encoding
+
 foreign php function arrayKeys "array_keys" :: Encoding -> [String]
+
 foreign php function arrayValuesEnc "array_values" :: Encoding -> [Encoding]
+
 foreign php function listAsEnc "array_values" :: [Encoding] -> Encoding
+
 foreign php function getObjectVars "get_object_vars" :: Encoding -> Encoding
+
 foreign php function arrayKeyExists "array_key_exists" :: String -> Encoding -> Bool
+
 foreign php function arrayIntersectKey "array_intersect_key" :: Encoding -> Encoding -> Encoding
+
 foreign php function arrayFlip "array_flip" :: [String] -> Encoding
+
 foreign php function phpBoolval "boolval" :: Encoding -> Bool
+
 foreign php function phpStrval "strval" :: Encoding -> String
+
 foreign php function phpIntval "intval" :: Encoding -> Int
+
 foreign php function phpFloatval "floatval" :: Encoding -> Double
+
 foreign php function phpStrlen "strlen" :: String -> Int
+
 foreign php function asIntEnc "intval" :: Int -> Encoding
+
 foreign php function asBoolEnc "boolval" :: Bool -> Encoding
+
 foreign php function asStringEnc "strval" :: String -> Encoding
+
 foreign php function asDoubleEnc "floatval" :: Double -> Encoding
+
 foreign php function integerIsInt "is_int" :: Integer -> Bool
+
 foreign php function digitsToInteger "bcadd" :: String -> String -> Integer
+
 foreign php function implode "implode" :: String -> [String] -> String
 
 bsToStr b = decodeUtf8 b
@@ -116,9 +148,8 @@ encodeArrText enc = case arrayValuesEnc enc of
 
 encodeObjText :: Encoding -> String
 encodeObjText enc =
-  let ks = objectKeys enc in
-  let vs = objectVals enc in
-  "{" <> implode "," (encodeObjPairs ks vs) <> "}"
+  let ks = objectKeys enc
+  in let vs = objectVals enc in "{" <> implode "," (encodeObjPairs ks vs) <> "}"
 
 encodeEncTextList :: [Encoding] -> [String]
 encodeEncTextList [] = []
@@ -128,8 +159,7 @@ encodeObjPairs :: [String] -> [Encoding] -> [String]
 encodeObjPairs [] _ = []
 encodeObjPairs _ [] = []
 encodeObjPairs (k : ks) (v : vs) =
-  (jsonEncode (asStringEnc k) jsonEncodeFlags <> ":" <> encodeEncText v)
-  : encodeObjPairs ks vs
+  jsonEncode (asStringEnc k) jsonEncodeFlags <> ":" <> encodeEncText v : encodeObjPairs ks vs
 
 decodeEncoding :: ByteString -> IO (Either String Encoding)
 decodeEncoding bs = do
@@ -163,8 +193,8 @@ encInteger n = case integerIsInt n of
 -- kind 7 and are emitted unquoted by encodeEncText.
 encIntegerBc :: Integer -> Encoding
 encIntegerBc n =
-  let s = integerShow n in
-  case intCompare# (phpStrlen s) 18 of
+  let s = integerShow n
+  in case intCompare# (phpStrlen s) 18 of
     GT -> asStringEnc s
     _ -> asIntEnc (integerToInt n)
 
