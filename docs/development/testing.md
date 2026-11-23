@@ -136,10 +136,11 @@ On Alpine, `ldd` prints the musl loader for static-PIE executables even when
 when the ELF checks already prove the executable has no dynamic dependencies.
 CI builds the micro PHP runtime and runs the PHP static and package cases on
 both Linux architectures, runs the JVM static case on Linux, and runs the .NET
-static case in Alpine musl containers. The static jobs set
-`MOGGI_STATIC_REQUIRED=1`, so a missing runtime or compiler fails the build
-instead of turning the check into a skip. Ubuntu cannot produce the .NET
-`linux-musl-*` static executable, hence the Alpine container.
+static case in Alpine musl containers. Those checks are one `static` matrix; its
+remaining entries assert that macOS and Windows refuse static linking for every
+backend. Every entry sets `MOGGI_STATIC_REQUIRED=1`, so a missing runtime or
+compiler fails the build instead of turning the check into a skip. Ubuntu cannot
+produce the .NET `linux-musl-*` static executable, hence the Alpine container.
 The other backends also build and run a `--native --package` executable on
 Linux, macOS and Windows from a different working directory, which exercises
 the `$ORIGIN`, `@loader_path` and Windows DLL paths. The supported OS/backend
