@@ -9,6 +9,7 @@ use function Moggi\Registry\badPackageMarker;
 use function Moggi\Registry\badPackageProblem;
 use function Moggi\Registry\fetchVerifiedRelease;
 use function Moggi\Registry\findDescriptor;
+use function Moggi\Registry\lockDisagreements;
 use function Moggi\Registry\lockPath;
 use function Moggi\Registry\lockRegistryProblem;
 use function Moggi\Registry\prettyJson;
@@ -92,6 +93,16 @@ function runVerifyCommand(array $argv): int
         if ($registryProblem !== null) {
             throw new \RuntimeException($registryProblem . ' — run `moggi update` against the registry you mean');
         }
+
+        $entries = $catalog->entries(lockedPackageNames($lock));
+        $disagreements = lockDisagreements($lock, $entries);
+        if ($disagreements !== []) {
+            throw new \RuntimeException(
+                "the lock does not match the catalog:\n  " . \implode("\n  ", $disagreements)
+                . "\nrun `moggi update` to re-resolve, or fix the pin in the descriptor",
+            );
+        }
+
         $checks = verifyLockedReleases($options['registry'], $lock, $catalog, ! $options['noCache'], $log);
 
         $ok = true;

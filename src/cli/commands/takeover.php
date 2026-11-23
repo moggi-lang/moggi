@@ -45,7 +45,7 @@ function takeoverUsage(): string
       --reason TEXT        why you should take the package over (required to request)
       --repo URL           where you intend to maintain it (optional)
       --note TEXT          the note an admin records with a decision
-      --registry URL|DIR   registry to write to (default: MOGGI_REGISTRY_WRITE,
+      --registry URL       registry to write to (default: MOGGI_REGISTRY_WRITE,
                            else MOGGI_REGISTRY, else {$default})
       --as NPUB            the identity that signs (default: the descriptor here, when there is one)
       --nsec-file FILE     the signing key, mode 0600 (default: MOGGI_NSEC_FILE,
