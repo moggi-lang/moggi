@@ -25,6 +25,8 @@ function runUsage(): string
       -o PATH          keep the built tree here instead of a temp directory
       --lib PATH       extra module search root. Repeatable.
       --native         build a native executable and run that
+      --static         make that executable fully static (Linux only)
+      --musl           link that executable against musl libc (Linux only)
       --no-opt         skip optimizations when generating code
       --no-strip       keep bindings unreachable from `main`
       --no-cache       bypass the on-disk compile cache for this run
@@ -38,6 +40,8 @@ function runRun(array $argv): int
     $spec = new CommandSpec('run', runUsage(), [
         ['name' => 'noOpt'],
         ['name' => 'native'],
+        ['name' => 'static'],
+        ['name' => 'musl'],
         ['name' => 'noStrip'],
         ['name' => 'strip'],
         ['name' => 'noCache'],
@@ -86,6 +90,8 @@ function runRun(array $argv): int
         $options['lib'],
         $native,
         $backend === 'php' && ! $native,
+        (bool) $options['static'],
+        (bool) $options['musl'],
     );
 
     if ($built['exitCode'] !== 0 || $built['outputRoot'] === null) {

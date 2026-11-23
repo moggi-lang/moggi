@@ -200,7 +200,13 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang
+          sudo apt-get install -y clang lld patchelf musl-tools
+          musl_arch="$(uname -m)"
+          sudo ln -sf /usr/bin/musl-gcc "/usr/local/bin/${musl_arch}-linux-musl-gcc"
+          curl -fsSL https://zlib.net/fossils/zlib-1.3.1.tar.gz -o /tmp/zlib.tar.gz
+          mkdir -p /tmp/zlib && tar -xzf /tmp/zlib.tar.gz -C /tmp/zlib --strip-components=1
+          ( cd /tmp/zlib && CC=musl-gcc ./configure --static && make -j"$(nproc)" )
+          sudo cp /tmp/zlib/libz.a "/usr/lib/${musl_arch}-linux-musl/libz.a"
 
       # Windows C toolchain.
       - name: Install MSYS2
@@ -262,3 +268,116 @@ jobs:
 
       - name: Run the suite
         run: php test-all.php --backend ${{ matrix.backend }} --native
+
+      # The packaged executable is the portable artifact. PHP needs the micro
+      # runtime, so its package check runs in static-php instead; the other
+      # backends run here from a different working directory, which catches a
+      # broken rpath/install name or a Windows DLL search path.
+      - name: Verify the native package bundle
+        if: matrix.backend != 'php'
+        env:
+          MOGGI_NATIVE_BACKEND: ${{ matrix.backend }}
+        run: php tests/cli/native_package.php
+
+      # Linux php and dotnet have dedicated jobs: php needs the micro runtime
+      # built from source, and dotnet needs a musl host. The remaining legs
+      # must not report a skip as success.
+      - name: Verify native static linking
+        if: runner.os != 'Linux' || (matrix.backend != 'php' && matrix.backend != 'dotnet')
+        env:
+          MOGGI_NATIVE_BACKEND: ${{ matrix.backend }}
+          MOGGI_STATIC_REQUIRED: '1'
+        run: php tests/cli/native_static_package.php
+
+  # The micro PHP runtime is a source build. Compile it once per Linux
+  # architecture, then use it for the same static package/run check as CI.
+  static-php:
+    name: ${{ matrix.target }} / php static
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {target: linux-x86_64,  runner: ubuntu-24.04}
+          - {target: linux-aarch64, runner: ubuntu-24.04-arm}
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@2.40.0
+        with:
+          php-version: '8.5'
+          extensions: bcmath, mbstring, zip, phar, ctype, intl
+          ini-values: memory_limit=1G
+          coverage: none
+
+      - name: Install the micro runtime build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            git ca-certificates curl unzip zstd \
+            clang binutils autoconf make pkg-config libzip-dev libonig-dev \
+            libicu-dev re2c flex bison automake autopoint libtool zlib1g-dev patchelf
+
+      - name: Cache the micro runtime build
+        uses: actions/cache@v6
+        with:
+          path: |
+            .dist-cache/downloads
+            .dist-cache/build
+            .dist-cache/runtimes
+          key: static-php-${{ matrix.target }}-${{ hashFiles('dist/runtimes.json', 'dist/runtimes.lock.json') }}
+
+      - name: Build the micro PHP runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          micro="$(php -r 'require "packaging/assemble.php"; $config = \Moggi\Dist\loadRuntimeConfig(); $target = \Moggi\Dist\hostTarget($config); echo \Moggi\Dist\prepareRuntime("php-native", $target, $config);')"
+          test -f "$micro/micro.sfx"
+          echo "MOGGI_MICRO_SFX=$micro" >> "$GITHUB_ENV"
+
+      - name: Verify the native PHP package bundle
+        env:
+          MOGGI_NATIVE_BACKEND: php
+        run: php tests/cli/native_package.php
+
+      - name: Build, relink, verify and run the static PHP executable
+        env:
+          MOGGI_NATIVE_BACKEND: php
+          MOGGI_STATIC_REQUIRED: '1'
+        run: php tests/cli/native_static_package.php
+
+  # Ubuntu cannot produce a Native AOT `linux-musl-*` executable. Run the
+  # .NET static package case on an Alpine musl host, where the result is real.
+  static-dotnet-alpine:
+    name: ${{ matrix.target }} / dotnet static
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {target: linux-x86_64,  runner: ubuntu-24.04}
+          - {target: linux-aarch64, runner: ubuntu-24.04-arm}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Build, relink, verify and run the static .NET package
+        run: |
+          docker run --rm \
+            -e MOGGI_NATIVE_BACKEND=dotnet \
+            -e MOGGI_STATIC_REQUIRED=1 \
+            -v "$PWD:/work" \
+            -w /work \
+            mcr.microsoft.com/dotnet/sdk:8.0-alpine \
+            sh -c '
+              set -e
+              apk add --no-cache \
+                --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community \
+                php85 php85-phar php85-mbstring php85-zip php85-ctype \
+                php85-openssl php85-tokenizer php85-intl \
+                binutils build-base clang lld zlib-dev zlib-static musl-dev
+              php85 tests/cli/native_static_package.php
+            '

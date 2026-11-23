@@ -58,6 +58,20 @@ ifneq (,$(findstring mingw,$(PLATFORM)))
   LDFLAGS += -static
 endif
 
+# Linux: prefer a fully static executable. macOS cannot link libSystem
+# statically, and MinGW already gets -static above. Probe the toolchain so a
+# host without static libc can still build a working dynamic binary.
+STATIC_LDFLAGS =
+ifeq (,$(findstring mingw,$(PLATFORM)))
+  ifeq (,$(findstring apple,$(PLATFORM)))
+    STATIC_LDFLAGS := $(shell tmp=$$(mktemp 2>/dev/null) || exit 0; \
+      printf 'int main(void){return 0;}\n' | $(CC) -static -x c - -o $$tmp >/dev/null 2>&1 \
+        && printf '%s' '-static'; \
+      rm -f $$tmp)
+    LDFLAGS += $(STATIC_LDFLAGS)
+  endif
+endif
+
 # compat.h covers what these platforms lack in C: memrchr (libSystem and the Windows
 # CRT), the weak-alias attribute (Mach-O and PE/COFF cannot express it) and the
 # size_t-typed overflow builtins (Windows is LLP64, where size_t is wider than

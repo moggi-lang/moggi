@@ -889,12 +889,73 @@ function runDotnetCli(string $dotnet, array $args, string $cwd, array $env): voi
 }
 
 /**
+ * The runtime identifier that makes Native AOT target musl.
+ *
+ * The SDK selects the C library through this RID; there is no separate
+ * `UseMusl` property. The architecture is the compiler host's, matching the
+ * native target the rest of `--native` builds.
+ */
+function dotnetMuslRuntimeIdentifier(): string
+{
+    $arch = \strtolower(\php_uname('m'));
+
+    return \in_array($arch, ['aarch64', 'arm64'], true) ? 'linux-musl-arm64' : 'linux-musl-x64';
+}
+
+/**
+ * The `dotnet publish` argv for Native AOT, including its static and musl modes.
+ *
+ * `StaticExecutable=true` is Native AOT's own property; it is not the same as
+ * disabling the .NET runtime, which PublishAot already does. A static glibc
+ * link is not portable (and Native AOT's static-PIE link does not accept the
+ * static glibc runtime pack), so a static .NET executable, like GraalVM's,
+ * targets musl. The musl RID selects the musl runtime pack, and the linker and
+ * musl loader still have to be present.
+ *
+ * Native AOT otherwise resolves ICU with `dlopen`, so a musl target would need
+ * a musl ICU installation at run time. Invariant globalization is the only
+ * self-contained option: it removes the ICU dependency rather than making a
+ * portable executable that fails on a minimal musl host.
+ *
+ * @return list<string>
+ */
+function dotnetNativePublishCommand(
+    string $dotnet,
+    string $proj,
+    string $pubDir,
+    string $binaryName,
+    bool $static = false,
+    bool $musl = false,
+): array {
+    $command = [
+        $dotnet, 'publish', $proj,
+        '-c', 'Release',
+        '-o', $pubDir,
+        '-p:PublishAot=true',
+        '-p:AssemblyName=' . $binaryName,
+    ];
+    if ($static || $musl) {
+        $command[] = '-r';
+        $command[] = dotnetMuslRuntimeIdentifier();
+        $command[] = '-p:InvariantGlobalization=true';
+    }
+    if ($static) {
+        $command[] = '-p:StaticExecutable=true';
+        $command[] = '-p:LinkerFlavor=lld';
+    }
+
+    return [...$command, '--nologo', '-v', 'q'];
+}
+
+/**
  * Native AOT via `dotnet publish -p:PublishAot=true` on the ilproj.
  */
 function buildDotNetNativeExecutable(
     string $outputRoot,
     string $assemblyName = 'moggi-app',
     string $binaryName = 'moggi-app',
+    bool $static = false,
+    bool $musl = false,
 ): bool {
     $dotnet = resolveDotnetExecutable();
     if ($dotnet === null) {
@@ -909,15 +970,7 @@ function buildDotNetNativeExecutable(
         return false;
     }
     $pubDir = $outputRoot . DIRECTORY_SEPARATOR . 'native-out';
-    $cmd = [
-        $dotnet, 'publish', $proj,
-        '-c', 'Release',
-        '-o', $pubDir,
-        '-p:PublishAot=true',
-        '-p:AssemblyName=' . $binaryName,
-        '--nologo',
-        '-v', 'q',
-    ];
+    $cmd = dotnetNativePublishCommand($dotnet, $proj, $pubDir, $binaryName, $static, $musl);
     $result = runProcess($cmd, $outputRoot, dotnetCliEnv());
     $binary = executableName($binaryName);
     $built = $result['exitCode'] === 0 ? nativeAotArtifact($pubDir, $binary) : null;

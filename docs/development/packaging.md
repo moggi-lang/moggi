@@ -55,7 +55,9 @@ library sources under `libraries/`, `docs/`, `examples/`, `LICENSE`,
 `THIRD-PARTY-NOTICES.md` and `runtime/`. The compiler's sources live inside the
 archive; the library sits beside it so users can read what they compile against.
 `bin/schnorr` is always built here from this repository's sources, with the
-platform toolchain, so a distribution cannot ship someone else's binary; the
+platform toolchain, so a distribution cannot ship someone else's binary. On
+Linux it links statically when the toolchain has static libc; Windows MinGW is
+static too, while macOS stays dynamic because it has no static `libSystem`. The
 assembler refuses a variant whose runtime or linked dependency lacks its
 licence file.
 

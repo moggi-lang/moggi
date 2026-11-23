@@ -66,10 +66,41 @@ function isNativeBinary(string $path): bool
         || \in_array($magic, ["\xcf\xfa\xed\xfe", "\xce\xfa\xed\xfe", "\xfe\xed\xfa\xcf", "\xfe\xed\xfa\xce"], true);
 }
 
+/**
+ * Whether an ELF binary has no interpreter, and so asks no glibc of the host.
+ *
+ * A statically linked executable has no `INTERP` program header; `objdump -p`
+ * reports it for every dynamic ELF, including a PIE. The glibc floor only
+ * describes what the loader resolves, so a static binary has nothing to check.
+ */
+function isStaticallyLinked(string $binary): bool
+{
+    $magic = (string) @\file_get_contents($binary, false, null, 0, 4);
+    if ($magic !== "\x7fELF") {
+        return false;
+    }
+
+    $objdump = findExecutable('objdump');
+    if ($objdump === null || ! \is_file($binary)) {
+        return false;
+    }
+
+    $result = runProcess([$objdump, '-p', $binary]);
+    if ($result[0] !== 0) {
+        return false;
+    }
+
+    return \preg_match('/^\s*INTERP\s/im', $result[1]) !== 1;
+}
+
 function assertGlibcFloor(string $binary, string $floor, string $label): void
 {
     $required = requiredGlibc($binary);
     if ($required === null) {
+        if (isStaticallyLinked($binary)) {
+            return;
+        }
+
         throw new \RuntimeException("cannot read the glibc requirements of {$label} ({$binary}); is `objdump` installed?");
     }
     if (\version_compare($required, $floor, '>')) {

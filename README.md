@@ -95,9 +95,18 @@ name to choose your own (`-o app.phar`, `-o app.jar`, `-o app.dll`).
 
 Useful flags: `--unpacked` keeps the generated tree instead of packaging it,
 `--native` builds a standalone executable (the PHAR appended to the micro PHP
-runtime, GraalVM `native-image`, or .NET `PublishAot`), and
-`--tokens`/`--ast`/`--typed-ast`/`--ir`/`--opt-ir` dump the compiler's
-intermediate stages. `--help` lists everything.
+runtime, GraalVM `native-image`, or .NET `PublishAot`), `--static` requires a
+fully static Linux executable, `--musl` selects musl on Linux, `--package`
+writes `<artifact>.bundle/` with the native executable and its non-system shared
+libraries, and `--tokens`/`--ast`/`--typed-ast`/`--ir`/`--opt-ir` dump the
+compiler's intermediate stages. The native options can also be set as booleans
+on `[executable]` in the project descriptor, so `moggi build` uses them without
+repeating flags. `--package` works on Linux too: it is the fallback when
+shipping dependencies is easier than static linking them (for example Qt5).
+macOS and Windows cannot produce a fully static executable; they use
+`--package`. The OS/backend matrix and its verification commands are in
+[docs/quickstart.md](docs/quickstart.md#build-option-matrix). `--help` lists
+everything.
 
 ## Documentation
 

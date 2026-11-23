@@ -120,6 +120,24 @@ options:
                     runtime for php — no PHP installation needed; GraalVM
                     native-image for jvm; `dotnet publish -p:PublishAot=true`
                     for dotnet)
+    --static        compile/run with --native: require a fully static Linux
+                    executable. jvm uses GraalVM's musl mode and dotnet uses
+                    the musl runtime pack; both need a musl C toolchain and
+                    static zlib. The result is rejected if it still has a
+                    dynamic loader or shared-library dependencies. macOS cannot
+                    build a fully static executable; Windows PE always imports
+                    system DLLs. Use --package there
+    --musl          compile/run with --native: link against musl libc on Linux.
+                    jvm uses GraalVM's musl mode; dotnet publishes for
+                    linux-musl-<arch> with invariant globalization; php's micro
+                    runtime is already musl. The result is rejected if it names
+                    a non-musl loader or carries glibc symbol versions
+    --package       compile with --native: write <artifact>.bundle/ beside the
+                    executable, containing the executable and its non-system
+                    shared libraries. The executable is relinked to load them
+                    from its own directory. This is the portable option on
+                    macOS and Windows, where a fully static executable is not
+                    possible
     -o PATH         compile: the artifact file to produce (e.g. app.phar,
                     app.jar); with --unpacked it names the output directory
                     instead. For the print modes below it names the output file.

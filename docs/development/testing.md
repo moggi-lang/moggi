@@ -116,11 +116,35 @@ keep a golden green.
 | `MOGGI_NO_CACHE` | inherited by the compiler the cases invoke |
 | `JAVA_HOME` | locating `java` / `native-image` for jvm cases |
 | `MOGGI_MICRO_SFX` | micro PHP runtime for the `--native` php smoke; without it the verdict is a skip |
+| `MOGGI_STATIC_REQUIRED` | CI sets `1` on static-build legs: a missing toolchain fails instead of skipping |
 
 `--native` builds one example (`examples/twice`) as a native executable — the
 micro PHP runtime, GraalVM `native-image`, or .NET Native AOT — and compares its
 output with the same program run managed. It is a mode of that example's case,
 not a separate case, and it is off by default because the builds take minutes.
+`tests/cli/native_static.php` additionally pins the `--static`, `--musl` and
+`--package` command construction, their refusals without `--native`, and the
+Linux PHP static/package build and run. `tests/cli/native_static_package.php`
+is the matrix-driven end-to-end case: on Linux it builds, runs and bundles a
+static executable for the backend named by `MOGGI_NATIVE_BACKEND`, checks
+`readelf` for an interpreter and `NEEDED` entries, and asks `ldd` for its static
+verdict; macOS and Windows assert that the same request is refused. The PHP leg
+needs `MOGGI_MICRO_SFX` (or a bundled `micro.sfx`); the JVM leg needs
+`native-image` and a musl C toolchain, and the .NET leg runs on a musl host.
+On Alpine, `ldd` prints the musl loader for static-PIE executables even when
+`readelf` shows no interpreter; the test accepts that single loader line only
+when the ELF checks already prove the executable has no dynamic dependencies.
+CI builds the micro PHP runtime and runs the PHP static and package cases on
+both Linux architectures, runs the JVM static case on Linux, and runs the .NET
+static case in Alpine musl containers. The static jobs set
+`MOGGI_STATIC_REQUIRED=1`, so a missing runtime or compiler fails the build
+instead of turning the check into a skip. Ubuntu cannot produce the .NET
+`linux-musl-*` static executable, hence the Alpine container.
+The other backends also build and run a `--native --package` executable on
+Linux, macOS and Windows from a different working directory, which exercises
+the `$ORIGIN`, `@loader_path` and Windows DLL paths. The supported OS/backend
+combinations and the exact `readelf`/`ldd`/`otool` checks are in [the quickstart
+matrix](../quickstart.md#build-option-matrix).
 
 The suite's own tests are in `tests/suite/`; the language server's tests are
 `tests/lsp/`; the distribution smoke is `test.php distribution`.

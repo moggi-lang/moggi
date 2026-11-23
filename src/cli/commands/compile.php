@@ -19,6 +19,7 @@ use function Moggi\Compiler\compileFile;
 use function Moggi\Compiler\executableName;
 use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\findToolchainExecutable;
+use function Moggi\Compiler\runProcess;
 use function Moggi\Modules\bundledStdlibLibPath;
 use function Moggi\Modules\cachedModuleHeader;
 use function Moggi\Paths\globPaths;
@@ -62,6 +63,9 @@ function compileIntoRoot(
     array $libDirs = [],
     bool $native = false,
     bool $packageUnpacked = false,
+    bool $static = false,
+    bool $musl = false,
+    bool $package = false,
 ): array {
     $empty = static fn (int $code): array => [
         'exitCode' => $code,
@@ -71,6 +75,13 @@ function compileIntoRoot(
         'backend' => $backend,
         'native' => $native,
     ];
+
+    $linkProblem = nativeLinkProblem($native, $static, $musl, $package);
+    if ($linkProblem !== null) {
+        \fwrite(STDERR, "error: {$linkProblem}\n");
+
+        return $empty(1);
+    }
 
     if ($native && ! backendSupportsNative($backend)) {
         \fwrite(STDERR, "error: --native is only supported with --backend php, jvm or dotnet\n");
@@ -206,7 +217,7 @@ function compileIntoRoot(
         ])) {
             return $empty(1);
         }
-        if ($native && ! buildNativeExecutable($outputRoot, $backend)) {
+        if ($native && ! buildNativeExecutable($outputRoot, $backend, 'moggi-app', $static, $musl)) {
             return $empty(1);
         }
         echo \count($files) . " file(s) compiled\n";
@@ -264,7 +275,7 @@ function compileIntoRoot(
     ])) {
         return $empty(1);
     }
-    if ($native && ! buildNativeExecutable($outputRoot, $backend)) {
+    if ($native && ! buildNativeExecutable($outputRoot, $backend, 'moggi-app', $static, $musl)) {
         return $empty(1);
     }
 
@@ -301,6 +312,11 @@ function compileIntoRoot(
  * tree is kept for inspection (no packaging). A native executable is built
  * from the packaged archive, so --native and --unpacked are refused together.
  *
+ * With --package, a native build also writes `<artifact>.bundle/` beside the
+ * executable: the executable and its non-system shared libraries, relinked to
+ * load from that directory. Static builds need no libraries and still get the
+ * directory for a uniform deployable unit.
+ *
  * @return array{
  *   exitCode: int, outputRoot: ?string, artifactPath: ?string,
  *   entryModule: ?string, entryRelative: ?string, backend: string, native: bool
@@ -315,6 +331,9 @@ function runCompile(
     array $libDirs = [],
     bool $native = false,
     bool $unpacked = false,
+    bool $static = false,
+    bool $musl = false,
+    bool $package = false,
 ): array {
     $empty = static fn (int $code): array => [
         'exitCode' => $code,
@@ -346,7 +365,7 @@ function runCompile(
             return $empty(1);
         }
 
-        $result = compileIntoRoot($inputPath, $outputPath, $optimize, $backend, $strip, $libDirs, $native, true);
+        $result = compileIntoRoot($inputPath, $outputPath, $optimize, $backend, $strip, $libDirs, $native, true, $static, $musl, $package);
 
         return $result + ['artifactPath' => null];
     }
@@ -358,7 +377,7 @@ function runCompile(
     }
 
     $staging = \sys_get_temp_dir() . '/moggi-build-' . \getmypid() . '-' . \bin2hex(\random_bytes(3));
-    $result = compileIntoRoot($inputPath, $staging, $optimize, $backend, $strip, $libDirs, $native, false);
+    $result = compileIntoRoot($inputPath, $staging, $optimize, $backend, $strip, $libDirs, $native, false, $static, $musl, $package);
     if ($result['exitCode'] !== 0 || $result['outputRoot'] === null) {
         removeOutputTree($staging);
 
@@ -370,6 +389,20 @@ function runCompile(
         ? $outputPath
         : \getcwd() . DIRECTORY_SEPARATOR . $base . artifactExtension($backend);
 
+    $packageSource = null;
+    if ($package && $native) {
+        $sourceNative = $staging . DIRECTORY_SEPARATOR . executableName('moggi-app');
+        if (\is_file($sourceNative)) {
+            $packageSource = $staging . DIRECTORY_SEPARATOR . '.package-source-' . executableName('moggi-app');
+            if (! @\link($sourceNative, $packageSource) && ! \copy($sourceNative, $packageSource)) {
+                removeOutputTree($staging);
+                \fwrite(STDERR, "error: cannot preserve the native executable for --package\n");
+
+                return $empty(1);
+            }
+        }
+    }
+
     try {
         $moved = movePackagedArtifacts($staging, $destBase, $backend, $native);
     } catch (\RuntimeException $e) {
@@ -378,30 +411,46 @@ function runCompile(
 
         return $empty(1);
     }
-    removeOutputTree($staging);
 
-    $order = artifactPrimaryRel($backend, $native);
-    foreach ($order as $rel) {
-        if (isset($moved[$rel])) {
-            echo artifactLabel($rel) . ": {$moved[$rel]}\n";
+    try {
+        $order = artifactPrimaryRel($backend, $native);
+        foreach ($order as $rel) {
+            if (isset($moved[$rel])) {
+                echo artifactLabel($rel) . ": {$moved[$rel]}\n";
+            }
         }
-    }
-    foreach ($moved as $rel => $final) {
-        if (! \in_array($rel, $order, true)) {
-            echo artifactLabel($rel) . ": {$final}\n";
+        foreach ($moved as $rel => $final) {
+            if (! \in_array($rel, $order, true)) {
+                echo artifactLabel($rel) . ": {$final}\n";
+            }
         }
-    }
 
-    $primary = null;
-    foreach ($order as $rel) {
-        if (isset($moved[$rel])) {
-            $primary = $moved[$rel];
+        $primary = null;
+        foreach ($order as $rel) {
+            if (isset($moved[$rel])) {
+                $primary = $moved[$rel];
 
-            break;
+                break;
+            }
         }
-    }
 
-    return $result + ['artifactPath' => $primary];
+        if ($package && $primary === null) {
+            \fwrite(STDERR, "error: --package found no native executable to bundle\n");
+
+            return \array_merge($result, ['exitCode' => 1, 'artifactPath' => null]);
+        }
+        if ($package) {
+            $bundle = bundleNativeExecutable((string) $primary, $packageSource);
+            if ($bundle === null) {
+                return \array_merge($result, ['exitCode' => 1, 'artifactPath' => $primary]);
+            }
+            echo "bundle: {$bundle}\n";
+        }
+
+        return $result + ['artifactPath' => $primary];
+    } finally {
+        removeOutputTree($staging);
+    }
 }
 
 /**
@@ -720,23 +769,227 @@ function backendSupportsNative(string $backend): bool
     return \in_array($backend, ['php', 'jvm', 'dotnet'], true);
 }
 
-function buildNativeExecutable(string $outputRoot, string $backend, string $binaryName = 'moggi-app'): bool
+/**
+ * Why `--static`, `--musl` or `--package` cannot be honoured before anything
+ * is built, or null.
+ *
+ * Static verification is an ELF check, so the strict form is Linux-only. macOS
+ * has no static libSystem and Windows PE always imports system DLLs; `--package`
+ * is the portable answer there. The native builders are the only ones that
+ * produce an executable to link.
+ */
+function nativeLinkProblem(bool $native, bool $static, bool $musl, bool $package = false): ?string
 {
-    if ($backend === 'php') {
-        return Backend\Php\buildPhpNativeExecutable($outputRoot, 'moggi-app.phar', $binaryName);
+    if ($package && ! $native) {
+        return '--package requires --native';
     }
-    if ($backend === 'jvm') {
-        return buildJvmNativeExecutable($outputRoot, 'moggi-app.jar', $binaryName);
+    if (! $static && ! $musl) {
+        return null;
     }
-    if ($backend === 'dotnet') {
-        return Backend\DotNet\buildDotNetNativeExecutable($outputRoot, 'moggi-app', $binaryName);
-    }
-    \fwrite(STDERR, "error: --native is not supported for backend `{$backend}`\n");
+    if (! $native) {
+        if ($static) {
+            return '--static requires --native';
+        }
 
-    return false;
+        return '--musl requires --native';
+    }
+    if (\PHP_OS_FAMILY !== 'Linux') {
+        if ($static) {
+            return \PHP_OS_FAMILY === 'Darwin'
+                ? '--static is not possible on macOS: every executable links libSystem.dylib; use --package to ship non-system libraries'
+                : '--static is not possible on Windows: PE executables always import system DLLs; use --package to ship non-system DLLs';
+        }
+
+        return '--musl is only supported for native Linux builds';
+    }
+    if (findExecutable('readelf') === null) {
+        $flag = $static ? '--static' : '--musl';
+
+        return "{$flag} requires `readelf` on PATH to verify the native executable";
+    }
+
+    return null;
 }
 
-function buildJvmNativeExecutable(string $outputRoot, string $jarName, string $binaryName): bool
+/**
+ * Prove an executable has neither a dynamic loader nor shared-library entries.
+ *
+ * A static PIE still has a dynamic section for relocations, so `DT_NEEDED` is
+ * the dependency test, not the presence of `.dynamic`; `PT_INTERP` is the
+ * loader test. `readelf` is the same binutils the native toolchain already uses.
+ */
+function staticLinkingProblem(string $path): ?string
+{
+    $readelf = findExecutable('readelf');
+    if ($readelf === null) {
+        return 'cannot verify the executable is static: readelf is not on PATH';
+    }
+
+    $headers = runProcess([$readelf, '-l', $path]);
+    if ($headers['exitCode'] !== 0) {
+        return 'readelf could not read the executable: ' . \trim($headers['stderr']);
+    }
+    if (\preg_match('/^\s*INTERP\b/m', $headers['stdout']) === 1) {
+        return 'the executable still requests a dynamic loader (PT_INTERP)';
+    }
+
+    $dynamic = runProcess([$readelf, '-d', $path]);
+    if ($dynamic['exitCode'] === 0 && \preg_match('/\(NEEDED\)/', $dynamic['stdout']) === 1) {
+        return 'the executable still has shared-library dependencies (DT_NEEDED)';
+    }
+
+    return null;
+}
+
+/**
+ * Prove an executable uses musl rather than glibc.
+ *
+ * A dynamic executable names its loader in PT_INTERP, so a musl loader there is
+ * conclusive. A static executable has no interpreter; glibc's static link still
+ * carries versioned `GLIBC_*` symbols and, after stripping, glibc loader strings
+ * that musl does not. This rejects what it can prove and lets the build through
+ * when there is nothing to inspect.
+ */
+function muslLinkingProblem(string $path): ?string
+{
+    $readelf = findExecutable('readelf');
+    if ($readelf === null) {
+        return 'cannot verify the executable uses musl: readelf is not on PATH';
+    }
+
+    $headers = runProcess([$readelf, '-l', $path]);
+    if ($headers['exitCode'] !== 0) {
+        return 'readelf could not read the executable: ' . \trim($headers['stderr']);
+    }
+    if (\preg_match('/^\s*INTERP\b/m', $headers['stdout']) === 1) {
+        if (\preg_match('/ld-musl[^\s\/]*\.so/', $headers['stdout']) !== 1) {
+            return 'the executable requests a non-musl dynamic loader';
+        }
+
+        return null;
+    }
+
+    $versions = runProcess([$readelf, '-V', $path]);
+    if ($versions['exitCode'] === 0 && \preg_match('/\bGLIBC_[0-9]/', $versions['stdout']) === 1) {
+        return 'the executable references glibc symbol versions';
+    }
+
+    $glibc = staticGlibcProblem($path);
+    if ($glibc !== null) {
+        return $glibc;
+    }
+
+    return null;
+}
+
+/**
+ * Reject static glibc, whose version section is absent but whose loader strings
+ * remain. A static musl binary does not carry `GLIBC_TUNABLES` or glibc's
+ * `ld.so.cache`/fatal-error strings; without this check a static glibc binary
+ * with no version section would pass `--musl`.
+ */
+function staticGlibcProblem(string $path): ?string
+{
+    $readelf = findExecutable('readelf');
+    if ($readelf === null) {
+        return 'cannot check whether the static executable is musl: readelf is not on PATH';
+    }
+
+    $rodata = runProcess([$readelf, '-p', '.rodata', $path]);
+    if ($rodata['exitCode'] !== 0) {
+        return null;
+    }
+    if (\preg_match('/Fatal glibc error|glibc-ld\.so\.cache|GLIBC_TUNABLES/', $rodata['stdout']) === 1) {
+        return 'the executable contains glibc runtime strings';
+    }
+
+    return null;
+}
+
+function buildNativeExecutable(
+    string $outputRoot,
+    string $backend,
+    string $binaryName = 'moggi-app',
+    bool $static = false,
+    bool $musl = false,
+): bool {
+    if ($backend === 'php') {
+        $built = Backend\Php\buildPhpNativeExecutable($outputRoot, 'moggi-app.phar', $binaryName);
+    } elseif ($backend === 'jvm') {
+        $built = buildJvmNativeExecutable($outputRoot, 'moggi-app.jar', $binaryName, $static, $musl);
+    } elseif ($backend === 'dotnet') {
+        $built = Backend\DotNet\buildDotNetNativeExecutable($outputRoot, 'moggi-app', $binaryName, $static, $musl);
+    } else {
+        \fwrite(STDERR, "error: --native is not supported for backend `{$backend}`\n");
+
+        return false;
+    }
+
+    if (! $built) {
+        return false;
+    }
+
+    $binary = $outputRoot . DIRECTORY_SEPARATOR . executableName($binaryName);
+    if ($static) {
+        $problem = staticLinkingProblem($binary);
+        if ($problem !== null) {
+            \fwrite(STDERR, "error: --static was requested, but {$binary} is not static: {$problem}\n");
+            @\unlink($binary);
+
+            return false;
+        }
+    }
+    if ($musl) {
+        $problem = muslLinkingProblem($binary);
+        if ($problem !== null) {
+            \fwrite(STDERR, "error: --musl was requested, but {$binary} is not linked against musl: {$problem}\n");
+            @\unlink($binary);
+
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * The `native-image` argv, including GraalVM's static and musl modes.
+ *
+ * GraalVM does not support a static glibc link; its fully static targets use
+ * musl. `--musl` asks for the musl libc without requiring static linking, while
+ * a static JVM executable necessarily selects it too.
+ *
+ * @return list<string>
+ */
+function jvmNativeImageCommand(
+    string $nativeImage,
+    string $jarName,
+    string $binaryName,
+    bool $static,
+    bool $musl = false,
+): array {
+    $command = [$nativeImage];
+    if ($static) {
+        $command[] = '--static';
+    }
+    if ($static || $musl) {
+        $command[] = '--libc=musl';
+    }
+    $command[] = '-jar';
+    $command[] = $jarName;
+    $command[] = '--no-fallback';
+    $command[] = $binaryName;
+
+    return $command;
+}
+
+function buildJvmNativeExecutable(
+    string $outputRoot,
+    string $jarName,
+    string $binaryName,
+    bool $static = false,
+    bool $musl = false,
+): bool
 {
     $nativeImage = resolveNativeImageExecutable();
     if ($nativeImage === null) {
@@ -752,13 +1005,19 @@ function buildJvmNativeExecutable(string $outputRoot, string $jarName, string $b
         return false;
     }
 
-    $cmd = \implode(' ', \array_map('escapeshellarg', [
+    if ($static) {
+        \fwrite(STDERR, "note: jvm --static uses GraalVM's musl libc mode (needs a musl C toolchain and static zlib)\n");
+    } elseif ($musl) {
+        \fwrite(STDERR, "note: jvm --musl uses GraalVM's musl libc mode (needs a musl C toolchain)\n");
+    }
+
+    $cmd = \implode(' ', \array_map('escapeshellarg', jvmNativeImageCommand(
         $nativeImage,
-        '-jar',
         $jarName,
-        '--no-fallback',
         $binaryName,
-    ]));
+        $static,
+        $musl,
+    )));
     $cwd = \getcwd();
     if (\chdir($outputRoot) === false) {
         \fwrite(STDERR, "error: cannot chdir to output directory {$outputRoot}\n");
@@ -801,7 +1060,8 @@ function projectUsesModules(array $files): bool
  * @return array{
  *   input: string, output: ?string, mode: string, optimize: bool,
  *   backend: string, strip: bool, libDirs: list<string>,
- *   hostLibDirs: array<string, list<string>>, native: bool, unpacked: bool
+ *   hostLibDirs: array<string, list<string>>, native: bool, unpacked: bool,
+ *   static: bool, musl: bool, package: bool
  * }
  */
 /** @param list<string> $argv */
@@ -854,6 +1114,16 @@ function parseCompileArgs(array $argv): array
         }
     }
 
+    $native = (bool) $options['native'];
+    $static = (bool) $options['static'];
+    $musl = (bool) $options['musl'];
+    $package = (bool) $options['package'];
+    $linkProblem = nativeLinkProblem($native, $static, $musl, $package);
+    if ($linkProblem !== null) {
+        \fwrite(STDERR, "error: {$linkProblem}\n\n" . $spec->help . "\n");
+        exit(1);
+    }
+
     return [
         'input' => $input,
         'output' => $output,
@@ -863,8 +1133,11 @@ function parseCompileArgs(array $argv): array
         'strip' => ! $options['noStrip'],
         'libDirs' => $options['lib'],
         'hostLibDirs' => $hostLibDirs,
-        'native' => (bool) $options['native'],
+        'native' => $native,
         'unpacked' => (bool) $options['unpacked'],
+        'static' => $static,
+        'musl' => $musl,
+        'package' => $package,
     ];
 }
 
@@ -902,6 +1175,18 @@ function compileUsage(): string
                        Repeatable.
       --unpacked       keep the generated tree on disk instead of packaging
       --native         build a native executable
+      --static         make a native executable fully static (Linux only; jvm
+                       uses GraalVM's musl mode and dotnet uses the musl
+                       runtime pack; both need a musl C toolchain and static
+                       zlib)
+      --musl           link a native executable against musl libc (Linux only;
+                       jvm uses GraalVM's musl mode; dotnet publishes for
+                       linux-musl-<arch>; php's micro runtime is already musl)
+      --package        write <artifact>.bundle/ beside the executable: the
+                       executable and its non-system shared libraries in one
+                       directory, relinked to load them from there. Use this
+                       on macOS or Windows, where a fully static build is not
+                       possible, or when a static build is not wanted
       --no-opt         skip optimizations when generating code
       --no-strip       keep bindings unreachable from `main`
       --no-cache       bypass the on-disk compile cache for this run
@@ -925,6 +1210,9 @@ function compileSpec(): CommandSpec
         ...$printModes,
         ['name' => 'noOpt'],
         ['name' => 'native'],
+        ['name' => 'static'],
+        ['name' => 'musl'],
+        ['name' => 'package'],
         ['name' => 'unpacked'],
         ['name' => 'strip'],
         ['name' => 'noStrip'],
@@ -1167,6 +1455,9 @@ function runCompileCommand(array $argv): int
         $options['libDirs'],
         $options['native'],
         $options['unpacked'],
+        $options['static'],
+        $options['musl'],
+        $options['package'],
     );
 
     return $result['exitCode'];
