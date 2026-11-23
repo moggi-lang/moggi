@@ -39,6 +39,14 @@ the pages beyond the path — [kinds](types/kinds.md),
 | [lsp.md](lsp.md) | the language server: editor setup, capabilities, limits |
 | [env-vars.md](env-vars.md) | the environment variables the compiler, runtimes and tests read |
 
+## Registry operations
+
+| Page | Contents |
+|------|----------|
+| [registry-local.md](registry-local.md) | run and test reads, writes, docs and version switching locally |
+| [registry-public.md](registry-public.md) | publish the tree, deploy the Worker, bind R2, and verify production |
+| [registry-reset.md](registry-reset.md) | back up, restore, reset, and destroy a registry safely |
+
 ## Working on the compiler
 
 | Page | Contents |
