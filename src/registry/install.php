@@ -158,7 +158,24 @@ function fetchVerifiedRelease(string $base, string $name, string $version, mixed
         return ['ok' => false, 'detail' => $file['problem'], 'release' => null, 'signer' => null];
     }
 
-    $record = \json_decode((string) $file['bytes'], true, 512, \JSON_THROW_ON_ERROR);
+    try {
+        $record = \json_decode((string) $file['bytes'], true, 512, \JSON_THROW_ON_ERROR);
+    } catch (\JsonException $error) {
+        return [
+            'ok' => false,
+            'detail' => "{$name}'s package file is not valid JSON ({$error->getMessage()})",
+            'release' => null,
+            'signer' => null,
+        ];
+    }
+    if (! \is_array($record) || \array_is_list($record) || ! \is_array($record['versions'] ?? null)) {
+        return [
+            'ok' => false,
+            'detail' => "{$name}'s package file does not carry a versions object",
+            'release' => null,
+            'signer' => null,
+        ];
+    }
     $release = $record['versions'][$version] ?? null;
     if (! \is_array($release)) {
         return ['ok' => false, 'detail' => "{$name} {$version} is not in its package file", 'release' => null, 'signer' => null];
@@ -293,6 +310,9 @@ function sourceBlobFromGit(array $source): array
     $commit = \is_string($source['commit'] ?? null) ? $source['commit'] : '';
     if ($url === '' || $commit === '') {
         return ['bytes' => null, 'problem' => 'the registry does not serve its blob, and its `git` source names no url and commit', 'origin' => ''];
+    }
+    if (\preg_match('/^[0-9a-f]{40}$/', $commit) !== 1) {
+        return ['bytes' => null, 'problem' => 'the registry does not serve its blob, and its `git` source commit is not a 40-character lowercase hex id', 'origin' => ''];
     }
     $urlProblem = sourceUrlProblem('git', $url);
     if ($urlProblem !== null) {

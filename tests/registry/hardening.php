@@ -125,6 +125,26 @@ try {
     $one(lockDisagreements($lock(['json' => ['version' => '1.0.0', 'digest' => 'sha256:' . $hex]]), ['json' => $catalog(['1.0.0' => []], 'sha256:' . $hexC)]), 'changed since', 'a moved digest must be a disagreement');
     $one(lockDisagreements($lock(['json' => ['version' => '9.9.9', 'digest' => 'sha256:' . $hex]]), ['json' => $catalog(['1.0.0' => []], 'sha256:' . $hex)]), 'not published any more', 'a vanished version must be a disagreement');
 
+    // --- a malformed package record is a refusal, not a JSON exception ------
+    $badPackageBase = $work . '/bad-package-registry';
+    \mkdir($badPackageBase . '/packages', 0777, true);
+    $badBytes = 'not json';
+    \file_put_contents($badPackageBase . '/packages/json.json', $badBytes);
+    $badRelease = \Moggi\Registry\fetchVerifiedRelease(
+        $badPackageBase,
+        'json',
+        '1.0.0',
+        \Moggi\Registry\sha256Digest($badBytes),
+        [],
+        false,
+        null,
+        new FetchLog(),
+    );
+    $assert(
+        ! $badRelease['ok'] && \str_contains($badRelease['detail'], 'not valid JSON'),
+        'a package file that is not JSON must be refused: ' . \var_export($badRelease, true),
+    );
+
     // --- a lock belongs to the registry it was resolved from ----------------
     $recorded = ['packages' => [], 'registry' => ['npub' => $seedNpub]];
     $assert(\Moggi\Registry\lockRegistryProblem($recorded, $seedNpub) === null, 'a lock from this registry is fine');

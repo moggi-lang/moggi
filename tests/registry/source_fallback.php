@@ -158,7 +158,14 @@ try {
         $unsourced['problem'] !== null && \str_contains($unsourced['problem'], 'names no url and commit'),
         'a git source with no url or commit is refused',
     );
-    $localRepo = fetchBlobFromSource(['source' => ['kind' => 'git', 'url' => '/tmp/repo', 'commit' => 'HEAD']], null);
+    $optionInjection = fetchBlobFromSource([
+        'source' => ['kind' => 'git', 'url' => 'https://example.test/repo.git', 'commit' => '--upload-pack=/tmp/evil'],
+    ], null);
+    $assert(
+        $optionInjection['problem'] !== null && \str_contains($optionInjection['problem'], '40-character lowercase hex'),
+        'a signed git commit cannot become a git option: ' . ($optionInjection['problem'] ?? ''),
+    );
+    $localRepo = fetchBlobFromSource(['source' => ['kind' => 'git', 'url' => '/tmp/repo', 'commit' => \str_repeat('a', 40)]], null);
     $assert(
         $localRepo['problem'] !== null && \str_contains($localRepo['problem'], 'not allowed'),
         'a local git source is refused as a transport rather than cloned: ' . ($localRepo['problem'] ?? ''),

@@ -52,7 +52,7 @@ function publishUsage(): string
     key the release is signed with.
 
     options:
-      --registry URL|DIR   registry to publish to (default: MOGGI_REGISTRY_WRITE,
+      --registry URL       registry to publish to (default: MOGGI_REGISTRY_WRITE,
                            else MOGGI_REGISTRY, else {$default})
       --as NPUB            which [author] signs (required when there is more than one)
       --nsec-file FILE     the signing key, mode 0600 (default: MOGGI_NSEC_FILE,
@@ -150,7 +150,7 @@ function publishRelease(array $options): int
     if ($record === null) {
         $author = selectAuthor($descriptor['authors'], $options['as']);
     }
-    $nsec = readNsecKey($options['nsec-file']);
+    $nsec = $record !== null && $options['dryRun'] ? null : readNsecKey($options['nsec-file']);
 
     $output = $options['output'] ?? "{$directory}/{$name}-{$version}.tar";
     $exclude = [];
@@ -207,7 +207,7 @@ function publishRelease(array $options): int
                 $docs === null ? null : $docs['digest'],
             ),
             $author,
-            $nsec,
+            (string) $nsec,
         );
     }
 
