@@ -89,6 +89,13 @@ function compileIntoRoot(
         return $empty(1);
     }
 
+    if ($native && $static && $backend === 'jvm' && \PHP_OS_FAMILY === 'Linux'
+        && \in_array(\strtolower(\php_uname('m')), ['aarch64', 'arm64'], true)) {
+        \fwrite(STDERR, "error: jvm --static is not supported on Linux aarch64: GraalVM's fully static native-image target is x86_64-only\n");
+
+        return $empty(1);
+    }
+
     echo "backend: {$backend}\n";
 
     try {

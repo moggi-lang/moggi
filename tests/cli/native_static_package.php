@@ -123,6 +123,9 @@ try {
     if ($backend === 'jvm') {
         $machine = \strtolower(\php_uname('m'));
         $arch = \in_array($machine, ['aarch64', 'arm64'], true) ? 'aarch64' : 'x86_64';
+        if ($arch !== 'x86_64') {
+            $skip('native static package tests skipped for jvm (GraalVM static images are x86_64-only)');
+        }
         if (resolveNativeImageExecutable() === null || findExecutable($arch . '-linux-musl-gcc') === null) {
             $skip('native static package tests skipped for jvm (no native-image or musl C toolchain)');
         }
