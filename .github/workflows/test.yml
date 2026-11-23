@@ -294,8 +294,9 @@ jobs:
         include:
           - {name: 'linux-x86_64 / php static',    runner: ubuntu-24.04,     target: linux-x86_64,  kind: php}
           - {name: 'linux-aarch64 / php static',   runner: ubuntu-24.04-arm, target: linux-aarch64, kind: php}
+          # GraalVM's fully static native-image target is x86_64-only; the
+          # aarch64 JVM leg still builds and runs the non-static package above.
           - {name: 'linux-x86_64 / jvm static',    runner: ubuntu-24.04,     target: linux-x86_64,  kind: jvm}
-          - {name: 'linux-aarch64 / jvm static',   runner: ubuntu-24.04-arm, target: linux-aarch64, kind: jvm}
           - {name: 'linux-x86_64 / dotnet static', runner: ubuntu-24.04,     target: linux-x86_64,  kind: dotnet}
           - {name: 'linux-aarch64 / dotnet static', runner: ubuntu-24.04-arm, target: linux-aarch64, kind: dotnet}
           - {name: 'macos-x86_64 / static refusal',  runner: macos-15-intel, target: macos-x86_64,  kind: refusal}
