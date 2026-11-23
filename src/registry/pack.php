@@ -412,6 +412,12 @@ function assertPortablePath(string $path): void
     if (\str_contains($path, "\0") || \str_contains($path, "\n") || \str_contains($path, "\r")) {
         throw new \RuntimeException('a path may not contain NUL, LF or CR: ' . \var_export($path, true));
     }
+    if (\str_contains($path, '\\')) {
+        throw new \RuntimeException('a path may not contain a backslash (use `/`): ' . \var_export($path, true));
+    }
+    if (\preg_match('#^[A-Za-z]:#', $path) === 1) {
+        throw new \RuntimeException('a path may not start with a drive letter: ' . \var_export($path, true));
+    }
     if (! \mb_check_encoding($path, 'UTF-8')) {
         throw new \RuntimeException('a path must be valid UTF-8: ' . \var_export($path, true));
     }
@@ -608,6 +614,12 @@ function extractArchive(string $archive, string $destination): ?string
         }
         if ($name === '' || $name === '.') {
             continue;
+        }
+        if (\str_contains($name, "\0") || \str_contains($name, "\n") || \str_contains($name, "\r")) {
+            return 'the archive contains a path with NUL, LF or CR';
+        }
+        if (\str_contains($name, '\\') || \preg_match('#^[A-Za-z]:#', $name) === 1) {
+            return "the archive contains an unsafe path ({$name})";
         }
         if (\str_starts_with($name, '/') || \preg_match('#(^|/)\.\.(/|$)#', $name) === 1) {
             return "the archive contains an unsafe path ({$name})";

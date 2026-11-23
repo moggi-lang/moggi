@@ -140,6 +140,15 @@ try {
     $assert($refusal !== null && \str_contains($refusal, 'unsafe path'), 'a `../` entry must be refused: ' . \var_export($refusal, true));
     $assert(! \file_exists($work . '/escape.mog'), 'a `../` entry must not be written');
 
+    // Windows treats `\` as a separator and `C:` as a drive, so a path the Unix
+    // packer accepts must not become an escape when the same blob is unpacked there.
+    foreach (['..\\..\\escape.mog', 'C:escape.mog', "a\nb.mog"] as $hostileName) {
+        $blob = \Moggi\Registry\tarHeader($hostileName, '0', 0644, 3, '')
+            . \Moggi\Registry\padTo512('boo') . \str_repeat("\0", 1024);
+        $verdict = \Moggi\Registry\extractArchive($blob, $escape);
+        $assert($verdict !== null, "a {$hostileName} entry must be refused");
+    }
+
     // A link is the other way out of the destination, and the blob is hostile input: a target that
     // climbs above the root, or names an absolute path, must be refused on the way in as well as on
     // the way out.
@@ -185,7 +194,7 @@ try {
     $assert($accepted, 'a link that stays inside the tree must be accepted');
 
     // A path a record could not survive: it would make the format ambiguous.
-    foreach (["a\nb.mog", "a\rb.mog"] as $impossible) {
+    foreach (["a\nb.mog", "a\rb.mog", 'a\\b.mog', 'C:evil.mog'] as $impossible) {
         $refused = false;
 
         try {

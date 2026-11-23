@@ -37,7 +37,7 @@ function unmaintainedUsage(): string
     options:
       --note TEXT          why it is unmaintained (optional; the reason a user reads)
       --clear              remove the marker instead of setting one
-      --registry URL|DIR   registry to write to (default: MOGGI_REGISTRY_WRITE,
+      --registry URL       registry to write to (default: MOGGI_REGISTRY_WRITE,
                            else MOGGI_REGISTRY, else {$default})
       --as NPUB            the identity that signs (default: the descriptor here, when there is one)
       --nsec-file FILE     the signing key, mode 0600 (default: MOGGI_NSEC_FILE,
