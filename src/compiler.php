@@ -270,6 +270,7 @@ require __DIR__ . '/cli/commands/build.php';
 require __DIR__ . '/cli/commands/check.php';
 require __DIR__ . '/cli/commands/format.php';
 require __DIR__ . '/cli/commands/verify.php';
+require __DIR__ . '/cli/commands/native_bundle.php';
 require __DIR__ . '/cli/commands/compile.php';
 require __DIR__ . '/cli/commands/run.php';
 require __DIR__ . '/cli/commands/cache.php';

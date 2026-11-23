@@ -72,7 +72,7 @@ const DESCRIPTOR_BACKEND_TABLES = ['php.extensions', 'jvm.maven', 'dotnet.nuget'
  */
 const DESCRIPTOR_REPEATABLE_SECTIONS = [
     'author' => ['name', 'email', 'npub', 'automation'],
-    'executable' => ['main', 'source-dirs', 'backend'],
+    'executable' => ['main', 'source-dirs', 'backend', 'native', 'static', 'musl', 'package'],
     'test-suite' => ['main', 'source-dirs', 'backend'],
 ];
 
@@ -178,6 +178,35 @@ function descriptorProblems(string $path): array
         }
     } catch (\RuntimeException $error) {
         $problems[] = $error->getMessage();
+    }
+
+    foreach ($ini as $section => $values) {
+        if (! \is_array($values) || ! \preg_match('/^executable(\.(.+))?$/', (string) $section)) {
+            continue;
+        }
+        $flags = [];
+        foreach (['native', 'static', 'musl', 'package'] as $flag) {
+            if (! isset($values[$flag])) {
+                $flags[$flag] = false;
+
+                continue;
+            }
+            $raw = \strtolower(\trim((string) $values[$flag]));
+            if (! \in_array($raw, ['true', 'false'], true)) {
+                $problems[] = "{$path}: [{$section}] `{$flag} = {$values[$flag]}` is not `true` or `false`";
+                $flags[$flag] = null;
+
+                continue;
+            }
+            $flags[$flag] = $raw === 'true';
+        }
+        if (($flags['native'] ?? false) !== true) {
+            foreach (['static', 'musl', 'package'] as $flag) {
+                if (($flags[$flag] ?? false) === true) {
+                    $problems[] = "{$path}: [{$section}] `{$flag} = true` requires `native = true`";
+                }
+            }
+        }
     }
 
     $authors = [];
@@ -420,12 +449,23 @@ function descriptorUnknownKey(string $section, string $key): string
         return '[lib] takes no `backend` — a library has no entry point to build';
     }
 
-    $allowed = DESCRIPTOR_REPEATABLE_SECTIONS[$base] ?? DESCRIPTOR_SCHEMA[$section] ?? [];
+    $allowed = descriptorRepeatableKeys($section) ?? DESCRIPTOR_SCHEMA[$section] ?? [];
     if ($allowed === []) {
         return "[{$section}] does not take `{$key}`";
     }
 
     return "[{$section}] does not take `{$key}` (it takes: " . \implode(', ', $allowed) . ')';
+}
+
+/** The keys a repeatable `[section]` or `[section.<id>]` takes. */
+function descriptorRepeatableKeys(string $section): ?array
+{
+    if (isset(DESCRIPTOR_REPEATABLE_SECTIONS[$section])) {
+        return DESCRIPTOR_REPEATABLE_SECTIONS[$section];
+    }
+    $base = \explode('.', $section, 2)[0];
+
+    return DESCRIPTOR_REPEATABLE_SECTIONS[$base] ?? null;
 }
 
 /**
@@ -440,7 +480,7 @@ function descriptorSectionIsTable(string $section): bool
 function descriptorSectionKnown(string $section): bool
 {
     return isset(DESCRIPTOR_SCHEMA[$section])
-        || isset(DESCRIPTOR_REPEATABLE_SECTIONS[\explode('.', $section, 2)[0]])
+        || descriptorRepeatableKeys($section) !== null
         || descriptorSectionIsTable($section);
 }
 
@@ -449,7 +489,7 @@ function descriptorSectionAllows(string $section, string $key): bool
     if ($section === 'dependencies' || descriptorSectionIsTable($section)) {
         return true;
     }
-    $allowed = DESCRIPTOR_REPEATABLE_SECTIONS[\explode('.', $section, 2)[0]] ?? DESCRIPTOR_SCHEMA[$section] ?? null;
+    $allowed = descriptorRepeatableKeys($section) ?? DESCRIPTOR_SCHEMA[$section] ?? null;
 
     return $allowed !== null && \in_array($key, $allowed, true);
 }
@@ -497,8 +537,8 @@ function isNpub(string $npub): bool
  *   jvm: array{maven: list<string>, git: ?string, files: ?string},
  *   dotnet: array{nuget: list<string>, git: ?string, files: ?string},
  *   lib: array{sourceDirs: list<string>},
- *   executables: array<string, array{main: string, sourceDirs: list<string>, backend: ?string}>,
- *   testSuites: array<string, array{main: string, sourceDirs: list<string>, backend: ?string}>,
+ *   executables: array<string, array{main: string, sourceDirs: list<string>, backend: ?string, native: bool, static: bool, musl: bool, package: bool}>,
+ *   testSuites: array<string, array{main: string, sourceDirs: list<string>, backend: ?string, native: bool, static: bool, musl: bool, package: bool}>,
  *   docs: array{targetDir: ?string},
  *   license: ?string,
  *   licenseFile: ?string,
@@ -693,7 +733,7 @@ function declaredBackends(string $iniBytes): array
  * `--exe` is given.
  *
  * @param array<string, mixed> $ini
- * @return array<string, array{main: string, sourceDirs: list<string>, backend: ?string}>
+ * @return array<string, array{main: string, sourceDirs: list<string>, backend: ?string, native: bool, static: bool, musl: bool, package: bool}>
  */
 function readRepeatableSection(array $ini, string $name): array
 {
@@ -706,10 +746,20 @@ function readRepeatableSection(array $ini, string $name): array
             'main' => (string) ($values['main'] ?? ''),
             'sourceDirs' => splitList((string) ($values['source-dirs'] ?? '')),
             'backend' => isset($values['backend']) ? (string) $values['backend'] : null,
+            'native' => descriptorBoolean($values, 'native'),
+            'static' => descriptorBoolean($values, 'static'),
+            'musl' => descriptorBoolean($values, 'musl'),
+            'package' => descriptorBoolean($values, 'package'),
         ];
     }
 
     return $blocks;
+}
+
+/** @param array<string, mixed> $values */
+function descriptorBoolean(array $values, string $key): bool
+{
+    return \strtolower(\trim((string) ($values[$key] ?? 'false'))) === 'true';
 }
 
 /**

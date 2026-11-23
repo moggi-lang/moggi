@@ -128,6 +128,123 @@ take noticeably longer than the plain archive; the `php` one is the archive
 appended to the runtime. `--native` cannot be combined with `--unpacked`,
 because the executable is built from the packaged archive.
 
+### Project build options
+
+The project descriptor (`<name>.moggi`, named after the package) can carry the
+same native options on `[executable]`, so `moggi build` reproduces the build
+without repeating flags:
+
+```ini
+[executable]
+main = Main
+source-dirs = src
+native = true
+package = true
+# static = true
+# musl = true
+```
+
+The values are booleans. `static`, `musl` and `package` require `native = true`;
+`moggi build` forwards each enabled option to `moggi compile`. A flag passed
+after `--` is forwarded too and is not passed twice. `--package` is available
+on Linux as well; use it when a dependency cannot practically be linked
+statically (Qt5 is the common example), and the bundle carries its non-system
+shared libraries beside the executable.
+
+### Static and musl native executables
+
+On Linux, add `--static` to a native build to require an executable with no
+dynamic loader and no shared-library dependencies:
+
+```bash
+moggi compile hello.mog --native --static
+```
+
+The flag is only valid with `--native`. The PHP backend already produces a
+static executable, so it mainly verifies that fact. GraalVM does not support a
+static glibc link, so `jvm` uses GraalVM's musl mode (`--static --libc=musl`)
+and needs a musl C toolchain with static zlib installed. The `dotnet` backend
+likewise targets `linux-musl-<arch>` and passes Native AOT's
+`StaticExecutable=true`; its link needs the musl runtime pack and static zlib.
+The musl .NET modes also set `InvariantGlobalization=true`, because Native AOT
+otherwise looks up ICU with `dlopen` at run time; invariant mode is what makes
+the executable genuinely self-contained on a minimal musl host. Every result
+is checked with `readelf`; a binary that still names a dynamic loader or a
+`DT_NEEDED` library fails the build rather than being reported as static.
+`readelf` therefore has to be on `PATH`.
+
+A fully static executable is Linux-only. macOS provides no static `libSystem`,
+and a Windows PE executable always imports system DLLs (`kernel32.dll` and
+friends), so `--static` is refused there with a message rather than producing
+a binary that is not really static. Use `--package` on those platforms.
+
+Use `--musl` to ask for a musl-linked executable without requiring a fully
+static one:
+
+```bash
+moggi compile hello.mog --native --musl
+moggi compile hello.mog --native --static --musl
+```
+
+Like `--static`, `--musl` is Linux-only and needs `--native` and `readelf`. The
+PHP micro runtime is already a static musl build, so on `php` the flag mainly
+verifies the result. `jvm` passes `--libc=musl` to GraalVM; `dotnet` publishes
+for `linux-musl-<arch>` so the SDK selects the musl runtime pack, with
+`InvariantGlobalization=true` so it does not need a separate musl ICU install.
+A dynamic musl executable needs the musl loader at run time, and a static one
+needs the musl C toolchain and static library pack. The build is rejected if
+the result names a non-musl loader or carries glibc symbol versions.
+
+### Packaging dependencies beside the executable
+
+When a fully static executable is not possible or not wanted, `--package`
+writes a directory beside the native executable:
+
+```bash
+moggi compile hello.mog --native --package -o hello
+# hello          the executable (as before)
+# hello.bundle/  hello plus its non-system shared libraries
+```
+
+On Linux the executable and bundled libraries are relinked to `$ORIGIN`, on
+macOS to `@loader_path`; Windows already searches the executable's directory.
+There is no launcher and no environment variable to set. System libraries —
+libc, `libSystem`, the Windows system DLLs — stay with the operating system.
+The bundle is a directory, so it can be zipped or copied as one unit; it is
+not an AppImage.
+
+`--package` requires `--native` and may be combined with `--static` (where a
+static executable simply needs no libraries). It is not a macOS/Windows-only
+fallback: on Linux it is the answer when a dependency such as Qt5 is impractical
+to link statically. Linux needs `ldd` and `patchelf`; macOS needs `otool`,
+`install_name_tool` and `codesign`; Windows needs `objdump`/`llvm-objdump` or
+`dumpbin` to discover DLL imports.
+
+### Build-option matrix
+
+`--native` is the common case. `--static` is a Linux guarantee; on macOS and
+Windows the correct portable answer is `--package`. A refusal is intentional:
+the compiler does not label a binary static when the platform cannot make it so.
+
+| Host OS | Backend | `--native` | `--static` | `--musl` | `--package` |
+|---|---|---|---|---|---|
+| Linux | `php` | yes | yes (the micro runtime is already static musl) | yes (verifies the runtime) | yes |
+| Linux | `jvm` | yes | yes, with `<arch>-linux-musl-gcc` and static musl zlib | yes, with a musl C toolchain | yes |
+| Linux | `dotnet` | yes | yes, with the musl runtime pack, musl C toolchain and static zlib | yes, with the musl runtime pack and toolchain | yes |
+| macOS | `php`, `jvm`, `dotnet` | yes | refused: Apple provides no static `libSystem` | refused: Linux-only | yes (`@loader_path`) |
+| Windows | `php`, `jvm`, `dotnet` | yes | refused: a PE executable always imports system DLLs | refused: Linux-only | yes (DLLs beside the `.exe`) |
+
+Expected verification, per result:
+
+| Result | Check | Expected |
+|---|---|---|
+| Linux `--static` | `readelf -l BIN` / `readelf -d BIN` | no `INTERP` and no `(NEEDED)` entries |
+| Linux `--musl` (dynamic) | `readelf -l BIN` | the interpreter contains `ld-musl` |
+| Linux `--musl --static` | `readelf -V BIN` / `readelf -p .rodata BIN` | no `GLIBC_*` version references or glibc loader strings |
+| Linux/macOS `--package` | `ldd BIN.bundle/BIN` / `otool -L BIN.bundle/BIN` | non-system libraries resolve inside `BIN.bundle/` |
+| Windows `--package` | `objdump -p BIN` or `dumpbin /dependents` | non-system DLLs are beside the `.exe` |
+| any native result | run the binary | same stdout as the managed build |
+
 Without `-o` the artifact is named after the entry source file; give the full
 file name to choose your own (`-o app.phar`, `-o app.jar`, `-o app.dll`). With
 `--native`, `-o app` names the executable and the archive becomes `app.phar`

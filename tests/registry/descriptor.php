@@ -139,6 +139,25 @@ try {
     \file_put_contents($keyless, "[package]\nname = keyless\nversion = 1.0.0\n\n[author]\nname = Ada\nemail = ada@example.com\n");
     $assert(\str_contains($problems($keyless), 'needs at least one block with an npub'), 'a package of credits alone is refused: ' . $problems($keyless));
 
+    $native = $write(
+        'native',
+        '',
+        "[executable]\nmain = Main\nsource-dirs = src\nnative = true\nstatic = true\nmusl = true\npackage = true\n",
+    );
+    $assert(descriptorProblems($native) === [], 'an executable may declare native build options: ' . $problems($native));
+    $flags = readDescriptor($native)['executables'][''];
+    $assert($flags['native'] === true && $flags['static'] === true, 'native/static read back: ' . \json_encode($flags));
+    $assert($flags['musl'] === true && $flags['package'] === true, 'musl/package read back: ' . \json_encode($flags));
+
+    $badFlag = $write('badflag', '', "[executable]\nmain = Main\nsource-dirs = src\nnative = yes\n");
+    $assert(\str_contains($problems($badFlag), '`native = yes` is not `true` or `false`'), 'a non-boolean flag is refused: ' . $problems($badFlag));
+
+    $orphan = $write('orphan', '', "[executable]\nmain = Main\nsource-dirs = src\nstatic = true\n");
+    $assert(\str_contains($problems($orphan), '`static = true` requires `native = true`'), 'static without native is refused: ' . $problems($orphan));
+
+    $testFlag = $write('testflag', '', "[test-suite]\nmain = Main\nsource-dirs = tests\nstatic = true\n");
+    $assert(\str_contains($problems($testFlag), 'does not take `static`'), 'a test-suite does not take native build flags: ' . $problems($testFlag));
+
     echo "descriptor metadata tests passed ({$checks} checks)\n";
 } finally {
     $remove($work);

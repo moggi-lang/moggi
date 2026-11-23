@@ -57,8 +57,10 @@ Besides the compiler (`bin/moggi`) and, where PHP is bundled, the compiler archi
 `bin/moggi.phar`, `bin/` carries `schnorr` — a
 standalone BIP-340 CLI built from `schnorr/` and the two C libraries pinned in
 `schnorr/deps.json`. Nothing in Moggi uses it yet; it ships because it is part of
-the toolbox and costs nothing at run time (it links statically and reads no
-runtime files). Every variant, `moggi-minimal` included, is smoke-tested by
+the toolbox and costs nothing at run time (it links statically on Linux when
+the toolchain has static libc and on Windows, stays dynamic on macOS where
+`libSystem` cannot be static, and reads no runtime files). Every variant,
+`moggi-minimal` included, is smoke-tested by
 generating a key with it.
 
 Building the micro PHP runtime is a source build of PHP and its extension

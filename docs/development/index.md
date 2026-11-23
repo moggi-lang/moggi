@@ -32,6 +32,16 @@ Maven, and puts three wrappers on `PATH`:
 | `runtest` | `php test.php` |
 | `runalltest` | `php test-all.php` |
 
+The shell points `MOGGI_MICRO_SFX` at
+`.dist-cache/runtimes/<target>/php-native/micro.sfx` when a packaging run has
+prepared one, which is what makes `moggi compile … --native` work from a
+checkout. A fresh checkout has none — the micro runtime is a PHP source build —
+so build it first if that path is absent:
+
+```bash
+php packaging/assemble.php --variants moggi-minimal
+```
+
 With [direnv](https://direnv.net/), `direnv allow` loads the same shell from
 `nix/shell.nix` (package list in `nix/devshell.nix`, shared with `flake.nix`).
 
@@ -44,7 +54,13 @@ moggi compile examples/twice -o out --unpacked   # generated tree
 moggi run examples/twice                      # compile + run
 moggi run examples/twice --backend jvm
 moggi compile examples/twice --native         # standalone executable
+moggi compile examples/twice --native --static  # no dynamic loader or shared libs
+moggi compile examples/twice --native --musl    # link against musl libc
+moggi compile examples/twice --native --package # executable + non-system libraries
 ```
+
+Which flags each OS/backend supports, and how the result is verified, is the
+[build-option matrix](../quickstart.md#build-option-matrix).
 
 `moggi compile` accepts a file or a directory; a directory keeps its layout
 under `-o`. Without `-o` the artifact is named after the entry source file —

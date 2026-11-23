@@ -26,10 +26,19 @@ let
   php = (pkgs.php85.override { ztsSupport = true; }).withExtensions (
     { enabled, all, ... }: enabled ++ [ all.parallel ]
   );
+  # The name packaging/assemble.php uses for this host, so the shell can find
+  # the runtime a previous packaging run left in .dist-cache/.
+  target =
+    if pkgs.stdenv.hostPlatform.isLinux then
+      if pkgs.stdenv.hostPlatform.isx86_64 then "linux-x86_64" else "linux-aarch64"
+    else if pkgs.stdenv.hostPlatform.isx86_64 then "macos-x86_64"
+    else "macos-aarch64";
 in
 {
   packages = with pkgs; [
     git
+    # --package rewrites ELF rpaths to $ORIGIN after a native build.
+    patchelf
     php
     # GraalVM CE provides the Java 21 toolchain plus native-image.
     graalvmPackages.graalvm-ce
@@ -62,7 +71,21 @@ in
   ];
 
   shellHook = ''
+    # A checkout bundles no runtime. Point --native at the one packaging built,
+    # unless the caller already chose one.
+    if [ -z "''${MOGGI_MICRO_SFX-}" ]; then
+      cached="$(${moggiRootScript})/.dist-cache/runtimes/${target}/php-native/micro.sfx"
+      if [ -f "$cached" ]; then
+        export MOGGI_MICRO_SFX="$cached"
+      fi
+    fi
+
     echo "PHP $(php --version | head -n1) (ZTS: $(php -r 'echo PHP_ZTS ? "yes" : "no";') / parallel: $(php -r 'echo extension_loaded("parallel") ? "yes" : "no";'); pinned ${pinnedVersions.php})"
+    if [ -n "''${MOGGI_MICRO_SFX-}" ]; then
+      echo "micro PHP runtime ''${MOGGI_MICRO_SFX} (MOGGI_MICRO_SFX)"
+    else
+      echo "micro PHP runtime not built: --native on php needs one; run php packaging/assemble.php --target ${target} --variants moggi-minimal"
+    fi
     echo "nixpkgs ${nixpkgsRev}"
     echo "Java $(java -version 2>&1 | head -n1) (nixpkgs graalvmPackages.graalvm-ce; JVM backend target)"
     echo "native-image $(native-image --version 2>&1 | head -n1)"

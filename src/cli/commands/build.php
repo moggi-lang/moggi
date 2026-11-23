@@ -60,6 +60,10 @@ function buildUsage(): string
     for the resolved host tree. A build is what its flags say: the same compile
     can be typed by hand.
 
+    [executable] may also set `native`, `static`, `musl` and `package` to
+    `true` or `false`; each is forwarded to compile. `static`, `musl` and
+    `package` require `native = true`.
+
     Refuses to build when the lock does not match the registry catalog (run
     `moggi update`), when a package the registry has marked bad would be linked,
     or when a locked package is not installed (run `moggi install`).
@@ -311,6 +315,9 @@ function runBuildCommand(array $argv): int
         if ($options['unpacked']) {
             $compileArgv[] = '--unpacked';
         }
+        foreach (executableCompileFlags($executable, $forwarded) as $flag) {
+            $compileArgv[] = $flag;
+        }
         foreach ($forwarded as $argument) {
             $compileArgv[] = $argument;
         }
@@ -351,8 +358,32 @@ function runBuildCommand(array $argv): int
 }
 
 /**
+ * The native-link flags an executable block turns on.
+ *
+ * The descriptor and the command line are one request: a flag present in
+ * either is passed once, and the descriptor cannot contradict a CLI flag
+ * because these are one-way switches. The bools are validated by
+ * `descriptorProblems()`; this function only maps them.
+ *
+ * @param array{main: string, sourceDirs: list<string>, backend: ?string, native?: bool, static?: bool, musl?: bool, package?: bool} $executable
+ * @param list<string> $forwarded
+ * @return list<string>
+ */
+function executableCompileFlags(array $executable, array $forwarded): array
+{
+    $flags = [];
+    foreach (['native', 'static', 'musl', 'package'] as $flag) {
+        if (($executable[$flag] ?? false) === true && ! \in_array('--' . $flag, $forwarded, true)) {
+            $flags[] = '--' . $flag;
+        }
+    }
+
+    return $flags;
+}
+
+/**
  * @param array<string, mixed> $descriptor
- * @return ?array{main: string, sourceDirs: list<string>, backend: ?string}
+ * @return ?array{main: string, sourceDirs: list<string>, backend: ?string, native?: bool, static?: bool, musl?: bool, package?: bool}
  */
 function selectExecutable(array $descriptor, ?string $name): ?array
 {
@@ -370,7 +401,7 @@ function selectExecutable(array $descriptor, ?string $name): ?array
  * The file a module name names: `Foo.Bar` is `Foo/Bar.mog`, looked for in the
  * executable's source directories in order.
  *
- * @param array{main: string, sourceDirs: list<string>, backend: ?string} $executable
+ * @param array{main: string, sourceDirs: list<string>, backend: ?string, native?: bool, static?: bool, musl?: bool, package?: bool} $executable
  */
 function findEntryFile(array $executable, string $root): ?string
 {

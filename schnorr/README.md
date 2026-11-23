@@ -89,7 +89,9 @@ make CC=x86_64-w64-mingw32-gcc
 ```
 
 The Makefile adds `-lbcrypt` automatically when the compiler is a MinGW toolchain.
-On Windows MinGW names the result `schnorr.exe`.
+On Linux it links `-static` when the toolchain has static libc, and falls back to
+a dynamic binary when it does not. macOS cannot link `libSystem` statically, so
+its binary stays dynamic. On Windows MinGW names the result `schnorr.exe`.
 
 ## License
 
