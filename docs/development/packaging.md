@@ -49,8 +49,8 @@ derived by removing runtime directories. `bin/moggi` is the native compiler in
 every variant; a bundled PHP is a *program* runtime, never the compiler's, and
 `moggi-jvm`/`moggi-dotnet` carry no PHP at all.
 
-An installation contains `bin/moggi` (the micro runtime with `bin/moggi.phar`
-appended), `bin/moggi.phar` where PHP is bundled, `bin/schnorr`, the standard
+An installation contains `bin/moggi` (the micro runtime with the compiler
+archive appended and the archive then discarded), `bin/schnorr`, the standard
 library sources under `libraries/`, `docs/`, `examples/`, `LICENSE`,
 `THIRD-PARTY-NOTICES.md` and `runtime/`. The compiler's sources live inside the
 archive; the library sits beside it so users can read what they compile against.
@@ -74,12 +74,16 @@ extracts and caches one runtime for one target, or builds it when the entry
 carries a build recipe.
 
 * **PHP is built from source** (php.net publishes no Linux/macOS binary) with a
-  minimal configure: `--disable-all` plus `bcmath`, `intl` and `mbstring`.
+  minimal configure: `--disable-all` plus `bcmath`, `ctype`, `intl`, `mbstring`,
+  `parallel`, `sodium` and `tokenizer`.
 * **The micro PHP runtime is built**, not downloaded: its entry carries a `spc`
-  (static-php-cli) recipe and inherits the `php` runtime's extension set, so
-  what a native executable can call is what a PHAR can call — that is what makes
-  `IntlChar` available under `--native`. Its static link pulls in ICU and
-  friends, whose licences ship under `runtime/php-native/license/`.
+  (static-php-cli) recipe with its own extension list, a superset of the `php`
+  runtime's, so a native executable can call at least what a PHAR can — that is
+  what makes `IntlChar` available under `--native`. Its static link pulls in ICU and
+  friends, whose licences ship under `runtime/php-native/license/`. `spc` itself
+  is the `v3` branch pinned by commit — there is no 3.0 release tag to pin an
+  asset from — so the archive is built here with the pinned Composer before it
+  compiles the runtime.
 * **Zig is pinned** because `spc` would otherwise install the newest Zig, and
   Zig 0.16.0's `strnlen` reads past its buffer, so every static-musl binary it
   produces segfaults before it can run. Only Linux uses Zig; macOS uses Clang,

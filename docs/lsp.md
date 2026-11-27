@@ -22,8 +22,8 @@ already have:
 
 | Setting | Value |
 |---|---|
-| `moggi.serverPath` | `<installation>/bin/moggi.phar` in a PHP-bundling distribution, `<installation>/bin/moggi` where PHP is not bundled, or `<checkout>/moggi.php` |
-| `moggi.phpPath` | the PHP 8.5.12 binary, when `serverPath` is a `.phar` or `.php` |
+| `moggi.serverPath` | `<installation>/bin/moggi`, or `<checkout>/moggi.php` |
+| `moggi.phpPath` | the PHP 8.6.0 binary, when `serverPath` is a `.php` |
 | `moggi.libPaths` | extra `--lib` roots |
 | `moggi.inlayHints` | show or hide type inlays |
 | `moggi.testRoot` | fixture directory for Test Explorer (default `tests/backend/runtime`) |

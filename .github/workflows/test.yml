@@ -41,7 +41,7 @@ jobs:
       - name: Set up PHP
         uses: shivammathur/setup-php@2.40.0
         with:
-          php-version: '8.5'
+          php-version: '8.6'
           extensions: bcmath, mbstring, zip, phar, ctype, intl
           tools: pie
           ini-values: memory_limit=1G
@@ -310,7 +310,7 @@ jobs:
         if: matrix.kind != 'dotnet'
         uses: shivammathur/setup-php@2.40.0
         with:
-          php-version: '8.5'
+          php-version: '8.6'
           extensions: bcmath, mbstring, zip, phar, ctype, intl
           ini-values: memory_limit=1G
           coverage: none
@@ -404,10 +404,11 @@ jobs:
               set -e
               apk add --no-cache \
                 --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community \
-                php85 php85-phar php85-mbstring php85-zip php85-ctype \
-                php85-openssl php85-tokenizer php85-intl \
+                --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing \
+                php86 php86-phar php86-mbstring php86-zip php86-ctype \
+                php86-openssl php86-tokenizer php86-intl \
                 binutils build-base clang lld zlib-dev zlib-static musl-dev
-              php85 tests/cli/native_static_package.php
+              php86 tests/cli/native_static_package.php
             '
 
       - name: Assert static linking is refused on non-Linux platforms

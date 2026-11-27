@@ -50,7 +50,7 @@ function runtimeVersionOutput(string $runtime, string $root, string $target, arr
         'graalvm' => runtimeProcess([$binary, '--version']),
         'composer' => runtimeProcess([\PHP_BINARY, $binary, '--version']),
         'maven' => runtimeProcess([$binary, '--version']),
-        'spc' => spcVersion($binary),
+        'spc' => spcVersion($binary, ($config['runtimes']['spc']['fromSource'] ?? false) === true),
         default => throw new \RuntimeException("unknown runtime {$runtime}"),
     };
 }
@@ -163,11 +163,12 @@ function writeComposerShim(string $dir): void
  * `x.y.z` out of it, which would as happily return Symfony's own version as
  * `spc`'s.
  */
-function spcVersion(string $binary): string
+function spcVersion(string $binary, bool $viaPhp = false): string
 {
-    [$code, $stdout, $stderr] = runProcess([$binary, '--version']);
+    $command = $viaPhp ? [\PHP_BINARY, $binary, '--version'] : [$binary, '--version'];
+    [$code, $stdout, $stderr] = runProcess($command);
     $text = \trim($stdout . "\n" . $stderr);
-    if (\preg_match('/static-php-cli\s+v?([0-9]+\.[0-9]+\.[0-9]+)/i', $text, $match) === 1) {
+    if (\preg_match('/(?:static-php-cli|StaticPHP)\s+v?([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.]+)?)/i', $text, $match) === 1) {
         return $match[1];
     }
 
@@ -214,6 +215,14 @@ function runtimeIsPrepared(string $runtime, string $target, array $config): bool
 
     $entry = loadRuntimeLock()[$runtime . '/' . $target] ?? null;
     if (! \is_array($entry)) {
+        return false;
+    }
+
+    // An upstream archive pins the binary but not what the distribution asks it
+    // to load: the extension list can change while the archive stays the same, so
+    // a marker written under another list means this directory is stale (php.ini
+    // included) and has to be prepared again.
+    if ($runtime === 'php' && ($recorded['extensions'] ?? null) !== requiredPhpExtensions($config)) {
         return false;
     }
 
@@ -309,6 +318,9 @@ function prepareRuntime(string $runtime, string $target, array $config, bool $fo
             extractArchive($fetched['archive'], (string) $entry['format'], $dir, (int) $entry['stripComponents']);
             flattenDarwinBundleHome($dir, (string) $entry['binary']);
         }
+        if (($config['runtimes'][$runtime]['fromSource'] ?? false) === true) {
+            prepareToolSource($runtime, $dir, $target, $config, $entry);
+        }
         $reported = assertRuntimeVersion($runtime, runtimeVersionOutput($runtime, $dir, $target, $config), $config, $target);
     }
 
@@ -319,8 +331,9 @@ function prepareRuntime(string $runtime, string $target, array $config, bool $fo
         if (! $built && \PHP_OS_FAMILY === 'Windows' && \in_array('parallel', distributionPhpExtensions(), true)) {
             installParallelExtension($dir, $dir);
         }
-        $loaded = assertPhpExtensions($built ? $dir . '/bin/php' : $dir . '/' . $entry['binary'], $dir, $target, $config);
-        writeRuntimeExtensionManifest($dir, $runtime, $loaded);
+        $binary = $built ? $dir . '/bin/php' : $dir . '/' . $entry['binary'];
+        $loaded = assertPhpExtensions($binary, $dir, $target, $config);
+        writeRuntimeExtensionManifest($dir, $runtime, $loaded, $binary);
     }
 
     stageRuntimeLicense($runtime, $dir, $config, $target);
@@ -334,9 +347,59 @@ function prepareRuntime(string $runtime, string $target, array $config, bool $fo
         'reported' => $reported,
         'built' => $built,
         'binary' => $built ? 'bin/php' : (string) $entry['binary'],
+        // A `php` runtime is prepared *for* an extension list, so a marker made
+        // under another one is not this runtime: `runtimeIsPrepared` compares it.
+        ...($runtime === 'php' ? ['extensions' => requiredPhpExtensions($config)] : []),
     ]);
 
     return $dir;
+}
+
+/**
+ * Make a tool that upstream ships as source runnable, with its dependencies.
+ *
+ * static-php-cli publishes no 3.0 release, only a rolling nightly, so the version
+ * this distribution pins is a commit of its `v3` branch: the archive is the tree
+ * as that commit had it, and `bin/spc` is a PHP script that needs its Composer
+ * dependencies before it can run. They are installed from the tree's own
+ * `composer.lock` with the Composer this distribution already pins, so every
+ * package is the exact version and hash upstream committed — no `composer update`
+ * ever runs here, and a changed lock in the archive changes the derived runtime
+ * key through the spc entry.
+ *
+ * @param array<string, mixed> $entry
+ */
+function prepareToolSource(string $runtime, string $dir, string $target, array $config, array $entry): void
+{
+    $binary = $dir . '/' . (string) $entry['binary'];
+    if (! \is_file($binary)) {
+        throw new \RuntimeException("{$runtime}: the source archive has no {$entry['binary']}");
+    }
+    @\chmod($binary, 0755);
+
+    $composer = fetchRuntimeAsset('composer', $target, $config)['archive'];
+    runOrFail(
+        [\PHP_BINARY, $composer, 'install', '--no-dev', '--no-interaction', '--no-progress', '--no-scripts'],
+        $dir,
+    );
+}
+
+/**
+ * How a prepared tool is launched: its binary, or the PHP that runs it.
+ *
+ * A downloaded `spc` is a self-contained executable; the `v3` source tree hands
+ * out a PHP script instead, and the interpreter is this build's own PHP.
+ *
+ * @param array<string, mixed> $entry
+ * @return list<string>
+ */
+function toolCommand(string $runtime, string $dir, array $entry, array $config): array
+{
+    $binary = $dir . '/' . (string) $entry['binary'];
+
+    return ($config['runtimes'][$runtime]['fromSource'] ?? false) === true
+        ? [\PHP_BINARY, $binary]
+        : [$binary];
 }
 
 /**
@@ -413,6 +476,32 @@ function preparedTreeDigest(string $dir): string
     return 'sha256:' . \hash_final($context);
 }
 
+/**
+ * Rewrite a staged runtime's extension manifest from the binary that was staged.
+ *
+ * A prepared runtime is reused from the cache until its own inputs change, so
+ * the `extensions.json` beside it can predate the record this build writes — a
+ * change to how the manifest is written must not force a PHP rebuild, and it
+ * does not. The archive is what a client reads, so its record is taken from the
+ * copied binary rather than trusted: the set is what it loads, and the version
+ * and ABI are what it reports, so none of them can be stale.
+ */
+function refreshStagedExtensionManifest(string $stage, string $runtime): void
+{
+    if ($runtime !== 'php') {
+        return;
+    }
+
+    $dir = $stage . '/runtime/' . $runtime;
+    $binary = $dir . '/bin/php';
+    if (! \is_file($binary) || ! \is_file($dir . '/php.ini')) {
+        return;
+    }
+
+    $loaded = phpModuleList($binary, $dir, ['-c', $dir . '/php.ini', '-d', 'extension_dir=' . $dir . '/ext']);
+    writeRuntimeExtensionManifest($dir, $runtime, $loaded, $binary);
+}
+
 function stageRuntimeLicense(string $runtime, string $dir, array $config, string $target): void
 {
     $license = $config['runtimes'][$runtime]['license'] ?? null;
@@ -480,7 +569,7 @@ function assertRuntimeVersion(string $runtime, string $output, array $config, st
 /**
  * Whether a reported PHP version is the one a series pins.
  *
- * `8.5` matches `8.5` and `8.5.7`, and must not match `8.50` — so a shorter
+ * `8.6` matches `8.6` and `8.6.0`, and must not match `8.60` — so a shorter
  * series is only a match when the next character is the start of a new part.
  */
 function versionSeriesMatches(string $reported, string $series): bool

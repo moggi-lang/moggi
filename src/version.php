@@ -104,7 +104,7 @@ function stdlibVersion(): ?string
  * The `version` of the `[package]` table in a library manifest, or null.
  *
  * Only the leading `[package]` table is read: the same file carries a `version`
- * per target further down (`[php] version = 8.5`), and the package's own version
+ * per target further down (`[php] version = 8.6`), and the package's own version
  * is the one that names the library.
  */
 function readManifestVersion(string $path): ?string

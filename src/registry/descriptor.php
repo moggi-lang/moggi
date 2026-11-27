@@ -11,7 +11,7 @@ use function Moggi\Paths\globPaths;
  * Discovery is a `*.moggi` glob at the project root only, exactly one descriptor
  * per project, named after the package it declares: `json.moggi` says
  * `name = json`. Plain INI, read with `parse_ini_file` in raw mode — raw because
- * `8.5` is a version and not a float, and `0.1.0` must not be re-spelled on the
+ * `8.6` is a version and not a float, and `0.1.0` must not be re-spelled on the
  * way back out.
  *
  * The format is closed: it has no extension point, so a key the schema does not
