@@ -180,7 +180,7 @@ function emitStmt(EmitEnv $env, IR\Stmt $stmt, int $indent): string
             . ");\n",
         IR\Assign::class => frameMark($env, operandCallSrcLoc($stmt->value))
             . $pad . phpTemp($stmt->dest) . ' = ' . emitOperand($env, $stmt->value) . ";\n",
-        IR\Let::class => frameMark($env, operandCallSrcLoc($stmt->value))
+        IR\LetStmt::class => frameMark($env, operandCallSrcLoc($stmt->value))
             . $pad . '$' . mangleVar($stmt->name) . ' = ' . emitOperand($env, $stmt->value) . ";\n",
         IR\MatchStmt::class => emitMatchStmt($env, $stmt, $indent),
         IR\MatchReturn::class => emitMatchReturn($env, $stmt, $indent),

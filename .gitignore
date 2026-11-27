@@ -13,5 +13,9 @@
 /dist-out/
 /.dist-cache/
 
+# static-php-cli's own cache and build log, written while preparing the micro runtime.
+/.spc.cache.php
+/log/
+
 # The documentation site built by docs/build.sh.
 /docs/_site/

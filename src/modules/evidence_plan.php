@@ -164,7 +164,7 @@ function checkedTermsIn(Ast\AstNode $root): CheckedTerms
 
     $seen = [];
     $next = 0;
-    /** @var list<array{id: TermId, node: Ast\Lambda}> $lambdas */
+    
     $lambdas = [];
 
     $publishPattern = static function (Ast\AstNode $pattern) use ($terms, &$seen, &$next, &$publishPattern): int {
@@ -398,7 +398,7 @@ function checkedTermsIn(Ast\AstNode $root): CheckedTerms
             return;
         }
 
-        if ($node instanceof Ast\Let || $node instanceof Ast\Where || $node instanceof Ast\IoLet) {
+        if ($node instanceof Ast\LetExpr || $node instanceof Ast\Where || $node instanceof Ast\IoLet) {
             $key = \spl_object_id($node);
             if (isset($seen[$key])) {
                 return;
@@ -415,7 +415,7 @@ function checkedTermsIn(Ast\AstNode $root): CheckedTerms
             }
 
             $body = match (true) {
-                $node instanceof Ast\Let => $node->body,
+                $node instanceof Ast\LetExpr => $node->body,
                 $node instanceof Ast\Where => $node->expr,
                 default => null,
             };
@@ -459,6 +459,7 @@ function checkedTermsIn(Ast\AstNode $root): CheckedTerms
                 $node->handleBox,
                 $node->handleUnboxArgs,
                 $node->nativeSig,
+                $node->packTrailingArg,
             ));
 
             return;

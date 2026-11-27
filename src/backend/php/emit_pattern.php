@@ -212,7 +212,7 @@ function renameLocalsInStmtDeep(IR\Stmt $stmt, array $map): IR\Stmt
     return match ($stmt::class) {
         IR\Ret::class => new IR\Ret(renameLocalsInOperand($stmt->value, $map)),
         IR\Assign::class => new IR\Assign($stmt->dest, renameLocalsInOperand($stmt->value, $map)),
-        IR\Let::class => new IR\Let($stmt->name, renameLocalsInOperand($stmt->value, $map)),
+        IR\LetStmt::class => new IR\LetStmt($stmt->name, renameLocalsInOperand($stmt->value, $map)),
         IR\Call::class => new IR\Call(
             $stmt->callee,
             \array_map(static fn (IR\Operand $a): IR\Operand => renameLocalsInOperand($a, $map), $stmt->args),

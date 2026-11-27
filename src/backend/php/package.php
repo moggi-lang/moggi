@@ -156,9 +156,15 @@ function writePhar(string $outputRoot, string $pharPath, array $options = []): v
 /**
  * The PHAR stub: load the runtime, find the module that bootstraps `main`, run it.
  *
- * The closing `__HALT_COMPILER();` is spelled exactly as PHP writes it. A PHP CLI
- * accepts any spelling, but a micro SAPI runtime only registers an appended PHAR
- * whose stub carries the canonical token, so this token's case is load-bearing.
+ * The archive is opened through an alias, never through `__FILE__`: PHP's phar
+ * wrapper refuses a filename without an extension, and a native executable is
+ * exactly that — `moggi compile app --native` writes `app`. The archive carries
+ * no alias of its own, so the stub maps it under one derived from the archive's
+ * path: that is unique per file, so a program that loads a second Moggi archive
+ * in the same process does not collide with this one.
+ *
+ * The closing `__HALT_COMPILER();` is spelled exactly as PHP writes it, which is
+ * the token a micro SAPI runtime looks for when it finds the appended archive.
  */
 function buildPharStub(string $entryRelative = ''): string
 {
@@ -167,7 +173,7 @@ function buildPharStub(string $entryRelative = ''): string
         ? <<<'PHPSTUB'
 $entryFile = null;
 $it = new \RecursiveIteratorIterator(
-    new \RecursiveDirectoryIterator('phar://' . __FILE__, \FilesystemIterator::SKIP_DOTS),
+    new \RecursiveDirectoryIterator($pharRoot, \FilesystemIterator::SKIP_DOTS),
     \RecursiveIteratorIterator::LEAVES_ONLY,
 );
 foreach ($it as $file) {
@@ -182,7 +188,7 @@ foreach ($it as $file) {
     }
 }
 PHPSTUB
-        : "\$entryFile = 'phar://' . __FILE__ . '/{$entry}';";
+        : "\$entryFile = \$pharRoot . '/{$entry}';";
 
     return <<<PHPSTUB
 #!/usr/bin/env php
@@ -193,7 +199,11 @@ if (\PHP_INT_SIZE < 8) {
     exit(70);
 }
 
-require_once 'phar://' . __FILE__ . '/_runtime.php';
+\$alias = 'moggi-app-' . \\md5(__FILE__) . '.phar';
+\Phar::loadPhar(__FILE__, \$alias);
+\$pharRoot = 'phar://' . \$alias;
+
+require_once \$pharRoot . '/_runtime.php';
 
 {$locate}
 

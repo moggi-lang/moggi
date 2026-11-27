@@ -27,7 +27,7 @@ function specializeDictCallsStmt(IR\Stmt $stmt, array $evidenceByName = [], arra
 
     return match ($stmt::class) {
         IR\Assign::class => new IR\Assign($stmt->dest, specializeDictCallsOperand($stmt->value, $evidenceByName)),
-        IR\Let::class => new IR\Let($stmt->name, specializeDictCallsOperand($stmt->value, $evidenceByName)),
+        IR\LetStmt::class => new IR\LetStmt($stmt->name, specializeDictCallsOperand($stmt->value, $evidenceByName)),
         IR\Call::class => new IR\Call(
             $stmt->callee,
             \array_map(
@@ -94,7 +94,7 @@ function specializeDictCallsBlockWithEnv(
     array $localFns = [],
 ): IR\Block {
     $out = [];
-    /** @var array<int, true> $evidenceBindings dests of factory calls this block introduced */
+    
     $evidenceBindings = [];
 
     foreach ($block->items as $item) {
@@ -123,7 +123,7 @@ function specializeDictCallsBlockWithEnv(
             }
         }
 
-        if ($item instanceof IR\Let) {
+        if ($item instanceof IR\LetStmt) {
             $bound = resolveEvidenceBinding($item->value, $evidenceByName, $tempEvidence, $localEvidence);
             if ($bound !== null) {
                 $localEvidence[$item->name] = $bound;

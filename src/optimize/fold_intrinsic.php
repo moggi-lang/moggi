@@ -46,7 +46,7 @@ function foldIntrinsicsStmtWithKnown(IR\Stmt $stmt, array $known): IR\Stmt
     $folded = match ($stmt::class) {
         IR\Ret::class => new IR\Ret($foldOp($stmt->value)),
         IR\Assign::class => new IR\Assign($stmt->dest, $foldOp($stmt->value)),
-        IR\Let::class => new IR\Let($stmt->name, $foldOp($stmt->value)),
+        IR\LetStmt::class => new IR\LetStmt($stmt->name, $foldOp($stmt->value)),
         IR\Call::class => new IR\Call($stmt->callee, \array_map($foldOp, $stmt->args), $stmt->dest, $stmt->srcLoc),
         IR\CallValue::class => new IR\CallValue($foldOp($stmt->callee), \array_map($foldOp, $stmt->args), $stmt->dest, $stmt->srcLoc),
         IR\TailRecall::class => new IR\TailRecall(\array_map($foldOp, $stmt->args)),

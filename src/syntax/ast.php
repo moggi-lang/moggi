@@ -62,7 +62,7 @@ function desugarLambdaPatterns(array $params, AstNode $body, ?AstNode $onFail = 
 {
     static $fresh = 0;
 
-    /** @var list<array{0: LambdaParam, 1: ?AstNode}> $binders */
+    
     $binders = [];
     foreach ($params as $param) {
         $pattern = $param instanceof LambdaParam ? $param->pattern : $param;
@@ -223,7 +223,7 @@ function desugarDo(array $stmts, string $bind, ?string $fail = null): AstNode
         DoLet::class => (function () use ($first, $rest, $bind, $fail): AstNode {
             $inner = desugarDo($rest, $bind, $fail);
 
-            return new Let(
+            return new LetExpr(
                 \array_map(
                     static fn (DoBind $bind): Binding => new Binding(
                         $bind->pattern,
@@ -425,7 +425,7 @@ function dump(AstNode $node, int $indent = 0): string
                 $node->params,
             ))
             . dump($node->body, $indent + 1),
-        Let::class => $pad . "let\n"
+        LetExpr::class => $pad . "let\n"
             . \implode('', \array_map(
                 static fn (Binding $b): string => dumpBinding($b, $indent + 1),
                 $node->bindings,

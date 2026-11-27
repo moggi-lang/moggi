@@ -174,7 +174,7 @@ function stmtRefsUnboundLocal(IR\Stmt $stmt, array $bound): bool
     if ($stmt instanceof IR\Assign) {
         return operandRefsUnboundLocal($stmt->value, $bound);
     }
-    if ($stmt instanceof IR\Let) {
+    if ($stmt instanceof IR\LetStmt) {
         return operandRefsUnboundLocal($stmt->value, $bound);
     }
     if ($stmt instanceof IR\Call) {

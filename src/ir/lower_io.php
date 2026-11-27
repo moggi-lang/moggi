@@ -764,7 +764,7 @@ function lowerActionCall(
         return;
     }
 
-    /** @var IoCall $call */
+    
     $call->dest = $dest;
     $ctx->items[] = $call;
 
@@ -1026,7 +1026,7 @@ function resolveIoActionCalleeName(Ast\AstNode $fnExpr, LowerCtx $ctx): ?string
 function resolveLetBoundFnName(string $name, LowerCtx $ctx): ?string
 {
     foreach (\array_reverse($ctx->items) as $item) {
-        if (! $item instanceof Let || $item->name !== $name) {
+        if (! $item instanceof LetStmt || $item->name !== $name) {
             continue;
         }
 

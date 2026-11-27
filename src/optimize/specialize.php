@@ -49,7 +49,7 @@ function specializeAcrossModules(array $modules, array $externalFnsByModule = []
     $facts = $owner?->child() ?? new Facts();
 
     try {
-        /** @var array<string, array{module: string, name: string, sourceModule?: string}> $cache */
+        
         $cache = [];
         $specializations = 0;
         $cacheHits = 0;
@@ -227,9 +227,9 @@ function activateSpecializeWorld(array $modules, array $externalFnsByModule, Fac
 {
     $globalIndex = [];
     $globalEvidence = [];
-    /** @var array<string, true> $ambiguousShortNames */
+    
     $ambiguousShortNames = [];
-    /** @var array<string, array<string, IR\FunctionKind|true>> $fnsByModule */
+    
     $fnsByModule = [];
     foreach ($modules as $moduleName => $module) {
         foreach ($module->functions as $function) {
@@ -412,7 +412,7 @@ function specializeOneRootModule(
  */
 function collectNullaryCtorCafs(array $modules, Facts $facts, array $externalFnsByModule = []): array
 {
-    /** @var array<string, CtorTree> $cafs */
+    
     $cafs = [];
     foreach ($modules as $moduleName => $module) {
         $externals = $externalFnsByModule[$moduleName] ?? [];
@@ -462,9 +462,9 @@ function cafRetToCtorTree(array $items, Facts $facts, string $moduleName = '', a
         return null;
     }
 
-    /** @var array<int, CtorTree|IR\Operand> $ctors */
+    
     $ctors = [];
-    /** @var array<int, IR\Operand> $aliases */
+    
     $aliases = [];
     foreach ($items as $item) {
         recordCtorDef($item, $ctors, $aliases, $facts);
@@ -594,7 +594,7 @@ function functionBodyHasHostOrForeign(array $items): bool
                 }
             }
         }
-        if ($item instanceof IR\Ret || $item instanceof IR\Assign || $item instanceof IR\Let) {
+        if ($item instanceof IR\Ret || $item instanceof IR\Assign || $item instanceof IR\LetStmt) {
             if (operandHasHostOrForeign($item instanceof IR\Ret ? $item->value : $item->value)) {
                 return true;
             }
@@ -890,7 +890,7 @@ function specializeItems(
     $factsRevision = $facts->functionsRevision();
     $out = [];
     $changed = false;
-    /** @var array<int, IR\Operand> $concreteTemps */
+    
     $concreteTemps = [];
 
     foreach (denseStmtItems($items) as $item) {
@@ -1015,7 +1015,7 @@ function specializeItems(
             }
         }
 
-        if ($item instanceof IR\Let) {
+        if ($item instanceof IR\LetStmt) {
             $rewritten = specializeOperand(
                 $item->value,
                 $selfName,
@@ -1031,7 +1031,7 @@ function specializeItems(
             );
             if ($rewritten['changed']) {
                 $changed = true;
-                $out[] = new IR\Let($item->name, $rewritten['operand']);
+                $out[] = new IR\LetStmt($item->name, $rewritten['operand']);
 
                 continue;
             }
@@ -1687,7 +1687,7 @@ function cloneSpecializedFunction(
     $out = $prefix;
     foreach ($bodyItems as $item) {
         $out[] = substituteStmt($item, $substParams, $substArgs, $bound);
-        if ($item instanceof IR\Let) {
+        if ($item instanceof IR\LetStmt) {
             $bound[$item->name] = true;
         }
     }
@@ -1805,7 +1805,7 @@ function qualifySourceModuleCallees(
             ),
             IR\Assign::class => new IR\Assign($stmt->dest, $rewriteOperand($stmt->value)),
             IR\Ret::class => new IR\Ret($rewriteOperand($stmt->value)),
-            IR\Let::class => new IR\Let($stmt->name, $rewriteOperand($stmt->value)),
+            IR\LetStmt::class => new IR\LetStmt($stmt->name, $rewriteOperand($stmt->value)),
             IR\MatchStmt::class => new IR\MatchStmt(
                 $rewriteOperand($stmt->scrutinee),
                 \array_map(
@@ -1942,7 +1942,7 @@ function collectFreeLocalsInItems(array $items, array $bound, array &$free): voi
             continue;
         }
 
-        if ($item instanceof IR\Let) {
+        if ($item instanceof IR\LetStmt) {
             collectFreeLocalsInOperand($item->value, $bound, $free);
             $bound[$item->name] = true;
 

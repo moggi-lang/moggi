@@ -656,7 +656,7 @@ function renameInstanceMethodRefs(Ast\AstNode $expr, array $surfaceToIr, array $
 
             return $expr;
         })(),
-        Ast\Let::class => (function () use ($expr, $surfaceToIr, $bound): Ast\AstNode {
+        Ast\LetExpr::class => (function () use ($expr, $surfaceToIr, $bound): Ast\AstNode {
             $letBound = $bound;
             foreach ($expr->bindings as $binding) {
                 foreach (patternBoundNames([$binding->pattern]) as $name => $_) {
@@ -1792,7 +1792,7 @@ function assertProjectInstanceUnambiguous(
 ): void {
     $incumbent = null;
 
-    /** @var list<array<string, mixed>> $ties */
+    
     $ties = [];
 
     $savedFresh = $state->fresh;

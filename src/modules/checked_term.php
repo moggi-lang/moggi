@@ -997,6 +997,8 @@ final class CheckedForeignCall extends CheckedTerm
         public readonly bool $handleBox,
         public readonly array $handleUnboxArgs,
         public readonly ?string $nativeSig,
+        /** Trailing argument is a Moggi list to pack into a host array, not an array value. */
+        public readonly bool $packTrailingArg = false,
     ) {
         parent::__construct($id, $origin);
     }

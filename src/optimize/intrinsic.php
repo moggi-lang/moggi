@@ -110,7 +110,7 @@ function rewriteIntrinsicWrapperStmt(IR\Stmt $stmt, array $wrappers): IR\Stmt
             $stmt->dest,
             rewriteIntrinsicWrapperOperand($stmt->value, $wrappers),
         ),
-        IR\Let::class => new IR\Let(
+        IR\LetStmt::class => new IR\LetStmt(
             $stmt->name,
             rewriteIntrinsicWrapperOperand($stmt->value, $wrappers),
         ),
@@ -216,7 +216,7 @@ function collectReferencedFunctionsStmt(IR\Stmt $stmt, array &$refs): void
     match ($stmt::class) {
         IR\Call::class => addReferencedFunction($stmt->callee, $refs),
         IR\CallValue::class => collectReferencedFunctionsOperand($stmt->callee, $refs),
-        IR\Assign::class, IR\Let::class, IR\Ret::class => collectReferencedFunctionsOperand($stmt->value, $refs),
+        IR\Assign::class, IR\LetStmt::class, IR\Ret::class => collectReferencedFunctionsOperand($stmt->value, $refs),
         IR\MatchStmt::class, IR\MatchReturn::class => (static function () use ($stmt, &$refs): void {
             collectReferencedFunctionsOperand($stmt->scrutinee, $refs);
             foreach ($stmt->arms as $arm) {

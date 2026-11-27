@@ -96,7 +96,7 @@ function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env, ?Type 
         Ast\Tuple::class => inferTuple($state, $expr, $env, $expected),
         Ast\ListLit::class => inferList($state, $expr, $env, $expected),
         Ast\Lambda::class => inferLambda($state, $expr, $env, $expected),
-        Ast\Let::class => inferLet($state, $expr, $env, $expected),
+        Ast\LetExpr::class => inferLet($state, $expr, $env, $expected),
         Ast\Where::class => inferWhere($state, $expr, $env, $expected),
         Ast\CaseExpr::class => inferCase($state, $expr, $env, $expected),
         Ast\GuardsExpr::class => inferGuards($state, $expr, $env, $expected),
@@ -1249,7 +1249,7 @@ function checkConstrainedLambda(TypeCheckState $state, Ast\Lambda $expr, array $
     }
 }
 
-function inferLet(TypeCheckState $state, Ast\Let $expr, array $env, ?Type $expected = null): Type
+function inferLet(TypeCheckState $state, Ast\LetExpr $expr, array $env, ?Type $expected = null): Type
 {
     assertBindingGroupLinear($state, $expr->bindings);
     $state->pushBinderScope();
@@ -1281,9 +1281,9 @@ function inferCase(TypeCheckState $state, Ast\CaseExpr $expr, array $env, ?Type 
 {
     $scrutineeType = inferExpr($state, $expr->scrutinee, $env);
     $altEnvs = [];
-    /** @var list<array<string, int>> $altScopes each arm's frame, saved for its body */
+    
     $altScopes = [];
-    /** @var list<array<string, mixed>> $altGadt what each arm's pattern proved */
+    
     $altGadt = [];
     $outer = gadtPatternSnapshot($state);
 

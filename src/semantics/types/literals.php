@@ -446,7 +446,7 @@ function elaborateNumericLiterals(TypeCheckState $state, Ast\AstNode $expr): Ast
         return $expr;
     }
 
-    if ($expr instanceof Ast\Let) {
+    if ($expr instanceof Ast\LetExpr) {
         foreach ($expr->bindings as $binding) {
             $binding->value = elaborateNumericLiterals($state, $binding->value);
         }

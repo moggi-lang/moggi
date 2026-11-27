@@ -724,6 +724,8 @@ final class ForeignCall implements Operand
         public array $handleUnboxArgs = [],
         /** Inferred native calling signature (JVM descriptor); not present in source paths. */
         public ?string $nativeSig = null,
+        /** Trailing argument is a Moggi list to pack into a host array, not an array value. */
+        public bool $packTrailingArg = false,
     ) {
     }
 }
@@ -800,7 +802,7 @@ final class Assign implements Stmt
     }
 }
 
-final class Let implements Stmt
+final class LetStmt implements Stmt
 {
     public function __construct(
         public string $name,

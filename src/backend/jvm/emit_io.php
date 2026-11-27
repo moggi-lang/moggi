@@ -121,7 +121,7 @@ function emitIoAssignAction(EmitEnv $env, IR\IoAssignAction $stmt): void
     $assigned = [];
     $collectAssigned = static function (IR\Block $block) use (&$assigned, &$collectAssigned): void {
         foreach ($block->items as $item) {
-            if ($item instanceof IR\Let) {
+            if ($item instanceof IR\LetStmt) {
                 $assigned[$item->name] = true;
             }
             $definedTemp = match ($item::class) {

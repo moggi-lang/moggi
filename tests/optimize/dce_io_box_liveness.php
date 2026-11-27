@@ -52,7 +52,7 @@ $armRead = static fn (): IR\MatchArm => new IR\MatchArm(
 $kinds = [
     'Ret' => new IR\Ret($temp($read)),
     'Assign' => new IR\Assign(41, $temp($read)),
-    'Let' => new IR\Let('x', $temp($read)),
+    'Let' => new IR\LetStmt('x', $temp($read)),
     'Call' => new IR\Call('f', [$temp($read)], 43),
     'CallValue' => new IR\CallValue($temp($read), [], 44),
     'DictCall' => new IR\DictCall($temp($read), 'm', [], 45),
@@ -75,7 +75,7 @@ foreach ($kinds as $kind => $stmt) {
     );
 }
 $localFunction = new IR\FunctionDecl('main', [], null, new IR\Block([
-    new IR\Let('a', new IR\ConstInt(7)),
+    new IR\LetStmt('a', new IR\ConstInt(7)),
     new IR\IoAssignAction(
         9,
         new IR\Block([new IR\IoRun($temp(8)), new IR\Assign(8, new IR\Local('a'))]),

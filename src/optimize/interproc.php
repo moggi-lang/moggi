@@ -124,7 +124,7 @@ function inlineFunctionsRounds(array $functions, Facts $facts, string $moduleNam
         $inlineable = inlineableCandidates($functions);
         $next = [];
         $changed = false;
-        /** @var array<string, true> $rewrittenNames */
+        
         $rewrittenNames = [];
         $boundNames = [];
         foreach ($index as $name => $callee) {
@@ -201,7 +201,7 @@ function inlineFunctionsRounds(array $functions, Facts $facts, string $moduleNam
  */
 function functionNamesInRecursiveSccs(array $index, array $bodies): array
 {
-    /** @var array<string, list<string>> $edges */
+    
     $edges = [];
     foreach ($index as $name => $function) {
         $callees = [];
@@ -218,7 +218,7 @@ function functionNamesInRecursiveSccs(array $index, array $bodies): array
     $onStack = [];
     $stack = [];
     $dfsNum = 0;
-    /** @var array<string, true> $recursive */
+    
     $recursive = [];
 
     $strongconnect = static function (string $v) use (
@@ -359,7 +359,7 @@ function functionBoundNames(IR\FunctionDecl $function): array
     walkBlock(
         $function->body,
         static function (IR\Stmt $stmt) use (&$names): void {
-            if ($stmt instanceof IR\Let) {
+            if ($stmt instanceof IR\LetStmt) {
                 $names[] = $stmt->name;
 
                 return;
@@ -487,7 +487,7 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Call $call, string $selfName,
     $bound = [];
     foreach (\array_slice($body, 0, -1) as $item) {
         $prefix[] = substituteStmt($item, $target->params, $args, $bound);
-        if ($item instanceof IR\Let) {
+        if ($item instanceof IR\LetStmt) {
             $bound[$item->name] = true;
         }
     }
@@ -561,7 +561,7 @@ function tryInlineMatchWrapper(IR\FunctionDecl $target, IR\Call $call, int &$nex
         $armItems = [];
         foreach (denseStmtItems($arm->body->items) as $item) {
             $armItems[] = substituteStmt($item, $target->params, $call->args, $armBound);
-            if ($item instanceof IR\Let) {
+            if ($item instanceof IR\LetStmt) {
                 $armBound[$item->name] = true;
             }
         }
@@ -858,6 +858,7 @@ function replaceTempsInOperand(IR\Operand $operand, array $tempEnv, array $stick
             $operand->handleBox,
             $operand->handleUnboxArgs,
             $operand->nativeSig,
+            $operand->packTrailingArg,
         );
     }
 
@@ -1097,7 +1098,7 @@ function substituteGuards(array $guards, array $params, array $args, array $boun
 function substituteStmt(IR\Stmt $stmt, array $params, array $args, array $bound = []): IR\Stmt
 {
     return match ($stmt::class) {
-        IR\Let::class => new IR\Let($stmt->name, substituteOperand($stmt->value, $params, $args, $bound)),
+        IR\LetStmt::class => new IR\LetStmt($stmt->name, substituteOperand($stmt->value, $params, $args, $bound)),
         IR\Assign::class => new IR\Assign($stmt->dest, substituteOperand($stmt->value, $params, $args, $bound)),
         IR\Call::class => new IR\Call($stmt->callee, \array_map(
             static fn (IR\Operand $arg): IR\Operand => substituteOperand($arg, $params, $args, $bound),
@@ -1204,7 +1205,7 @@ function substituteArm(IR\MatchArm $arm, array $params, array $args, array $boun
     $items = [];
     foreach (denseStmtItems($arm->body->items) as $item) {
         $items[] = substituteStmt($item, $params, $args, $armBound);
-        if ($item instanceof IR\Let) {
+        if ($item instanceof IR\LetStmt) {
             $armBound[$item->name] = true;
         }
     }
@@ -1353,7 +1354,7 @@ function remapTempsInItems(array $items, array $remap): array
 function remapTempsInStmt(IR\Stmt $stmt, array $remap): IR\Stmt
 {
     return match ($stmt::class) {
-        IR\Let::class => new IR\Let($stmt->name, remapTempsInOperand($stmt->value, $remap)),
+        IR\LetStmt::class => new IR\LetStmt($stmt->name, remapTempsInOperand($stmt->value, $remap)),
         IR\Assign::class => new IR\Assign(remapTempId($stmt->dest, $remap), remapTempsInOperand($stmt->value, $remap)),
         IR\Call::class => new IR\Call($stmt->callee, \array_map(static fn (IR\Operand $a): IR\Operand => remapTempsInOperand($a, $remap), $stmt->args), remapTempId($stmt->dest, $remap), $stmt->srcLoc),
         IR\CallValue::class => new IR\CallValue(remapTempsInOperand($stmt->callee, $remap), \array_map(static fn (IR\Operand $a): IR\Operand => remapTempsInOperand($a, $remap), $stmt->args), remapTempId($stmt->dest, $remap), $stmt->srcLoc),
@@ -1504,6 +1505,7 @@ function remapTempsInOperand(IR\Operand $operand, array $remap): IR\Operand
             $operand->handleBox,
             $operand->handleUnboxArgs,
             $operand->nativeSig,
+            $operand->packTrailingArg,
         ),
         default => $operand,
     };
@@ -1778,7 +1780,7 @@ function qualifyBareCalleesInStmt(IR\Stmt $stmt, string $module, array $index = 
         ),
         IR\Ret::class => new IR\Ret(qualifyBareCalleesInOperand($stmt->value, $module, $index)),
         IR\Assign::class => new IR\Assign($stmt->dest, qualifyBareCalleesInOperand($stmt->value, $module, $index)),
-        IR\Let::class => new IR\Let($stmt->name, qualifyBareCalleesInOperand($stmt->value, $module, $index)),
+        IR\LetStmt::class => new IR\LetStmt($stmt->name, qualifyBareCalleesInOperand($stmt->value, $module, $index)),
         IR\CallValue::class => new IR\CallValue(
             qualifyBareCalleesInOperand($stmt->callee, $module, $index),
             \array_map(static fn (IR\Operand $a): IR\Operand => qualifyBareCalleesInOperand($a, $module, $index), $stmt->args),
@@ -1845,7 +1847,7 @@ function tryInlinePeFusionBody(IR\FunctionDecl $target, IR\Call $call, int &$nex
                 $armItems = [];
                 foreach (denseStmtItems($arm->body->items) as $armItem) {
                     $armItems[] = substituteStmt($armItem, $target->params, $args, $armBound);
-                    if ($armItem instanceof IR\Let) {
+                    if ($armItem instanceof IR\LetStmt) {
                         $armBound[$armItem->name] = true;
                     }
                 }
@@ -1870,7 +1872,7 @@ function tryInlinePeFusionBody(IR\FunctionDecl $target, IR\Call $call, int &$nex
         }
 
         $out[] = substituteStmt($item, $target->params, $args, $bound);
-        if ($item instanceof IR\Let) {
+        if ($item instanceof IR\LetStmt) {
             $bound[$item->name] = true;
         }
     }

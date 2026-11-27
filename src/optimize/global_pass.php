@@ -282,7 +282,7 @@ function isDeadStmt(IR\Stmt $stmt, array $used, Model $effects, ?int $matchDest 
             && ! $effects->ofCall($stmt->callee)->union($effects->evaluationsOf($stmt->args))->discardIsObservable(),
         IR\CallValue::class => $unusedTemp($stmt->dest)
             && ! $effects->ofOperand($stmt->callee)->union($effects->ofOperands($stmt->args))->discardIsObservable(),
-        IR\Let::class => ! isset($used['locals'][$stmt->name])
+        IR\LetStmt::class => ! isset($used['locals'][$stmt->name])
             && ! $effects->ofOperand($stmt->value)->discardIsObservable(),
         default => false,
     };
@@ -349,7 +349,7 @@ function rewriteStmtOperands(IR\Stmt $stmt, callable $rewriteOp): IR\Stmt
     return match ($stmt::class) {
         IR\Ret::class => new IR\Ret($rewriteOp($stmt->value)),
         IR\Assign::class => new IR\Assign($stmt->dest, $rewriteOp($stmt->value)),
-        IR\Let::class => new IR\Let($stmt->name, $rewriteOp($stmt->value)),
+        IR\LetStmt::class => new IR\LetStmt($stmt->name, $rewriteOp($stmt->value)),
         IR\Call::class => new IR\Call(
             $stmt->callee,
             \array_map($rewriteOp, $stmt->args),
@@ -483,7 +483,7 @@ function cleanupFieldExtractLets(array $items, IR\Pattern $pattern, IR\Operand $
             }
         }
 
-        if ($item instanceof IR\Let && $item->value instanceof IR\Temp) {
+        if ($item instanceof IR\LetStmt && $item->value instanceof IR\Temp) {
             $tempId = $item->value->id;
             if (isset($skipTemps[$tempId])) {
                 continue;
@@ -579,7 +579,7 @@ function propagateCopiesBlock(IR\Block $block, Facts $facts, array $temps = [], 
             continue;
         }
 
-        if ($item instanceof IR\Let && isPropagatableExpr($item->value)) {
+        if ($item instanceof IR\LetStmt && isPropagatableExpr($item->value)) {
             $captureIndex ??= lambdaCaptureIndex($block->items, $facts);
             if (($captureIndex[$item->name] ?? -1) > $itemIndex) {
                 $items[] = $item;
@@ -638,7 +638,7 @@ function mapCopyStmt(IR\Stmt $stmt, Facts $facts, array &$temps, array &$locals)
         IR\CallValue::class => new IR\CallValue(mapCopyOperand($stmt->callee, $temps, $locals), \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->srcLoc),
         IR\DictCall::class => new IR\DictCall(mapCopyOperand($stmt->evidence, $temps, $locals), $stmt->method, \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->srcLoc, $stmt->localEvidence),
         IR\Assign::class => new IR\Assign($stmt->dest, mapCopyOperand($stmt->value, $temps, $locals)),
-        IR\Let::class => new IR\Let($stmt->name, mapCopyOperand($stmt->value, $temps, $locals)),
+        IR\LetStmt::class => new IR\LetStmt($stmt->name, mapCopyOperand($stmt->value, $temps, $locals)),
         IR\IoCall::class => new IR\IoCall($stmt->callee, \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->op, $stmt->srcLoc),
         IR\IoRun::class => new IR\IoRun(mapCopyOperand($stmt->action, $temps, $locals), $stmt->dest, $stmt->srcLoc),
         IR\IoThrow::class => new IR\IoThrow(mapCopyOperand($stmt->exception, $temps, $locals), $stmt->dest, $stmt->srcLoc),

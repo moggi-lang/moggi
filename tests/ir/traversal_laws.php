@@ -81,7 +81,7 @@ foreach ($operands as $class => [$operand, $children]) {
 
 // ---- statements: one row per head ---------------------------------------
 
-$guard = new IR\Guard(new IR\Block([new IR\Let('g', $local('x'))]), $local('ok'));
+$guard = new IR\Guard(new IR\Block([new IR\LetStmt('g', $local('x'))]), $local('ok'));
 $arm = new IR\MatchArm(new IR\PatVar('p'), new IR\Block([new IR\Ret($local('p'))]), [$guard]);
 
 $statements = [
@@ -90,7 +90,7 @@ $statements = [
     IR\CallValue::class => [new IR\CallValue($local('callee'), [$local('a')], 0), 2, 0],
     IR\DictCall::class => [new IR\DictCall($local('dict'), 'm', [$local('a')], 0), 2, 0],
     IR\Assign::class => [new IR\Assign(0, $local('a')), 1, 0],
-    IR\Let::class => [new IR\Let('n', $local('a')), 1, 0],
+    IR\LetStmt::class => [new IR\LetStmt('n', $local('a')), 1, 0],
     IR\MatchStmt::class => [new IR\MatchStmt($local('s'), [$arm], 0), 2, 2],
     IR\MatchReturn::class => [new IR\MatchReturn($local('s'), [$arm]), 2, 2],
     IR\IoMatch::class => [new IR\IoMatch($local('s'), [$arm]), 2, 2],
@@ -99,7 +99,7 @@ $statements = [
     IR\IoCall::class => [new IR\IoCall('f', [$local('a')], 0), 1, 0],
     IR\IoRun::class => [new IR\IoRun($local('action'), 0), 1, 0],
     IR\IoAssignAction::class => [
-        new IR\IoAssignAction(0, new IR\Block([new IR\Let('m', $local('a'))]), $local('m')),
+        new IR\IoAssignAction(0, new IR\Block([new IR\LetStmt('m', $local('a'))]), $local('m')),
         1,
         1,
     ],

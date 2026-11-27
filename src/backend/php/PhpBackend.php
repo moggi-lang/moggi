@@ -121,8 +121,10 @@ final class PhpBackend implements Backend
     }
 
     /**
-     * PHP is the one backend whose host is the compiler's own process, so the declaration can be
-     * checked against the functions, methods, constructors and constants that would run it. See
+     * PHP is the one backend whose host can be asked directly, so the declaration is checked
+     * against the functions, methods, constructors and constants that would run it. The host is the
+     * bundled `runtime/php` (or this process, when it is a real CLI PHP) — see
+     * {@see \Moggi\Backend\Php\Host\phpHost()} and
      * {@see \Moggi\Backend\Php\Verify\verifyForeignImportAgainstHost} for what is and is not asked.
      */
     public function verifyForeignImport(

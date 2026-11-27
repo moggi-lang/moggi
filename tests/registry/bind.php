@@ -53,6 +53,7 @@ $assert(
 );
 $badFfi = \implode("\n", descriptorProblems($writeDescriptor("bindings = php:acme/hello\nbogus = 1\n")));
 $assert(\str_contains($badFfi, '[ffi] does not take `bogus`'), "unexpected `[ffi]` verdict: {$badFfi}");
+@\unlink($work . '/acme.moggi');
 
 $parts = parsePhpCoordinate('acme/hello');
 $assert($parts === ['vendor' => 'acme', 'package' => 'hello'], 'coordinate misparsed');

@@ -303,7 +303,7 @@ function matchArmClosureUses(IR\Block $block, EmitEnv $env): array
         if ($dest !== null) {
             $definedTemps[$dest] = true;
         }
-        if ($item instanceof IR\Let) {
+        if ($item instanceof IR\LetStmt) {
             $definedLocals[$item->name] = true;
         }
     }
@@ -373,7 +373,7 @@ function stmtReferencedLocals(IR\Stmt $stmt): array
         IR\CallValue::class => [...operandReferencedLocals($stmt->callee), ...\array_merge(...\array_map(operandReferencedLocals(...), $stmt->args))],
         IR\DictCall::class => [...operandReferencedLocals($stmt->evidence), ...\array_merge([], ...\array_map(operandReferencedLocals(...), $stmt->args))],
         IR\Assign::class => operandReferencedLocals($stmt->value),
-        IR\Let::class => operandReferencedLocals($stmt->value),
+        IR\LetStmt::class => operandReferencedLocals($stmt->value),
         IR\MatchStmt::class => matchStmtReferencedLocals($stmt),
         default => [],
     };
@@ -419,7 +419,7 @@ function stmtReferencedTemps(IR\Stmt $stmt): array
         IR\CallValue::class => [...operandReferencedTemps($stmt->callee), ...($stmt->args === [] ? [] : \array_merge(...\array_map(operandReferencedTemps(...), $stmt->args)))],
         IR\DictCall::class => [...operandReferencedTemps($stmt->evidence), ...($stmt->args === [] ? [] : \array_merge(...\array_map(operandReferencedTemps(...), $stmt->args)))],
         IR\Assign::class => operandReferencedTemps($stmt->value),
-        IR\Let::class => operandReferencedTemps($stmt->value),
+        IR\LetStmt::class => operandReferencedTemps($stmt->value),
         IR\MatchStmt::class => matchStmtReferencedTemps($stmt),
         default => [],
     };

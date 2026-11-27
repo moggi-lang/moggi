@@ -45,6 +45,10 @@ function smokeTest(string $stage, string $target, array $runtimes, string $work,
 
     $env = \getenv();
 
+    if (! \in_array('php', $runtimes, true) && \PHP_BINARY !== '' && \is_file(\PHP_BINARY)) {
+        $env['MOGGI_PHP_HOST'] = \PHP_BINARY;
+    }
+
     $checked = [];
     [$code, $stdout, $stderr] = runProcess([$compiler, 'version'], $work, $env);
     if ($code !== 0 || ! \str_contains($stdout, 'compiler:')) {
@@ -52,9 +56,6 @@ function smokeTest(string $stage, string $target, array $runtimes, string $work,
     }
     $checked[] = 'version';
 
-    // The bundled PHP's ini resolves extension_dir through PHPRC. Run it from
-    // the staged installation, exactly as a user would, so a build-cache path
-    // or a missing parallel module cannot hide behind the preparer's checks.
     if (\in_array('php', $runtimes, true)
         && \in_array('parallel', \array_map('strtolower', distributionPhpExtensions()), true)) {
         $phpHome = $stage . '/runtime/php';

@@ -77,7 +77,7 @@ function optimizeItems(array $items, ?Facts $facts = null, ?int $armValueDest = 
             continue;
         }
 
-        if ($item instanceof IR\Let) {
+        if ($item instanceof IR\LetStmt) {
             if (Support\isPropagatableExpr($item->value)) {
                 if (
                     $item->value instanceof IR\Local
@@ -317,7 +317,7 @@ function mapStmt(IR\Stmt $stmt, array &$temps, array &$locals, ?Facts $facts = n
             $stmt->dest,
         ),
         IR\Assign::class => new IR\Assign($stmt->dest, mapOperand($stmt->value, $temps, $locals)),
-        IR\Let::class => new IR\Let($stmt->name, mapOperand($stmt->value, $temps, $locals)),
+        IR\LetStmt::class => new IR\LetStmt($stmt->name, mapOperand($stmt->value, $temps, $locals)),
         IR\MatchStmt::class => new IR\MatchStmt(
             mapOperand($stmt->scrutinee, $temps, $locals),
             \array_map(
@@ -574,7 +574,7 @@ function withFirstOperandReplaced(IR\Stmt $stmt, int $dest, IR\Operand $value): 
     return match ($stmt::class) {
         IR\Ret::class => $isDest($stmt->value) ? new IR\Ret($value) : null,
         IR\Assign::class => $isDest($stmt->value) ? new IR\Assign($stmt->dest, $value) : null,
-        IR\Let::class => $isDest($stmt->value) ? new IR\Let($stmt->name, $value) : null,
+        IR\LetStmt::class => $isDest($stmt->value) ? new IR\LetStmt($stmt->name, $value) : null,
         IR\Call::class => $firstArgIsDest($stmt->args)
             ? new IR\Call($stmt->callee, [$value, ...\array_slice($stmt->args, 1)], $stmt->dest, $stmt->srcLoc)
             : null,

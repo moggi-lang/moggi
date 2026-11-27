@@ -125,7 +125,7 @@ function collectFreeRenameSpans(Ast\AstNode $expr, string $from, array $bound, a
             }
             collectFreeRenameSpans($expr->body, $from, $local, $out, $to);
         })(),
-        Ast\Let::class => collectFreeRenameSpansInBindings($expr->bindings, $expr->body, $from, $bound, $out, $to),
+        Ast\LetExpr::class => collectFreeRenameSpansInBindings($expr->bindings, $expr->body, $from, $bound, $out, $to),
         Ast\Where::class => collectFreeRenameSpansInBindings($expr->bindings, $expr->expr, $from, $bound, $out, $to),
         Ast\CaseExpr::class => (static function () use ($expr, $from, $bound, &$out, $to): void {
             collectFreeRenameSpans($expr->scrutinee, $from, $bound, $out, $to);

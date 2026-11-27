@@ -26,7 +26,7 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
         return;
     }
 
-    if (($op->kind ?? 'function') === 'const') {
+    if ($op->kind === 'const') {
         $env->c->getstatic(
             $env->cp->fieldRef($resolved['class'], $resolved['hostMember'], $desc),
             valueSlots($desc),
@@ -41,32 +41,50 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
     $args = $op->args;
     $argOffset = 0;
 
-    if ($resolved['dispatch'] === 'instance') {
+    $isInstance = $resolved['dispatch'] === 'instance';
+    $isConstructor = $resolved['dispatch'] === 'constructor';
+
+    if ($isInstance) {
         if ($args === []) {
             throw new \RuntimeException("JVM instance foreign `{$op->path}` needs a receiver");
         }
-        emitOperand($env, $args[0]);
-        $env->c->checkcast($env->cp->class_($resolved['class']));
         $argOffset = 1;
-    } elseif ($resolved['dispatch'] === 'constructor') {
-        $env->c->new_($env->cp->class_($resolved['class']));
-        $env->c->dup();
     }
 
     $paramArgs = \array_slice($args, $argOffset);
-    $packIndex = packArgIndex($desc, $argKinds, $paramArgs);
+    $packIndex = $op->packTrailingArg ? packArgIndex($desc, $argKinds, $paramArgs) : null;
     if ($packIndex !== null) {
         $last = \count($paramArgs) - 1;
+        emitPackVarargs($env, $paramArgs[$last], (string) \end($argKinds));
+        $packed = $env->freshLocal((string) \end($argKinds));
+        $env->c->astore($packed);
+
+        if ($isInstance) {
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_($resolved['class']));
+        } elseif ($isConstructor) {
+            $env->c->new_($env->cp->class_($resolved['class']));
+            $env->c->dup();
+        }
+
         foreach ($paramArgs as $i => $arg) {
             if ($i === $last) {
-                emitPackVarargs($env, $arg, (string) \end($argKinds));
-
                 continue;
             }
             emitOperand($env, $arg);
             unboxForeignArg($env, $argKinds[$i]);
         }
+
+        $env->c->aload($packed);
     } else {
+        if ($isInstance) {
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_($resolved['class']));
+        } elseif ($isConstructor) {
+            $env->c->new_($env->cp->class_($resolved['class']));
+            $env->c->dup();
+        }
+
         if (\count($paramArgs) < \count($argKinds)) {
             foreach ($paramArgs as $i => $arg) {
                 emitOperand($env, $arg);
@@ -149,10 +167,12 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
 }
 
 /**
- * When the resolved descriptor ends in a host array while the declaration
- * supplied every argument, the last operand is a Moggi list to pack: the
- * declaration named no array type (JVM foreign types cannot denote arrays),
- * so a trailing array in the resolved descriptor is always the pack shape.
+ * When the resolved descriptor ends in a host array and the declaration named
+ * a Moggi list for that argument, the last operand is the list to pack.
+ *
+ * The declaration decides: `foreign jvm function f "C.m" :: [Int] -> ()` is the
+ * pack shape, while one that names the host's own array type (`ByteArray`) is
+ * a value already of that type and is passed through.
  *
  * @param list<string> $argKinds descriptor parameters of the resolved call
  * @param list<IR\Operand> $paramArgs
@@ -202,14 +222,17 @@ function emitEmptyArray(EmitEnv $env, string $kind, string $path): void
 function emitPackVarargs(EmitEnv $env, IR\Operand $list, string $arrayKind): void
 {
     $component = \substr($arrayKind, 1);
-    $cursor = $env->freshLocal();
-    $arr = $env->freshLocal();
+    
+    
+    
+    $cursor = $env->freshLocal('moggi/rt/MList');
     $idx = $env->freshLocal('int');
     $headRef = $env->cp->fieldRef('moggi/rt/MList', 'head', 'Ljava/lang/Object;');
     $tailRef = $env->cp->fieldRef('moggi/rt/MList', 'tail', 'Lmoggi/rt/MList;');
     $id = $env->freshLabelId();
 
     emitOperand($env, $list);
+    $env->c->checkcast($env->cp->class_('moggi/rt/MList'));
     $env->c->astore($cursor);
     $env->c->iconst(0);
     $env->c->istore($idx);
@@ -231,8 +254,13 @@ function emitPackVarargs(EmitEnv $env, IR\Operand $list, string $arrayKind): voi
     } else {
         $env->c->anewarray($env->cp->class_(\substr($component, 1, -1)));
     }
+    
+    
+    
+    $arr = $env->freshLocal($arrayKind);
     $env->c->astore($arr);
     emitOperand($env, $list);
+    $env->c->checkcast($env->cp->class_('moggi/rt/MList'));
     $env->c->astore($cursor);
     $env->c->iconst(0);
     $env->c->istore($idx);
@@ -395,6 +423,13 @@ function unboxForeignArg(EmitEnv $env, string $kind): void
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Float', 'floatValue', '()F'), 0, true);
         })(),
         default => (static function () use ($env, $kind): void {
+            
+            
+            if (\str_starts_with($kind, '[')) {
+                $env->c->checkcast($env->cp->class_($kind));
+
+                return;
+            }
             if (\str_starts_with($kind, 'L') && \str_ends_with($kind, ';')) {
                 $internal = \substr($kind, 1, -1);
                 if ($internal !== 'java/lang/Object') {

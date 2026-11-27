@@ -262,7 +262,7 @@ $assert(
 // A consumer that is not the very next statement would be reordered past whatever sits between.
 $fn = $decl('typedNonAdjacent', ['f', 'x', 'y'], $funcType([$intToIntToInt, $int(), $int()], $int()), [
     new IR\CallValue(new IR\Local('f'), [new IR\Local('x')], 0),
-    new IR\Let('between', new IR\ConstInt(1)),
+    new IR\LetStmt('between', new IR\ConstInt(1)),
     new IR\CallValue(new IR\Temp(0), [new IR\Local('y')], 1),
     new IR\Ret(new IR\Temp(1)),
 ]);

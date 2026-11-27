@@ -90,6 +90,7 @@ function bclAssemblyFor(string $fullTypeName): string
             'System.Collections.Generic.KeyValuePair`2' => 'System.Runtime',
             'System.Collections.Generic.EqualityComparer`1' => 'System.Runtime',
             'System.Linq.Enumerable' => 'System.Linq',
+            'System.Security.Cryptography.DES' => 'System.Security.Cryptography.Algorithms',
         ];
     }
 

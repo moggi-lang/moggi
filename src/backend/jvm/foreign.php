@@ -388,6 +388,11 @@ function jvmForeignTypeDescriptorOrFail(?string $con, ?string $module = null): s
         );
     }
 
+    [$dotted] = jvmParseForeignHostType($host);
+    if (\str_starts_with($dotted, '[')) {
+        return $dotted;
+    }
+
     return 'L' . jvmForeignHostInternal($host) . ';';
 }
 

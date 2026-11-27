@@ -73,110 +73,110 @@ function emitManagedStmt(StmtTarget $env, IR\Stmt $stmt): void
 
     switch ($stmt::class) {
         case IR\Ret::class:
-            /** @var IR\Ret $stmt */
+            
             emitOperand($env, $stmt->value, $env);
             $env->emitReturn();
 
             return;
 
         case IR\Assign::class:
-            /** @var IR\Assign $stmt */
+            
             emitOperand($env, $stmt->value, $env);
             $env->storeTemp($stmt->dest);
 
             return;
 
-        case IR\Let::class:
-            /** @var IR\Let $stmt */
+        case IR\LetStmt::class:
+            
             emitOperand($env, $stmt->value, $env);
             $env->storeLocal($stmt->name);
 
             return;
 
         case IR\Call::class:
-            /** @var IR\Call $stmt */
+            
             $env->emitCall($stmt);
 
             return;
 
         case IR\CallValue::class:
-            /** @var IR\CallValue $stmt */
+            
             $env->emitCallValue($stmt);
 
             return;
 
         case IR\IoRun::class:
-            /** @var IR\IoRun $stmt */
+            
             $env->emitIoRun($stmt);
             $env->storeTempOrPop($stmt->dest);
 
             return;
 
         case IR\IoCall::class:
-            /** @var IR\IoCall $stmt */
+            
             $env->emitIoCall($stmt);
 
             return;
 
         case IR\IoAssignAction::class:
-            /** @var IR\IoAssignAction $stmt */
+            
             $env->emitIoAssignAction($stmt);
 
             return;
 
         case IR\IoMatch::class:
-            /** @var IR\IoMatch $stmt */
+            
             $env->emitIoMatch($stmt);
 
             return;
 
         case IR\IoThrow::class:
-            /** @var IR\IoThrow $stmt */
+            
             $env->emitIoThrow($stmt);
             $env->storeTempOrPop($stmt->dest);
 
             return;
 
         case IR\IoCatch::class:
-            /** @var IR\IoCatch $stmt */
+            
             $env->emitIoCatch($stmt);
             $env->storeTempOrPop($stmt->dest);
 
             return;
 
         case IR\IoFinally::class:
-            /** @var IR\IoFinally $stmt */
+            
             $env->emitIoFinally($stmt);
             $env->storeTempOrPop($stmt->dest);
 
             return;
 
         case IR\MatchReturn::class:
-            /** @var IR\MatchReturn $stmt */
+            
             $env->emitMatchReturn($stmt);
 
             return;
 
         case IR\MatchStmt::class:
-            /** @var IR\MatchStmt $stmt */
+            
             $env->emitMatchStmt($stmt);
 
             return;
 
         case IR\Loop::class:
-            /** @var IR\Loop $stmt */
+            
             $env->emitTailLoop($stmt);
 
             return;
 
         case IR\TailRecall::class:
-            /** @var IR\TailRecall $stmt */
+            
             $env->emitTailRecall($stmt);
 
             return;
 
         case IR\DictCall::class:
-            /** @var IR\DictCall $stmt */
+            
             $env->emitDictCall($stmt);
             $env->storeTemp($stmt->dest);
 

@@ -120,7 +120,7 @@ function remapTempsInStmt(IR\Stmt $stmt, array $temps): IR\Stmt
             $stmt->srcLoc,
         ),
         IR\Assign::class => new IR\Assign($stmt->dest, remapTempsInOperand($stmt->value, $temps)),
-        IR\Let::class => new IR\Let($stmt->name, remapTempsInOperand($stmt->value, $temps)),
+        IR\LetStmt::class => new IR\LetStmt($stmt->name, remapTempsInOperand($stmt->value, $temps)),
         default => $stmt,
     };
 }

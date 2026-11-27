@@ -620,7 +620,7 @@ function validatePureExpr(Ast\AstNode $expr, string $source, string $filename): 
         Ast\Apply::class => validateApply($expr, $source, $filename),
         Ast\Lambda::class => validatePureExpr($expr->body, $source, $filename),
         Ast\DoExpr::class => validatePureDo($expr, $source, $filename),
-        Ast\Let::class => validateLet($expr, $source, $filename),
+        Ast\LetExpr::class => validateLet($expr, $source, $filename),
         Ast\Where::class => validateWhere($expr, $source, $filename),
         Ast\CaseExpr::class => validatePureCase($expr, $source, $filename),
         Ast\RecordCon::class => (static function () use ($expr, $source, $filename): void {
@@ -743,7 +743,7 @@ function validateApply(Ast\Apply $expr, string $source, string $filename): void
     }
 }
 
-function validateLet(Ast\Let $expr, string $source, string $filename): void
+function validateLet(Ast\LetExpr $expr, string $source, string $filename): void
 {
     foreach ($expr->bindings as $binding) {
         validatePureExpr($binding->value, $source, $filename);
@@ -892,7 +892,7 @@ function validateIoBuildExpr(Ast\AstNode $expr, string $source, string $filename
         Ast\Apply::class => validateApplyBuild($expr, $source, $filename),
         Ast\Lambda::class => validateIoBuildExpr($expr->body, $source, $filename),
         Ast\DoExpr::class => validateIoBuildDo($expr, $source, $filename),
-        Ast\Let::class => validateLetBuild($expr, $source, $filename),
+        Ast\LetExpr::class => validateLetBuild($expr, $source, $filename),
         Ast\Where::class => validateWhereBuild($expr, $source, $filename),
         Ast\CaseExpr::class => validateIoBuildCase($expr, $source, $filename),
         Ast\RecordCon::class => (static function () use ($expr, $source, $filename): void {
@@ -941,7 +941,7 @@ function validateApplyBuild(Ast\Apply $expr, string $source, string $filename): 
     }
 }
 
-function validateLetBuild(Ast\Let $expr, string $source, string $filename): void
+function validateLetBuild(Ast\LetExpr $expr, string $source, string $filename): void
 {
     foreach ($expr->bindings as $binding) {
         validateIoBuildExpr($binding->value, $source, $filename);

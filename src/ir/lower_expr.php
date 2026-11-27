@@ -104,7 +104,7 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
         Ast\ListLit::class => lowerList($expr->elements, $ctx),
         Ast\Lambda::class => lowerCheckedLambda($expr, $ctx),
         Ast\DoExpr::class => lowerDoExpr($expr, $ctx),
-        Ast\Let::class, Ast\Where::class => lowerLetGroup($expr, $ctx),
+        Ast\LetExpr::class, Ast\Where::class => lowerLetGroup($expr, $ctx),
         Ast\CaseExpr::class => lowerCase($expr, $ctx),
         Ast\GuardsExpr::class => lowerGuards($expr, $ctx),
         Ast\RecordCon::class, Ast\RecordUpdate::class => lowerRecord($expr, $ctx),
@@ -375,6 +375,7 @@ function foreignCallOperand(CheckedForeignCall $term, array $args): ForeignCall
         handleBox: $term->handleBox,
         handleUnboxArgs: $term->handleUnboxArgs,
         nativeSig: $term->nativeSig,
+        packTrailingArg: $term->packTrailingArg,
     );
 }
 
@@ -1451,7 +1452,7 @@ function lowerBindingGroups(CheckedLetGroup $term, LowerCtx $ctx): void
  */
 function lowerRecursiveBindings(array $bindingIds, LowerCtx $ctx): void
 {
-    /** @var array<string, array{kind: 'lambda'|'nullary', fnName: string, rhs: Ast\AstNode}> $planned */
+    
     $planned = [];
 
     $bindings = [];

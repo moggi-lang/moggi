@@ -90,7 +90,7 @@ function rewriteIntrinsicApplies(TypeCheckState $state, Ast\AstNode $expr): Ast\
 
             return $expr;
         })(),
-        Ast\Let::class => (static function () use ($state, $expr): Ast\AstNode {
+        Ast\LetExpr::class => (static function () use ($state, $expr): Ast\AstNode {
             foreach ($expr->bindings as $binding) {
                 $binding->value = rewriteIntrinsicApplies($state, $binding->value);
             }

@@ -31,11 +31,6 @@ if (\PHP_VERSION_ID < 80600) {
 }
 
 \define('MOGGI_INSTALL_ROOT', \dirname(__FILE__, 2));
-
-// The archive is opened through an alias, not through __FILE__: a distribution's
-// `bin/moggi` is this archive appended to micro.sfx and has no extension, which
-// the phar wrapper will not open by path. The archive carries no alias of its
-// own, so it is mapped under one derived from its path.
 $alias = 'moggi-compiler-' . \md5(__FILE__) . '.phar';
 \Phar::loadPhar(__FILE__, $alias);
 $pharRoot = 'phar://' . $alias;

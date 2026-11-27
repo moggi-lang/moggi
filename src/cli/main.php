@@ -19,6 +19,7 @@ use function Moggi\CLI\Commands\runPackCommand;
 use function Moggi\CLI\Commands\runPublishCommand;
 use function Moggi\CLI\Commands\runRepl;
 use function Moggi\CLI\Commands\runRun;
+use function Moggi\CLI\Commands\runRuntimeCommand;
 use function Moggi\CLI\Commands\runSearchCommand;
 use function Moggi\CLI\Commands\runShowCommand;
 use function Moggi\CLI\Commands\runSignCommand;
@@ -77,6 +78,7 @@ function commands(): array
         'publish' => runPublishCommand(...),
         'sign' => runSignCommand(...),
         'cache' => runCache(...),
+        'runtime' => runRuntimeCommand(...),
         'mogdoc' => runMogdoc(...),
         'moogle' => runMoogle(...),
         'lsp' => runLsp(...),

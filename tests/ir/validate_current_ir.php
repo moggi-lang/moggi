@@ -78,7 +78,7 @@ $sharedArm = new IR\MatchArm(new IR\PatVar('a'), new IR\Block([new IR\Assign(0, 
 $sharedArm2 = new IR\MatchArm(new IR\PatVar('b'), new IR\Block([new IR\Assign(0, $local('b'))]));
 $sharedMatch = new IR\MatchStmt($local('x'), [$sharedArm, $sharedArm2], 0);
 
-$guard = new IR\Guard(new IR\Block([new IR\Let('ok', $local('x'))]), $local('ok'));
+$guard = new IR\Guard(new IR\Block([new IR\LetStmt('ok', $local('x'))]), $local('ok'));
 $guardedArm = new IR\MatchArm(
     new IR\PatVar('n'),
     new IR\Block([new IR\Assign(1, $local('n'))]),
@@ -88,13 +88,13 @@ $guardedMatch = new IR\MatchStmt($local('x'), [$guardedArm], 1);
 
 $action = new IR\IoAssignAction(
     2,
-    new IR\Block([new IR\Let('marr', $local('x'))]),
+    new IR\Block([new IR\LetStmt('marr', $local('x'))]),
     $local('marr'),
 );
 
 $legal = $module([
     $fn('main', [], new IR\Block([
-        new IR\Let('x', new IR\ConstInt(1)),
+        new IR\LetStmt('x', new IR\ConstInt(1)),
         $sharedMatch,
         $guardedMatch,
         $action,
@@ -267,7 +267,7 @@ $check(
 $leaky = $module([$fn('leaky', [], new IR\Block([
     new IR\MatchStmt($local('x'), [
         new IR\MatchArm(new IR\PatVar('a'), new IR\Block([]), [
-            new IR\Guard(new IR\Block([new IR\Let('onlyHere', $local('a'))]), new IR\ConstInt(1)),
+            new IR\Guard(new IR\Block([new IR\LetStmt('onlyHere', $local('a'))]), new IR\ConstInt(1)),
         ]),
         new IR\MatchArm(new IR\PatVar('b'), new IR\Block([new IR\Ret($local('onlyHere'))])),
     ], 0),

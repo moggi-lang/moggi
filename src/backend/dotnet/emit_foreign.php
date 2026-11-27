@@ -51,7 +51,7 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
     }
     $typeRef = qualifyType($resolved['class']);
 
-    if (($op->kind ?? 'function') === 'const') {
+    if ($op->kind === 'const') {
         if (isDotNetConstProperty($resolved['class'], $resolved['hostMember'])) {
             $env->m->emit("call {$desc} {$typeRef}::get_{$resolved['hostMember']}()");
         } else {
