@@ -1,13 +1,13 @@
 {
-    "generated": "2026-11-16T08:04:55+00:00",
+    "generated": "2026-11-26T07:24:55+00:00",
     "assets": {
         "php/linux-x86_64": {
-            "url": "https://www.php.net/distributions/php-8.5.12.tar.gz",
+            "url": "https://www.php.net/distributions/php-8.6.0.tar.gz",
             "format": "tar.gz",
             "stripComponents": 0,
             "binary": "sapi/cli/php",
-            "version": "8.5.12",
-            "sha256": "81a0f450349e84b08eb43faa85f8a4c835684f3cc1c50471775d1317a046c525",
+            "version": "8.6.0",
+            "sha256": "62337dccde3d9fcc39797d4529f42637613036eaf3875353c206874e5813a3c1",
             "source": "release-metadata",
             "build": true
         },
@@ -39,12 +39,12 @@
             "source": "release-metadata"
         },
         "php/linux-aarch64": {
-            "url": "https://www.php.net/distributions/php-8.5.12.tar.gz",
+            "url": "https://www.php.net/distributions/php-8.6.0.tar.gz",
             "format": "tar.gz",
             "stripComponents": 0,
             "binary": "sapi/cli/php",
-            "version": "8.5.12",
-            "sha256": "81a0f450349e84b08eb43faa85f8a4c835684f3cc1c50471775d1317a046c525",
+            "version": "8.6.0",
+            "sha256": "62337dccde3d9fcc39797d4529f42637613036eaf3875353c206874e5813a3c1",
             "source": "release-metadata",
             "build": true
         },
@@ -76,12 +76,12 @@
             "source": "sidecar"
         },
         "php/macos-x86_64": {
-            "url": "https://www.php.net/distributions/php-8.5.12.tar.gz",
+            "url": "https://www.php.net/distributions/php-8.6.0.tar.gz",
             "format": "tar.gz",
             "stripComponents": 0,
             "binary": "sapi/cli/php",
-            "version": "8.5.12",
-            "sha256": "81a0f450349e84b08eb43faa85f8a4c835684f3cc1c50471775d1317a046c525",
+            "version": "8.6.0",
+            "sha256": "62337dccde3d9fcc39797d4529f42637613036eaf3875353c206874e5813a3c1",
             "source": "release-metadata",
             "build": true
         },
@@ -113,12 +113,12 @@
             "source": "sidecar"
         },
         "php/macos-aarch64": {
-            "url": "https://www.php.net/distributions/php-8.5.12.tar.gz",
+            "url": "https://www.php.net/distributions/php-8.6.0.tar.gz",
             "format": "tar.gz",
             "stripComponents": 0,
             "binary": "sapi/cli/php",
-            "version": "8.5.12",
-            "sha256": "81a0f450349e84b08eb43faa85f8a4c835684f3cc1c50471775d1317a046c525",
+            "version": "8.6.0",
+            "sha256": "62337dccde3d9fcc39797d4529f42637613036eaf3875353c206874e5813a3c1",
             "source": "release-metadata",
             "build": true
         },
@@ -177,12 +177,12 @@
             "source": "sidecar"
         },
         "php/windows-x86_64": {
-            "url": "https://downloads.php.net/~windows/releases/archives/php-8.5.12-Win32-vs17-x64.zip",
+            "url": "https://downloads.php.net/~windows/releases/archives/php-8.6.0-Win32-vs18-x64.zip",
             "format": "zip",
             "stripComponents": 0,
             "binary": "php.exe",
-            "version": "8.5.12",
-            "sha256": "660f3ff6ccbdf60f9607ef54bdba85ee22a58d61fd3633b38a93d57fb7c3d184",
+            "version": "8.6.0",
+            "sha256": "daf3639addc12197bfea7aff8797edc78939f5d8809e0cced49d899347c337b0",
             "source": "config-pin"
         },
         "composer/linux-x86_64": {
@@ -276,66 +276,66 @@
             "source": "sidecar"
         },
         "spc/linux-x86_64": {
-            "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-linux-x86_64.tar.gz",
+            "url": "https://github.com/crazywhalecc/static-php-cli/archive/2a1982ddae78ee0c20365ff05d0f595779fe79cf.tar.gz",
             "format": "tar.gz",
-            "stripComponents": 0,
-            "binary": "spc",
-            "version": "2.8.5",
-            "sha256": "523ba4279c54c7a377156c0dd3a36adf92ee64b01e9a7f5e9e2ec084b8e458e5",
+            "stripComponents": 1,
+            "binary": "bin/spc",
+            "version": "3.0.0-alpha1",
+            "sha256": "3e1d0c0e0f51de70ea5dd21fb3bdcd3ea449554d2c36364e7ccea99cf504ede8",
             "source": "config-pin"
         },
         "spc/linux-aarch64": {
-            "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-linux-aarch64.tar.gz",
+            "url": "https://github.com/crazywhalecc/static-php-cli/archive/2a1982ddae78ee0c20365ff05d0f595779fe79cf.tar.gz",
             "format": "tar.gz",
-            "stripComponents": 0,
-            "binary": "spc",
-            "version": "2.8.5",
-            "sha256": "675a3840dcdc4ed041fe20eaa54310ce019a9984c1c03951df9ec66df5795213",
+            "stripComponents": 1,
+            "binary": "bin/spc",
+            "version": "3.0.0-alpha1",
+            "sha256": "3e1d0c0e0f51de70ea5dd21fb3bdcd3ea449554d2c36364e7ccea99cf504ede8",
             "source": "config-pin"
         },
         "spc/macos-x86_64": {
-            "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-macos-x86_64.tar.gz",
+            "url": "https://github.com/crazywhalecc/static-php-cli/archive/2a1982ddae78ee0c20365ff05d0f595779fe79cf.tar.gz",
             "format": "tar.gz",
-            "stripComponents": 0,
-            "binary": "spc",
-            "version": "2.8.5",
-            "sha256": "e8b798048f62ca4960764196543b60ae703f7174aa418824cf542aeec1d2cd6a",
+            "stripComponents": 1,
+            "binary": "bin/spc",
+            "version": "3.0.0-alpha1",
+            "sha256": "3e1d0c0e0f51de70ea5dd21fb3bdcd3ea449554d2c36364e7ccea99cf504ede8",
             "source": "config-pin"
         },
         "spc/macos-aarch64": {
-            "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-macos-aarch64.tar.gz",
+            "url": "https://github.com/crazywhalecc/static-php-cli/archive/2a1982ddae78ee0c20365ff05d0f595779fe79cf.tar.gz",
             "format": "tar.gz",
-            "stripComponents": 0,
-            "binary": "spc",
-            "version": "2.8.5",
-            "sha256": "acf2f25d56d0cbf8e65aa82e5054fef555f7be7c5c38046c6e0819f266d83225",
+            "stripComponents": 1,
+            "binary": "bin/spc",
+            "version": "3.0.0-alpha1",
+            "sha256": "3e1d0c0e0f51de70ea5dd21fb3bdcd3ea449554d2c36364e7ccea99cf504ede8",
             "source": "config-pin"
         },
         "spc/windows-x86_64": {
-            "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-windows-x64.exe",
-            "format": "raw",
-            "stripComponents": 0,
-            "binary": "spc.exe",
-            "version": "2.8.5",
-            "sha256": "425b54ab857e21409c1fd9b818899ffebabd1e2817ef0a0ed5ae8a3d9f5b463b",
+            "url": "https://github.com/crazywhalecc/static-php-cli/archive/2a1982ddae78ee0c20365ff05d0f595779fe79cf.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 1,
+            "binary": "bin/spc",
+            "version": "3.0.0-alpha1",
+            "sha256": "3e1d0c0e0f51de70ea5dd21fb3bdcd3ea449554d2c36364e7ccea99cf504ede8",
             "source": "config-pin"
         },
         "zig/linux-x86_64": {
-            "url": "https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz",
+            "url": "https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz",
             "format": "tar.xz",
             "stripComponents": 1,
             "binary": "zig",
-            "version": "0.15.2",
-            "sha256": "02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239",
+            "version": "0.17.1",
+            "sha256": "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a",
             "source": "ziglang-index"
         },
         "zig/linux-aarch64": {
-            "url": "https://ziglang.org/download/0.15.2/zig-aarch64-linux-0.15.2.tar.xz",
+            "url": "https://ziglang.org/download/0.17.1/zig-aarch64-linux-0.17.1.tar.xz",
             "format": "tar.xz",
             "stripComponents": 1,
             "binary": "zig",
-            "version": "0.15.2",
-            "sha256": "958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f",
+            "version": "0.17.1",
+            "sha256": "a1546d5646eb184437918d6635ca6b762a0e889eac09cef720ee7a1ed3fe7795",
             "source": "ziglang-index"
         }
     }

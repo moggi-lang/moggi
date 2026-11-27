@@ -25,14 +25,22 @@ const PHAR_STUB = <<<'PHP'
 
 namespace Moggi\Dist;
 
-if (\PHP_VERSION_ID < 80512) {
-    \fwrite(STDERR, "moggi: PHP 8.5.12+ is required, this is " . \PHP_VERSION . "\n");
+if (\PHP_VERSION_ID < 80600) {
+    \fwrite(STDERR, "moggi: PHP 8.6.0+ is required, this is " . \PHP_VERSION . "\n");
     exit(1);
 }
 
 \define('MOGGI_INSTALL_ROOT', \dirname(__FILE__, 2));
 
-require 'phar://' . __FILE__ . '/src/compiler.php';
+// The archive is opened through an alias, not through __FILE__: a distribution's
+// `bin/moggi` is this archive appended to micro.sfx and has no extension, which
+// the phar wrapper will not open by path. The archive carries no alias of its
+// own, so it is mapped under one derived from its path.
+$alias = 'moggi-compiler-' . \md5(__FILE__) . '.phar';
+\Phar::loadPhar(__FILE__, $alias);
+$pharRoot = 'phar://' . $alias;
+
+require $pharRoot . '/src/compiler.php';
 
 exit(\Moggi\CLI\main($argv));
 
@@ -142,7 +150,7 @@ function buildCompilerPhar(string $sourceRoot, string $outPath): void
         \unlink($tmp);
     }
 
-    $phar = new \Phar($tmp, 0, \basename($outPath));
+    $phar = new \Phar($tmp);
     $phar->startBuffering();
 
     $count = 0;

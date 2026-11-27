@@ -127,7 +127,7 @@ try {
     $original = "[package]\nname = app\nversion = 0.1.0\n\n"
         . $author
         . "\n[lib]\nsource-dirs = src\n"
-        . "\n; the PHP half is Composer's\n[php]\nversion = 8.5\ncomposer = existing/dep:^1.0 ; keep the comment\n"
+        . "\n; the PHP half is Composer's\n[php]\nversion = 8.6\ncomposer = existing/dep:^1.0 ; keep the comment\n"
         . "\n[jvm.maven]\norg.jetbrains:annotations = 24.1.0\n"
         . "\n[dotnet.nuget]\nSystem.Text.Json = 8.0.0\n"
         . "\n[dependencies]\nbase = >=0.2.0\n";

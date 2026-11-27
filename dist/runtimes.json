@@ -11,7 +11,7 @@
 
   "runtimes": {
     "php": {
-      "version": "8.5.12",
+      "version": "8.6.0",
       "upstream": "php.net",
       "license": {
         "name": "PHP License 3.01",
@@ -27,6 +27,7 @@
         "intl",
         "mbstring",
         "parallel",
+        "sodium",
         "tokenizer"
       ],
       "configureFlags": [
@@ -38,7 +39,9 @@
         "--enable-ctype",
         "--enable-mbstring",
         "--enable-intl",
+        "--enable-phar",
         "--enable-tokenizer",
+        "--with-sodium",
         "--without-pear"
       ],
       "unix": {
@@ -50,10 +53,10 @@
       },
       "windows-x86_64": {
         "format": "zip",
-        "url": "https://downloads.php.net/~windows/releases/archives/php-{version}-Win32-vs17-x64.zip",
+        "url": "https://downloads.php.net/~windows/releases/archives/php-{version}-Win32-vs18-x64.zip",
         "stripComponents": 0,
         "binary": "php.exe",
-        "sha256": "660f3ff6ccbdf60f9607ef54bdba85ee22a58d61fd3633b38a93d57fb7c3d184"
+        "sha256": "daf3639addc12197bfea7aff8797edc78939f5d8809e0cced49d899347c337b0"
       },
       "unsupported": {
         "windows-aarch64": "php.net publishes no Windows ARM64 build (the Windows release page offers x64 and x86 only)"
@@ -172,9 +175,9 @@
     },
 
     "php-native": {
-      "version": "8.5",
+      "version": "8.6",
       "static": true,
-      "upstream": "static-php-cli's micro SAPI, compiled for this target by spc 2.8.5",
+      "upstream": "static-php-cli's micro SAPI, compiled for this target by spc 3.0.0-alpha1",
       "license": {
         "name": "PHP License 3.01, plus the licences of everything the runtime statically links (ICU and friends)",
         "file": "LICENSE",
@@ -185,35 +188,52 @@
       },
       "build": {
         "tool": "spc",
-        "php": "8.5",
+        "php": "8.6",
         "sapi": "micro",
-        "extensions": ["bcmath", "ctype", "intl", "mbstring", "parallel", "phar", "tokenizer"],
+        "extensions": [
+          "bcmath",
+          "ctype",
+          "curl",
+          "dom",
+          "fileinfo",
+          "filter",
+          "iconv",
+          "intl",
+          "mbstring",
+          "openssl",
+          "parallel",
+          "pcntl",
+          "pdo",
+          "pdo_sqlite",
+          "phar",
+          "posix",
+          "session",
+          "simplexml",
+          "sodium",
+          "sockets",
+          "sqlite3",
+          "tokenizer",
+          "xml",
+          "xmlreader",
+          "xmlwriter",
+          "zip",
+          "zlib"
+        ],
         "note": "The native compiler runs itself from the archive appended to its binary, so the micro runtime needs the phar wrapper on top of the extensions compiled programs require."
       }
     },
 
     "spc": {
-      "version": "2.8.5",
-      "upstream": "github.com/crazywhalecc/static-php-cli",
-      "checksumsUrl": "https://api.github.com/repos/crazywhalecc/static-php-cli/releases/tags/{version}",
-      "sha256ByTarget": {
-        "linux-x86_64": "523ba4279c54c7a377156c0dd3a36adf92ee64b01e9a7f5e9e2ec084b8e458e5",
-        "linux-aarch64": "675a3840dcdc4ed041fe20eaa54310ce019a9984c1c03951df9ec66df5795213",
-        "macos-x86_64": "e8b798048f62ca4960764196543b60ae703f7174aa418824cf542aeec1d2cd6a",
-        "macos-aarch64": "acf2f25d56d0cbf8e65aa82e5054fef555f7be7c5c38046c6e0819f266d83225",
-        "windows-x86_64": "425b54ab857e21409c1fd9b818899ffebabd1e2817ef0a0ed5ae8a3d9f5b463b"
-      },
-      "unix": {
+      "version": "3.0.0-alpha1",
+      "commit": "2a1982ddae78ee0c20365ff05d0f595779fe79cf",
+      "fromSource": true,
+      "upstream": "github.com/crazywhalecc/static-php-cli (v3 branch, pinned by commit: no 3.0 release tag exists yet)",
+      "asset": {
         "format": "tar.gz",
-        "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/{version}/spc-{spcAsset}.tar.gz",
-        "stripComponents": 0,
-        "binary": "spc"
-      },
-      "windows": {
-        "format": "raw",
-        "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/{version}/spc-{spcAsset}.exe",
-        "stripComponents": 0,
-        "binary": "spc.exe"
+        "url": "https://github.com/crazywhalecc/static-php-cli/archive/{commit}.tar.gz",
+        "stripComponents": 1,
+        "binary": "bin/spc",
+        "sha256": "3e1d0c0e0f51de70ea5dd21fb3bdcd3ea449554d2c36364e7ccea99cf504ede8"
       },
       "unsupported": {
         "windows-aarch64": "static-php-cli publishes no Windows ARM64 build (linux x86_64/aarch64, macOS x86_64/aarch64 and Windows x64 only)"
@@ -221,7 +241,7 @@
     },
 
     "zig": {
-      "version": "0.15.2",
+      "version": "0.17.1",
       "upstream": "ziglang.org",
       "checksumsUrl": "https://ziglang.org/download/index.json",
       "unix": {

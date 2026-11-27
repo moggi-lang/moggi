@@ -97,7 +97,7 @@ time with `TypeLoadException`.
 
 | Backend | Build | Run | Host toolchain |
 |---|---|---|---|
-| `php` | `moggi build` → `app.phar` | `php app.phar` | PHP 8.5.12+ and Composer |
+| `php` | `moggi build` → `app.phar` | `php app.phar` | PHP 8.6.0+ and Composer |
 | `jvm` | `moggi build --backend jvm` → `app.jar` | `java -jar app.jar` | JDK 21+ and Maven |
 | `dotnet` | `moggi build --backend dotnet` → `app.dll` | `dotnet app.dll` | .NET 8 SDK |
 

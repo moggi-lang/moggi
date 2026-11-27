@@ -192,13 +192,13 @@ function assertPhpRuntimeExtensions(array $required, array $loaded, array $compi
 }
 
 /**
- * Refuse a distribution whose pinned extension list has drifted from the derived
- * set.
+ * Refuse a distribution whose built extension set is missing a required one.
  *
- * `dist/runtimes.json` records what the bundled PHP is built with; the set itself
- * comes from the packages the distribution ships plus the compiler's own needs,
- * so the list there is verified output. A list that no longer names exactly that
- * set is a hard assembly failure rather than a runtime built to a stale set.
+ * `dist/runtimes.json` records what the bundled PHP is built with; the set the
+ * packages and the compiler need is derived from the tree. A runtime may carry
+ * *more* than that (an extension users are expected to call, a wider baseline),
+ * but never less — a missing one is a compile-time requirement the runtime
+ * cannot satisfy, so it is a hard assembly failure.
  */
 function assertRuntimeExtensionsDeclared(array $config): void
 {
@@ -207,15 +207,14 @@ function assertRuntimeExtensionsDeclared(array $config): void
         $declared[normalizeExtensionName((string) $name)] = (string) $name;
     }
     $declaredList = extensionNamesSorted($declared);
-    $derived = distributionPhpExtensions();
-    if (extensionSetsEqual($declaredList, $derived)) {
+    $missing = missingPhpExtensions(distributionPhpExtensions(), $declaredList);
+    if ($missing === []) {
         return;
     }
 
     throw new \RuntimeException(
-        'the bundled PHP\'s extension list has drifted from the distribution\'s requirements: '
-        . 'dist/runtimes.json lists [' . \implode(', ', $declaredList) . '], '
-        . 'the packages require [' . \implode(', ', $derived) . ']',
+        'the bundled PHP is built without extensions the distribution requires: missing ['
+        . \implode(', ', $missing) . ']; dist/runtimes.json lists [' . \implode(', ', $declaredList) . ']',
     );
 }
 
@@ -261,20 +260,73 @@ function extensionBuildFlags(array $extensions, array $config): array
 }
 
 /**
- * Record what a prepared runtime's extension set is, so a client can check a
- * package's `[php] extension` requirements against it instead of guessing.
+ * Record what a prepared runtime carries: its extension set, and for a PHP
+ * runtime the version and ABI it was built with.
+ *
+ * The set is what a client checks a package's `[php] extension` requirements
+ * against. The ABI is what makes an installed extension valid or not, and a
+ * client that copies the runtime (`moggi runtime php build`) needs it without
+ * guessing: an extension built for 8.6 ZTS does not load into anything else.
+ *
+ * `$php` is the binary to ask, and it is the one just verified, so the record
+ * cannot disagree with what was shipped. A static micro runtime has no command
+ * line to ask, so it records only its set; a client falls back to asking the
+ * binary itself when the fields are absent, which is also how an archive built
+ * before this record existed keeps working.
  *
  * @param list<string> $extensions
+ * @return array{version: string, zts: bool} the ABI written, empty for a static runtime
  */
-function writeRuntimeExtensionManifest(string $dir, string $runtime, array $extensions): void
+function writeRuntimeExtensionManifest(string $dir, string $runtime, array $extensions, ?string $php = null): array
 {
+    $abi = ['version' => '', 'zts' => false];
+    if ($php !== null) {
+        $args = [$php, '-n', '-r', 'echo PHP_VERSION, " ", PHP_ZTS ? "zts" : "nts";'];
+        $output = \PHP_OS_FAMILY === 'Windows'
+            ? runtimeProcess($args)
+            : runWithLibraryPath($args, $dir . '/lib');
+        $fields = \preg_split('/\s+/', \trim($output)) ?: [];
+        $abi = ['version' => (string) ($fields[0] ?? ''), 'zts' => ($fields[1] ?? '') === 'zts'];
+        if ($abi['version'] === '') {
+            throw new \RuntimeException("cannot read the PHP version of {$php}: `" . \trim($output) . '`');
+        }
+    }
+
+    $record = ['runtime' => $runtime];
+    if ($abi['version'] !== '') {
+        $record['php'] = $abi['version'];
+        $record['abi'] = ['version' => $abi['version'], 'zts' => $abi['zts']];
+    }
+    $record['extensions'] = \array_values($extensions);
+
     \file_put_contents(
         $dir . '/' . EXTENSION_MANIFEST,
-        \json_encode([
-            'runtime' => $runtime,
-            'extensions' => \array_values($extensions),
-        ], \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES) . "\n",
+        \json_encode($record, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES) . "\n",
     );
+
+    return $abi;
+}
+
+/**
+ * Every extension a prepared `php` runtime has to load.
+ *
+ * The derived contract — what the shipped packages and the compiler call — plus
+ * everything `dist/runtimes.json` says the bundled PHP is built with. The second
+ * half is what a PHAR may call beyond the packages' declarations, and it is also
+ * what a prepared runtime is checked against before it is reused: a list that
+ * gains an extension makes an older build stale instead of silently continuing
+ * without it.
+ *
+ * @return list<string>
+ */
+function requiredPhpExtensions(array $config): array
+{
+    $names = [];
+    foreach ([...distributionPhpExtensions(), ...((array) ($config['runtimes']['php']['extensions'] ?? []))] as $name) {
+        $names[normalizeExtensionName((string) $name)] ??= (string) $name;
+    }
+
+    return extensionNamesSorted($names);
 }
 
 /**
@@ -282,12 +334,18 @@ function writeRuntimeExtensionManifest(string $dir, string $runtime, array $exte
  * a bundled extension has to be enabled. Returns them so the caller can record
  * them beside the runtime.
  *
+ * Both the derived contract and every extension `dist/runtimes.json` says the
+ * runtime is built with are required here. The declared list is what a PHAR may
+ * call, and an upstream archive may carry one of its entries as a *shared*
+ * library — Windows' PHP ships `php_sodium.dll` — so the ini this writes has to
+ * enable it; there is no host `php.ini` in the runtime to do it instead.
+ *
  * @return list<string> the loaded modules
  */
 function assertPhpExtensions(string $binary, string $dir, string $target, array $config): array
 {
     assertRuntimeExtensionsDeclared($config);
-    $required = distributionPhpExtensions();
+    $required = requiredPhpExtensions($config);
     if (\in_array('parallel', \array_map('strtolower', $required), true)) {
         assertPhpThreadSafe($binary, $dir, $target);
     }
@@ -346,7 +404,14 @@ function phpHasModule(array $modules, string $extension): bool
     return false;
 }
 
-/** Modules a PHP binary reports, run without touching the host's configuration. */
+/**
+ * Modules a PHP binary reports, run without touching the host's configuration.
+ *
+ * Only the module section is read, and only lines that are module names: `php -m`
+ * prints startup warnings to stdout as well, and a warning recorded as an
+ * extension would end up in the shipped manifest and look like a missing
+ * extension on every later check.
+ */
 function phpModuleList(string $binary, string $dir, array $options): array
 {
     if (\PHP_OS_FAMILY === 'Windows') {
@@ -356,12 +421,22 @@ function phpModuleList(string $binary, string $dir, array $options): array
     }
 
     $modules = [];
+    $inModules = false;
     foreach (\explode("\n", $output) as $line) {
         $line = \trim($line);
-        if ($line === '' || ($line[0] === '[' && \str_ends_with($line, ']'))) {
+        if ($line === '' || $line === '[PHP Modules]') {
+            $inModules = $inModules || $line === '[PHP Modules]';
+
             continue;
         }
-        $modules[] = $line;
+        if ($line[0] === '[' && \str_ends_with($line, ']')) {
+            $inModules = false;
+
+            continue;
+        }
+        if ($inModules && \preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $line) === 1) {
+            $modules[] = $line;
+        }
     }
 
     return $modules;

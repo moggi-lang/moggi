@@ -259,7 +259,7 @@ main = do
 ```
 5
 21/09/2026
-8.5.7
+8.6.0
 ok=True
 ```
 
@@ -431,9 +431,59 @@ descriptor this import will emit, and it can say it does not.
 
 | Backend | How the host is asked | What is checked |
 |---|---|---|
-| `php` | the compiler's own process (`function_exists`, reflection) | the function/class/method/constant exists, a `Class:member` path names a *static* method, `Class.__con` an instantiable class, and the declared arity can be satisfied |
+| `php` | the PHP host a project installs into — the bundled `runtime/php`, or the compiler's own process when it is a real CLI PHP (`MOGGI_PHP_HOST` names another) | the function/class/method/constant exists, a `Class:member` path names a *static* method, `Class.__con` an instantiable class, and the declared arity can be satisfied. A compiler running as a micro SAPI executable is never its own host: it asks the bundled runtime, and refuses when the extension it would need is not installed there |
 | `jvm` | `javap -s -p` on the class the path names, from the JDK the build compiles with | the member exists on that class, is public, and has exactly the descriptor the emitter will use — so a wrong name, a wrong argument count and a wrong type are all compile errors. A class `javap` cannot find is a verdict too (``jvm class `X` was not found on the compile classpath``), and a missing `javap` refuses every `foreign jvm` declaration with an error naming it |
 | `dotnet` | a reflection inspector built from shipped C# source over the compile's reference set (vendored assemblies plus the target framework) | the emitted signature matches a member the CLR declares — a missing class, member, or signature is a compile error naming the host. The sidecar cross-check still applies first; assembly scopes are ignored in the comparison because the runtime resolves across forwarding. No `dotnet` refuses the declaration; a broken inspector warns and leaves it unverified |
+
+### Adding an extension
+
+An extension a program calls has to exist before the compiler can verify the
+call, and before the program can run. Both are the same runtime: the bundled
+`runtime/php`.
+
+```bash
+moggi runtime php install-ext curl    # build/install it into the bundled PHP
+moggi runtime php install-ext moggi_probe --from path/to/ext   # an extension you have
+moggi runtime php list-ext            # declared / installed / carried
+moggi runtime php verify              # what the project declares, checked
+moggi runtime php build --out dist/php  # a copy that runs anywhere, no PHP needed
+```
+
+The runtime the compiler runs programs on is bound to the machine that built
+it: on Linux its binary names the build's own library directory, and PHP only
+looks for `php.ini` at the prefix it was compiled with. `build` writes the
+version of it that a person can ship — every shared library it needs in its own
+`lib/`, a runpath relative to wherever it lands, a launcher that finds its own
+`php.ini` and its own loader — so the copy is extracted and run, with nothing
+installed. It is entered through `bin/php`, which locates the copy from its own
+path. The copy is cached by version, platform and extension set, so a second
+build of the same set reuses it; `--out` also puts it where it will be shipped
+from, replacing what that directory held.
+
+On Windows the copy is the runtime's own directory — `php.exe`, the DLLs beside
+it, `ext/` — because the loader already searches there, plus a `php.ini` that
+enables every extension DLL the runtime can actually load, and a `bin\php.cmd`
+entry point. The one thing a Windows copy cannot work out for itself is its
+extension directory: PHP resolves a relative `extension_dir` against the current
+directory rather than against `php.exe`, so `php.cmd` passes the copy's own path,
+and a bare `php.exe` finds its extensions when it is started from the copy's
+directory. An extension DLL whose own native dependencies are not in the tree is
+left out and reported, rather than left to fail on every start.
+
+macOS is refused: a copy there needs `install_name_tool` and an ad-hoc
+`codesign`, which the command does not do.
+
+Declare it in the descriptor so the requirement is part of the build:
+
+```ini
+[php.extensions]
+curl = *
+```
+
+A compile then refuses a declared extension the host does not have, naming the
+command that installs it. `--native` builds cannot load an extension at run
+time (the micro runtime is static), so `moggi runtime php native` reports
+whether the runtime a native build appends a program to carries the set.
 
 The name in the diagnostic is always the *host's*, and the descriptor it prints
 is the one codegen would put on the wire:
