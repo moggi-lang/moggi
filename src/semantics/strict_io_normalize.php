@@ -137,7 +137,7 @@ function normalizeIoBody(Ast\AstNode $expr, int &$counter): Ast\AstNode
         return $normalized;
     }
 
-    if ($expr instanceof Ast\Let) {
+    if ($expr instanceof Ast\LetExpr) {
         return normalizeIoBindings($expr->bindings, $expr->body, $expr, $counter);
     }
 
@@ -297,7 +297,7 @@ function normalizePureExpr(Ast\AstNode $expr, int &$counter): Ast\AstNode
 
             return $expr;
         })(),
-        Ast\Let::class => (function () use ($expr, &$counter): Ast\AstNode {
+        Ast\LetExpr::class => (function () use ($expr, &$counter): Ast\AstNode {
             foreach ($expr->bindings as $binding) {
                 $binding->value = normalizePureExpr($binding->value, $counter);
             }

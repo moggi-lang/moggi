@@ -33,6 +33,9 @@ usage:
     moggi pack    [<dir>] [-o FILE] [--list] [--json]
     moggi publish [<dir|<name>.moggi>] [--registry URL] [--as NPUB] [--nsec-file FILE]
     moggi cache <info|clear [<area>]>
+    moggi runtime list [--json]
+    moggi runtime <backend> [version [--json]]
+    moggi runtime php <list-ext|install-ext|remove-ext|verify|build|native>
     moggi version [--json]
     moggi mogdoc <input-dir> -o <output-dir> [--lib PATH]… [--rebuild] [--no-cache]
     moggi mogdoc serve [--port N] [-o DIR] [--root PATH] [--lib PATH]… [--rebuild] [--no-cache]
@@ -104,6 +107,10 @@ commands:
                  registry — the archive, the docs, then the signed record
     cache        what the on-disk cache holds, and how to get the space back
                  (info | clear [compiler|catalog|packages|runtime|test|downloads|all])
+    runtime      the runtime programs run on: which backends this installation
+                 can run programs on, the extensions a project adds to one, and
+                 `runtime php build` — a copy that runs anywhere, needing
+                 nothing from the machine it is copied to
     version      print compiler and stdlib versions, the compiler source
                  fingerprint, and host toolchain versions
     mogdoc       generate HTML documentation

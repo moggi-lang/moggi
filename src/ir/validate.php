@@ -302,7 +302,7 @@ function validateBlock(
     foreach ($block->items as $index => $stmt) {
         $where = $path . '[' . $index . ']';
 
-        if ($stmt instanceof IR\Let) {
+        if ($stmt instanceof IR\LetStmt) {
             checkOperand($function, $stmt->value, $bound, $temps, $pass, $capturesAllowed, $where);
             $bound[$stmt->name] = true;
 
@@ -312,7 +312,7 @@ function validateBlock(
         if ($stmt instanceof IR\MatchStmt || $stmt instanceof IR\MatchReturn || $stmt instanceof IR\IoMatch) {
             checkOperand($function, $stmt->scrutinee, $bound, $temps, $pass, $capturesAllowed, $where);
             $outerTemps = $temps;
-            /** @var list<array<int, true>> $arms' temps, one entry per arm */
+            
             $armTempsList = [];
             foreach ($stmt->arms as $armIndex => $arm) {
                 $armWhere = $where . '.arm[' . $armIndex . ']';

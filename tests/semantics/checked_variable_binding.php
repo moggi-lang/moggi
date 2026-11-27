@@ -189,13 +189,13 @@ try {
 
                 return;
             }
-            if ($node instanceof Ast\Let || $node instanceof Ast\Where) {
-                $bodyField = $node instanceof Ast\Let ? 'body' : 'expr';
+            if ($node instanceof Ast\LetExpr || $node instanceof Ast\Where) {
+                $bodyField = $node instanceof Ast\LetExpr ? 'body' : 'expr';
                 foreach ($node->bindings as $binding) {
                     if ($binding->pattern instanceof Ast\PatVar) {
-                        // A group's member is in scope in every member's value and in the body: the
-                        // checker resolves those uses to the member's binder, which is why the
-                        // binding site's identity has to be allocated before any value is checked.
+                        
+                        
+                        
                         $scope[] = ['name' => $binding->pattern->name, 'binder' => $binding->pattern->binderId];
                     }
                 }

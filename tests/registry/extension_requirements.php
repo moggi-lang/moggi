@@ -137,9 +137,11 @@ try {
     $withManifest = phpExtensionProblems(phpExtensionDescriptors($rootDescriptor, []));
     $assert($withManifest['blocking'] === [$absent], 'an extension the micro runtime lacks is blocking: ' . \json_encode($withManifest));
     $assert(\count($withManifest['problems']) === 2, 'the missing extension is reported against both the running PHP and the micro runtime: ' . \json_encode($withManifest));
-    $assert(\str_contains($withManifest['problems'][0], 'the PHP running this'), 'the first problem names the running PHP');
+    $assert(\str_contains($withManifest['problems'][0], 'the PHP this compiler runs on'), 'the first problem names the PHP host');
     $assert(\str_contains($withManifest['problems'][1], 'the runtime a --native build uses'), 'the second problem names the native runtime');
     $assert(\str_contains($withManifest['problems'][0], $absent) && \str_contains($withManifest['problems'][1], $absent), 'each problem names the extension that is missing');
+    $assert(\str_contains($withManifest['problems'][0], 'moggi runtime php install-ext ' . $absent), 'the host problem names the command that fixes it');
+    $assert(\str_contains($withManifest['problems'][1], 'moggi runtime php native'), 'the native problem names the command that fixes it');
     $assert(! \str_contains(\implode("\n", $withManifest['problems']), '`' . $present . '`'), 'an extension both runtimes have is not reported');
     $assert(! \str_contains(\implode("\n", $withManifest['problems']), 'micro.sfx'), 'no message names the runtime mechanism');
 

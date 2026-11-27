@@ -894,7 +894,7 @@ function binding(string $name, array $params, Ast\AstNode $body, ?string $infix 
         return $body->ifParts !== null ? printIfBinding($head, $body) : printCase($head, $body);
     }
 
-    if ($body instanceof Ast\Let && (containsBlock($body) || \count($body->bindings) > 1)) {
+    if ($body instanceof Ast\LetExpr && (containsBlock($body) || \count($body->bindings) > 1)) {
         return Doc::concat([$head, Doc::text(' ='), Doc::nest(2, Doc::concat([Doc::line(), letDoc($body)]))]);
     }
 
@@ -992,7 +992,7 @@ function brokenNodeDoc(Ast\AstNode $expression, int $indent): Doc
     if ($expression instanceof Ast\Infix) {
         return chainDoc($expression, $indent);
     }
-    if ($expression instanceof Ast\Let) {
+    if ($expression instanceof Ast\LetExpr) {
         return brokenLetDoc($expression, $indent);
     }
     if ($expression instanceof Ast\Tuple) {
@@ -1101,7 +1101,7 @@ function brokenArgumentDoc(Ast\AstNode $argument, int $indent): Doc
  * A wide single-binding `let`: the value breaks under its own `=`, and `in` returns to the `let`'s
  * column. Any other binding shape goes through `letDoc`, which already lays those out.
  */
-function brokenLetDoc(Ast\Let $let, int $indent): Doc
+function brokenLetDoc(Ast\LetExpr $let, int $indent): Doc
 {
     if (\count($let->bindings) !== 1 || ! $let->bindings[0] instanceof Ast\Binding
         || ! $let->bindings[0]->pattern instanceof Ast\PatVar
@@ -1436,7 +1436,7 @@ function ifExpression(Ast\CaseExpr $if): Doc
 }
 
 /** Whether a `let` has exactly one binding to a plain name, the shape that prints on one line. */
-function isSingleVariableBinding(Ast\Let $let): bool
+function isSingleVariableBinding(Ast\LetExpr $let): bool
 {
     return \count($let->bindings) === 1 && $let->bindings[0] instanceof Ast\Binding
         && $let->bindings[0]->pattern instanceof Ast\PatVar;
@@ -1454,7 +1454,7 @@ function whereExpressionDoc(Ast\Where $where): Doc
 }
 
 /** Multi-binding `let`: the bindings align under the first name, `in` returns to the `let`. */
-function letDoc(Ast\Let $let): Doc
+function letDoc(Ast\LetExpr $let): Doc
 {
     $docs = [];
     foreach ($let->bindings as $index => $binding) {
@@ -1563,11 +1563,30 @@ function doExpressionDoc(Ast\DoExpr $do): Doc
         $suffix = $trailing === null ? '' : ' ' . $trailing['text'];
 
         if ($stmt instanceof Ast\DoLet && doLetHasBlock($stmt)) {
-            foreach ($stmt->bindings as $binding) {
-                $body[] = Doc::line();
-                $body[] = Doc::text('let ' . printPattern($binding->pattern) . ' = ');
-                $body[] = expressionDoc($binding->expr);
+            
+            
+            
+            
+            
+            $docs = [];
+            foreach ($stmt->bindings as $index => $binding) {
+                if ($index !== 0) {
+                    $docs[] = Doc::line();
+                }
+                $head = ($index === 0 ? 'let ' : '    ') . printPattern($binding->pattern) . ' =';
+                if (containsBlock($binding->expr)) {
+                    
+                    
+                    $docs[] = Doc::text($head);
+                    $docs[] = Doc::nest(6, Doc::concat([Doc::line(), brokenBodyDoc($binding->expr, 4)]));
+
+                    continue;
+                }
+                $docs[] = Doc::text($head . ' ');
+                $docs[] = expressionDoc($binding->expr);
             }
+            $body[] = Doc::line();
+            $body[] = Doc::align(Doc::concat($docs));
 
             continue;
         }
@@ -2539,7 +2558,7 @@ function patternOperand(Ast\AstNode $pattern): string
  */
 function containsBlock(mixed $value): bool
 {
-    /** @var null|\WeakMap<object, bool> $cache */
+    
     static $cache = null;
     $cache ??= new \WeakMap();
 
@@ -2560,7 +2579,7 @@ function containsBlock(mixed $value): bool
     }
 
     $result = $value instanceof Ast\CaseExpr || $value instanceof Ast\DoExpr || $value instanceof Ast\Where
-        || ($value instanceof Ast\Let && ! isSingleVariableBinding($value));
+        || ($value instanceof Ast\LetExpr && ! isSingleVariableBinding($value));
     if (! $result) {
         foreach ($value->childValues() as $child) {
             if (containsBlock($child)) {
@@ -2622,7 +2641,7 @@ function expressionDocNode(Ast\AstNode $expression): Doc
 
         return Doc::concat([Doc::text($head . ' '), expressionDoc($expression->body)]);
     }
-    if ($expression instanceof Ast\Let) {
+    if ($expression instanceof Ast\LetExpr) {
         return letDoc($expression);
     }
     if ($expression instanceof Ast\Where) {
@@ -2970,7 +2989,7 @@ function inlineExpressionDoc(Ast\AstNode $expression): Doc
 /** The text an expression would occupy with no comments taken and no width considered. */
 function measureInline(Ast\AstNode $expression): string
 {
-    /** @var null|\WeakMap<object, string> $cache */
+    
     static $cache = null;
     $cache ??= new \WeakMap();
     if (isset($cache[$expression])) {
@@ -3141,7 +3160,7 @@ function inlineDoc(Ast\AstNode $expression, bool $comments = true): Doc
     if ($expression instanceof Ast\CaseExpr && $expression->ifParts !== null) {
         return inlineIfDoc($expression, $comments);
     }
-    if ($expression instanceof Ast\Let) {
+    if ($expression instanceof Ast\LetExpr) {
         if (isSingleVariableBinding($expression)) {
             $one = $expression->bindings[0];
 

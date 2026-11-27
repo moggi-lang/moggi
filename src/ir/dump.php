@@ -46,7 +46,7 @@ function dump(IR\IrNode $node, int $indent = 0): string
             . '->' . $node->method
             . '(' . \implode(', ', \array_map(dumpOperand(...), $node->args)) . ")\n",
         IR\Assign::class => $pad . 't' . $node->dest . ' = ' . dumpExpr($node->value) . "\n",
-        IR\Let::class => $pad . 'let ' . $node->name . ' = ' . dumpOperand($node->value) . "\n",
+        IR\LetStmt::class => $pad . 'let ' . $node->name . ' = ' . dumpOperand($node->value) . "\n",
         IR\MatchStmt::class => $pad . 't' . $node->dest . ' = match ' . dumpOperand($node->scrutinee) . "\n"
             . \implode('', \array_map(
                 static fn (IR\MatchArm $arm): string => dumpMatchArm($arm, $indent + 1),

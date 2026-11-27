@@ -6,7 +6,7 @@
  *
  * These two families were the last places where the "checked core" was metadata
  * over the AST: a `case` arm list and a group's binding order were read from
- * `CaseExpr::$alts` / `Let::$bindings` at lowering time, and the SCC decomposition
+ * `CaseExpr::$alts` / `LetExpr::$bindings` at lowering time, and the SCC decomposition
  * inference had already computed was recomputed by the lowerer from the same
  * nodes. Both are now terms ({@see \Moggi\Modules\CheckedCase},
  * {@see \Moggi\Modules\CheckedLetGroup}), and a `do` statement's group is the same
@@ -137,7 +137,7 @@ $shapeOf = static function (Ast\AstNode $node): string {
     return match (true) {
         $node instanceof Ast\CaseExpr => 'case',
         $node instanceof Ast\IoCase => 'io-case',
-        $node instanceof Ast\Let => 'let',
+        $node instanceof Ast\LetExpr => 'let',
         $node instanceof Ast\Where => 'where',
         default => 'do-let',
     };
@@ -255,7 +255,7 @@ try {
                 return;
             }
 
-            if (! $node instanceof Ast\Let && ! $node instanceof Ast\Where && ! $node instanceof Ast\IoLet) {
+            if (! $node instanceof Ast\LetExpr && ! $node instanceof Ast\Where && ! $node instanceof Ast\IoLet) {
                 return;
             }
 
@@ -275,8 +275,8 @@ try {
                 );
             }
 
-            // The components are the members in dependency order, each carrying whether its members
-            // bind each other — which is exactly what the check's decomposition answers.
+            
+            
             $ordered = [];
             $expectedOrder = [];
             foreach (bindingGroupSccs($node->bindings) as $component) {
@@ -298,7 +298,7 @@ try {
                     'the group at line ' . $node->line . ' publishes a binding order the check did not compute',
                 );
             }
-            if ($node instanceof Ast\Let && $term->body !== $record->terms->structureFor($node->body)?->id->value) {
+            if ($node instanceof Ast\LetExpr && $term->body !== $record->terms->structureFor($node->body)?->id->value) {
                 throw new \RuntimeException('the `let` at line ' . $node->line . ' publishes another body');
             }
             if ($node instanceof Ast\Where && $term->body !== $record->terms->structureFor($node->expr)?->id->value) {
@@ -398,7 +398,7 @@ try {
             continue;
         }
         $body = (string) \file_get_contents($file->getPathname());
-        foreach (['CaseExpr', 'IoCase', 'Let', 'Where', 'IoLet', 'Alt', 'GuardsExpr'] as $family) {
+        foreach (['CaseExpr', 'IoCase', 'LetExpr', 'Where', 'IoLet', 'Alt', 'GuardsExpr'] as $family) {
             if (\preg_match('/new Ast\\\\' . $family . '\\s*\\(/', $body) === 1) {
                 $fabrications[] = \str_replace($root . '/', '', $file->getPathname()) . ' builds `' . $family . '`';
             }

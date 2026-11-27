@@ -271,7 +271,7 @@ function freeVarsStructure(
                 ? throw new \RuntimeException('do expression reached free-variable analysis before desugaring')
                 : freeVarsStructure($desugared, $bound, $evidenceParameter, $terms);
         })(),
-        Ast\Let::class,
+        Ast\LetExpr::class,
         Ast\Where::class => (static function () use ($structure, $id, $bound, $evidenceParameter, $terms): array {
             $term = $terms->termForStructure($id);
             if (! $term instanceof CheckedLetGroup) {

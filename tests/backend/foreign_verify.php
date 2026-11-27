@@ -347,4 +347,31 @@ if (\PHP_OS_FAMILY !== 'Windows') {
 
 removeDirectory($toolchainWork);
 
+// --- the spawned host probe ------------------------------------------------
+// A distribution's compiler is a micro SAPI binary and cannot reflect the
+// bundled runtime, so the same questions are answered over a pipe. Point the
+// probe at this very CLI (forced through ProbeHost, since phpHost() would
+// recognise it as the current process) and check it answers the same shapes.
+$probe = new \Moggi\Backend\Php\Host\ProbeHost(\PHP_BINARY);
+try {
+    $assert(
+        \in_array('core', \array_map('strtolower', $probe->extensions()), true),
+        'the spawned host reports its loaded extensions',
+    );
+    $assert($probe->version() !== '', 'the spawned host reports its version');
+    $same(
+        ['required' => 1, 'total' => 1, 'variadic' => false],
+        $probe->functionShape('strlen'),
+        'the spawned host answers a function shape',
+    );
+    $same(null, $probe->functionShape('moggi_no_such_function'), 'the spawned host says a missing function is missing');
+    $assert($probe->methodShape('DateTime', 'format') !== null, 'the spawned host answers a method shape');
+    $assert($probe->methodShape('DateTime', 'nopeMethod') === null, 'the spawned host says a missing method is missing');
+    $assert($probe->hasConstant(null, 'PHP_OS'), 'the spawned host answers a global constant');
+    $assert(! $probe->hasConstant(null, 'PHP_OSP'), 'the spawned host says a missing constant is missing');
+    $assert(! $probe->hasConstant('DateTime', 'NOPE'), 'the spawned host answers a class constant');
+} finally {
+    $probe->close();
+}
+
 echo "foreign host verification tests passed\n";

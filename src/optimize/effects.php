@@ -66,7 +66,7 @@ function stmtHasIoEffect(IR\Stmt $stmt, array $index): bool
         IR\Call::class => calleeIoEffect($stmt->callee, $index),
         IR\CallValue::class => operandHasIoEffect($stmt->callee, $index)
             || operandsHaveIoEffect($stmt->args, $index),
-        IR\Assign::class, IR\Let::class => operandHasIoEffect($stmt->value, $index),
+        IR\Assign::class, IR\LetStmt::class => operandHasIoEffect($stmt->value, $index),
         IR\Ret::class => operandHasIoEffect($stmt->value, $index),
         IR\MatchStmt::class, IR\MatchReturn::class, IR\IoMatch::class => operandHasIoEffect($stmt->scrutinee, $index)
             || matchArmsHaveIoEffect($stmt->arms, $index),
@@ -130,7 +130,7 @@ function operandHasIoEffect(IR\Operand $operand, array $index): bool
  */
 function effectfulCalleeNames(array $functions, array $index, string $moduleName = ''): array
 {
-    /** @var array<string, true> $effectful */
+    
     $effectful = [];
     foreach ($functions as $function) {
         if ($function->shape->foreign || $function->shape->kind === IR\FunctionKind::Worker || $function->shape->ioEffect) {
@@ -175,7 +175,7 @@ function blockHasDirectForeign(IR\Block $block): bool
 function stmtHasDirectForeign(IR\Stmt $stmt): bool
 {
     return match ($stmt::class) {
-        IR\Assign::class, IR\Let::class, IR\Ret::class => operandHasDirectForeign($stmt->value),
+        IR\Assign::class, IR\LetStmt::class, IR\Ret::class => operandHasDirectForeign($stmt->value),
         IR\Call::class => operandsHaveDirectForeign($stmt->args),
         IR\CallValue::class => operandHasDirectForeign($stmt->callee) || operandsHaveDirectForeign($stmt->args),
         IR\DictCall::class => operandHasDirectForeign($stmt->evidence) || operandsHaveDirectForeign($stmt->args),
@@ -245,7 +245,7 @@ function stmtCallsHostEffect(IR\Stmt $stmt, array $host, array $index): bool
 {
     return match ($stmt::class) {
         IR\Call::class => isset($host[$stmt->callee]),
-        IR\Assign::class, IR\Let::class, IR\Ret::class => operandCallsHostEffect($stmt->value, $host),
+        IR\Assign::class, IR\LetStmt::class, IR\Ret::class => operandCallsHostEffect($stmt->value, $host),
         IR\CallValue::class => operandCallsHostEffect($stmt->callee, $host)
             || operandsCallHostEffect($stmt->args, $host),
         IR\MatchStmt::class, IR\MatchReturn::class, IR\IoMatch::class => operandCallsHostEffect($stmt->scrutinee, $host)
@@ -368,7 +368,7 @@ function scanBody(IR\Block $block): array
     $unresolved = false;
     $throws = false;
     $loops = false;
-    /** @var array<string, true> $dictMethods the methods reachable code dispatches through a dictionary */
+    
     $dictMethods = [];
 
     walkBlock(

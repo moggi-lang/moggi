@@ -20,11 +20,20 @@ use function Moggi\Backend\Php\resolveMicroSfx;
  * version constraint (the name is what gets compared), or a path it is built
  * against.
  *
- * Two runtimes answer separately: the PHP running this process, and the micro
- * PHP runtime a `--native` build appends the PHAR to. The first reports its set
- * through `get_loaded_extensions()`, the second through the `extensions.json` a
- * packaging run records beside `micro.sfx`.
+ * Two runtimes answer separately: the PHP host this project installs into, and
+ * the micro PHP runtime a `--native` build appends the PHAR to. The first is
+ * asked over the probe in `Backend\Php\Host` — the bundled `runtime/php`, or
+ * the compiler's own process when that process is a real CLI — and the second
+ * through the `extensions.json` a packaging run records beside `micro.sfx`.
+ *
+ * A missing extension is a requirement, not a warning: the compiler cannot
+ * introspect a symbol it cannot load, and a `--native` runtime cannot be made to
+ * carry it after the fact. `phpExtensionHostProblems()` is the list a compile
+ * refuses on, and every line ends in the command that fixes it.
  */
+
+use function Moggi\Backend\Php\Host\phpHostExtensions;
+use function Moggi\Backend\Php\Host\phpHostLabel;
 
 /** The file a prepared runtime records its extension set in, beside its binary. */
 const EXTENSION_MANIFEST = 'extensions.json';
@@ -163,10 +172,21 @@ function normalizeExtensionName(string $name): string
     return \strtolower(\trim($name));
 }
 
-/** The extensions the PHP running this reports, folded for comparison. */
+/**
+ * The extensions the project's PHP host reports, folded for comparison.
+ *
+ * A compiler that has no host to ask answers with an empty set, which makes
+ * every declared extension unmet — the honest answer, and the one a PHP-less
+ * variant should give rather than passing a project it can never run.
+ */
 function phpRuntimeExtensions(): array
 {
-    return \array_map(normalizeExtensionName(...), \get_loaded_extensions());
+    $extensions = phpHostExtensions();
+    if ($extensions === null) {
+        return [];
+    }
+
+    return \array_map(normalizeExtensionName(...), $extensions);
 }
 
 /**
@@ -235,7 +255,7 @@ function microRuntimeExtensions(?string $sfxPath = null): ?array
  * can use.
  *
  * A package declares one set — what its program calls — and it is answered by
- * two runtimes: the PHP running this process, and the micro PHP runtime a
+ * two runtimes: the PHP host this project installs into, and the micro PHP runtime a
  * `--native` build appends the PHAR to.
  *
  * @param array<string, array<string, mixed>> $descriptors label => descriptor
@@ -248,8 +268,13 @@ function phpExtensionProblems(array $descriptors): array
     $problems = [];
     $blocking = [];
 
+    if (phpHostExtensions() === null && $requirements !== []) {
+        $problems[] = 'there is no PHP host to check php extensions against (this installation bundles no PHP;'
+            . ' use a distribution that bundles one, or set MOGGI_PHP_HOST)';
+    }
+
     foreach (unmetPhpExtensions($requirements, phpRuntimeExtensions()) as $name) {
-        $problems[] = extensionRequirementProblem($name, $requirements, 'the PHP running this (' . \PHP_VERSION . ')');
+        $problems[] = extensionRequirementProblem($name, $requirements, phpHostLabel(), 'moggi runtime php install-ext ' . $name);
     }
 
     $sfx = resolveMicroSfx();
@@ -266,7 +291,7 @@ function phpExtensionProblems(array $descriptors): array
     }
 
     foreach (unmetPhpExtensions($requirements, $manifest) as $name) {
-        $problems[] = extensionRequirementProblem($name, $requirements, 'the runtime a --native build uses');
+        $problems[] = extensionRequirementProblem($name, $requirements, 'the runtime a --native build uses', 'moggi runtime php native');
         $blocking[] = $name;
     }
 
@@ -274,11 +299,45 @@ function phpExtensionProblems(array $descriptors): array
 }
 
 /**
+ * The findings a compile refuses on: an extension a declared program calls that
+ * its PHP host does not provide.
+ *
+ * The `--native` half is not a compile refusal — a non-native build never runs
+ * the micro runtime — so it is reported by `phpExtensionProblems()` for callers
+ * that ask about both, and this list stays the host requirement.
+ *
+ * @param array<string, array<string, mixed>> $descriptors label => descriptor
+ * @return list<string>
+ */
+function phpExtensionHostProblems(array $descriptors): array
+{
+    $requirements = collectPhpExtensions($descriptors);
+    if ($requirements === []) {
+        return [];
+    }
+
+    $available = phpHostExtensions();
+    if ($available === null) {
+        return [
+            'this installation has no PHP host to check php extensions against'
+            . ' — use a distribution that bundles PHP, or set MOGGI_PHP_HOST to one',
+        ];
+    }
+
+    $problems = [];
+    foreach (unmetPhpExtensions($requirements, $available) as $name) {
+        $problems[] = extensionRequirementProblem($name, $requirements, phpHostLabel(), 'moggi runtime php install-ext ' . $name);
+    }
+
+    return $problems;
+}
+
+/**
  * One finding line, naming the labels that asked for the extension.
  *
  * @param array<string, array{name: string, sources: list<string>, paths: list<string>}> $requirements
  */
-function extensionRequirementProblem(string $name, array $requirements, string $runtime): string
+function extensionRequirementProblem(string $name, array $requirements, string $runtime, ?string $remedy = null): string
 {
     $key = normalizeExtensionName($name);
     $requirement = $requirements[$key] ?? null;
@@ -289,5 +348,7 @@ function extensionRequirementProblem(string $name, array $requirements, string $
     );
     $by = $sources === [] || $sources === ['this package'] ? '' : ' (required by ' . \implode(', ', $sources) . ')';
 
-    return "php extension `{$display}` is not in {$runtime}{$by}";
+    $fix = $remedy === null ? '' : " — run `{$remedy}`";
+
+    return "php extension `{$display}` is not in {$runtime}{$by}{$fix}";
 }

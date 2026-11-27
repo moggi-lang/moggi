@@ -320,7 +320,7 @@ function parseLet(ParserState $state): Ast\AstNode
     expect($state, TokenKind::KwIn);
     $body = parseExprWithWhere($state);
 
-    return new Ast\Let($bindings, $body);
+    return new Ast\LetExpr($bindings, $body);
 }
 
 /**

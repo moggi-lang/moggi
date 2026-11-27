@@ -477,8 +477,8 @@ function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode $expr):
 
             return $expr;
         })(),
-        Ast\Let::class => (static function () use ($state, $expr): Ast\AstNode {
-            if (! $expr instanceof Ast\Let) {
+        Ast\LetExpr::class => (static function () use ($state, $expr): Ast\AstNode {
+            if (! $expr instanceof Ast\LetExpr) {
                 return $expr;
             }
 

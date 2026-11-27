@@ -24,6 +24,13 @@ use function Moggi\Modules\bundledStdlibLibPath;
 use function Moggi\Modules\cachedModuleHeader;
 use function Moggi\Paths\globPaths;
 use function Moggi\Pipeline\printModeNames;
+use function Moggi\Backend\Php\Store\declaredExtensions;
+use function Moggi\Backend\Php\Store\lockDrift;
+use function Moggi\Registry\lockPath;
+use function Moggi\Registry\phpExtensionDescriptors;
+use function Moggi\Registry\phpExtensionHostProblems;
+use function Moggi\Registry\readDescriptor;
+use function Moggi\Registry\readLock;
 
 /**
  * Register the roots a compile searches ({@see Modules\registerLibraryRoots}).
@@ -87,6 +94,15 @@ function compileIntoRoot(
         \fwrite(STDERR, "error: --native is only supported with --backend php, jvm or dotnet\n");
 
         return $empty(1);
+    }
+
+    if ($backend === 'php') {
+        $extensionProblem = compileExtensionRequirement($inputPath, $native);
+        if ($extensionProblem !== null) {
+            \fwrite(STDERR, "error: {$extensionProblem}\n");
+
+            return $empty(1);
+        }
     }
 
     if ($native && $static && $backend === 'jvm' && \PHP_OS_FAMILY === 'Linux'
@@ -356,6 +372,15 @@ function runCompile(
         \fwrite(STDERR, "error: --native is only supported with --backend php, jvm or dotnet\n");
 
         return $empty(1);
+    }
+
+    if ($backend === 'php') {
+        $extensionProblem = compileExtensionRequirement($inputPath, $native);
+        if ($extensionProblem !== null) {
+            \fwrite(STDERR, "error: {$extensionProblem}\n");
+
+            return $empty(1);
+        }
     }
 
     if ($native && $unpacked) {
@@ -1468,6 +1493,53 @@ function runCompileCommand(array $argv): int
     );
 
     return $result['exitCode'];
+}
+
+/**
+ * Refuse a PHP compile whose project declares an extension its host cannot load.
+ *
+ * A `foreign php` declaration is verified against the host, and a host without
+ * the extension cannot answer for the symbol — worse, a program that reaches
+ * the call dies at run time. So the requirement is a compile-time contract, not
+ * a note printed after an install.
+ *
+ * Only a project with exactly one descriptor at the compile input's root is
+ * checked: compiling a single file (a test fixture, an example) has no project
+ * to make promises for, and the descriptor is the only place `[php.extensions]`
+ * can be declared.
+ */
+function compileExtensionRequirement(string $inputPath, bool $native = false): ?string
+{
+    $dir = \is_dir($inputPath) ? $inputPath : \dirname($inputPath);
+    $descriptors = \glob($dir . '/*.moggi') ?: [];
+    if (\count($descriptors) !== 1) {
+        return null;
+    }
+
+    try {
+        $descriptor = readDescriptor($descriptors[0]);
+        $lock = readLock(lockPath($descriptors[0])) ?? ['packages' => []];
+    } catch (\Throwable $error) {
+        return 'cannot read the project descriptor: ' . $error->getMessage();
+    }
+
+    $descriptors = phpExtensionDescriptors($descriptor, $lock);
+    $problems = phpExtensionHostProblems($descriptors);
+    $problems = [...$problems, ...lockDrift($dir, declaredExtensions($dir))];
+    if ($native) {
+        foreach (\Moggi\Registry\phpExtensionProblems($descriptors)['blocking'] as $name) {
+            $problems[] = "php extension `{$name}` is not in the runtime a --native build uses"
+                . ' — run `moggi runtime php native`, or build without --native';
+        }
+    }
+    if ($problems === []) {
+        return null;
+    }
+
+    return "this project needs PHP extensions its host does not provide:\n  - "
+        . \implode("\n  - ", $problems)
+        . "\nthese are compile-time requirements: the compiler verifies each `foreign php` import"
+        . " against the PHP that will run the program";
 }
 
 /**

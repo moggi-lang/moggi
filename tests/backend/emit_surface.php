@@ -54,7 +54,7 @@ $shared = [
 ];
 
 $hostOnly = [
-    'php' => ['PhpBackend.php', 'build_phar.php', 'native.php', 'runtime.php'],
+    'php' => ['PhpBackend.php', 'build_phar.php', 'host.php', 'native.php', 'portable.php', 'runtime.php', 'store.php'],
     'jvm' => ['JvmBackend.php', 'classfile.php', 'frames.php', 'runtime_abi.php'],
     'dotnet' => [
         'DotNetBackend.php',

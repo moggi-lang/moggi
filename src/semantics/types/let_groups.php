@@ -23,7 +23,7 @@ function bindingGroupSccs(array $bindings): array
         return [];
     }
 
-    /** @var array<string, list<int>> $binderIndex */
+    
     $binderIndex = [];
     for ($i = 0; $i < $n; ++$i) {
         foreach (patternVariableNames($bindings[$i]->pattern) as $name) {
@@ -31,7 +31,7 @@ function bindingGroupSccs(array $bindings): array
         }
     }
 
-    /** @var array<int, array<int, int>> $deps adjacency: i → binders that i's RHS uses */
+    
     $deps = [];
     for ($i = 0; $i < $n; ++$i) {
         $deps[$i] = [];
@@ -71,11 +71,11 @@ function bindingGroupSccs(array $bindings): array
  */
 function topLevelBindingSccs(array $items): array
 {
-    /** @var array<int, Ast\FunctionDecl> $declarations */
+    
     $declarations = [];
-    /** @var array<int, int> $itemOf dense index to position in $items */
+    
     $itemOf = [];
-    /** @var array<string, list<int>> $binderIndex */
+    
     $binderIndex = [];
     foreach ($items as $itemIndex => $item) {
         if (! $item instanceof Ast\FunctionDecl || $item->signatureOnly) {
@@ -92,7 +92,7 @@ function topLevelBindingSccs(array $items): array
         return [];
     }
 
-    /** @var array<int, array<int, int>> $deps adjacency: dense i -> the binders i uses */
+    
     $deps = [];
     foreach ($declarations as $i => $fn) {
         $bound = [];
@@ -131,15 +131,15 @@ function tarjanScc(array $deps): array
 {
     $n = \count($deps);
     $index = 0;
-    /** @var array<int, int> $indices */
+    
     $indices = [];
-    /** @var array<int, int> $lowlink */
+    
     $lowlink = [];
-    /** @var array<int, true> $onStack */
+    
     $onStack = [];
-    /** @var list<int> $stack */
+    
     $stack = [];
-    /** @var list<list<int>> $sccs */
+    
     $sccs = [];
 
     $strongconnect = function (int $v) use (
@@ -224,7 +224,7 @@ function letExprFreeVarsSet(Ast\AstNode $expr, array $bound): array
             $expr->body,
             $bound + patternBoundNamesInLambdaParams($expr->params),
         ),
-        Ast\Let::class => letExprFreeVarsInBindingGroup($expr->bindings, $expr->body, $bound),
+        Ast\LetExpr::class => letExprFreeVarsInBindingGroup($expr->bindings, $expr->body, $bound),
         Ast\Where::class => letExprFreeVarsInBindingGroup($expr->bindings, $expr->expr, $bound),
         Ast\CaseExpr::class => letExprFreeVarsInCase($expr, $bound),
         Ast\GuardsExpr::class => (static function () use ($expr, $bound): array {

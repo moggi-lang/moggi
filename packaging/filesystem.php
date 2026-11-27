@@ -326,9 +326,28 @@ function flattenDarwinBundleHome(string $dir, string $binary): void
     removeTree($dir . '/Contents');
 }
 
+/**
+ * The environment for a PHP child process the packaging runs.
+ *
+ * `-c` picks the main ini, but the scan directory is a second source of
+ * configuration, and a build shell that exports one (a distribution's PHP
+ * does) silently loads that distribution's absolute `extension=` lines into
+ * the runtime being prepared. Clearing it is what makes `-c` mean "this file
+ * only".
+ *
+ * @return array<string, string>
+ */
+function childEnvironment(): array
+{
+    $env = \getenv();
+    $env['PHP_INI_SCAN_DIR'] = '';
+
+    return $env;
+}
+
 function runtimeProcess(array $command): string
 {
-    [$code, $stdout, $stderr] = runProcess($command);
+    [$code, $stdout, $stderr] = runProcess($command, null, childEnvironment());
     if ($code !== 0) {
         throw new \RuntimeException(
             'runtime check failed (' . $code . '): ' . \implode(' ', $command) . ' ' . \trim($stdout . ' ' . $stderr),
@@ -342,7 +361,7 @@ function runtimeProcess(array $command): string
 function runWithLibraryPath(array $command, string $libDir): string
 {
     $name = \PHP_OS_FAMILY === 'Darwin' ? 'DYLD_FALLBACK_LIBRARY_PATH' : 'LD_LIBRARY_PATH';
-    $env = \getenv();
+    $env = childEnvironment();
     $existing = $env[$name] ?? '';
     $env[$name] = $existing === '' ? $libDir : $libDir . ':' . $existing;
 

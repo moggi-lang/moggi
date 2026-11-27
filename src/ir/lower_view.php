@@ -103,7 +103,7 @@ function applyView(Ast\AstNode $site, Operand $value, LowerCtx $ctx): array
         $dest = freshTemp($ctx);
         $name = freshLocalName($ctx, '_viewed');
         $ctx->items[] = new CallValue($callee, [$value], $dest);
-        $ctx->items[] = new Let($name, new Temp($dest));
+        $ctx->items[] = new LetStmt($name, new Temp($dest));
 
         return [$ctx->items, new Local($name)];
     } finally {

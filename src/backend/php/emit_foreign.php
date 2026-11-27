@@ -17,13 +17,13 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $foreign): string
     );
     $call = emitForeignCall($foreign, $argExprs);
 
-    return ($foreign->phpValueBox ?? false) === true ? emitPhpValueBox($call) : $call;
+    return $foreign->phpValueBox ? emitPhpValueBox($call) : $call;
 }
 
 /** @param list<string> $argExprs */
 function emitForeignCall(IR\ForeignCall $foreign, array $argExprs): string
 {
-    if (($foreign->kind ?? '') === 'const') {
+    if ($foreign->kind === 'const') {
         return emitForeignConst($foreign);
     }
 
@@ -53,7 +53,7 @@ function emitForeignConst(IR\ForeignCall $foreign): string
     if (($info['classPath'] ?? '') === 'PHP') {
         $expr = (string) $info['hostMember'];
 
-        return ($foreign->handleBox ?? false) === true ? emitHandleBox($expr) : $expr;
+        return $foreign->handleBox ? emitHandleBox($expr) : $expr;
     }
 
     return '\\' . phpClassFqn((string) $info['classPath']) . '::' . $info['hostMember'];
@@ -124,11 +124,11 @@ function emitForeignIoWrap(string $call, ?string $destVar, string $pad, IR\IoWra
 
 function emitForeignValueBox(string $call, IR\ForeignCall $foreign): string
 {
-    if (($foreign->phpValueBox ?? false) === true) {
+    if ($foreign->phpValueBox) {
         return emitPhpValueBox($call);
     }
 
-    if (($foreign->handleBox ?? false) === true) {
+    if ($foreign->handleBox) {
         return emitHandleBox($call);
     }
 
@@ -150,7 +150,7 @@ function emitPhpValueBox(string $expr): string
 /** @param list<string> $argExprs @return list<string> */
 function emitForeignArgExprs(IR\ForeignCall $foreign, array $argExprs): array
 {
-    $unbox = $foreign->handleUnboxArgs ?? [];
+    $unbox = $foreign->handleUnboxArgs;
     if ($unbox === []) {
         return $argExprs;
     }

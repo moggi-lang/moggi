@@ -679,7 +679,7 @@ function freshLocalName(LowerCtx $ctx, string $occ): string
  * With `$terms` supplied, a `case` or a binding group is walked through its own
  * structure — the arms and the members of {@see CheckedCase} /
  * {@see CheckedLetGroup} — so nothing that lowers ever reads `CaseExpr::$alts` or
- * `Let::$bindings` for structure. The node's own lists are read only for a tree that
+ * `LetExpr::$bindings` for structure. The node's own lists are read only for a tree that
  * was never published, which is the checker's copy: a tree with no terms has no
  * structural term to read, and falling back to the node there is honest rather than
  * a second authority, because no lowered compilation takes that path.
@@ -724,7 +724,7 @@ function freeVarsAst(Ast\AstNode $expr, array $bound, callable $evidenceParamete
         Ast\DoExpr::class => $expr->desugared !== null
             ? $walk($expr->desugared, $bound)
             : throw new \RuntimeException('do expression reached free-variable analysis before desugaring'),
-        Ast\Let::class,
+        Ast\LetExpr::class,
         Ast\Where::class => freeVarsInGroupNode($expr, $bound, $evidenceParameter, $terms),
         Ast\CaseExpr::class => freeVarsInCaseNode($expr, $bound, $evidenceParameter, $terms),
         Ast\GuardsExpr::class => freeVarsInGuards(guardsClauses($expr, $terms), $bound, $evidenceParameter, $terms),

@@ -1765,7 +1765,7 @@ function zonkInferredTypesInExpr(TypeCheckState $state, Ast\AstNode $expr): void
             }
             zonkInferredTypesInExpr($state, $expr->body);
         })(),
-        Ast\Let::class => (static function () use ($state, $expr): void {
+        Ast\LetExpr::class => (static function () use ($state, $expr): void {
             foreach ($expr->bindings as $binding) {
                 zonkInferredTypesInPattern($state, $binding->pattern);
                 zonkInferredTypesInExpr($state, $binding->value);

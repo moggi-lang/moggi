@@ -1409,7 +1409,7 @@ final class Lambda extends AstNode
     public bool $section = false;
 }
 
-final class Let extends AstNode
+final class LetExpr extends AstNode
 {
     /**
      * @param array<int, Binding> $bindings
@@ -1693,6 +1693,12 @@ final class ForeignCall extends AstNode
         public array $handleUnboxArgs = [],
         /** Inferred native calling signature (e.g. JVM method descriptor); not from source. */
         public ?string $nativeSig = null,
+        /**
+         * Whether the trailing argument is a Moggi list to pack into a host array, rather than a host
+         * array value handed over as it stands. Read from the declared parameter type: a list is
+         * packed, a foreign array type is not.
+         */
+        public bool $packTrailingArg = false,
         int $line = 0,
         int $col = 0,
         int $endCol = 0,

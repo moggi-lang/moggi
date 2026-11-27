@@ -216,6 +216,15 @@ function variantPlan(array $config, string $target, array $requested): array
     return $plan;
 }
 
+/**
+ * The installation every variant is layered on: compiler, library, docs,
+ * examples, LICENSE.
+ *
+ * The compiler archive is the input `bin/moggi` is made from, not a second thing
+ * to ship: once the native compiler exists it is deleted, so a distribution
+ * carries one compiler artifact and the process that runs is the process that
+ * verifies.
+ */
 function stageBaseInstallation(string $repo, string $base, string $target): void
 {
     removeTree($base);
@@ -240,6 +249,7 @@ function stageBaseInstallation(string $repo, string $base, string $target): void
     }
 
     buildNativeCompiler($base . '/bin/moggi.phar', $target);
+    @\unlink($base . '/bin/moggi.phar');
     stageSchnorr($repo, $base . '/bin', $target);
     \fwrite(
         STDOUT,
@@ -406,8 +416,8 @@ function distributionReadme(string $variant, string $target, array $runtimes, st
         . "PHP runtime with the compiler archive appended to it. It needs no PHP of\n"
         . "its own, and it finds `libraries/` and `runtime/` beside it.\n";
     if (\in_array('php', $runtimes, true)) {
-        $nativeSection .= "\n`bin/moggi.phar` beside it is the same compiler as a plain PHP\n"
-            . "archive, for running under a PHP you already have.\n";
+        $nativeSection .= "\nThe bundled `runtime/php` is the PHP a PHP program runs on, and the one\n"
+            . "`moggi runtime php install-ext` installs extensions into.\n";
     }
 
     return <<<TEXT
@@ -572,10 +582,9 @@ function assembleMain(array $argv): int
                 $stage . '/runtime/' . $runtime,
                 static fn (string $relative, string $name): bool => $name !== '.prepared',
             );
+            refreshStagedExtensionManifest($stage, $runtime);
         }
-        if (! \in_array('php', $entry['runtimes'], true)) {
-            @\unlink($stage . '/bin/moggi.phar');
-        }
+
         \file_put_contents(
             $stage . '/README.md',
             distributionReadme($variant, $target, $entry['runtimes'], $version),

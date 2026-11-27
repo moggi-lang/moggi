@@ -124,6 +124,7 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
         handleBox: foreignHandleBox($item->type),
         handleUnboxArgs: foreignHandleUnboxArgIndices($item->type),
         nativeSig: $nativeSig,
+        packTrailingArg: foreignTrailingArgIsList($item->type),
     );
 
     $axiom = new Ast\FunctionDecl(
@@ -327,6 +328,27 @@ function foreignIsHostValueType(TypeCheckState $state, Ast\TypeNode $type): bool
     }
 
     return true;
+}
+
+/**
+ * Whether the trailing parameter is a Moggi list for a host array.
+ *
+ * A backend that fills a host array parameter from a Moggi list may only do so when the
+ * declaration says the argument is a list: a declaration that already names a host array type
+ * (the JVM's `ByteArray`, for instance) hands that array over as it stands, and the emitter must
+ * not pack a list out of it.
+ */
+function foreignTrailingArgIsList(Ast\TypeNode $type): bool
+{
+    $last = null;
+    $cursor = $type;
+
+    while ($cursor instanceof Ast\TypeArrow) {
+        $last = $cursor->from;
+        $cursor = $cursor->to;
+    }
+
+    return $last instanceof Ast\TypeNode && foreignTypeConName($last) === 'List';
 }
 
 function foreignHandleUnboxArgIndices(Ast\TypeNode $type): array

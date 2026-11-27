@@ -53,8 +53,8 @@ function functionFromArray(array $fn): IR\FunctionDecl
         $entryKind = IR\EntryPointKind::Main;
     }
 
-    // One shape from the fixture's flat keys: a fixture names the traits it cares about and the
-    // defaults answer the rest, so a new trait needs no fixture edit at all.
+    
+    
     return new IR\FunctionDecl(
         $fn['name'],
         $fn['params'],
@@ -105,7 +105,7 @@ function stmtFromArray(array $stmt): IR\Stmt
         'call_value' => new IR\CallValue(operandFromArray($stmt['callee']), \array_map(operandFromArray(...), $stmt['args']), $stmt['dest']),
         'dict_call' => new IR\DictCall(operandFromArray($stmt['evidence']), $stmt['method'], \array_map(operandFromArray(...), $stmt['args']), $stmt['dest'], null, $stmt['localEvidence']),
         'assign' => new IR\Assign($stmt['dest'], operandFromArray($stmt['value'])),
-        'let' => new IR\Let($stmt['name'], operandFromArray($stmt['value'])),
+        'let' => new IR\LetStmt($stmt['name'], operandFromArray($stmt['value'])),
         'match' => new IR\MatchStmt(
             operandFromArray($stmt['scrutinee']),
             \array_map(armFromArray(...), $stmt['arms']),

@@ -100,7 +100,7 @@ function stmtShapeKey(IR\Stmt $stmt): string
 {
     return match ($stmt::class) {
         IR\Assign::class => 'Assign:' . $stmt->dest . '=' . operandShapeKey($stmt->value),
-        IR\Let::class => 'Let:' . $stmt->name . '=' . operandShapeKey($stmt->value),
+        IR\LetStmt::class => 'Let:' . $stmt->name . '=' . operandShapeKey($stmt->value),
         IR\Ret::class => 'Ret:' . operandShapeKey($stmt->value),
         IR\Call::class => 'Call:' . $stmt->dest . '=' . $stmt->callee
             . '(' . operandListShapeKey($stmt->args) . ')',
@@ -365,8 +365,8 @@ function replaceTempsInItems(array $items, array $tempEnv): array
 
             continue;
         }
-        if ($item instanceof IR\Let) {
-            $out[] = new IR\Let($item->name, replaceTempsInOperand($item->value, $tempEnv));
+        if ($item instanceof IR\LetStmt) {
+            $out[] = new IR\LetStmt($item->name, replaceTempsInOperand($item->value, $tempEnv));
 
             continue;
         }
@@ -722,7 +722,7 @@ function collectTempDefsInItems(array $items, array &$defs): void
                 collectTempDefsInItems($arm->body->items, $defs);
             }
         }
-        if ($item instanceof IR\Let) {
+        if ($item instanceof IR\LetStmt) {
         }
     }
 }
@@ -740,7 +740,7 @@ function collectTempUsesInItems(array $items, array &$uses): void
 /** @return list<int> */
 function tempsReferencedInStmt(IR\Stmt $stmt): array
 {
-    /** @var array<int, true> $ids operand ids, filled through `$add` below */
+    
     $ids = [];
     $add = static function (IR\Operand $op) use (&$add, &$ids): void {
         if ($op instanceof IR\Temp) {
@@ -779,7 +779,7 @@ function tempsReferencedInStmt(IR\Stmt $stmt): array
 
     match ($stmt::class) {
         IR\Ret::class => $add($stmt->value),
-        IR\Assign::class, IR\Let::class => $add($stmt->value),
+        IR\Assign::class, IR\LetStmt::class => $add($stmt->value),
         IR\Call::class => (static function () use ($stmt, $add): void {
             foreach ($stmt->args as $arg) {
                 $add($arg);
@@ -891,7 +891,7 @@ function tryFoldMatch(
             $leaf = materializeOperand($operand, $body, $nextTemp);
             if (operandIsNonDuplicable($leaf, $facts)) {
                 $fresh = $name . '__seed' . ($seedBase + \count($params));
-                $body[] = new IR\Let($fresh, $leaf);
+                $body[] = new IR\LetStmt($fresh, $leaf);
                 $params[] = $name;
                 $args[] = new IR\Local($fresh);
             } else {
@@ -1348,7 +1348,7 @@ function foldNestedFieldExtractsInStmt(IR\Stmt $stmt, array $ctors, array $alias
             $stmt->dest,
             foldNestedFieldExtractOperand($stmt->value, $ctors, $aliases, $facts),
         ),
-        IR\Let::class => new IR\Let(
+        IR\LetStmt::class => new IR\LetStmt(
             $stmt->name,
             foldNestedFieldExtractOperand($stmt->value, $ctors, $aliases, $facts),
         ),

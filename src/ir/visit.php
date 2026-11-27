@@ -131,6 +131,7 @@ function mapOperandChildren(IR\Operand $operand, callable $mapChild): IR\Operand
                 $operand->handleBox,
                 $operand->handleUnboxArgs,
                 $operand->nativeSig,
+                $operand->packTrailingArg,
             );
         })(),
         IR\ConstInt::class, IR\ConstStr::class, IR\ConstChar::class, IR\ConstDouble::class,
@@ -209,7 +210,7 @@ function walkOperands(array $operands, callable $visit): void
 function stmtDirectOperands(IR\Stmt $stmt): array
 {
     return match ($stmt::class) {
-        IR\Ret::class, IR\Assign::class, IR\Let::class => [$stmt->value],
+        IR\Ret::class, IR\Assign::class, IR\LetStmt::class => [$stmt->value],
         IR\Call::class => $stmt->args,
         IR\IoCall::class => $stmt->args,
         IR\IoRun::class => [$stmt->action],
@@ -255,7 +256,7 @@ function stmtNestedBlocks(IR\Stmt $stmt): array
         IR\Loop::class => [$stmt->body],
         IR\IoAssignAction::class => [$stmt->body],
         IR\Ret::class, IR\Call::class, IR\CallValue::class, IR\DictCall::class,
-        IR\Assign::class, IR\Let::class, IR\TailRecall::class, IR\IoCall::class, IR\IoRun::class,
+        IR\Assign::class, IR\LetStmt::class, IR\TailRecall::class, IR\IoCall::class, IR\IoRun::class,
         IR\IoThrow::class, IR\IoCatch::class, IR\IoFinally::class => [],
         default => throw UnknownIrNode::for($stmt),
     };
@@ -493,7 +494,7 @@ function boundLocalsInBlock(IR\Block $block): array
     walkBlock(
         $block,
         static function (IR\Stmt $stmt) use (&$bound): void {
-            if ($stmt instanceof IR\Let) {
+            if ($stmt instanceof IR\LetStmt) {
                 $bound[$stmt->name] = true;
 
                 return;
@@ -557,7 +558,7 @@ function freeLocalsInItems(array $items, array $bound, array &$free): void
 
             continue;
         }
-        if ($item instanceof IR\Let) {
+        if ($item instanceof IR\LetStmt) {
             freeLocalsInOperand($item->value, $bound, $free);
             $bound[$item->name] = true;
 
