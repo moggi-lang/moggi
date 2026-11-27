@@ -34,9 +34,14 @@ The distributions differ only in which runtimes they carry:
 | `moggi-minimal` | nothing — uses the `php`, `javac`/`java`, `dotnet`, `composer` and `mvn` on your `PATH` |
 
 A bundled runtime is preferred over the one on your `PATH`; anything the
-variant does not bundle has to be installed yourself. `bin/moggi` is native in
+variant does not bundle has to be provided yourself — put it on `PATH`, or use
+a distribution that bundles it. `moggi runtime list` says which backends can
+run programs here and where each tool came from; `moggi runtime <backend>
+version` reports what was found.
+
+`bin/moggi` is native in
 every variant, so none of them needs PHP to run the compiler — but a build with
-the `php` backend needs a PHP 8.5.12+ to execute what it produced, which only
+the `php` backend needs a PHP 8.6.0+ to execute what it produced, which only
 `moggi` and `moggi-php` bundle. The micro PHP runtime is not on `PATH` at all:
 it is the `micro.sfx` file a `--native` build on the `php` backend appends the
 artifact to, so a variant without it (`moggi-dotnet`, `moggi-jvm`,
@@ -94,7 +99,7 @@ dotnet hello.dll
 
 | Backend | Artifact | Run with | Needs |
 |---|---|---|---|
-| `php` (default) | `hello.phar` | `php hello.phar` | PHP 8.5.12+ |
+| `php` (default) | `hello.phar` | `php hello.phar` | PHP 8.6.0+ |
 | `jvm` | `hello.jar` | `java -jar hello.jar` | JDK 21+ |
 | `dotnet` | `hello.dll` (+ `hello.deps.json`, `hello.runtimeconfig.json`) | `dotnet hello.dll` | .NET 8 SDK |
 
@@ -298,8 +303,8 @@ to it over the language server protocol. Point it at your installation:
 
 | Setting | Value |
 |---|---|
-| `moggi.serverPath` | `<installation>/bin/moggi.phar` where PHP is bundled, `<installation>/bin/moggi` in a PHP-less variant, or `<root>/moggi.php` in a checkout |
-| `moggi.phpPath` | a PHP 8.5.12 binary — the bundled `runtime/php/bin/php` will do; not used when `serverPath` is the native `bin/moggi` |
+| `moggi.serverPath` | `<installation>/bin/moggi`, or `<root>/moggi.php` in a checkout |
+| `moggi.phpPath` | a PHP 8.6.0 binary, used only when `serverPath` is a `.php` |
 
 Any other editor works too: `moggi lsp` is a plain stdio language server.
 [lsp.md](lsp.md) describes the server and the extension's commands in full.

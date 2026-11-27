@@ -20,6 +20,7 @@ use function Moggi\Dist\assertRuntimeExtensionsDeclared;
 use function Moggi\Dist\distributionPhpExtensions;
 use function Moggi\Dist\loadRuntimeConfig;
 use function Moggi\Dist\missingPhpExtensions;
+use function Moggi\Dist\requiredPhpExtensions;
 
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
@@ -39,6 +40,12 @@ $config = loadRuntimeConfig();
 assertRuntimeExtensionsDeclared($config);
 $assert(true, 'the pinned extension list must match the derived set');
 
+$required = requiredPhpExtensions($config);
+$assert(
+    $required === ['bcmath', 'ctype', 'intl', 'mbstring', 'parallel', 'sodium', 'tokenizer'],
+    'the declared list joins the derived contract: ' . \implode(', ', $required),
+);
+
 $drifted = $config;
 $drifted['runtimes']['php']['extensions'] = ['bcmath', 'mbstring'];
 
@@ -46,7 +53,7 @@ try {
     assertRuntimeExtensionsDeclared($drifted);
     $assert(false, 'a pinned list that has drifted must be refused');
 } catch (\RuntimeException $error) {
-    $assert(\str_contains($error->getMessage(), 'drifted'), 'the drift refusal names the cause: ' . $error->getMessage());
+            $assert(\str_contains($error->getMessage(), 'without extensions'), 'the drift refusal names the cause: ' . $error->getMessage());
     $assert(\str_contains($error->getMessage(), 'intl'), 'the drift refusal names what is missing: ' . $error->getMessage());
 }
 

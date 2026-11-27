@@ -106,6 +106,7 @@ function expandAssetTemplate(string $template, string $runtime, string $target, 
     $spec = $config['runtimes'][$runtime];
     $values = [
         'version' => (string) $spec['version'],
+        'commit' => (string) ($spec['commit'] ?? ''),
         'target' => $target,
         'os' => (string) $coords['os'],
         'arch' => (string) $coords['arch'],

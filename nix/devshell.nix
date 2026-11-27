@@ -12,8 +12,9 @@
 
 let
   pinnedVersions = {
-    # 8.5.12 is the minimum the compiler runs on (see `MOGGI_MINIMUM_PHP`);
-    php = "8.5.12";
+    # 8.6.0 is the development PHP and the compiler's own floor (see
+    # `MINIMUM_PHP` and the note in docs/development/index.md);
+    php = "8.6.0";
     dotnet = "8";
     composer = "2.10.1";
     maven = "3.9.12";
@@ -23,9 +24,22 @@ let
   '';
   # The compiler shells out to PHP; the concurrency runtime needs a ZTS build
   # with ext-parallel, which is exactly what `parallel` requires.
-  php = (pkgs.php85.override { ztsSupport = true; }).withExtensions (
-    { enabled, all, ... }: enabled ++ [ all.parallel ]
-  );
+  phpBase = pkgs.php86.override { ztsSupport = true; };
+  # nixpkgs' ext-parallel is 1.2.15, released before PHP 8.6 changed the closure
+  # and packed-array layouts: copying a closure into a thread segfaults there, so
+  # every MVar program and `Exec-Concurrent*` dies. These are the upstream fixes
+  # that landed after the release, taken from `develop` until 1.2.16 ships.
+  parallel = phpBase.buildPecl {
+    pname = "parallel";
+    version = "1.2.15-unstable-2026-11-20";
+    src = pkgs.fetchFromGitHub {
+      owner = "krakjoe";
+      repo = "parallel";
+      rev = "956f51d526d7681455b579103a631d12723eb72c";
+      hash = "sha256-sCSPs6FlzF0PzQ4IRIE2DRc7+/fjU7bViGYLe+/+2MI=";
+    };
+  };
+  php = phpBase.withExtensions ({ enabled, ... }: enabled ++ [ parallel ]);
   # The name packaging/assemble.php uses for this host, so the shell can find
   # the runtime a previous packaging run left in .dist-cache/.
   target =
@@ -40,12 +54,17 @@ in
     # --package rewrites ELF rpaths to $ORIGIN after a native build.
     patchelf
     php
+    # The bundled PHP is configured with --with-sodium, which enables php-src's
+    # own ext/sodium against the system libsodium: its headers and .pc are build
+    # input, not a PECL/PIE install.
+    libsodium
+    pkg-config
     # GraalVM CE provides the Java 21 toolchain plus native-image.
     graalvmPackages.graalvm-ce
     # .NET 8 SDK for the DotNet IL backend (run + Native AOT).
     dotnet-sdk_8
     # Composer drives `[php] composer` dependencies.
-    php85.packages.composer
+    php86.packages.composer
     # Maven resolves `[jvm] maven` coordinates onto this JDK.
     maven
     # The documentation site: jekyll 3.10 is the version GitHub Pages builds

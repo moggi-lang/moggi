@@ -8,7 +8,7 @@ This section is for changing Moggi itself. To *use* the language, start at
 [quickstart.md](../quickstart.md); a release carries every runtime it needs, and
 none of what follows is needed for that.
 
-The compiler is PHP and needs 8.5.12 or newer (`MINIMUM_PHP` in
+The compiler is PHP and needs 8.6.0 or newer (`MINIMUM_PHP` in
 `src/compiler.php`); it compiles Moggi to PHP, the JVM and .NET. Everything here
 assumes Linux or macOS with Nix; without Nix, `php moggi.php …` and
 `php test.php …` run the same two entry points with whatever is installed, and
@@ -22,9 +22,11 @@ curl -L https://nixos.org/nix/install | sh -s -- --daemon
 nix develop
 ```
 
-The shell pins **PHP 8.5.12** (8.5.7 and older carry a security issue), the
-**.NET 8 SDK**, **GraalVM CE** (Java 25 plus `native-image`), Composer and
-Maven, and puts three wrappers on `PATH`:
+The shell pins **PHP 8.6.0** — its libsodium XOF is what the crypto library's
+SHAKE binds, and its OpenSSL 3.5 what carries Keccak — together with the
+**.NET 8 SDK**, **GraalVM CE** (Java 25 plus `native-image`), Composer, Maven
+and **ext-parallel** built from the upstream PHP 8.6 fix (the released 1.2.15
+segfaults when a thread starts). It also puts three wrappers on `PATH`:
 
 | Command | Runs |
 |---|---|
@@ -41,6 +43,20 @@ so build it first if that path is absent:
 ```bash
 php packaging/assemble.php --variants moggi-minimal
 ```
+
+That runtime is built from PHP 8.6, and the shell, the bundled `php` runtime a
+PHAR runs on and the micro runtime a native launcher *is* are all 8.6.0, so the
+compiler's floor is 8.6.0 too: a native launcher is the micro runtime, so the
+floor cannot pass what that runtime can build. The micro runtime is compiled by
+static-php-cli's `v3` branch, pinned by commit in `dist/runtimes.json` because 3.0
+exists only as alpha nightlies — no release tag to pin an asset from — so
+`packaging/runtimes.php` builds the tool from that source archive with the pinned
+Composer. Nothing in that tree is patched: the Zig version probe that xz's
+`-Werror` trips over is fixed upstream at the pinned commit. The released
+ext-parallel still segfaults on 8.6, so the shell builds the upstream `develop`
+commit instead; the runtime itself carries it as `spc` builds it. The shell and
+the crypto library's PHP backend would be on 8.6 even without that, because
+SHAKE's libsodium XOF and Keccak's OpenSSL 3.5 are only there.
 
 With [direnv](https://direnv.net/), `direnv allow` loads the same shell from
 `nix/shell.nix` (package list in `nix/devshell.nix`, shared with `flake.nix`).

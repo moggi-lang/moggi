@@ -53,8 +53,7 @@ archive — `format: plain` in `dist/runtimes.json` — so `runtimes.php` genera
 `bin/composer` shim beside it that runs it on the bundled PHP (or the one on
 `PATH`), and the smoke test runs both tools from the finished archive.
 
-Besides the compiler (`bin/moggi`) and, where PHP is bundled, the compiler archive
-`bin/moggi.phar`, `bin/` carries `schnorr` — a
+Besides the compiler (`bin/moggi`), `bin/` carries `schnorr` — a
 standalone BIP-340 CLI built from `schnorr/` and the two C libraries pinned in
 `schnorr/deps.json`. Nothing in Moggi uses it yet; it ships because it is part of
 the toolbox and costs nothing at run time (it links statically on Linux when
@@ -69,9 +68,12 @@ libraries, so it is the slowest step of an assembly — static-php-cli's own
 missing, before hours of compiling rather than during them. It is also the only
 step a fresh assembly of any variant cannot skip, because `bin/moggi` is built
 from it: the compiler runs as one self-contained executable with no PHP of its
-own, which is what lets `moggi-jvm` and `moggi-dotnet` ship no PHP. A variant
-that bundles PHP also ships `bin/moggi.phar`, the same compiler as a plain PHP
-archive, beside it.
+own, which is what lets `moggi-jvm` and `moggi-dotnet` ship no PHP. The archive
+is consumed building `bin/moggi` and is not shipped; there is exactly one
+compiler artifact. A variant that bundles PHP ships `runtime/php`, the PHP a
+program runs on — the same runtime `moggi runtime php install-ext` installs
+extensions into, the one `moggi runtime php build` copies into a self-contained
+tree, and the one the compiler verifies `foreign php` imports against.
 
 ## Runtime availability
 
@@ -106,14 +108,15 @@ Two consequences worth stating plainly:
 * **The micro PHP runtime is built, not downloaded.** Its `runtimes.json` entry
   has no asset URL: it carries a `build` recipe, and `packaging/runtimes.php`
   compiles it with `spc` — static-php-cli's build tool, which is itself a pinned
-  download from that project's own release rather than a Composer checkout. The
+  commit of that project's `v3` branch, built here with the pinned Composer
+  because 3.0 has no release tag. The
   compiler `spc` uses on Linux is pinned the same way, because it cannot be left
   to `spc`: `spc` installs whatever Zig ziglang.org lists as newest, and Zig
   0.16.0 miscompiles static-musl code — its `strnlen` reads past its buffer, so
   every binary it produces, this runtime included, segfaults before it starts.
   The pinned version is installed, with the wrappers `spc` looks for beside it,
   where `spc` finds it. The runtime is built from the same PHP source as the
-  `php` runtime with the same extension list, so `intl` is there and
+  `php` runtime, with its own (broader) extension list, so `intl` is there and
   `Data.Char`'s and `Data.String`'s `IntlChar` foreigns have a host under a
   native executable.
 

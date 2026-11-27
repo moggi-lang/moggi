@@ -112,6 +112,12 @@ function expectedAssetToken(string $runtime, string $target, array $config): ?st
  */
 function assertAssetMatchesTarget(string $runtime, string $url, string $target, array $config): void
 {
+    // A tool built from a pinned source tree is the same archive for every
+    // target, so its name cannot carry the target's architecture.
+    if (($config['runtimes'][$runtime]['fromSource'] ?? false) === true) {
+        return;
+    }
+
     if ($runtime === 'php' && ($config['targets'][$target]['phpPlatform'] ?? '') === 'windows') {
         $path = (string) \parse_url($url, \PHP_URL_PATH);
         if (\str_contains(\strtolower($path), 'nts')) {

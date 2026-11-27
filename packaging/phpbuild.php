@@ -25,7 +25,7 @@ use function Moggi\Compiler\findExecutable;
  */
 
 /**
- * The PHP version a micro SAPI runtime is, e.g. `8.5.12`.
+ * The PHP version a micro SAPI runtime is, e.g. `8.6.0`.
  *
  * It has no command line — anything appended to it is the program, and its own
  * banner is what a bare run prints — so its identity comes from that banner
@@ -105,7 +105,7 @@ function zigToolchainPin(string $target, array $config): ?array
  * The extensions a derived runtime is built with.
  *
  * The micro PHP runtime carries the `php` runtime's own set unless its recipe
- * names a set of its own, so what a native executable can call is what a PHAR
+ * names a set of its own, so a native executable can call at least what a PHAR
  * can call — the invariant the previous pre-built runtime broke by shipping no
  * `intl` (see the `build` recipe in `dist/runtimes.json`).
  *
@@ -141,9 +141,11 @@ function buildDerivedRuntime(string $runtime, string $target, array $config, str
 /**
  * Compile the micro PHP runtime with static-php-cli's `spc`.
  *
- * The tool is prepared first — it is a pinned download, not a bundled runtime —
- * and `spc craft` then fetches the PHP source and every library the extension
- * list needs, builds them, and leaves the result at `buildroot/bin/micro.sfx`.
+ * The tool is prepared first — it is pinned, and never bundled with a
+ * distribution — and `spc craft` then fetches the PHP source and every library
+ * the extension list needs, builds them, and leaves the result at
+ * `buildroot/bin/micro.sfx`. A pinned `spc` is a source tree, so the command is
+ * run by this build's PHP (`toolCommand`).
  *
  * static-php-cli reads its output, source and download paths from the
  * environment, so pointing all three inside `.dist-cache` is what makes a
@@ -159,9 +161,10 @@ function buildMicroWithSpc(string $runtime, string $target, array $config, strin
     $tool = (string) ($recipe['tool'] ?? 'spc');
     $toolDir = prepareRuntime($tool, $target, $config);
     $toolEntry = loadRuntimeLock()[$tool . '/' . $target] ?? [];
-    $spc = $toolDir . '/' . (string) ($toolEntry['binary'] ?? 'spc');
-    if (! \is_file($spc)) {
-        throw new \RuntimeException("the {$tool} build tool is missing at {$spc}");
+    $spc = toolCommand($tool, $toolDir, $toolEntry, $config);
+    $spcBinary = $spc[\count($spc) - 1];
+    if (! \is_file($spcBinary)) {
+        throw new \RuntimeException("the {$tool} build tool is missing at {$spcBinary}");
     }
 
     assertCToolchain($target, "compiling the {$runtime} runtime");
@@ -176,7 +179,7 @@ function buildMicroWithSpc(string $runtime, string $target, array $config, strin
     }
 
     if (unsupportedReason('zig', $target, $config) === null) {
-        installZigToolchain($target, $config, $work);
+        installZigToolchain($target, $config, $work, $toolDir);
     }
 
     $craft = $work . '/craft.yml';
@@ -185,7 +188,7 @@ function buildMicroWithSpc(string $runtime, string $target, array $config, strin
     $env = microBuildEnvironment($work, $target);
 
     assertChildCwd($work);
-    runOrFail([$spc, 'craft', '--no-motd', '--no-interaction', $craft], $work, true, null, $env);
+    runOrFail([...$spc, 'craft', '--no-motd', '--no-interaction', $craft], $work, true, null, $env);
 
     $micro = $work . '/buildroot/bin/micro.sfx';
     if (! \is_file($micro)) {
@@ -199,7 +202,7 @@ function buildMicroWithSpc(string $runtime, string $target, array $config, strin
 
     runOrFail(
         [
-            $spc,
+            ...$spc,
             'dump-license',
             '--no-motd',
             '--no-interaction',
@@ -279,6 +282,10 @@ function microBuildEnvironment(string $work, string $target): array
  * Every other doctor item still runs, and still installs what it can find a
  * packager for.
  *
+ * The compiler flags ride along here because they are toolchain input: see
+ * `spcCompilerFlags`, and `derivedRuntimeKey` keeps a change to them from
+ * reusing a runtime built with the old ones.
+ *
  * @return array<string, string>
  */
 function microToolchainEnv(string $target): array
@@ -290,83 +297,56 @@ function microToolchainEnv(string $target): array
     return [
         'SPC_TARGET' => 'native-native-musl',
         'SPC_SKIP_DOCTOR_CHECK_ITEMS' => 'if musl-wrapper is installed,if musl-cross-make is installed',
+        'SPC_DEFAULT_CFLAGS' => spcCompilerFlags(),
+        'SPC_DEFAULT_CXXFLAGS' => spcCompilerFlags(),
     ];
 }
 
 /**
- * The `zig-cc` wrapper static-php-cli generates beside the Zig it installs.
+ * The C flags a Zig build runs with, besides what spc appends itself.
  *
- * `spc` puts that directory on `PATH`, and every library build calls this wrapper
- * rather than `zig` directly: it translates the flags a unix `configure` writes
- * into what Zig accepts (`-isystem` for this build's own buildroot,
- * `-march=x86-64` for `-march=x86_64`), and it is what turns `SPC_TARGET` into
- * `zig cc -target …`. A pinned Zig has to arrive with the same wrappers, or `spc`
- * would not recognise the toolchain and would install its own Zig over it.
+ * spc reads `SPC_DEFAULT_CFLAGS` and keeps whatever it finds, so setting it
+ * *replaces* the defaults in its `config/env.ini` — these are those defaults for
+ * spc 3.0.0-alpha1, spelled out, plus one diagnostic. Dropping them is not an
+ * option worth considering: without `-fPIC` the libraries it builds (libcurl,
+ * first) are position-dependent and PHP's own configure rejects them with
+ * "the libcurl check failed".
  *
- * Copied from static-php-cli 2.8.5 (MIT), `src/SPC/scripts/zig-cc.sh`.
+ * The extra `-Wno-gcc-install-dir-libstdcxx` exists for hosts with more than one
+ * GCC install directory. Zig 0.17.1 warns that a future release will prefer the
+ * one holding libstdc++ headers, and a bare `-Werror` probe — xz's configure runs
+ * one — turns that warning into a failure before anything is compiled.
  */
-const ZIG_CC_WRAPPER = <<<'SH'
-#!/usr/bin/env bash
+function spcCompilerFlags(): string
+{
+    return '-fPIC -O3 -pipe -fno-plt -fno-semantic-interposition -fstack-clash-protection'
+        . ' -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -ffunction-sections -fdata-sections'
+        . ' -Wno-unused-command-line-argument -Wno-gcc-install-dir-libstdcxx';
+}
 
-SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
-BUILDROOT_ABS="$(realpath "$SCRIPT_DIR/../../../buildroot/include" 2>/dev/null || true)"
-PARSED_ARGS=()
+/**
+ * static-php-cli's own `zig-cc` wrapper, read from the pinned source tree.
+ *
+ * `spc` puts the wrapper directory on `PATH`, and every library build calls this
+ * script rather than `zig` directly: it rewrites configure's flags into what Zig
+ * accepts (`-isystem` for the build's own buildroot, `-march=x86_64` for
+ * `-march=x86-64`, `-mtune=baseline` for `-mtune=generic`) and turns
+ * `SPC_TARGET` into `zig cc -target …`. A pinned Zig has to arrive with the
+ * wrapper the pinned `spc` expects, or `spc` would not recognise the toolchain
+ * and would install its own Zig over it. Reading it from the pinned tree keeps
+ * the copy in step with the `spc` commit instead of carrying a second one that
+ * can drift.
+ */
+function zigCcWrapper(string $toolDir): string
+{
+    $path = $toolDir . '/src/globals/scripts/zig-cc.sh';
+    $script = @\file_get_contents($path);
+    if (! \is_string($script) || $script === '') {
+        throw new \RuntimeException("the pinned spc tree has no zig-cc wrapper at {$path}");
+    }
 
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -isystem)
-            shift
-            ARG="$1"
-            shift
-            ARG_ABS="$(realpath "$ARG" 2>/dev/null || true)"
-            [[ "$ARG_ABS" == "$BUILDROOT_ABS" ]] && PARSED_ARGS+=("-I$ARG") || PARSED_ARGS+=("-isystem" "$ARG")
-            ;;
-        -isystem*)
-            ARG="${1#-isystem}"
-            shift
-            ARG_ABS="$(realpath "$ARG" 2>/dev/null || true)"
-            [[ "$ARG_ABS" == "$BUILDROOT_ABS" ]] && PARSED_ARGS+=("-I$ARG") || PARSED_ARGS+=("-isystem$ARG")
-            ;;
-        -march=*|-mcpu=*)
-            OPT_NAME="${1%%=*}"
-            OPT_VALUE="${1#*=}"
-            # Skip armv8- flags entirely as Zig doesn't support them
-            if [[ "$OPT_VALUE" == armv8-* ]]; then
-                shift
-                continue
-            fi
-            # replace -march=x86-64 with -march=x86_64
-            OPT_VALUE="${OPT_VALUE//-/_}"
-            PARSED_ARGS+=("${OPT_NAME}=${OPT_VALUE}")
-            shift
-            ;;
-        *)
-            PARSED_ARGS+=("$1")
-            shift
-            ;;
-    esac
-done
-
-[[ -n "$SPC_TARGET" ]] && TARGET="-target $SPC_TARGET" || TARGET=""
-
-if [[ "$SPC_TARGET" =~ \.[0-9]+\.[0-9]+ ]]; then
-    output=$(zig cc $TARGET $SPC_COMPILER_EXTRA "${PARSED_ARGS[@]}" 2>&1)
-    status=$?
-
-    if [[ $status -eq 0 ]]; then
-        echo "$output"
-        exit 0
-    fi
-
-    if echo "$output" | grep -qE "version '.*' in target triple"; then
-        filtered_output=$(echo "$output" | grep -vE "version '.*' in target triple")
-        echo "$filtered_output"
-        exit 0
-    fi
-fi
-
-exec zig cc $TARGET $SPC_COMPILER_EXTRA "${PARSED_ARGS[@]}"
-SH;
+    return $script;
+}
 
 /**
  * Install the pinned Zig, and the wrappers `spc` looks for beside it, into a
@@ -383,7 +363,7 @@ SH;
  * library archive exists, so archives from a different compiler would be reused
  * and then fail at the final link on symbols that libc does not provide.
  */
-function installZigToolchain(string $target, array $config, string $work): void
+function installZigToolchain(string $target, array $config, string $work, string $toolDir): void
 {
     $dir = $work . '/pkgroot/zig';
     $version = (string) $config['runtimes']['zig']['version'];
@@ -403,7 +383,10 @@ function installZigToolchain(string $target, array $config, string $work): void
         (int) $fetched['entry']['stripComponents'],
     );
 
-    $ccWrapper = ZIG_CC_WRAPPER . "\n";
+    $ccWrapper = zigCcWrapper($toolDir);
+    if (! \str_ends_with($ccWrapper, "\n")) {
+        $ccWrapper .= "\n";
+    }
     $oneLiner = static fn (string $command): string => "#!/usr/bin/env bash\nexec {$command} $@";
     $wrappers = [
         'zig-cc' => $ccWrapper,
@@ -459,19 +442,20 @@ function craftFile(string $php, string $sapi, array $extensions): string
 /**
  * Refuse a micro runtime that does not satisfy the runtime contract.
  *
- * The micro runtime is what a `--native` executable runs, so it has to satisfy
- * the same extension contract as the bundled CLI PHP. static-php-cli will build
- * an NTS runtime happily when only the extension list is checked, and an NTS
- * runtime cannot load `parallel`. The probe also checks every declared
- * extension, so a missing `ctype` or `tokenizer` cannot reach a release.
+ * The micro runtime is what a `--native` executable runs, so it has to carry
+ * exactly the extensions the build asked for — a runtime that loads fewer is a
+ * program that dies on the call it was compiled to make, and the micro runtime
+ * cannot load one at run time (it is statically linked and has no `dl()`).
+ *
+ * static-php-cli will also build an NTS runtime happily when only the extension
+ * list is checked, and an NTS runtime cannot load `parallel`; the probe checks
+ * the thread-safety the extension set implies as well.
  *
  * @param list<string> $extensions
  */
 function assertMicroRuntime(string $binary, string $target, array $extensions): void
 {
-    if (! \in_array('parallel', \array_map('strtolower', $extensions), true)) {
-        return;
-    }
+    $ztsRequired = \in_array('parallel', \array_map('strtolower', $extensions), true);
 
     // micro.sfx has no command line of its own: it runs the PHP code appended
     // to it. Build a throwaway probe executable, run it, and remove it.
@@ -481,9 +465,11 @@ function assertMicroRuntime(string $binary, string $target, array $extensions): 
         if (! \copy($binary, $probe)) {
             throw new \RuntimeException("cannot copy {$binary} to a micro runtime probe");
         }
-        $payload = '<?php echo PHP_ZTS ? "zts" : "nts", " ", extension_loaded("parallel") ? "parallel" : "no-parallel";'
-            . ' $missing = []; foreach (' . \var_export($extensions, true) . ' as $extension) { if (! extension_loaded($extension)) { $missing[] = $extension; } }'
-            . ' if ($missing !== []) { echo " missing:", implode(",", $missing); exit(1); }';
+        $payload = '<?php $missing = []; foreach (' . \var_export($extensions, true) . ' as $extension) {'
+            . ' if (! extension_loaded($extension)) { $missing[] = $extension; } }'
+            . ' echo PHP_ZTS ? "zts " : "nts ";'
+            . ' echo $missing === [] ? "complete" : "missing:" . implode(",", $missing);'
+            . ' exit($missing === [] ? 0 : 1);';
         if (\file_put_contents($probe, $payload, \FILE_APPEND) === false) {
             throw new \RuntimeException('cannot append the micro runtime probe payload');
         }
@@ -491,9 +477,10 @@ function assertMicroRuntime(string $binary, string $target, array $extensions): 
 
         [$code, $stdout, $stderr] = runProcess([$probe]);
         $verdict = \trim($stdout);
-        if ($code !== 0 || $verdict !== 'zts parallel') {
+        $complete = \str_ends_with($verdict, 'complete');
+        if ($code !== 0 || ! $complete || ($ztsRequired && ! \str_starts_with($verdict, 'zts '))) {
             throw new \RuntimeException(
-                "the micro PHP runtime for {$target} does not satisfy the ZTS extension contract ({$verdict})\n"
+                "the micro PHP runtime for {$target} does not satisfy its extension contract ({$verdict})\n"
                 . \substr(\trim($stderr), -1000),
             );
         }
@@ -575,12 +562,69 @@ function buildPhpFromSource(string $runtime, string $target, array $config, stri
     @\chmod($dir . '/bin/php', 0755);
     stripBinary($dir . '/bin/php');
     copyNonBaselineLibraries($dir . '/bin/php', $dir . '/lib');
+    installPhpizeTree($prefix, $dir, $target);
 
     $output = \PHP_OS_FAMILY === 'Windows'
         ? runtimeProcess([$dir . '/bin/php', '-n', '-r', 'echo PHP_VERSION, " ", PHP_OS_FAMILY, "-", php_uname("m");'])
         : runWithLibraryPath([$dir . '/bin/php', '-n', '-r', 'echo PHP_VERSION, " ", PHP_OS_FAMILY, "-", php_uname("m");'], $dir . '/lib');
 
     return assertRuntimeVersion($runtime, $output, $config, $target);
+}
+
+/**
+ * Copy the PHP build's extension-development files beside the runtime.
+ *
+ * `moggi runtime php install-ext` compiles an extension against the bundled PHP,
+ * and that needs three things the program runtime does not: `php-config` (which
+ * reports
+ * the ABI and the build flags), `phpize` and the `include/php` headers plus the
+ * `lib/php/build` makefiles it drives. They are copied into the runtime's own
+ * tree and made relocatable, so a project's extension is built against the exact
+ * PHP the compiler verifies with — not the build host's.
+ *
+ * `php-config` is a shell script with its prefix baked in, so the prefix is
+ * rewritten to be computed from the script's own location. A build-cache path
+ * left in there is how an extension ends up linked against a directory that no
+ * longer exists after installation.
+ *
+ * A Windows archive is a binary distribution with no `phpize`, so there is
+ * nothing to install there: PIE uses its prebuilt DLLs instead of compiling.
+ */
+function installPhpizeTree(string $prefix, string $dir, string $target): void
+{
+    if (\str_starts_with($target, 'windows-')) {
+        return;
+    }
+
+    foreach (['bin/php-config', 'bin/phpize'] as $relative) {
+        $source = $prefix . '/' . $relative;
+        if (! \is_file($source)) {
+            throw new \RuntimeException("the PHP build left no {$relative} in {$prefix}");
+        }
+        if (! \is_dir(\dirname($dir . '/' . $relative))) {
+            \mkdir(\dirname($dir . '/' . $relative), 0777, true);
+        }
+        if (! \copy($source, $dir . '/' . $relative)) {
+            throw new \RuntimeException("cannot copy {$relative} into the runtime");
+        }
+        @\chmod($dir . '/' . $relative, 0755);
+    }
+
+    foreach (['include/php', 'lib/php/build'] as $relative) {
+        if (\is_dir($prefix . '/' . $relative)) {
+            copyTree($prefix . '/' . $relative, $dir . '/' . $relative);
+        }
+    }
+
+    $computed = '$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)';
+    foreach (['bin/php-config', 'bin/phpize'] as $relative) {
+        $path = $dir . '/' . $relative;
+        $text = (string) \file_get_contents($path);
+        $text = \str_replace('prefix="' . $prefix . '"', 'prefix="' . $computed . '"', $text);
+        $text = \str_replace("prefix='" . $prefix . "'", 'prefix="' . $computed . '"', $text);
+        $text = \str_replace($prefix, '${prefix}', $text);
+        \file_put_contents($path, $text);
+    }
 }
 
 /**

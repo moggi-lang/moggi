@@ -26,7 +26,7 @@ use function Moggi\Syntax\Parser\parse;
 /**
  * The oldest PHP this compiler runs on.
  */
-const MINIMUM_PHP = '8.5.12';
+const MINIMUM_PHP = '8.6.0';
 
 if (\version_compare(\PHP_VERSION, MINIMUM_PHP, '<')) {
     throw new \RuntimeException(
@@ -131,6 +131,9 @@ require __DIR__ . '/optimize/pass_checkpoints.php';
 require __DIR__ . '/optimize/optimize.php';
 require __DIR__ . '/backend/ir_meta.php';
 require __DIR__ . '/backend/Backend.php';
+require __DIR__ . '/backend/php/host.php';
+require __DIR__ . '/backend/php/store.php';
+require __DIR__ . '/backend/php/portable.php';
 require __DIR__ . '/backend/php/verify.php';
 require __DIR__ . '/backend/jvm/verify.php';
 require __DIR__ . '/backend/dotnet/verify.php';
@@ -274,6 +277,7 @@ require __DIR__ . '/cli/commands/native_bundle.php';
 require __DIR__ . '/cli/commands/compile.php';
 require __DIR__ . '/cli/commands/run.php';
 require __DIR__ . '/cli/commands/cache.php';
+require __DIR__ . '/cli/commands/runtime.php';
 require __DIR__ . '/cli/commands/repl.php';
 require __DIR__ . '/cli/commands/mogdoc.php';
 require __DIR__ . '/cli/commands/moogle.php';
