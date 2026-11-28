@@ -936,6 +936,26 @@ function canonicalPath(string $path): string
 
     $canonical = $drive . '/' . \implode('/', $parts);
 
+    $probe = $canonical;
+    $tail = [];
+    while (($real = \realpath($probe)) === false) {
+        $parent = \dirname($probe);
+        if ($parent === $probe) {
+            break;
+        }
+        \array_unshift($tail, \basename($probe));
+        $probe = $parent;
+    }
+    if ($real !== false) {
+        $base = \rtrim(\str_replace('\\', '/', $real), '/');
+        if ($base === '') {
+            $base = '/';
+        }
+        $canonical = $base === '/' || $tail === []
+            ? $base . \implode('/', $tail)
+            : $base . '/' . \implode('/', $tail);
+    }
+
     return \PHP_OS_FAMILY === 'Windows' ? \strtolower($canonical) : $canonical;
 }
 

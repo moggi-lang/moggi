@@ -27,8 +27,8 @@ let
   phpBase = pkgs.php86.override { ztsSupport = true; };
   # nixpkgs' ext-parallel is 1.2.15, released before PHP 8.6 changed the closure
   # and packed-array layouts: copying a closure into a thread segfaults there, so
-  # every MVar program and `Exec-Concurrent*` dies. These are the upstream fixes
-  # that landed after the release, taken from `develop` until 1.2.16 ships.
+  # every MVar program and `Exec-Concurrent*` dies. These are the fixes 1.2.16
+  # ships, taken from the commit they landed on rather than waiting for nixpkgs.
   parallel = phpBase.buildPecl {
     pname = "parallel";
     version = "1.2.15-unstable-2026-11-20";

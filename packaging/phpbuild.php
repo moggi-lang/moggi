@@ -636,7 +636,7 @@ function installPhpizeTree(string $prefix, string $dir, string $target): void
  * `parallel` is a ZTS-only extension, so both the PHP build and the extension
  * have to be the intended pair.
  */
-const PARALLEL_PACKAGE = 'pecl/parallel:1.2.15';
+const PARALLEL_PACKAGE = 'pecl/parallel:1.2.16';
 
 /**
  * Install ext-parallel into a PHP prefix or a downloaded Windows runtime.

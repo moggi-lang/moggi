@@ -25,8 +25,9 @@ nix develop
 The shell pins **PHP 8.6.0** — its libsodium XOF is what the crypto library's
 SHAKE binds, and its OpenSSL 3.5 what carries Keccak — together with the
 **.NET 8 SDK**, **GraalVM CE** (Java 25 plus `native-image`), Composer, Maven
-and **ext-parallel** built from the upstream PHP 8.6 fix (the released 1.2.15
-segfaults when a thread starts). It also puts three wrappers on `PATH`:
+and **ext-parallel** with the upstream PHP 8.6 closure and packed-array fixes
+(1.2.15 segfaults when a thread starts; the shell pins the commit that became
+1.2.16). It also puts three wrappers on `PATH`:
 
 | Command | Runs |
 |---|---|
