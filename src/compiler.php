@@ -23,18 +23,6 @@ use function Moggi\Syntax\Lexer\dump as dumpTokens;
 use function Moggi\Syntax\Lexer\lex;
 use function Moggi\Syntax\Parser\parse;
 
-/**
- * The oldest PHP this compiler runs on.
- */
-const MINIMUM_PHP = '8.6.0';
-
-if (\version_compare(\PHP_VERSION, MINIMUM_PHP, '<')) {
-    throw new \RuntimeException(
-        'moggi needs PHP ' . MINIMUM_PHP . ' or newer, and this is ' . \PHP_VERSION
-        . '; older releases carry a security issue',
-    );
-}
-
 (static function (): void {
     $current = \trim((string) \ini_get('memory_limit'));
     if ($current === '-1') {
@@ -58,12 +46,6 @@ if (\version_compare(\PHP_VERSION, MINIMUM_PHP, '<')) {
         \ini_set('memory_limit', '3072M');
     }
 })();
-
-if (\PHP_INT_SIZE < 8) {
-    \fwrite(\STDERR, 'moggi: the compiler requires 64-bit PHP (PHP_INT_SIZE=8); detected '
-        . \PHP_INT_SIZE . "-byte int\n");
-    exit(70);
-}
 
 require __DIR__ . '/errors.php';
 require __DIR__ . '/memory.php';
